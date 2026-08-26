@@ -1,18 +1,27 @@
 ; Engine configuration file.
+<<<<<<< HEAD
 ; It's best edited using the editor UI and not directly,
 ; since the parameters that go here are not all obvious.
 ;
 ; Format:
 ;   [section] ; section goes between []
 ;   param=value ; assign values to parameters
+=======
+; Objetivo de esta iteracion: Godot 4.7.2 estable.
+>>>>>>> c6f6e24053cdabb8f634490a0d68443ba1ed1830
 
 config_version=5
 
 [application]
 
 config/name="VPFlujo"
+<<<<<<< HEAD
 run/main_scene="res://demo/main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
+=======
+config/features=PackedStringArray("4.7", "GL Compatibility")
+run/main_scene="res://demo/main.tscn"
+>>>>>>> c6f6e24053cdabb8f634490a0d68443ba1ed1830
 
 [display]
 
