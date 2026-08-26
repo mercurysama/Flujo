@@ -1,0 +1,26 @@
+; Engine configuration file.
+; Objetivo de esta iteracion: Godot 4.7.2 estable.
+
+config_version=5
+
+[application]
+
+config/name="VPFlujo"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+run/main_scene="res://demo/main.tscn"
+
+[display]
+
+window/size/viewport_width=960
+window/size/viewport_height=540
+window/size/window_width_override=960
+window/size/window_height_override=540
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/vp_flujo/plugin.cfg")
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
