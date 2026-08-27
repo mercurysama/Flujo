@@ -41,14 +41,14 @@ Todo elemento persistente posee un identificador interno estable, independiente 
 - Identificador interno estable.
 - Nombre visible independiente del identificador.
 - `schema_version`, cuyo valor inicial es `1`.
-- Colección ordenada de referencias a `FlowContainer`.
+- Colección ordenada de referencias a `FlowBlockContainer`.
 - Colección de definiciones de estado o referencias a `FlowStateDefinition`, cuando el grafo las utilice.
 
 **Ciclo de vida:** se crea como contenido de usuario o de un paquete; se carga y valida antes de editarse o utilizarse; puede migrarse de forma explícita; se guarda como recurso persistente. Durante una ejecución permanece en modo de solo lectura y no almacena estado temporal.
 
 **Dependencias permitidas:** puede depender de otros tipos persistentes del modelo y de utilidades runtime portátiles de validación o migración. No puede depender del plugin, controles, docks, selección del editor, deshacer/rehacer del editor ni de un ejecutor concreto.
 
-### FlowContainer
+### FlowBlockContainer
 
 **Base:** `Resource`.
 
@@ -166,4 +166,3 @@ La validación se realiza después de cargar o migrar un grafo y antes de editar
 El contenido propio del proyecto se organiza bajo `res://flow/`. Los paquetes instalados usan `res://flow_packages/<package_id>/`, donde `package_id` es estable y apto para rutas portátiles. `res://addons/vp_flujo/` queda reservado exclusivamente al código y recursos distribuidos con el complemento.
 
 El modelo no utiliza rutas absolutas, separadores específicos del sistema operativo, procesos externos ni APIs exclusivas del editor. Todo código runtime relacionado con carga, validación, migración o lectura del modelo debe funcionar también en juegos exportados en las plataformas compatibles con Godot 4.7.2.
-
