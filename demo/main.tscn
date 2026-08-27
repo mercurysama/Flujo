@@ -1,9 +1,8 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://b2yl4y0ndur55"]
 
-[ext_resource type="Script" path="res://addons/vp_flujo/runtime/pv_controller.gd" id="1_controller"]
+[ext_resource type="Script" uid="uid://dk4epdvws1851" path="res://addons/vp_flujo/runtime/pv_controller.gd" id="1_controller"]
 
-[node name="Main" type="Node"]
+[node name="Main" type="Node" unique_id=1379096097]
 
-[node name="PVController" type="Node" parent="."]
+[node name="PVController" type="Node" parent="." unique_id=1259269483]
 script = ExtResource("1_controller")
-

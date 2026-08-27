@@ -8,8 +8,11 @@ func _init() -> void:
 	_build_interface()
 
 
-func set_controller_present(_is_present: bool) -> void:
-	open()
+func set_controller_present(is_present: bool) -> void:
+	if is_present:
+		open()
+	else:
+		close()
 
 
 func _configure_dock() -> void:
