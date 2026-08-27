@@ -15,11 +15,9 @@ func get_internal_id() -> String:
 
 
 func duplicate_with_new_ids() -> FlowBlockContainer:
-	var copy: FlowBlockContainer = FlowBlockContainer.new()
+	var copy: FlowBlockContainer = duplicate(false) as FlowBlockContainer
 	copy._internal_id = FlowId.create()
-	copy.display_name = display_name
-	copy.enabled = enabled
-	copy.user_note = user_note
+	copy.blocks = []
 
 	for block: FlowBlock in blocks:
 		if block == null:
