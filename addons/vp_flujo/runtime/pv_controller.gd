@@ -7,7 +7,7 @@ extends Node
 
 signal visual_program_enabled_changed(is_enabled: bool)
 
-@export var visual_program_enabled: bool = true:
+var visual_program_enabled: bool = true:
 	set(value):
 		if visual_program_enabled == value:
 			return
@@ -17,4 +17,3 @@ signal visual_program_enabled_changed(is_enabled: bool)
 
 func can_execute_visual_program() -> bool:
 	return visual_program_enabled and is_inside_tree()
-
