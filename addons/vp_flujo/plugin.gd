@@ -58,6 +58,8 @@ func _refresh_current_scene() -> void:
 		return
 
 	var scene_root := EditorInterface.get_edited_scene_root()
+	if scene_root == null:
+		return
+
 	var has_controller: bool = _scene_inspector.contains_controller(scene_root)
 	_dock.set_controller_present(has_controller)
-
