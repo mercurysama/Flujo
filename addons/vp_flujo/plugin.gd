@@ -9,6 +9,8 @@ const VP_FLUJO_DOCK_CLASS := preload("res://addons/vp_flujo/editor/vp_flujo_dock
 
 var _dock
 var _scene_inspector
+var _editor_selection: EditorSelection
+var _selected_node: Node
 
 
 func _enter_tree() -> void:
@@ -35,6 +37,15 @@ func _connect_editor_signals() -> void:
 	get_tree().node_added.connect(_on_scene_tree_changed)
 	get_tree().node_removed.connect(_on_scene_tree_changed)
 
+	_editor_selection = EditorInterface.get_selection()
+	if (
+		_editor_selection != null
+		and not _editor_selection.selection_changed.is_connected(_on_selection_changed)
+	):
+		_editor_selection.selection_changed.connect(_on_selection_changed)
+
+	_on_selection_changed()
+
 
 func _disconnect_editor_signals() -> void:
 	if scene_changed.is_connected(_on_scene_changed):
@@ -43,6 +54,27 @@ func _disconnect_editor_signals() -> void:
 		get_tree().node_added.disconnect(_on_scene_tree_changed)
 	if get_tree().node_removed.is_connected(_on_scene_tree_changed):
 		get_tree().node_removed.disconnect(_on_scene_tree_changed)
+	if (
+		_editor_selection != null
+		and _editor_selection.selection_changed.is_connected(_on_selection_changed)
+	):
+		_editor_selection.selection_changed.disconnect(_on_selection_changed)
+
+	_editor_selection = null
+	_selected_node = null
+
+
+func _on_selection_changed() -> void:
+	_selected_node = null
+
+	if _editor_selection == null:
+		return
+
+	var selected_nodes: Array[Node] = _editor_selection.get_selected_nodes()
+	if selected_nodes.size() != 1:
+		return
+
+	_selected_node = selected_nodes[0]
 
 
 func _on_scene_changed(_scene_root: Node) -> void:
