@@ -7,6 +7,8 @@ extends Node
 
 signal visual_program_enabled_changed(is_enabled: bool)
 
+@export var flow_graph: FlowGraph = FlowGraph.new()
+
 var visual_program_enabled: bool = true:
 	set(value):
 		if visual_program_enabled == value:
