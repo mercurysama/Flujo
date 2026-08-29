@@ -95,13 +95,42 @@ func _shortcut_input(event: InputEvent) -> void:
 		return
 	if not is_instance_valid(_selected_node):
 		return
-	if _scene_inspector == null or not _scene_inspector.contains_controller(_selected_node):
-		return
-	if not is_instance_valid(_dock):
+	if _scene_inspector == null or not is_instance_valid(_dock):
 		return
 
-	get_viewport().set_input_as_handled()
-	_dock.toggle_visibility()
+	if _scene_inspector.contains_controller(_selected_node):
+		_dock.toggle_visibility()
+		get_viewport().set_input_as_handled()
+		return
+
+	if _add_controller_to_selected_node():
+		get_viewport().set_input_as_handled()
+
+
+func _add_controller_to_selected_node() -> bool:
+	var scene_root: Node = EditorInterface.get_edited_scene_root()
+	if not is_instance_valid(scene_root):
+		return false
+
+	var selected_node: Node = _selected_node
+	if selected_node != scene_root and not scene_root.is_ancestor_of(selected_node):
+		return false
+
+	var undo_redo: EditorUndoRedoManager = get_undo_redo()
+	if undo_redo == null:
+		return false
+
+	var controller: Node = PV_CONTROLLER_SCRIPT.new()
+	controller.name = "PVController"
+
+	undo_redo.create_action("Add Flujo Controller")
+	undo_redo.add_do_method(selected_node, &"add_child", controller, true)
+	undo_redo.add_do_method(controller, &"set_owner", scene_root)
+	undo_redo.add_undo_method(selected_node, &"remove_child", controller)
+	undo_redo.add_do_reference(controller)
+	undo_redo.commit_action()
+
+	return controller.get_parent() == selected_node and controller.owner == scene_root
 
 
 func _on_scene_changed(_scene_root: Node) -> void:
