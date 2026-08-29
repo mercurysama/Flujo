@@ -125,6 +125,8 @@ Los identificadores no dependen del índice ni de la posición en estas coleccio
 
 Los requisitos de esta sección son decisiones de diseño futuras. No describen funciones disponibles en la implementación actual.
 
+El contrato planificado para el esquema 2 de `FlowGraph` y su migración atómica desde el esquema 1 se define en [`flow_graph_v2_migration.md`](flow_graph_v2_migration.md). Ese documento es diseño previo y no afirma que la migración, las nuevas colecciones ni su interfaz estén implementadas.
+
 ### Ejecución y estado temporal
 
 - Durante la futura ejecución, `FlowGraph` y todos sus recursos persistentes serán tratados como datos de solo lectura.
