@@ -125,6 +125,109 @@ func _ready() -> void:
 	assert(global_reference.value_type == FlowVariableDefinition.ValueType.VECTOR3)
 	assert(global_reference.persistent == false)
 
+	var state_machine: FlowStateMachineDefinition = FlowStateMachineDefinition.new()
+	var state_machine_id: String = state_machine.get_internal_id()
+	assert(state_machine_id.length() == 32)
+	assert(state_machine.display_name == "State Machine")
+	assert(state_machine.enabled == true)
+	assert(state_machine.user_note == "")
+	assert(state_machine.states.is_empty())
+	assert(state_machine.initial_state_id == "")
+	assert(state_machine.get_initial_state() == null)
+
+	state_machine.add_state(null)
+	assert(state_machine.states.size() == 1)
+	assert(state_machine.states[0] == null)
+	assert(state_machine.initial_state_id == "")
+	assert(state_machine.get_initial_state() == null)
+
+	var idle_state: FlowStateDefinition = FlowStateDefinition.new()
+	idle_state.display_name = "Idle"
+	var idle_state_id: String = idle_state.get_internal_id()
+	var idle_is_initial: bool = idle_state.is_initial
+	state_machine.add_state(idle_state)
+	assert(state_machine.states.size() == 2)
+	assert(state_machine.states[1] == idle_state)
+	assert(state_machine.initial_state_id == idle_state_id)
+	assert(state_machine.get_initial_state() == idle_state)
+
+	var run_state: FlowStateDefinition = FlowStateDefinition.new()
+	run_state.display_name = "Run"
+	var run_state_id: String = run_state.get_internal_id()
+	var run_is_initial: bool = run_state.is_initial
+	state_machine.add_state(run_state)
+	assert(state_machine.states.size() == 3)
+	assert(state_machine.states[2] == run_state)
+	assert(state_machine.initial_state_id == idle_state_id)
+	assert(state_machine.get_initial_state() == idle_state)
+
+	assert(state_machine.set_initial_state_by_id("") == false)
+	assert(state_machine.initial_state_id == idle_state_id)
+	assert(state_machine.set_initial_state_by_id("missing_state") == false)
+	assert(state_machine.initial_state_id == idle_state_id)
+	assert(state_machine.set_initial_state_by_id(run_state_id) == true)
+	assert(state_machine.initial_state_id == run_state_id)
+	assert(state_machine.get_initial_state() == run_state)
+	assert(idle_state.is_initial == idle_is_initial)
+	assert(run_state.is_initial == run_is_initial)
+
+	state_machine.display_name = "Movement"
+	state_machine.enabled = false
+	state_machine.user_note = "Controls movement states."
+
+	var state_machine_copy: FlowStateMachineDefinition = state_machine.duplicate_with_new_ids()
+	var idle_state_copy: FlowStateDefinition = state_machine_copy.states[1] as FlowStateDefinition
+	var run_state_copy: FlowStateDefinition = state_machine_copy.states[2] as FlowStateDefinition
+	assert(state_machine_copy != state_machine)
+	assert(state_machine_copy.get_internal_id().length() == 32)
+	assert(state_machine_copy.get_internal_id() != state_machine_id)
+	assert(state_machine.get_internal_id() == state_machine_id)
+	assert(state_machine_copy.display_name == "Movement")
+	assert(state_machine_copy.enabled == false)
+	assert(state_machine_copy.user_note == "Controls movement states.")
+	assert(state_machine_copy.states.size() == 3)
+	assert(state_machine_copy.states[0] == null)
+	assert(idle_state_copy != idle_state)
+	assert(run_state_copy != run_state)
+	assert(idle_state_copy.get_internal_id().length() == 32)
+	assert(run_state_copy.get_internal_id().length() == 32)
+	assert(idle_state_copy.get_internal_id() != idle_state_id)
+	assert(run_state_copy.get_internal_id() != run_state_id)
+	assert(idle_state_copy.display_name == "Idle")
+	assert(run_state_copy.display_name == "Run")
+	assert(state_machine_copy.initial_state_id == run_state_copy.get_internal_id())
+	assert(state_machine_copy.get_initial_state() == run_state_copy)
+	assert(state_machine.display_name == "Movement")
+	assert(state_machine.enabled == false)
+	assert(state_machine.user_note == "Controls movement states.")
+	assert(state_machine.states.size() == 3)
+	assert(state_machine.states[0] == null)
+	assert(state_machine.states[1] == idle_state)
+	assert(state_machine.states[2] == run_state)
+	assert(state_machine.initial_state_id == run_state_id)
+	assert(state_machine.get_initial_state() == run_state)
+	assert(idle_state.get_internal_id() == idle_state_id)
+	assert(run_state.get_internal_id() == run_state_id)
+	assert(idle_state.is_initial == idle_is_initial)
+	assert(run_state.is_initial == run_is_initial)
+
+	var state_machine_without_initial: FlowStateMachineDefinition = FlowStateMachineDefinition.new()
+	var unassigned_state: FlowStateDefinition = FlowStateDefinition.new()
+	state_machine_without_initial.states.append(unassigned_state)
+	assert(state_machine_without_initial.initial_state_id == "")
+	var state_machine_without_initial_copy: FlowStateMachineDefinition = state_machine_without_initial.duplicate_with_new_ids()
+	var unassigned_state_copy: FlowStateDefinition = state_machine_without_initial_copy.states[0] as FlowStateDefinition
+	assert(state_machine_without_initial_copy.initial_state_id == unassigned_state_copy.get_internal_id())
+	assert(state_machine_without_initial_copy.get_initial_state() == unassigned_state_copy)
+
+	var state_machine_with_invalid_initial: FlowStateMachineDefinition = FlowStateMachineDefinition.new()
+	var invalid_initial_state: FlowStateDefinition = FlowStateDefinition.new()
+	state_machine_with_invalid_initial.states.append(invalid_initial_state)
+	state_machine_with_invalid_initial.initial_state_id = "missing_state"
+	var state_machine_with_invalid_initial_copy: FlowStateMachineDefinition = state_machine_with_invalid_initial.duplicate_with_new_ids()
+	assert(state_machine_with_invalid_initial_copy.initial_state_id == "")
+	assert(state_machine_with_invalid_initial_copy.get_initial_state() == null)
+
 	print("[Flujo] Model smoke test passed")
 	await get_tree().process_frame
 	get_tree().quit()
