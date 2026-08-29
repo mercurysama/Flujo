@@ -3,16 +3,38 @@ extends EditorDock
 
 ## Vista del editor. No busca nodos ni administra el ciclo de vida del plugin.
 
+var _controller_present: bool
+var _controller_presence_initialized: bool = false
+var _is_open: bool = false
+
+
 func _init() -> void:
 	_configure_dock()
 	_build_interface()
 
 
 func set_controller_present(is_present: bool) -> void:
+	if _controller_presence_initialized and _controller_present == is_present:
+		return
+
+	_controller_presence_initialized = true
+	_controller_present = is_present
+
 	if is_present:
 		open()
+		_is_open = true
 	else:
 		close()
+		_is_open = false
+
+
+func toggle_visibility() -> void:
+	if _is_open:
+		close()
+		_is_open = false
+	else:
+		make_visible()
+		_is_open = true
 
 
 func _configure_dock() -> void:

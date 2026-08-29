@@ -77,6 +77,33 @@ func _on_selection_changed() -> void:
 	_selected_node = selected_nodes[0]
 
 
+func _shortcut_input(event: InputEvent) -> void:
+	if not event is InputEventKey:
+		return
+
+	var key_event: InputEventKey = event as InputEventKey
+	if not key_event.pressed or key_event.echo:
+		return
+	if key_event.keycode != KEY_F4:
+		return
+	if (
+		key_event.alt_pressed
+		or key_event.ctrl_pressed
+		or key_event.meta_pressed
+		or key_event.shift_pressed
+	):
+		return
+	if not is_instance_valid(_selected_node):
+		return
+	if _scene_inspector == null or not _scene_inspector.contains_controller(_selected_node):
+		return
+	if not is_instance_valid(_dock):
+		return
+
+	get_viewport().set_input_as_handled()
+	_dock.toggle_visibility()
+
+
 func _on_scene_changed(_scene_root: Node) -> void:
 	_refresh_current_scene.call_deferred()
 
