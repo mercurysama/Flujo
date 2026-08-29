@@ -1,8 +1,195 @@
 extends Node
 
 
+func _has_diagnostic(result: FlowValidationResult, code: StringName) -> bool:
+	for diagnostic: FlowDiagnostic in result.diagnostics:
+		if diagnostic.code == code:
+			return true
+
+	return false
+
+
+func _find_diagnostic(
+		result: FlowValidationResult,
+		code: StringName,
+		element_path: String
+) -> FlowDiagnostic:
+	for diagnostic: FlowDiagnostic in result.diagnostics:
+		if diagnostic.code == code and diagnostic.element_path == element_path:
+			return diagnostic
+
+	return null
+
+
+func _assert_same_diagnostic_sequence(
+		first_result: FlowValidationResult,
+		second_result: FlowValidationResult
+) -> void:
+	assert(first_result.diagnostics.size() == second_result.diagnostics.size())
+	for diagnostic_index: int in first_result.diagnostics.size():
+		var first: FlowDiagnostic = first_result.diagnostics[diagnostic_index]
+		var second: FlowDiagnostic = second_result.diagnostics[diagnostic_index]
+		assert(first.code == second.code)
+		assert(first.element_path == second.element_path)
+		assert(first.related_id == second.related_id)
+
+
 func _ready() -> void:
 	await get_tree().process_frame
+
+	var null_graph_result: FlowValidationResult = FlowGraphValidator.validate(null)
+	assert(null_graph_result.has_errors())
+	assert(_has_diagnostic(null_graph_result, FlowDiagnostic.CODE_NULL_GRAPH))
+
+	var valid_graph: FlowGraph = FlowGraph.new()
+	var valid_process: FlowProcess = FlowProcess.new()
+	var valid_block: FlowBlock = FlowBlock.new()
+	var valid_state: FlowStateDefinition = FlowStateDefinition.new()
+	valid_process.blocks.append(valid_block)
+	valid_process.blocks.append(null)
+	valid_graph.containers.append(valid_process)
+	valid_graph.containers.append(null)
+	valid_graph.containers.append(valid_state)
+
+	var valid_graph_id: String = valid_graph.get_internal_id()
+	var valid_process_id: String = valid_process.get_internal_id()
+	var valid_block_id: String = valid_block.get_internal_id()
+	var valid_state_id: String = valid_state.get_internal_id()
+	var valid_result: FlowValidationResult = FlowGraphValidator.validate(valid_graph)
+	assert(not valid_result.has_errors())
+	assert(valid_result.diagnostics.is_empty())
+	assert(valid_graph.schema_version == FlowGraph.CURRENT_SCHEMA_VERSION)
+	assert(valid_graph.get_internal_id() == valid_graph_id)
+	assert(valid_graph.containers.size() == 3)
+	assert(valid_graph.containers[0] == valid_process)
+	assert(valid_graph.containers[1] == null)
+	assert(valid_graph.containers[2] == valid_state)
+	assert(valid_process.get_internal_id() == valid_process_id)
+	assert(valid_process.blocks.size() == 2)
+	assert(valid_process.blocks[0] == valid_block)
+	assert(valid_process.blocks[1] == null)
+	assert(valid_block.get_internal_id() == valid_block_id)
+	assert(valid_state.get_internal_id() == valid_state_id)
+
+	var unsupported_schema_graph: FlowGraph = FlowGraph.new()
+	unsupported_schema_graph.schema_version = FlowGraph.CURRENT_SCHEMA_VERSION + 1
+	var unsupported_schema_result: FlowValidationResult = FlowGraphValidator.validate(
+		unsupported_schema_graph
+	)
+	assert(unsupported_schema_result.has_errors())
+	assert(_has_diagnostic(
+		unsupported_schema_result,
+		FlowDiagnostic.CODE_UNSUPPORTED_SCHEMA_VERSION
+	))
+
+	var empty_id_graph: FlowGraph = FlowGraph.new()
+	empty_id_graph._internal_id = ""
+	var empty_id_result: FlowValidationResult = FlowGraphValidator.validate(empty_id_graph)
+	assert(_has_diagnostic(empty_id_result, FlowDiagnostic.CODE_EMPTY_INTERNAL_ID))
+
+	var short_id_graph: FlowGraph = FlowGraph.new()
+	short_id_graph._internal_id = "1234"
+	var short_id_result: FlowValidationResult = FlowGraphValidator.validate(short_id_graph)
+	assert(_has_diagnostic(short_id_result, FlowDiagnostic.CODE_INVALID_INTERNAL_ID_LENGTH))
+
+	var non_hex_id_graph: FlowGraph = FlowGraph.new()
+	non_hex_id_graph._internal_id = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+	var non_hex_id_result: FlowValidationResult = FlowGraphValidator.validate(non_hex_id_graph)
+	assert(_has_diagnostic(non_hex_id_result, FlowDiagnostic.CODE_NON_HEXADECIMAL_INTERNAL_ID))
+
+	var duplicate_id_graph: FlowGraph = FlowGraph.new()
+	var duplicate_id_process: FlowProcess = FlowProcess.new()
+	duplicate_id_process._internal_id = duplicate_id_graph.get_internal_id()
+	duplicate_id_graph.containers.append(duplicate_id_process)
+	var duplicate_id_result: FlowValidationResult = FlowGraphValidator.validate(duplicate_id_graph)
+	assert(_has_diagnostic(duplicate_id_result, FlowDiagnostic.CODE_DUPLICATE_INTERNAL_ID))
+	var duplicate_id_diagnostic: FlowDiagnostic = _find_diagnostic(
+		duplicate_id_result,
+		FlowDiagnostic.CODE_DUPLICATE_INTERNAL_ID,
+		"containers[0]"
+	)
+	assert(duplicate_id_diagnostic != null)
+	assert(duplicate_id_diagnostic.severity == FlowDiagnostic.Severity.ERROR)
+	assert(not duplicate_id_diagnostic.message.is_empty())
+	assert(duplicate_id_diagnostic.element_path == "containers[0]")
+	assert(duplicate_id_diagnostic.related_id == duplicate_id_graph.get_internal_id())
+
+	var duplicate_block_id_graph: FlowGraph = FlowGraph.new()
+	var duplicate_block_id_process: FlowProcess = FlowProcess.new()
+	var duplicate_id_block: FlowBlock = FlowBlock.new()
+	duplicate_id_block._internal_id = duplicate_block_id_process.get_internal_id()
+	duplicate_block_id_process.blocks.append(duplicate_id_block)
+	duplicate_block_id_graph.containers.append(duplicate_block_id_process)
+	var duplicate_block_id_result: FlowValidationResult = FlowGraphValidator.validate(
+		duplicate_block_id_graph
+	)
+	assert(_has_diagnostic(
+		duplicate_block_id_result,
+		FlowDiagnostic.CODE_DUPLICATE_INTERNAL_ID
+	))
+
+	var repeated_instance_graph: FlowGraph = FlowGraph.new()
+	var repeated_process: FlowProcess = FlowProcess.new()
+	repeated_instance_graph.containers.append(repeated_process)
+	repeated_instance_graph.containers.append(repeated_process)
+	var repeated_instance_result: FlowValidationResult = FlowGraphValidator.validate(
+		repeated_instance_graph
+	)
+	assert(_has_diagnostic(
+		repeated_instance_result,
+		FlowDiagnostic.CODE_REPEATED_RESOURCE_INSTANCE
+	))
+
+	var repeated_block_graph: FlowGraph = FlowGraph.new()
+	var repeated_block_process: FlowProcess = FlowProcess.new()
+	var repeated_block: FlowBlock = FlowBlock.new()
+	repeated_block_process.blocks.append(repeated_block)
+	repeated_block_process.blocks.append(null)
+	repeated_block_process.blocks.append(repeated_block)
+	repeated_block_graph.containers.append(repeated_block_process)
+	var repeated_block_graph_id: String = repeated_block_graph.get_internal_id()
+	var repeated_block_process_id: String = repeated_block_process.get_internal_id()
+	var repeated_block_id: String = repeated_block.get_internal_id()
+	var first_repeated_block_result: FlowValidationResult = FlowGraphValidator.validate(
+		repeated_block_graph
+	)
+	var second_repeated_block_result: FlowValidationResult = FlowGraphValidator.validate(
+		repeated_block_graph
+	)
+	_assert_same_diagnostic_sequence(
+		first_repeated_block_result,
+		second_repeated_block_result
+	)
+	var repeated_block_diagnostic: FlowDiagnostic = _find_diagnostic(
+		first_repeated_block_result,
+		FlowDiagnostic.CODE_REPEATED_RESOURCE_INSTANCE,
+		"containers[0].blocks[2]"
+	)
+	assert(repeated_block_diagnostic != null)
+	assert(repeated_block_diagnostic.severity == FlowDiagnostic.Severity.ERROR)
+	assert(not repeated_block_diagnostic.message.is_empty())
+	assert(repeated_block_diagnostic.element_path == "containers[0].blocks[2]")
+	assert(repeated_block_diagnostic.related_id == repeated_block_id)
+	assert(repeated_block_graph.get_internal_id() == repeated_block_graph_id)
+	assert(repeated_block_graph.containers.size() == 1)
+	assert(repeated_block_graph.containers[0] == repeated_block_process)
+	assert(repeated_block_process.get_internal_id() == repeated_block_process_id)
+	assert(repeated_block_process.blocks.size() == 3)
+	assert(repeated_block_process.blocks[0] == repeated_block)
+	assert(repeated_block_process.blocks[1] == null)
+	assert(repeated_block_process.blocks[2] == repeated_block)
+	assert(repeated_block.get_internal_id() == repeated_block_id)
+
+	var unmigratable_graph: FlowGraph = FlowGraph.new()
+	var unmigratable_container: FlowBlockContainer = FlowBlockContainer.new()
+	unmigratable_graph.containers.append(unmigratable_container)
+	var unmigratable_result: FlowValidationResult = FlowGraphValidator.validate(
+		unmigratable_graph
+	)
+	assert(_has_diagnostic(
+		unmigratable_result,
+		FlowDiagnostic.CODE_UNMIGRATABLE_CONTAINER_TYPE
+	))
 
 	var original: FlowGraph = FlowGraph.new()
 

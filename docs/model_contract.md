@@ -121,9 +121,19 @@ El orden de `FlowGraph.containers` y `FlowBlockContainer.blocks` se conserva dur
 
 Los identificadores no dependen del índice ni de la posición en estas colecciones. La copia recibe identificadores nuevos en el grafo, los contenedores y los bloques.
 
+## Validación implementada del esquema 1
+
+`FlowGraphValidator` valida el modelo sin modificarlo y devuelve un `FlowValidationResult` con diagnósticos estructurados `FlowDiagnostic`. Cada diagnóstico contiene un código estable, severidad, mensaje, ruta del elemento e identificador relacionado. El resultado permite consultar si existen errores.
+
+La validación actual detecta grafos nulos, versiones de esquema no soportadas, identificadores vacíos, de longitud distinta de 32 caracteres, no hexadecimales o duplicados, instancias de recursos repetidas y tipos de contenedor que no pueden migrarse según el contrato planificado del esquema 2. Recorre de forma determinista el grafo, `containers` y sus bloques; acepta las posiciones `null` sin producir diagnósticos.
+
+El validador pertenece al runtime, usa únicamente APIs portátiles y no depende del editor. Esta validación no implementa la migración ni añade las colecciones del esquema 2.
+
 ## Contrato planificado — todavía no implementado
 
 Los requisitos de esta sección son decisiones de diseño futuras. No describen funciones disponibles en la implementación actual.
+
+El contrato planificado para el esquema 2 de `FlowGraph` y su migración atómica desde el esquema 1 se define en [`flow_graph_v2_migration.md`](flow_graph_v2_migration.md). Ese documento es diseño previo y no afirma que la migración, las nuevas colecciones ni su interfaz estén implementadas.
 
 ### Ejecución y estado temporal
 
