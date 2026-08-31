@@ -73,16 +73,7 @@ func _disconnect_editor_signals() -> void:
 
 
 func _on_selection_changed() -> void:
-	_selected_node = null
-
-	if _editor_selection == null:
-		return
-
-	var selected_nodes: Array[Node] = _editor_selection.get_selected_nodes()
-	if selected_nodes.size() != 1:
-		return
-
-	_selected_node = selected_nodes[0]
+	_update_dock_visibility()
 
 
 func _shortcut_input(event: InputEvent) -> void:
@@ -150,12 +141,29 @@ func _on_scene_tree_changed(_node: Node) -> void:
 
 
 func _refresh_current_scene() -> void:
+	_update_dock_visibility()
+
+
+func _update_dock_visibility() -> void:
 	if not is_instance_valid(_dock) or _scene_inspector == null:
 		return
 
-	var scene_root := EditorInterface.get_edited_scene_root()
-	if scene_root == null:
-		return
+	var selected_nodes: Array[Node] = []
+	if _editor_selection != null:
+		selected_nodes = _editor_selection.get_selected_nodes()
+	var scene_root: Node = EditorInterface.get_edited_scene_root()
+	var should_show: bool = _should_show_dock(selected_nodes, scene_root, _scene_inspector)
+	_selected_node = selected_nodes[0] if selected_nodes.size() == 1 else null
+	_dock.set_controller_present(should_show)
 
-	var has_controller: bool = _scene_inspector.contains_controller(scene_root)
-	_dock.set_controller_present(has_controller)
+
+static func _should_show_dock(
+		selected_nodes: Array[Node],
+		scene_root: Node,
+		scene_inspector
+) -> bool:
+	if selected_nodes.size() == 1:
+		return scene_inspector != null and scene_inspector.contains_controller(selected_nodes[0])
+	if selected_nodes.size() > 1:
+		return false
+	return scene_inspector != null and scene_inspector.contains_controller(scene_root)

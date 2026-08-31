@@ -27,10 +27,15 @@ func _parse_property(
 		_usage_flags: int,
 		_wide: bool
 ) -> bool:
-	if property_name != FLOW_GRAPH_PROPERTY:
+	var is_flow_graph: bool = is_flow_graph_property(property_name)
+	if not is_flow_graph:
 		return false
-
 	var property: FlowGraphInspectorProperty = FLOW_GRAPH_INSPECTOR_PROPERTY.new()
 	property.configure(_undo_redo)
-	add_property_editor(property_name, property, true, "Flow Graph")
+	add_property_editor(property_name, property, false, "Flow Graph")
 	return true
+
+
+## Returns whether a property name is the FlowGraph reference intercepted by this plugin.
+static func is_flow_graph_property(property_name: String) -> bool:
+	return property_name == FLOW_GRAPH_PROPERTY

@@ -21,6 +21,60 @@ func _run() -> void:
 	commands.changed.connect(_on_changed)
 	var controller: PVController = PVController.new()
 	controller.flow_graph = null
+	var inspector_plugin: PVControllerInspectorPlugin = PVControllerInspectorPlugin.new()
+	_expect(inspector_plugin._can_handle(controller), "Inspector plugin recognizes PVController.")
+	_expect(PVControllerInspectorPlugin.is_flow_graph_property(&"flow_graph"), "Inspector plugin intercepts exactly flow_graph.")
+	_expect(not PVControllerInspectorPlugin.is_flow_graph_property(&"visual_program_enabled"), "Inspector plugin does not intercept unrelated properties.")
+	var flow_graph_property: Dictionary = _find_property(controller.get_property_list(), &"flow_graph")
+	_expect(flow_graph_property["type"] == TYPE_OBJECT, "FlowGraph property is reported as an object when null.")
+	_expect(flow_graph_property["hint"] == PROPERTY_HINT_RESOURCE_TYPE, "FlowGraph property retains its resource-type hint when null.")
+	_expect(flow_graph_property["hint_string"] == "FlowGraph", "FlowGraph property reports the FlowGraph resource type.")
+	_expect((flow_graph_property["usage"] as int & PROPERTY_USAGE_EDITOR) != 0, "FlowGraph property remains editor-visible when null.")
+	_expect(
+		inspector_plugin._parse_property(
+			controller,
+			flow_graph_property["type"],
+			"flow_graph",
+			flow_graph_property["hint"],
+			flow_graph_property["hint_string"],
+			flow_graph_property["usage"],
+			false
+		),
+		"Inspector plugin replaces the default editor for null flow_graph."
+	)
+	var inspector_property: FlowGraphInspectorProperty = FlowGraphInspectorProperty.new()
+	inspector_property.configure(undo_redo)
+	get_root().add_child(inspector_property)
+	inspector_property.set_object_and_property(controller, &"flow_graph")
+	await process_frame
+	await process_frame
+	var create_graph_button: Button = _find_button(inspector_property, "Create Schema 2 Graph")
+	_expect(create_graph_button != null and create_graph_button.visible, "Null FlowGraph builds a visible create button after ready without _update_property().")
+	var inspector_content: Node = inspector_property.get_child(0)
+	var initial_control_count: int = inspector_content.get_child_count()
+	inspector_property.call(&"_rebuild_interface")
+	inspector_property.call(&"_rebuild_interface")
+	inspector_property.call(&"_rebuild_interface")
+	_expect(inspector_content.get_child_count() == initial_control_count, "Repeated same-frame rebuilds keep a stable control count.")
+	_expect(_count_buttons(inspector_property, "Create Schema 2 Graph") == 1, "Repeated same-frame rebuilds keep one create button.")
+	create_graph_button = _find_button(inspector_property, "Create Schema 2 Graph")
+	if create_graph_button != null:
+		create_graph_button.emit_signal(&"pressed")
+	await process_frame
+	_expect(controller.flow_graph != null and controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_2, "Create button assigns a schema 2 graph.")
+	history.undo()
+	_expect(controller.flow_graph == null, "Create button undo restores null.")
+	history.redo()
+	_expect(controller.flow_graph != null, "Create button redo restores the graph.")
+	inspector_property.call(&"_rebuild_interface")
+	await process_frame
+	_expect(_has_schema_2_category_order(inspector_property, "Add Process", "Processes"), "Processes renders button, category, then list.")
+	_expect(_has_schema_2_category_order(inspector_property, "Add Variable", "Variables"), "Variables renders button, category, then list.")
+	_expect(_has_schema_2_category_order(inspector_property, "Add State Machine", "State Machines"), "State Machines renders button, category, then list.")
+	inspector_property.queue_free()
+	controller.flow_graph = null
+	_test_dock_visibility_conditions()
+	_test_debug_instrumentation_removed()
 
 	_expect(commands.create_schema_2_graph(controller), "A missing graph can be created.")
 	var created_graph: FlowGraph = controller.flow_graph
@@ -94,3 +148,75 @@ func _expect(condition: bool, message: String) -> void:
 
 func _on_changed() -> void:
 	_changes += 1
+
+
+func _find_property(properties: Array[Dictionary], property_name: String) -> Dictionary:
+	for property: Dictionary in properties:
+		if property["name"] == property_name:
+			return property
+	return {}
+
+
+func _find_button(root: Node, button_text: String) -> Button:
+	if root is Button and (root as Button).text == button_text:
+		return root as Button
+	for child: Node in root.get_children():
+		var button: Button = _find_button(child, button_text)
+		if button != null:
+			return button
+	return null
+
+
+func _count_buttons(root: Node, button_text: String) -> int:
+	var count: int = 1 if root is Button and (root as Button).text == button_text else 0
+	for child: Node in root.get_children():
+		count += _count_buttons(child, button_text)
+	return count
+
+
+func _test_dock_visibility_conditions() -> void:
+	var scene_inspector = preload("res://addons/vp_flujo/editor/pv_scene_inspector.gd").new(
+		preload("res://addons/vp_flujo/runtime/pv_controller.gd")
+	)
+	var plugin_script: Script = preload("res://addons/vp_flujo/plugin.gd")
+	var root: Node = Node.new()
+	var parent: Node = Node.new()
+	var controller_node: PVController = PVController.new()
+	var sibling: Node = Node.new()
+	root.add_child(parent)
+	parent.add_child(controller_node)
+	root.add_child(sibling)
+	var controller_selection: Array[Node] = [controller_node]
+	var parent_selection: Array[Node] = [parent]
+	var sibling_selection: Array[Node] = [sibling]
+	var empty_selection: Array[Node] = []
+	var multiple_selection: Array[Node] = [parent, sibling]
+	_expect(plugin_script._should_show_dock(controller_selection, root, scene_inspector), "Selecting PVController makes the dock visible.")
+	_expect(plugin_script._should_show_dock(parent_selection, root, scene_inspector), "Selecting a parent containing PVController makes the dock visible.")
+	_expect(not plugin_script._should_show_dock(sibling_selection, root, scene_inspector), "Selecting an unrelated sibling hides the dock.")
+	_expect(plugin_script._should_show_dock(empty_selection, root, scene_inspector), "Empty selection falls back to a scene containing PVController.")
+	_expect(not plugin_script._should_show_dock(multiple_selection, root, scene_inspector), "Multiple selection hides the dock.")
+	root.queue_free()
+
+
+func _has_schema_2_category_order(property: FlowGraphInspectorProperty, button_text: String, title_text: String) -> bool:
+	var button: Button = _find_button(property, button_text)
+	if button == null:
+		return false
+	var category: Node = button.get_parent()
+	if not category is VBoxContainer or category.get_child_count() != 3:
+		return false
+	var title: Label = category.get_child(1) as Label
+	var list: ItemList = category.get_child(2) as ItemList
+	return category.get_child(0) == button and title != null and title.text == title_text and list != null
+
+
+func _test_debug_instrumentation_removed() -> void:
+	var sources: Array[String] = [
+		FileAccess.get_file_as_string("res://addons/vp_flujo/plugin.gd"),
+		FileAccess.get_file_as_string("res://addons/vp_flujo/editor/pv_controller_inspector_plugin.gd"),
+		FileAccess.get_file_as_string("res://addons/vp_flujo/editor/flow_graph_inspector_property.gd"),
+	]
+	for source: String in sources:
+		_expect(not source.contains("InspectorDebug") and not source.contains("DockDebug"), "Temporary debug output is removed.")
+		_expect(not source.contains("DEBUG_INSPECTOR") and not source.contains("DEBUG_DOCK"), "Temporary debug constants are removed.")

@@ -13,7 +13,7 @@ var _rename_input: LineEdit
 ## Supplies the editor undo/redo manager used by all model-changing controls.
 func configure(undo_redo: EditorUndoRedoManager) -> void:
 	_commands = FlowGraphEditorCommands.new(undo_redo)
-	_commands.changed.connect(update_property)
+	_commands.changed.connect(_rebuild_interface)
 
 
 func _init() -> void:
@@ -23,7 +23,15 @@ func _init() -> void:
 	add_child(_content)
 
 
-func update_property() -> void:
+func _ready() -> void:
+	call_deferred(&"_rebuild_interface")
+
+
+func _update_property() -> void:
+	_rebuild_interface()
+
+
+func _rebuild_interface() -> void:
 	var controller: PVController = get_edited_object() as PVController
 	var graph: FlowGraph = null
 	if controller != null:
@@ -33,6 +41,7 @@ func update_property() -> void:
 
 func _render(presentation: Dictionary, controller: PVController) -> void:
 	for child: Node in _content.get_children():
+		_content.remove_child(child)
 		child.queue_free()
 
 	var summary: Label = Label.new()
@@ -45,8 +54,11 @@ func _render(presentation: Dictionary, controller: PVController) -> void:
 	_render_actions(controller)
 
 	var sections: Array = presentation["sections"] as Array
-	for section: Dictionary in sections:
-		_render_section(section)
+	if _uses_schema_2_collections(controller):
+		_render_schema_2_sections(sections)
+	else:
+		for section: Dictionary in sections:
+			_render_section(section, _content)
 
 	var diagnostics: Array = presentation["diagnostics"] as Array
 	if not diagnostics.is_empty():
@@ -90,12 +102,6 @@ func _render_actions(controller: PVController) -> void:
 	if graph.schema_version != FlowGraph.SCHEMA_VERSION_2 or not graph.containers.is_empty():
 		return
 
-	var additions: HBoxContainer = HBoxContainer.new()
-	_content.add_child(additions)
-	_add_button_to(additions, "Add Process", _on_add_process_pressed)
-	_add_button_to(additions, "Add Variable", _on_add_variable_pressed)
-	_add_button_to(additions, "Add State Machine", _on_add_state_machine_pressed)
-
 	if _selected_id.is_empty():
 		return
 	_rename_input = LineEdit.new()
@@ -110,11 +116,26 @@ func _render_actions(controller: PVController) -> void:
 	_add_button_to(selection_actions, "Delete", _on_delete_pressed)
 
 
-func _render_section(section: Dictionary) -> void:
+func _render_schema_2_sections(sections: Array) -> void:
+	for section: Dictionary in sections:
+		var category: VBoxContainer = VBoxContainer.new()
+		category.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_content.add_child(category)
+		match section["title"]:
+			"Processes":
+				_add_button_to(category, "Add Process", _on_add_process_pressed)
+			"Variables":
+				_add_button_to(category, "Add Variable", _on_add_variable_pressed)
+			"State Machines":
+				_add_button_to(category, "Add State Machine", _on_add_state_machine_pressed)
+		_render_section(section, category)
+
+
+func _render_section(section: Dictionary, parent: Container) -> void:
 	var title: Label = Label.new()
 	title.text = section["title"]
 	title.add_theme_font_size_override("font_size", 14)
-	_content.add_child(title)
+	parent.add_child(title)
 
 	var list: ItemList = ItemList.new()
 	list.select_mode = ItemList.SELECT_SINGLE
@@ -125,7 +146,14 @@ func _render_section(section: Dictionary) -> void:
 		var item_index: int = list.add_item(_format_entry(entry))
 		list.set_item_metadata(item_index, entry)
 	list.item_selected.connect(_on_item_selected.bind(list))
-	_content.add_child(list)
+	parent.add_child(list)
+
+
+func _uses_schema_2_collections(controller: PVController) -> bool:
+	return controller != null \
+		and controller.flow_graph != null \
+		and controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_2 \
+		and controller.flow_graph.containers.is_empty()
 
 
 func _format_entry(entry: Dictionary) -> String:
@@ -168,7 +196,7 @@ func _on_item_selected(item_index: int, list: ItemList) -> void:
 		return
 	_selected_id = internal_id
 	_selected_collection = _collection_for_type(entry["type"])
-	update_property()
+	_rebuild_interface()
 
 
 func _on_create_graph_pressed() -> void:
