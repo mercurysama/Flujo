@@ -121,6 +121,12 @@ Todo elemento persistente posee un identificador interno estable, independiente 
 
 **Responsabilidad:** migrar un `FlowGraph` de esquema 1 a una copia independiente de esquema 2 sin modificar el origen. La migración valida el origen antes de construir la candidata y valida la candidata antes de devolverla como exitosa.
 
+### FlowGraphInspectorPresenter
+
+**Base:** `RefCounted`.
+
+**Responsabilidad:** producir una representación determinista y de solo lectura de un `FlowGraph` para la interfaz del Inspector. Pertenece al editor, incluye versión de esquema, fuente activa, secciones ordenadas, índices, nombres, tipos, IDs internos y diagnósticos, y no modifica el grafo.
+
 ### PVController
 
 **Base:** `Node`.
@@ -146,6 +152,12 @@ La validación actual detecta grafos nulos, versiones de esquema no soportadas, 
 En el esquema 2, `owner_container_id` debe resolver a un `FlowProcess` o `FlowStateDefinition` perteneciente al mismo grafo y `global_variable_id` debe resolver a una variable `GLOBAL` del mismo grafo. Las referencias ausentes o de tipo/ámbito no permitido se conservan y generan un diagnóstico.
 
 El validador pertenece al runtime, usa únicamente APIs portátiles y no depende del editor.
+
+## Presentación implementada del Inspector
+
+El editor usa `FlowGraphInspectorPresenter` para mostrar `flow_graph` de `PVController` sin modificar recursos. En esquema 1 muestra `Containers`; en esquema 2 muestra `Processes`, `Variables` y `State Machines`. Cada posición conserva su índice y las posiciones `null` se muestran como `Empty`. Los IDs internos se muestran como metadatos estables, mientras que `display_name` es solo texto de presentación.
+
+`PVControllerInspectorPlugin` y `FlowGraphInspectorProperty` pertenecen al editor y se registran desde el plugin principal. Las filas son seleccionables solo dentro de la interfaz; no escriben en el modelo. Los diagnósticos de `FlowGraphValidator` se muestran sin alterar el grafo.
 
 ## Migración implementada de esquema 1 a esquema 2
 

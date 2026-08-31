@@ -734,6 +734,93 @@ func _ready() -> void:
 		assert(first_migration_diagnostic.element_path == second_migration_diagnostic.element_path)
 		assert(first_migration_diagnostic.related_id == second_migration_diagnostic.related_id)
 
+	var presenter_schema_1_graph: FlowGraph = FlowGraph.new()
+	var presenter_schema_1_process: FlowProcess = FlowProcess.new()
+	presenter_schema_1_process.display_name = "Presenter Process"
+	var presenter_schema_1_state: FlowStateDefinition = FlowStateDefinition.new()
+	presenter_schema_1_state.display_name = "Presenter State"
+	presenter_schema_1_graph.containers.append(presenter_schema_1_process)
+	presenter_schema_1_graph.containers.append(null)
+	presenter_schema_1_graph.containers.append(presenter_schema_1_state)
+	var presenter_schema_1: Dictionary = FlowGraphInspectorPresenter.present(presenter_schema_1_graph)
+	var presenter_schema_1_repeat: Dictionary = FlowGraphInspectorPresenter.present(presenter_schema_1_graph)
+	var presenter_schema_1_sections: Array = presenter_schema_1["sections"] as Array
+	var presenter_containers: Dictionary = presenter_schema_1_sections[0] as Dictionary
+	var presenter_container_entries: Array = presenter_containers["entries"] as Array
+	var presenter_first_container: Dictionary = presenter_container_entries[0] as Dictionary
+	var presenter_empty_container: Dictionary = presenter_container_entries[1] as Dictionary
+	var presenter_last_container: Dictionary = presenter_container_entries[2] as Dictionary
+	assert(presenter_schema_1 == presenter_schema_1_repeat)
+	assert(presenter_schema_1["schema_version"] == FlowGraph.CURRENT_SCHEMA_VERSION)
+	assert(presenter_schema_1["active_source"] == "Containers")
+	assert(presenter_schema_1_sections.size() == 1)
+	assert(presenter_containers["title"] == "Containers")
+	assert(presenter_first_container["index"] == 0)
+	assert(presenter_first_container["name"] == "Presenter Process")
+	assert(presenter_first_container["type"] == "FlowProcess")
+	assert(presenter_first_container["internal_id"] == presenter_schema_1_process.get_internal_id())
+	assert(presenter_first_container["is_empty"] == false)
+	assert(presenter_empty_container["index"] == 1)
+	assert(presenter_empty_container["name"] == "Empty")
+	assert(presenter_empty_container["type"] == "Empty")
+	assert(presenter_empty_container["internal_id"] == "")
+	assert(presenter_empty_container["is_empty"] == true)
+	assert(presenter_last_container["index"] == 2)
+	assert(presenter_last_container["name"] == "Presenter State")
+	assert(presenter_last_container["type"] == "FlowStateDefinition")
+	assert(presenter_schema_1_graph.containers[0] == presenter_schema_1_process)
+	assert(presenter_schema_1_graph.containers[1] == null)
+	assert(presenter_schema_1_graph.containers[2] == presenter_schema_1_state)
+
+	var presenter_schema_2_graph: FlowGraph = FlowGraph.new()
+	presenter_schema_2_graph.schema_version = FlowGraph.SCHEMA_VERSION_2
+	var presenter_schema_2_process: FlowProcess = FlowProcess.new()
+	presenter_schema_2_process.display_name = "Typed Process"
+	var presenter_schema_2_variable: FlowVariableDefinition = FlowVariableDefinition.new()
+	presenter_schema_2_variable.display_name = "Typed Variable"
+	var presenter_schema_2_machine: FlowStateMachineDefinition = FlowStateMachineDefinition.new()
+	presenter_schema_2_machine.display_name = "Typed Machine"
+	presenter_schema_2_graph.processes.append(presenter_schema_2_process)
+	presenter_schema_2_graph.processes.append(null)
+	presenter_schema_2_graph.variables.append(null)
+	presenter_schema_2_graph.variables.append(presenter_schema_2_variable)
+	presenter_schema_2_graph.state_machines.append(presenter_schema_2_machine)
+	presenter_schema_2_graph.state_machines.append(null)
+	var presenter_schema_2: Dictionary = FlowGraphInspectorPresenter.present(presenter_schema_2_graph)
+	var presenter_schema_2_sections: Array = presenter_schema_2["sections"] as Array
+	var presenter_processes: Dictionary = presenter_schema_2_sections[0] as Dictionary
+	var presenter_variables: Dictionary = presenter_schema_2_sections[1] as Dictionary
+	var presenter_machines: Dictionary = presenter_schema_2_sections[2] as Dictionary
+	var presenter_process_entries: Array = presenter_processes["entries"] as Array
+	var presenter_variable_entries: Array = presenter_variables["entries"] as Array
+	var presenter_machine_entries: Array = presenter_machines["entries"] as Array
+	assert(presenter_schema_2["schema_version"] == FlowGraph.SCHEMA_VERSION_2)
+	assert(presenter_schema_2["active_source"] == "Typed collections")
+	assert(presenter_schema_2_sections.size() == 3)
+	assert(presenter_processes["title"] == "Processes")
+	assert(presenter_variables["title"] == "Variables")
+	assert(presenter_machines["title"] == "State Machines")
+	assert((presenter_process_entries[0] as Dictionary)["internal_id"] == presenter_schema_2_process.get_internal_id())
+	assert((presenter_process_entries[1] as Dictionary)["name"] == "Empty")
+	assert((presenter_variable_entries[0] as Dictionary)["is_empty"] == true)
+	assert((presenter_variable_entries[1] as Dictionary)["name"] == "Typed Variable")
+	assert((presenter_variable_entries[1] as Dictionary)["internal_id"] == presenter_schema_2_variable.get_internal_id())
+	assert((presenter_machine_entries[0] as Dictionary)["name"] == "Typed Machine")
+	assert((presenter_machine_entries[0] as Dictionary)["internal_id"] == presenter_schema_2_machine.get_internal_id())
+	assert((presenter_machine_entries[1] as Dictionary)["name"] == "Empty")
+	assert(presenter_schema_2_graph.containers.is_empty())
+	assert(presenter_schema_2_graph.processes[0] == presenter_schema_2_process)
+	assert(presenter_schema_2_graph.variables[1] == presenter_schema_2_variable)
+	assert(presenter_schema_2_graph.state_machines[0] == presenter_schema_2_machine)
+
+	var presenter_invalid_graph: FlowGraph = FlowGraph.new()
+	presenter_invalid_graph._internal_id = ""
+	var presenter_invalid: Dictionary = FlowGraphInspectorPresenter.present(presenter_invalid_graph)
+	var presenter_diagnostics: Array = presenter_invalid["diagnostics"] as Array
+	assert(presenter_diagnostics.size() == 1)
+	assert((presenter_diagnostics[0] as Dictionary)["code"] == "empty_internal_id")
+	assert(presenter_invalid_graph._internal_id == "")
+
 	print("[Flujo] Model smoke test passed")
 	await get_tree().process_frame
 	get_tree().quit()

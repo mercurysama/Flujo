@@ -6,15 +6,19 @@ extends EditorPlugin
 const PV_CONTROLLER_SCRIPT := preload("res://addons/vp_flujo/runtime/pv_controller.gd")
 const PV_SCENE_INSPECTOR_CLASS := preload("res://addons/vp_flujo/editor/pv_scene_inspector.gd")
 const VP_FLUJO_DOCK_CLASS := preload("res://addons/vp_flujo/editor/vp_flujo_dock.gd")
+const PV_CONTROLLER_INSPECTOR_PLUGIN_CLASS := preload("res://addons/vp_flujo/editor/pv_controller_inspector_plugin.gd")
 
 var _dock
 var _scene_inspector
+var _controller_inspector_plugin: EditorInspectorPlugin
 var _editor_selection: EditorSelection
 var _selected_node: Node
 
 
 func _enter_tree() -> void:
 	_scene_inspector = PV_SCENE_INSPECTOR_CLASS.new(PV_CONTROLLER_SCRIPT)
+	_controller_inspector_plugin = PV_CONTROLLER_INSPECTOR_PLUGIN_CLASS.new()
+	add_inspector_plugin(_controller_inspector_plugin)
 	_dock = VP_FLUJO_DOCK_CLASS.new()
 	add_dock(_dock)
 	_connect_editor_signals()
@@ -23,6 +27,9 @@ func _enter_tree() -> void:
 
 func _exit_tree() -> void:
 	_disconnect_editor_signals()
+	if is_instance_valid(_controller_inspector_plugin):
+		remove_inspector_plugin(_controller_inspector_plugin)
+	_controller_inspector_plugin = null
 
 	if is_instance_valid(_dock):
 		remove_dock(_dock)
