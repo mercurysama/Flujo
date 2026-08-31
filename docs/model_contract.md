@@ -42,9 +42,11 @@ Todo elemento persistente posee un identificador interno estable, independiente 
 
 - Identificador interno estable.
 - `CURRENT_SCHEMA_VERSION = 1` y `schema_version`, cuyo valor inicial es `1`, reservados para futuras migraciones.
-- Colección ordenada `Array[FlowBlockContainer]` que conserva también las posiciones `null`.
+- El esquema 1 usa exclusivamente la colección ordenada `Array[FlowBlockContainer]` llamada `containers`, que conserva también las posiciones `null`.
+- La representación disponible para el esquema 2 usa exclusivamente las colecciones ordenadas y tipadas `processes`, `variables` y `state_machines`, que también conservan las posiciones `null`.
+- Las dos representaciones no se sincronizan. Un grafo que contiene entradas en `containers` y en cualquier colección de esquema 2 es inválido.
 
-**Duplicación:** crea otro `FlowGraph` y genera identificadores nuevos para el grafo, sus contenedores y los bloques contenidos, manteniendo el orden y las posiciones `null`.
+**Duplicación:** requiere un grafo que haya superado la validación. Crea otro `FlowGraph` y genera identificadores nuevos para el grafo y todos los recursos de la representación activa, manteniendo el orden y las posiciones `null`. La copia de esquema 2 usa un único mapa de ID original a ID nuevo para remapear `owner_container_id`, `global_variable_id` e `initial_state_id`; las referencias no resueltas se conservan para diagnóstico.
 
 **Dependencias permitidas:** puede depender de los tipos persistentes del modelo y de utilidades portátiles del runtime. No depende del editor ni de un ejecutor.
 
@@ -121,11 +123,13 @@ El orden de `FlowGraph.containers` y `FlowBlockContainer.blocks` se conserva dur
 
 Los identificadores no dependen del índice ni de la posición en estas colecciones. La copia recibe identificadores nuevos en el grafo, los contenedores y los bloques.
 
-## Validación implementada del esquema 1
+## Validación implementada de los esquemas 1 y 2
 
 `FlowGraphValidator` valida el modelo sin modificarlo y devuelve un `FlowValidationResult` con diagnósticos estructurados `FlowDiagnostic`. Cada diagnóstico contiene un código estable, severidad, mensaje, ruta del elemento e identificador relacionado. El resultado permite consultar si existen errores.
 
-La validación actual detecta grafos nulos, versiones de esquema no soportadas, identificadores vacíos, de longitud distinta de 32 caracteres, no hexadecimales o duplicados, instancias de recursos repetidas y tipos de contenedor que no pueden migrarse según el contrato planificado del esquema 2. Recorre de forma determinista el grafo, `containers` y sus bloques; acepta las posiciones `null` sin producir diagnósticos.
+La validación actual detecta grafos nulos, versiones de esquema no soportadas, identificadores vacíos, de longitud distinta de 32 caracteres, no hexadecimales o duplicados, instancias de recursos repetidas y tipos de contenedor que no pueden migrarse según el contrato planificado del esquema 2. También detecta el uso simultáneo de `containers` y las colecciones de esquema 2. Recorre de forma determinista el grafo, sus colecciones activas, máquinas de estados y bloques; acepta las posiciones `null` sin producir diagnósticos.
+
+En el esquema 2, `owner_container_id` debe resolver a un `FlowProcess` o `FlowStateDefinition` perteneciente al mismo grafo y `global_variable_id` debe resolver a una variable `GLOBAL` del mismo grafo. Las referencias ausentes o de tipo/ámbito no permitido se conservan y generan un diagnóstico.
 
 El validador pertenece al runtime, usa únicamente APIs portátiles y no depende del editor. Esta validación no implementa la migración ni añade las colecciones del esquema 2.
 
@@ -133,7 +137,7 @@ El validador pertenece al runtime, usa únicamente APIs portátiles y no depende
 
 Los requisitos de esta sección son decisiones de diseño futuras. No describen funciones disponibles en la implementación actual.
 
-El contrato planificado para el esquema 2 de `FlowGraph` y su migración atómica desde el esquema 1 se define en [`flow_graph_v2_migration.md`](flow_graph_v2_migration.md). Ese documento es diseño previo y no afirma que la migración, las nuevas colecciones ni su interfaz estén implementadas.
+El contrato planificado para la migración atómica desde el esquema 1 al esquema 2 se define en [`flow_graph_v2_migration.md`](flow_graph_v2_migration.md). Ese documento es diseño previo y no afirma que la migración o su interfaz estén implementadas.
 
 ### Ejecución y estado temporal
 

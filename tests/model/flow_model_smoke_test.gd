@@ -72,7 +72,7 @@ func _ready() -> void:
 	assert(valid_state.get_internal_id() == valid_state_id)
 
 	var unsupported_schema_graph: FlowGraph = FlowGraph.new()
-	unsupported_schema_graph.schema_version = FlowGraph.CURRENT_SCHEMA_VERSION + 1
+	unsupported_schema_graph.schema_version = FlowGraph.SCHEMA_VERSION_2 + 1
 	var unsupported_schema_result: FlowValidationResult = FlowGraphValidator.validate(
 		unsupported_schema_graph
 	)
@@ -414,6 +414,166 @@ func _ready() -> void:
 	var state_machine_with_invalid_initial_copy: FlowStateMachineDefinition = state_machine_with_invalid_initial.duplicate_with_new_ids()
 	assert(state_machine_with_invalid_initial_copy.initial_state_id == "")
 	assert(state_machine_with_invalid_initial_copy.get_initial_state() == null)
+
+	var schema_2_graph: FlowGraph = FlowGraph.new()
+	schema_2_graph.schema_version = FlowGraph.SCHEMA_VERSION_2
+	var schema_2_process: FlowProcess = FlowProcess.new()
+	var schema_2_block: FlowBlock = FlowBlock.new()
+	schema_2_process.blocks.append(schema_2_block)
+	schema_2_process.blocks.append(null)
+	schema_2_graph.processes.append(schema_2_process)
+	schema_2_graph.processes.append(null)
+
+	var schema_2_global: FlowVariableDefinition = FlowVariableDefinition.new()
+	schema_2_global.scope = FlowVariableDefinition.Scope.GLOBAL
+	var schema_2_local: FlowVariableDefinition = FlowVariableDefinition.new()
+	schema_2_local.owner_container_id = schema_2_process.get_internal_id()
+	schema_2_local.global_variable_id = schema_2_global.get_internal_id()
+	schema_2_graph.variables.append(schema_2_global)
+	schema_2_graph.variables.append(null)
+	schema_2_graph.variables.append(schema_2_local)
+
+	var schema_2_machine: FlowStateMachineDefinition = FlowStateMachineDefinition.new()
+	schema_2_machine.add_state(null)
+	var schema_2_state: FlowStateDefinition = FlowStateDefinition.new()
+	var schema_2_state_block: FlowBlock = FlowBlock.new()
+	schema_2_state.blocks.append(schema_2_state_block)
+	schema_2_machine.add_state(schema_2_state)
+	schema_2_graph.state_machines.append(schema_2_machine)
+	schema_2_graph.state_machines.append(null)
+
+	var schema_2_result: FlowValidationResult = FlowGraphValidator.validate(schema_2_graph)
+	assert(not schema_2_result.has_errors())
+	assert(schema_2_result.diagnostics.is_empty())
+	assert(schema_2_graph.containers.is_empty())
+	assert(schema_2_graph.processes.size() == 2)
+	assert(schema_2_graph.processes[1] == null)
+	assert(schema_2_graph.variables.size() == 3)
+	assert(schema_2_graph.variables[1] == null)
+	assert(schema_2_graph.state_machines.size() == 2)
+	assert(schema_2_graph.state_machines[1] == null)
+
+	var schema_2_graph_id: String = schema_2_graph.get_internal_id()
+	var schema_2_process_id: String = schema_2_process.get_internal_id()
+	var schema_2_block_id: String = schema_2_block.get_internal_id()
+	var schema_2_global_id: String = schema_2_global.get_internal_id()
+	var schema_2_local_id: String = schema_2_local.get_internal_id()
+	var schema_2_machine_id: String = schema_2_machine.get_internal_id()
+	var schema_2_state_id: String = schema_2_state.get_internal_id()
+	var schema_2_state_block_id: String = schema_2_state_block.get_internal_id()
+	var schema_2_copy: FlowGraph = schema_2_graph.duplicate_with_new_ids()
+	var schema_2_process_copy: FlowProcess = schema_2_copy.processes[0] as FlowProcess
+	var schema_2_global_copy: FlowVariableDefinition = schema_2_copy.variables[0] as FlowVariableDefinition
+	var schema_2_local_copy: FlowVariableDefinition = schema_2_copy.variables[2] as FlowVariableDefinition
+	var schema_2_machine_copy: FlowStateMachineDefinition = schema_2_copy.state_machines[0] as FlowStateMachineDefinition
+	var schema_2_state_copy: FlowStateDefinition = schema_2_machine_copy.states[1] as FlowStateDefinition
+
+	assert(schema_2_copy != schema_2_graph)
+	assert(schema_2_copy.get_internal_id().length() == 32)
+	assert(schema_2_copy.get_internal_id() != schema_2_graph_id)
+	assert(schema_2_copy.schema_version == FlowGraph.SCHEMA_VERSION_2)
+	assert(schema_2_copy.containers.is_empty())
+	assert(schema_2_copy.processes.size() == 2)
+	assert(schema_2_copy.processes[1] == null)
+	assert(schema_2_copy.variables.size() == 3)
+	assert(schema_2_copy.variables[1] == null)
+	assert(schema_2_copy.state_machines.size() == 2)
+	assert(schema_2_copy.state_machines[1] == null)
+	assert(schema_2_process_copy != schema_2_process)
+	assert(schema_2_process_copy.get_internal_id().length() == 32)
+	assert(schema_2_process_copy.get_internal_id() != schema_2_process_id)
+	assert(schema_2_process_copy.blocks.size() == 2)
+	assert(schema_2_process_copy.blocks[1] == null)
+	assert(schema_2_process_copy.blocks[0] != schema_2_block)
+	assert(schema_2_process_copy.blocks[0].get_internal_id().length() == 32)
+	assert(schema_2_process_copy.blocks[0].get_internal_id() != schema_2_block_id)
+	assert(schema_2_global_copy != schema_2_global)
+	assert(schema_2_global_copy.get_internal_id() != schema_2_global_id)
+	assert(schema_2_local_copy != schema_2_local)
+	assert(schema_2_local_copy.get_internal_id() != schema_2_local_id)
+	assert(schema_2_local_copy.owner_container_id == schema_2_process_copy.get_internal_id())
+	assert(schema_2_local_copy.global_variable_id == schema_2_global_copy.get_internal_id())
+	assert(schema_2_machine_copy != schema_2_machine)
+	assert(schema_2_machine_copy.get_internal_id() != schema_2_machine_id)
+	assert(schema_2_machine_copy.states.size() == 2)
+	assert(schema_2_machine_copy.states[0] == null)
+	assert(schema_2_state_copy != schema_2_state)
+	assert(schema_2_state_copy.get_internal_id() != schema_2_state_id)
+	assert(schema_2_state_copy.blocks[0] != schema_2_state_block)
+	assert(schema_2_state_copy.blocks[0].get_internal_id() != schema_2_state_block_id)
+	assert(schema_2_machine_copy.initial_state_id == schema_2_state_copy.get_internal_id())
+	assert(schema_2_machine_copy.get_initial_state() == schema_2_state_copy)
+	assert(schema_2_graph.get_internal_id() == schema_2_graph_id)
+	assert(schema_2_process.get_internal_id() == schema_2_process_id)
+	assert(schema_2_block.get_internal_id() == schema_2_block_id)
+	assert(schema_2_global.get_internal_id() == schema_2_global_id)
+	assert(schema_2_local.get_internal_id() == schema_2_local_id)
+	assert(schema_2_local.owner_container_id == schema_2_process_id)
+	assert(schema_2_local.global_variable_id == schema_2_global_id)
+	assert(schema_2_machine.get_internal_id() == schema_2_machine_id)
+	assert(schema_2_state.get_internal_id() == schema_2_state_id)
+	assert(schema_2_state_block.get_internal_id() == schema_2_state_block_id)
+
+	var missing_reference_graph: FlowGraph = FlowGraph.new()
+	missing_reference_graph.schema_version = FlowGraph.SCHEMA_VERSION_2
+	var missing_reference_variable: FlowVariableDefinition = FlowVariableDefinition.new()
+	missing_reference_variable.owner_container_id = "missing_owner"
+	missing_reference_variable.global_variable_id = "missing_global"
+	missing_reference_graph.variables.append(missing_reference_variable)
+	var missing_reference_result: FlowValidationResult = FlowGraphValidator.validate(
+		missing_reference_graph
+	)
+	assert(missing_reference_result.has_errors())
+	assert(_has_diagnostic(
+		missing_reference_result,
+		FlowDiagnostic.CODE_MISSING_OWNER_CONTAINER_REFERENCE
+	))
+	assert(_has_diagnostic(
+		missing_reference_result,
+		FlowDiagnostic.CODE_MISSING_GLOBAL_VARIABLE_REFERENCE
+	))
+	assert(missing_reference_variable.owner_container_id == "missing_owner")
+	assert(missing_reference_variable.global_variable_id == "missing_global")
+
+	var invalid_reference_graph: FlowGraph = FlowGraph.new()
+	invalid_reference_graph.schema_version = FlowGraph.SCHEMA_VERSION_2
+	var invalid_reference_variable: FlowVariableDefinition = FlowVariableDefinition.new()
+	var non_global_target: FlowVariableDefinition = FlowVariableDefinition.new()
+	invalid_reference_variable.owner_container_id = non_global_target.get_internal_id()
+	invalid_reference_variable.global_variable_id = non_global_target.get_internal_id()
+	invalid_reference_graph.variables.append(invalid_reference_variable)
+	invalid_reference_graph.variables.append(non_global_target)
+	var invalid_reference_result: FlowValidationResult = FlowGraphValidator.validate(
+		invalid_reference_graph
+	)
+	assert(_has_diagnostic(
+		invalid_reference_result,
+		FlowDiagnostic.CODE_INVALID_OWNER_CONTAINER_REFERENCE
+	))
+	assert(_has_diagnostic(
+		invalid_reference_result,
+		FlowDiagnostic.CODE_INVALID_GLOBAL_VARIABLE_REFERENCE
+	))
+
+	var mixed_sources_graph: FlowGraph = FlowGraph.new()
+	mixed_sources_graph.schema_version = FlowGraph.SCHEMA_VERSION_2
+	mixed_sources_graph.containers.append(FlowProcess.new())
+	mixed_sources_graph.processes.append(FlowProcess.new())
+	var mixed_sources_result: FlowValidationResult = FlowGraphValidator.validate(mixed_sources_graph)
+	assert(_has_diagnostic(mixed_sources_result, FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES))
+
+	var repeated_schema_2_graph: FlowGraph = FlowGraph.new()
+	repeated_schema_2_graph.schema_version = FlowGraph.SCHEMA_VERSION_2
+	var repeated_schema_2_process: FlowProcess = FlowProcess.new()
+	repeated_schema_2_graph.processes.append(repeated_schema_2_process)
+	repeated_schema_2_graph.processes.append(repeated_schema_2_process)
+	var repeated_schema_2_result: FlowValidationResult = FlowGraphValidator.validate(
+		repeated_schema_2_graph
+	)
+	assert(_has_diagnostic(
+		repeated_schema_2_result,
+		FlowDiagnostic.CODE_REPEATED_RESOURCE_INSTANCE
+	))
 
 	print("[Flujo] Model smoke test passed")
 	await get_tree().process_frame

@@ -17,6 +17,11 @@ const CODE_NON_HEXADECIMAL_INTERNAL_ID: StringName = &"non_hexadecimal_internal_
 const CODE_DUPLICATE_INTERNAL_ID: StringName = &"duplicate_internal_id"
 const CODE_REPEATED_RESOURCE_INSTANCE: StringName = &"repeated_resource_instance"
 const CODE_UNMIGRATABLE_CONTAINER_TYPE: StringName = &"unmigratable_container_type"
+const CODE_MIXED_SCHEMA_SOURCES: StringName = &"mixed_schema_sources"
+const CODE_MISSING_OWNER_CONTAINER_REFERENCE: StringName = &"missing_owner_container_reference"
+const CODE_INVALID_OWNER_CONTAINER_REFERENCE: StringName = &"invalid_owner_container_reference"
+const CODE_MISSING_GLOBAL_VARIABLE_REFERENCE: StringName = &"missing_global_variable_reference"
+const CODE_INVALID_GLOBAL_VARIABLE_REFERENCE: StringName = &"invalid_global_variable_reference"
 
 var code: StringName
 var severity: Severity
