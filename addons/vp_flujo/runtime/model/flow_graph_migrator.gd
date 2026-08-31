@@ -1,3 +1,4 @@
+@tool
 ## Migrates validated FlowGraph schema 1 data into an independent schema 2 graph.
 class_name FlowGraphMigrator
 extends RefCounted

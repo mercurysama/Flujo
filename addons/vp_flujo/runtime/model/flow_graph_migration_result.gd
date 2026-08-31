@@ -1,3 +1,4 @@
+@tool
 ## Collects the candidate graph and diagnostics from one FlowGraph migration attempt.
 class_name FlowGraphMigrationResult
 extends RefCounted

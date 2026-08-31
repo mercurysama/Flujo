@@ -6,6 +6,13 @@ extends EditorInspectorPlugin
 const FLOW_GRAPH_PROPERTY: StringName = &"flow_graph"
 const FLOW_GRAPH_INSPECTOR_PROPERTY := preload("res://addons/vp_flujo/editor/flow_graph_inspector_property.gd")
 
+var _undo_redo: EditorUndoRedoManager
+
+
+## Receives the editor-owned undo/redo manager from the main plugin.
+func set_undo_redo(undo_redo: EditorUndoRedoManager) -> void:
+	_undo_redo = undo_redo
+
 
 func _can_handle(object: Object) -> bool:
 	return object is PVController
@@ -24,5 +31,6 @@ func _parse_property(
 		return false
 
 	var property: FlowGraphInspectorProperty = FLOW_GRAPH_INSPECTOR_PROPERTY.new()
+	property.configure(_undo_redo)
 	add_property_editor(property_name, property, true, "Flow Graph")
 	return true

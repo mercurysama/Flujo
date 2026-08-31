@@ -1,3 +1,4 @@
+@tool
 ## Describes one model validation finding with a stable code and source location.
 class_name FlowDiagnostic
 extends RefCounted

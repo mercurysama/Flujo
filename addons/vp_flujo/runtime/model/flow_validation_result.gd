@@ -1,3 +1,4 @@
+@tool
 ## Collects the ordered diagnostics produced by one model validation pass.
 class_name FlowValidationResult
 extends RefCounted

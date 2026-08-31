@@ -18,6 +18,7 @@ var _selected_node: Node
 func _enter_tree() -> void:
 	_scene_inspector = PV_SCENE_INSPECTOR_CLASS.new(PV_CONTROLLER_SCRIPT)
 	_controller_inspector_plugin = PV_CONTROLLER_INSPECTOR_PLUGIN_CLASS.new()
+	_controller_inspector_plugin.set_undo_redo(get_undo_redo())
 	add_inspector_plugin(_controller_inspector_plugin)
 	_dock = VP_FLUJO_DOCK_CLASS.new()
 	add_dock(_dock)

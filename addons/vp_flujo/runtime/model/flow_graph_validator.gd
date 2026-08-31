@@ -1,3 +1,4 @@
+@tool
 ## Validates FlowGraph schema 1 and schema 2 deterministically without modifying it.
 class_name FlowGraphValidator
 extends RefCounted

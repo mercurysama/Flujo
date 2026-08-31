@@ -159,6 +159,16 @@ El editor usa `FlowGraphInspectorPresenter` para mostrar `flow_graph` de `PVCont
 
 `PVControllerInspectorPlugin` y `FlowGraphInspectorProperty` pertenecen al editor y se registran desde el plugin principal. Las filas son seleccionables solo dentro de la interfaz; no escriben en el modelo. Los diagnósticos de `FlowGraphValidator` se muestran sin alterar el grafo.
 
+## Edición deshacer/rehacer implementada del Inspector
+
+`FlowGraphEditorCommands` pertenece exclusivamente al editor y recibe un `EditorUndoRedoManager` desde el plugin principal. Cada modificación se registra antes de ejecutarse como una acción atómica con operaciones de hacer y deshacer; el modelo no se modifica previamente.
+
+Cuando un `PVController` no tiene grafo, el Inspector puede asignarle mediante una acción un `FlowGraph` nuevo con `schema_version = 2`. Para un grafo válido de esquema 1, puede ejecutar `FlowGraphMigrator` y reemplazar la referencia únicamente por la candidata válida; deshacer restaura exactamente la instancia original y rehacer restaura la misma candidata migrada.
+
+En un esquema 2 sin fuentes mezcladas, el Inspector permite añadir `FlowProcess`, `FlowVariableDefinition` y `FlowStateMachineDefinition`, renombrar por ID interno, mover una posición y eliminar conservando el hueco `null`. Las acciones usan instantáneas de la colección activa, por lo que los recursos, IDs, orden y posiciones se recuperan al deshacer o rehacer. Antes de eliminar, se valida una candidata aislada: si deja referencias inválidas, la operación se rechaza, no entra al historial y sus diagnósticos se muestran en el Inspector.
+
+Los recursos runtime involucrados en esta presentación se ejecutan también en modo `@tool` para que Godot los instancie correctamente dentro del Inspector, pero no importan ni referencian APIs de editor.
+
 ## Migración implementada de esquema 1 a esquema 2
 
 `FlowGraphMigrator` solo acepta un origen de esquema 1 que supere `FlowGraphValidator`. Cualquier diagnóstico de error del origen impide la migración y se conserva en `FlowGraphMigrationResult`. La candidata se construye por separado, se valida y solo se expone cuando no tiene errores.
@@ -211,6 +221,12 @@ El contrato planificado para la evolución posterior del esquema 2 se define en 
 La escena `tests/model/flow_model_smoke_test.tscn` valida los identificadores, la duplicación, la conservación de tipos derivados y posiciones `null`, y que cada `PVController` nuevo posea un `FlowGraph` independiente.
 
 Se ejecuta manualmente abriendo esa escena en Godot y pulsando **F6**.
+
+`tests/editor/flow_graph_editor_commands_test.gd` se ejecuta en un editor headless y cubre creación, migración, renombrado, movimiento, eliminación válida y rechazada, conservación de instancias e IDs durante undo/redo, actualización del presenter y validación sin fuentes mezcladas.
+
+## Auditoría final de la Iteración 5
+
+La iteración entrega colecciones tipadas de esquema 2, validación determinista, migración explícita v1→v2, presentación de solo lectura y edición del Inspector basada en undo/redo. El valor predeterminado de `schema_version` se mantiene en `1` para recursos heredados. No se implementaron migración automática, edición de bloques o estados internos, cambios al dock o ejecutor, ni dependencias editoriales desde runtime.
 
 ## Ubicación y portabilidad
 
