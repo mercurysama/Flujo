@@ -48,6 +48,8 @@ Todo elemento persistente posee un identificador interno estable, independiente 
 
 **Duplicación:** requiere un grafo que haya superado la validación. Crea otro `FlowGraph` y genera identificadores nuevos para el grafo y todos los recursos de la representación activa, manteniendo el orden y las posiciones `null`. La copia de esquema 2 usa un único mapa de ID original a ID nuevo para remapear `owner_container_id`, `global_variable_id` e `initial_state_id`; las referencias no resueltas se conservan para diagnóstico.
 
+**Migración:** `FlowGraphMigrator.migrate_schema_1_to_2()` crea de forma atómica un nuevo grafo de esquema 2 a partir de un grafo de esquema 1 validado. Conserva el ID del grafo y los IDs válidos de procesos, estados y bloques, sin compartir recursos mutables con el origen. Los procesos y los estados conservan las posiciones de `containers`; los estados se agrupan en una máquina nueva llamada `Migrated States`.
+
 **Dependencias permitidas:** puede depender de los tipos persistentes del modelo y de utilidades portátiles del runtime. No depende del editor ni de un ejecutor.
 
 ### FlowBlockContainer
@@ -107,6 +109,18 @@ Todo elemento persistente posee un identificador interno estable, independiente 
 
 **Duplicación:** conserva el tipo `FlowStateDefinition`, el valor de `is_initial` y genera identificadores nuevos mediante la duplicación heredada.
 
+### FlowGraphMigrationResult
+
+**Base:** `RefCounted`.
+
+**Responsabilidad:** representar una tentativa de migración con el grafo migrado, cuando existe, y los diagnósticos ordenados del origen, la transformación o la candidata.
+
+### FlowGraphMigrator
+
+**Base:** `RefCounted`.
+
+**Responsabilidad:** migrar un `FlowGraph` de esquema 1 a una copia independiente de esquema 2 sin modificar el origen. La migración valida el origen antes de construir la candidata y valida la candidata antes de devolverla como exitosa.
+
 ### PVController
 
 **Base:** `Node`.
@@ -131,13 +145,21 @@ La validación actual detecta grafos nulos, versiones de esquema no soportadas, 
 
 En el esquema 2, `owner_container_id` debe resolver a un `FlowProcess` o `FlowStateDefinition` perteneciente al mismo grafo y `global_variable_id` debe resolver a una variable `GLOBAL` del mismo grafo. Las referencias ausentes o de tipo/ámbito no permitido se conservan y generan un diagnóstico.
 
-El validador pertenece al runtime, usa únicamente APIs portátiles y no depende del editor. Esta validación no implementa la migración ni añade las colecciones del esquema 2.
+El validador pertenece al runtime, usa únicamente APIs portátiles y no depende del editor.
+
+## Migración implementada de esquema 1 a esquema 2
+
+`FlowGraphMigrator` solo acepta un origen de esquema 1 que supere `FlowGraphValidator`. Cualquier diagnóstico de error del origen impide la migración y se conserva en `FlowGraphMigrationResult`. La candidata se construye por separado, se valida y solo se expone cuando no tiene errores.
+
+Los `FlowProcess` se copian profundamente a `processes` manteniendo el tamaño, orden e índices de `containers`; las posiciones que no contienen procesos quedan como `null`. Los `FlowStateDefinition` se copian profundamente a una única máquina `Migrated States`, cuyo arreglo conserva esos mismos índices y posiciones. La máquina no se crea si no hay estados y recibe un ID nuevo si se crea.
+
+Si existe exactamente un estado con `is_initial`, la máquina migrada lo selecciona; si no hay ninguno, selecciona el primer estado no nulo; más de uno produce un diagnóstico de error. Los tipos desconocidos de `FlowBlockContainer`, las referencias ausentes y cualquier otra invalidación estructural del origen impiden la migración sin cambiar el origen.
 
 ## Contrato planificado — todavía no implementado
 
 Los requisitos de esta sección son decisiones de diseño futuras. No describen funciones disponibles en la implementación actual.
 
-El contrato planificado para la migración atómica desde el esquema 1 al esquema 2 se define en [`flow_graph_v2_migration.md`](flow_graph_v2_migration.md). Ese documento es diseño previo y no afirma que la migración o su interfaz estén implementadas.
+El contrato planificado para la evolución posterior del esquema 2 se define en [`flow_graph_v2_migration.md`](flow_graph_v2_migration.md). Sus partes no cubiertas por la migración implementada siguen siendo diseño previo.
 
 ### Ejecución y estado temporal
 

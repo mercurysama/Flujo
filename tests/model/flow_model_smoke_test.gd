@@ -9,6 +9,14 @@ func _has_diagnostic(result: FlowValidationResult, code: StringName) -> bool:
 	return false
 
 
+func _has_migration_diagnostic(result: FlowGraphMigrationResult, code: StringName) -> bool:
+	for diagnostic: FlowDiagnostic in result.diagnostics:
+		if diagnostic.code == code:
+			return true
+
+	return false
+
+
 func _find_diagnostic(
 		result: FlowValidationResult,
 		code: StringName,
@@ -574,6 +582,157 @@ func _ready() -> void:
 		repeated_schema_2_result,
 		FlowDiagnostic.CODE_REPEATED_RESOURCE_INSTANCE
 	))
+
+	var migration_source: FlowGraph = FlowGraph.new()
+	var migration_process: FlowProcess = FlowProcess.new()
+	var migration_process_block: FlowBlock = FlowBlock.new()
+	migration_process.blocks.append(migration_process_block)
+	var migration_initial_state: FlowStateDefinition = FlowStateDefinition.new()
+	migration_initial_state.is_initial = true
+	var migration_initial_block: FlowBlock = FlowBlock.new()
+	migration_initial_state.blocks.append(migration_initial_block)
+	var migration_second_state: FlowStateDefinition = FlowStateDefinition.new()
+	migration_source.containers.append(migration_process)
+	migration_source.containers.append(null)
+	migration_source.containers.append(migration_initial_state)
+	migration_source.containers.append(migration_second_state)
+
+	var migration_source_id: String = migration_source.get_internal_id()
+	var migration_process_id: String = migration_process.get_internal_id()
+	var migration_process_block_id: String = migration_process_block.get_internal_id()
+	var migration_initial_state_id: String = migration_initial_state.get_internal_id()
+	var migration_initial_block_id: String = migration_initial_block.get_internal_id()
+	var migration_second_state_id: String = migration_second_state.get_internal_id()
+	var migration_result: FlowGraphMigrationResult = FlowGraphMigrator.migrate_schema_1_to_2(
+		migration_source
+	)
+	assert(migration_result.is_successful())
+	assert(migration_result.diagnostics.is_empty())
+	var migrated_graph: FlowGraph = migration_result.migrated_graph
+	var migrated_process: FlowProcess = migrated_graph.processes[0] as FlowProcess
+	var migrated_machine: FlowStateMachineDefinition = migrated_graph.state_machines[0] as FlowStateMachineDefinition
+	var migrated_initial_state: FlowStateDefinition = migrated_machine.states[2] as FlowStateDefinition
+	var migrated_second_state: FlowStateDefinition = migrated_machine.states[3] as FlowStateDefinition
+	assert(migrated_graph != migration_source)
+	assert(migrated_graph.schema_version == FlowGraph.SCHEMA_VERSION_2)
+	assert(migrated_graph.get_internal_id() == migration_source_id)
+	assert(migrated_graph.containers.is_empty())
+	assert(migrated_graph.processes.size() == 4)
+	assert(migrated_graph.processes[1] == null)
+	assert(migrated_graph.processes[2] == null)
+	assert(migrated_graph.processes[3] == null)
+	assert(migrated_process != migration_process)
+	assert(migrated_process.get_internal_id() == migration_process_id)
+	assert(migrated_process.blocks[0] != migration_process_block)
+	assert(migrated_process.blocks[0].get_internal_id() == migration_process_block_id)
+	assert(migrated_graph.state_machines.size() == 1)
+	assert(migrated_machine.display_name == "Migrated States")
+	assert(migrated_machine.get_internal_id().length() == 32)
+	assert(migrated_machine.get_internal_id() != migration_source_id)
+	assert(migrated_machine.states.size() == 4)
+	assert(migrated_machine.states[0] == null)
+	assert(migrated_machine.states[1] == null)
+	assert(migrated_initial_state != migration_initial_state)
+	assert(migrated_initial_state.get_internal_id() == migration_initial_state_id)
+	assert(migrated_initial_state.blocks[0] != migration_initial_block)
+	assert(migrated_initial_state.blocks[0].get_internal_id() == migration_initial_block_id)
+	assert(migrated_second_state != migration_second_state)
+	assert(migrated_second_state.get_internal_id() == migration_second_state_id)
+	assert(migrated_machine.initial_state_id == migration_initial_state_id)
+	assert(migrated_machine.get_initial_state() == migrated_initial_state)
+	var migrated_validation: FlowValidationResult = FlowGraphValidator.validate(migrated_graph)
+	assert(not migrated_validation.has_errors())
+	assert(migration_source.schema_version == FlowGraph.CURRENT_SCHEMA_VERSION)
+	assert(migration_source.get_internal_id() == migration_source_id)
+	assert(migration_source.containers.size() == 4)
+	assert(migration_source.containers[0] == migration_process)
+	assert(migration_source.containers[1] == null)
+	assert(migration_source.containers[2] == migration_initial_state)
+	assert(migration_source.containers[3] == migration_second_state)
+	assert(migration_source.processes.is_empty())
+	assert(migration_source.variables.is_empty())
+	assert(migration_source.state_machines.is_empty())
+	assert(migration_process.get_internal_id() == migration_process_id)
+	assert(migration_process_block.get_internal_id() == migration_process_block_id)
+	assert(migration_initial_state.get_internal_id() == migration_initial_state_id)
+	assert(migration_initial_block.get_internal_id() == migration_initial_block_id)
+	assert(migration_second_state.get_internal_id() == migration_second_state_id)
+
+	var no_initial_source: FlowGraph = FlowGraph.new()
+	no_initial_source.containers.append(null)
+	var no_initial_state: FlowStateDefinition = FlowStateDefinition.new()
+	no_initial_source.containers.append(no_initial_state)
+	var no_initial_result: FlowGraphMigrationResult = FlowGraphMigrator.migrate_schema_1_to_2(
+		no_initial_source
+	)
+	assert(no_initial_result.is_successful())
+	var no_initial_machine: FlowStateMachineDefinition = no_initial_result.migrated_graph.state_machines[0] as FlowStateMachineDefinition
+	var no_initial_state_copy: FlowStateDefinition = no_initial_machine.states[1] as FlowStateDefinition
+	assert(no_initial_machine.initial_state_id == no_initial_state_copy.get_internal_id())
+	assert(no_initial_machine.get_initial_state() == no_initial_state_copy)
+
+	var multiple_initial_source: FlowGraph = FlowGraph.new()
+	var first_multiple_initial_state: FlowStateDefinition = FlowStateDefinition.new()
+	var second_multiple_initial_state: FlowStateDefinition = FlowStateDefinition.new()
+	first_multiple_initial_state.is_initial = true
+	second_multiple_initial_state.is_initial = true
+	multiple_initial_source.containers.append(first_multiple_initial_state)
+	multiple_initial_source.containers.append(second_multiple_initial_state)
+	var multiple_initial_source_id: String = multiple_initial_source.get_internal_id()
+	var multiple_initial_result: FlowGraphMigrationResult = FlowGraphMigrator.migrate_schema_1_to_2(
+		multiple_initial_source
+	)
+	assert(not multiple_initial_result.is_successful())
+	assert(multiple_initial_result.migrated_graph == null)
+	assert(_has_migration_diagnostic(
+		multiple_initial_result,
+		FlowDiagnostic.CODE_MULTIPLE_INITIAL_STATES
+	))
+	assert(multiple_initial_source.get_internal_id() == multiple_initial_source_id)
+	assert(multiple_initial_source.schema_version == FlowGraph.CURRENT_SCHEMA_VERSION)
+	assert(multiple_initial_source.containers[0] == first_multiple_initial_state)
+	assert(multiple_initial_source.containers[1] == second_multiple_initial_state)
+
+	var unknown_container_source: FlowGraph = FlowGraph.new()
+	var unknown_container: FlowBlockContainer = FlowBlockContainer.new()
+	unknown_container_source.containers.append(unknown_container)
+	var unknown_container_result: FlowGraphMigrationResult = FlowGraphMigrator.migrate_schema_1_to_2(
+		unknown_container_source
+	)
+	assert(not unknown_container_result.is_successful())
+	assert(_has_migration_diagnostic(
+		unknown_container_result,
+		FlowDiagnostic.CODE_UNMIGRATABLE_CONTAINER_TYPE
+	))
+	assert(unknown_container_source.containers[0] == unknown_container)
+	assert(unknown_container_source.schema_version == FlowGraph.CURRENT_SCHEMA_VERSION)
+
+	var invalid_migration_source: FlowGraph = FlowGraph.new()
+	invalid_migration_source._internal_id = ""
+	var invalid_migration_result: FlowGraphMigrationResult = FlowGraphMigrator.migrate_schema_1_to_2(
+		invalid_migration_source
+	)
+	assert(not invalid_migration_result.is_successful())
+	assert(_has_migration_diagnostic(
+		invalid_migration_result,
+		FlowDiagnostic.CODE_EMPTY_INTERNAL_ID
+	))
+	assert(invalid_migration_source._internal_id == "")
+	assert(invalid_migration_source.schema_version == FlowGraph.CURRENT_SCHEMA_VERSION)
+
+	var first_deterministic_failure: FlowGraphMigrationResult = FlowGraphMigrator.migrate_schema_1_to_2(
+		multiple_initial_source
+	)
+	var second_deterministic_failure: FlowGraphMigrationResult = FlowGraphMigrator.migrate_schema_1_to_2(
+		multiple_initial_source
+	)
+	assert(first_deterministic_failure.diagnostics.size() == second_deterministic_failure.diagnostics.size())
+	for migration_diagnostic_index: int in first_deterministic_failure.diagnostics.size():
+		var first_migration_diagnostic: FlowDiagnostic = first_deterministic_failure.diagnostics[migration_diagnostic_index]
+		var second_migration_diagnostic: FlowDiagnostic = second_deterministic_failure.diagnostics[migration_diagnostic_index]
+		assert(first_migration_diagnostic.code == second_migration_diagnostic.code)
+		assert(first_migration_diagnostic.element_path == second_migration_diagnostic.element_path)
+		assert(first_migration_diagnostic.related_id == second_migration_diagnostic.related_id)
 
 	print("[Flujo] Model smoke test passed")
 	await get_tree().process_frame
