@@ -8,12 +8,13 @@ var _commands: FlowGraphEditorCommands
 var _selected_collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.PROCESSES
 var _selected_id: String = ""
 var _rename_input: LineEdit
+var _rebuild_queued: bool = false
 
 
 ## Supplies the editor undo/redo manager used by all model-changing controls.
 func configure(undo_redo: EditorUndoRedoManager) -> void:
 	_commands = FlowGraphEditorCommands.new(undo_redo)
-	_commands.changed.connect(_rebuild_interface)
+	_commands.changed.connect(_request_rebuild)
 
 
 func _init() -> void:
@@ -24,14 +25,22 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	call_deferred(&"_rebuild_interface")
+	_request_rebuild()
 
 
 func _update_property() -> void:
-	_rebuild_interface()
+	_request_rebuild()
+
+
+func _request_rebuild() -> void:
+	if _rebuild_queued:
+		return
+	_rebuild_queued = true
+	call_deferred(&"_rebuild_interface")
 
 
 func _rebuild_interface() -> void:
+	_rebuild_queued = false
 	var controller: PVController = get_edited_object() as PVController
 	var graph: FlowGraph = null
 	if controller != null:

@@ -71,6 +71,30 @@ func _run() -> void:
 	_expect(_has_schema_2_category_order(inspector_property, "Add Process", "Processes"), "Processes renders button, category, then list.")
 	_expect(_has_schema_2_category_order(inspector_property, "Add Variable", "Variables"), "Variables renders button, category, then list.")
 	_expect(_has_schema_2_category_order(inspector_property, "Add State Machine", "State Machines"), "State Machines renders button, category, then list.")
+	await _test_inspector_add_button_refresh(
+		inspector_property,
+		controller,
+		history,
+		"Add Process",
+		"Processes",
+		FlowGraphEditorCommands.Collection.PROCESSES
+	)
+	await _test_inspector_add_button_refresh(
+		inspector_property,
+		controller,
+		history,
+		"Add Variable",
+		"Variables",
+		FlowGraphEditorCommands.Collection.VARIABLES
+	)
+	await _test_inspector_add_button_refresh(
+		inspector_property,
+		controller,
+		history,
+		"Add State Machine",
+		"State Machines",
+		FlowGraphEditorCommands.Collection.STATE_MACHINES
+	)
 	inspector_property.queue_free()
 	controller.flow_graph = null
 	_test_dock_visibility_conditions()
@@ -209,6 +233,73 @@ func _has_schema_2_category_order(property: FlowGraphInspectorProperty, button_t
 	var title: Label = category.get_child(1) as Label
 	var list: ItemList = category.get_child(2) as ItemList
 	return category.get_child(0) == button and title != null and title.text == title_text and list != null
+
+
+func _test_inspector_add_button_refresh(
+		property: FlowGraphInspectorProperty,
+		controller: PVController,
+		history: UndoRedo,
+		button_text: String,
+		section_title: String,
+		collection: FlowGraphEditorCommands.Collection
+) -> void:
+	var previous_size: int = _collection_size(controller.flow_graph, collection)
+	var add_button: Button = _find_button(property, button_text)
+	_expect(add_button != null and add_button.visible, "%s is visible before adding." % button_text)
+	if add_button == null:
+		return
+	add_button.emit_signal(&"pressed")
+	await process_frame
+	_expect(_collection_size(controller.flow_graph, collection) == previous_size + 1, "%s changes its model collection." % button_text)
+	_expect(_visible_section_row_count(property, section_title) == previous_size + 1, "%s rebuilds the matching visible Inspector list." % button_text)
+	history.undo()
+	await process_frame
+	_expect(_collection_size(controller.flow_graph, collection) == previous_size, "%s undo restores its model collection." % button_text)
+	_expect(_visible_section_row_count(property, section_title) == previous_size, "%s undo refreshes the matching Inspector list." % button_text)
+	history.redo()
+	await process_frame
+	_expect(_collection_size(controller.flow_graph, collection) == previous_size + 1, "%s redo restores its model collection." % button_text)
+	_expect(_visible_section_row_count(property, section_title) == previous_size + 1, "%s redo refreshes the matching Inspector list." % button_text)
+	var content: Node = property.get_child(0)
+	var control_count: int = content.get_child_count()
+	property.call(&"_rebuild_interface")
+	property.call(&"_rebuild_interface")
+	property.call(&"_rebuild_interface")
+	_expect(content.get_child_count() == control_count, "%s repeated rebuilds keep a stable control count." % button_text)
+	_expect(_visible_section_row_count(property, section_title) == previous_size + 1, "%s repeated rebuilds do not duplicate rows." % button_text)
+
+
+func _collection_size(graph: FlowGraph, collection: FlowGraphEditorCommands.Collection) -> int:
+	match collection:
+		FlowGraphEditorCommands.Collection.PROCESSES:
+			return graph.processes.size()
+		FlowGraphEditorCommands.Collection.VARIABLES:
+			return graph.variables.size()
+		FlowGraphEditorCommands.Collection.STATE_MACHINES:
+			return graph.state_machines.size()
+	return -1
+
+
+func _visible_section_row_count(property: FlowGraphInspectorProperty, section_title: String) -> int:
+	var title: Label = _find_label(property, section_title)
+	if title == null:
+		return -1
+	var category: Node = title.get_parent()
+	for child: Node in category.get_children():
+		if child is ItemList:
+			var list: ItemList = child as ItemList
+			return list.item_count if list.is_visible_in_tree() else -1
+	return -1
+
+
+func _find_label(root: Node, label_text: String) -> Label:
+	if root is Label and (root as Label).text == label_text:
+		return root as Label
+	for child: Node in root.get_children():
+		var label: Label = _find_label(child, label_text)
+		if label != null:
+			return label
+	return null
 
 
 func _test_debug_instrumentation_removed() -> void:
