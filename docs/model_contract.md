@@ -50,6 +50,8 @@ Todo elemento persistente posee un identificador interno estable, independiente 
 
 **Migración:** `FlowGraphMigrator.migrate_schema_1_to_2()` crea de forma atómica un nuevo grafo de esquema 2 a partir de un grafo de esquema 1 validado. Conserva el ID del grafo y los IDs válidos de procesos, estados y bloques, sin compartir recursos mutables con el origen. Los procesos y los estados conservan las posiciones de `containers`; los estados se agrupan en una máquina nueva llamada `Migrated States`.
 
+**Compartición en escenas:** `FlowGraph` es una definición de programa compartible entre instancias de una `PackedScene` y permanece inmutable durante la ejecución. El estado y los valores mutables por instancia corresponderán a un futuro contexto runtime propio de cada `PVController`.
+
 **Dependencias permitidas:** puede depender de los tipos persistentes del modelo y de utilidades portátiles del runtime. No depende del editor ni de un ejecutor.
 
 ### FlowBlockContainer
