@@ -6,15 +6,20 @@ extends EditorPlugin
 const PV_CONTROLLER_SCRIPT := preload("res://addons/vp_flujo/runtime/pv_controller.gd")
 const PV_SCENE_INSPECTOR_CLASS := preload("res://addons/vp_flujo/editor/pv_scene_inspector.gd")
 const VP_FLUJO_DOCK_CLASS := preload("res://addons/vp_flujo/editor/vp_flujo_dock.gd")
+const PV_CONTROLLER_INSPECTOR_PLUGIN_CLASS := preload("res://addons/vp_flujo/editor/pv_controller_inspector_plugin.gd")
 
 var _dock
 var _scene_inspector
+var _controller_inspector_plugin: EditorInspectorPlugin
 var _editor_selection: EditorSelection
 var _selected_node: Node
 
 
 func _enter_tree() -> void:
 	_scene_inspector = PV_SCENE_INSPECTOR_CLASS.new(PV_CONTROLLER_SCRIPT)
+	_controller_inspector_plugin = PV_CONTROLLER_INSPECTOR_PLUGIN_CLASS.new()
+	_controller_inspector_plugin.set_undo_redo(get_undo_redo())
+	add_inspector_plugin(_controller_inspector_plugin)
 	_dock = VP_FLUJO_DOCK_CLASS.new()
 	add_dock(_dock)
 	_connect_editor_signals()
@@ -23,6 +28,9 @@ func _enter_tree() -> void:
 
 func _exit_tree() -> void:
 	_disconnect_editor_signals()
+	if is_instance_valid(_controller_inspector_plugin):
+		remove_inspector_plugin(_controller_inspector_plugin)
+	_controller_inspector_plugin = null
 
 	if is_instance_valid(_dock):
 		remove_dock(_dock)
@@ -65,16 +73,7 @@ func _disconnect_editor_signals() -> void:
 
 
 func _on_selection_changed() -> void:
-	_selected_node = null
-
-	if _editor_selection == null:
-		return
-
-	var selected_nodes: Array[Node] = _editor_selection.get_selected_nodes()
-	if selected_nodes.size() != 1:
-		return
-
-	_selected_node = selected_nodes[0]
+	_update_dock_visibility()
 
 
 func _shortcut_input(event: InputEvent) -> void:
@@ -142,12 +141,29 @@ func _on_scene_tree_changed(_node: Node) -> void:
 
 
 func _refresh_current_scene() -> void:
+	_update_dock_visibility()
+
+
+func _update_dock_visibility() -> void:
 	if not is_instance_valid(_dock) or _scene_inspector == null:
 		return
 
-	var scene_root := EditorInterface.get_edited_scene_root()
-	if scene_root == null:
-		return
+	var selected_nodes: Array[Node] = []
+	if _editor_selection != null:
+		selected_nodes = _editor_selection.get_selected_nodes()
+	var scene_root: Node = EditorInterface.get_edited_scene_root()
+	var should_show: bool = _should_show_dock(selected_nodes, scene_root, _scene_inspector)
+	_selected_node = selected_nodes[0] if selected_nodes.size() == 1 else null
+	_dock.set_controller_present(should_show)
 
-	var has_controller: bool = _scene_inspector.contains_controller(scene_root)
-	_dock.set_controller_present(has_controller)
+
+static func _should_show_dock(
+		selected_nodes: Array[Node],
+		scene_root: Node,
+		scene_inspector
+) -> bool:
+	if selected_nodes.size() == 1:
+		return scene_inspector != null and scene_inspector.contains_controller(selected_nodes[0])
+	if selected_nodes.size() > 1:
+		return false
+	return scene_inspector != null and scene_inspector.contains_controller(scene_root)
