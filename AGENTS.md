@@ -36,8 +36,8 @@
 - The Flujo `EditorDock` is reserved for the future Scratch-style block editor.
 - Do not place the container editor inside `EditorDock`.
 - `FlowGraph` schema version remains 1.
-- `FlowGraph.containers` remains the current legacy collection.
-- `FlowVariableDefinition` and `FlowStateMachineDefinition` exist but are not yet integrated into `FlowGraph`.
+- `FlowGraph.containers` remains the legacy collection for schema 1.
+- Schema 2 integrates the typed `processes`, `variables`, and `state_machines` collections in `FlowGraph`; it must not use `containers` at the same time.
 - `GLOBAL` variables currently mean global only inside one `FlowGraph`/`PVController`.
 - Cross-graph global variables are not implemented.
 - Persistent is currently model metadata; runtime save/load is not implemented.

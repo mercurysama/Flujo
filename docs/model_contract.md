@@ -44,7 +44,7 @@ Todo elemento persistente posee un identificador interno estable, independiente 
 - `CURRENT_SCHEMA_VERSION = 1` y `schema_version`, cuyo valor inicial es `1`, reservados para futuras migraciones.
 - El esquema 1 usa exclusivamente la colección ordenada `Array[FlowBlockContainer]` llamada `containers`, que conserva también las posiciones `null`.
 - La representación disponible para el esquema 2 usa exclusivamente las colecciones ordenadas y tipadas `processes`, `variables` y `state_machines`, que también conservan las posiciones `null`.
-- Las dos representaciones no se sincronizan. Un grafo que contiene entradas en `containers` y en cualquier colección de esquema 2 es inválido.
+- Las dos representaciones no se sincronizan. Schema 1 rechaza cualquier colección de esquema 2 con longitud mayor que cero, y schema 2 rechaza `containers` con longitud mayor que cero, incluso si contienen solo posiciones `null`.
 
 **Duplicación:** requiere un grafo que haya superado la validación. Crea otro `FlowGraph` y genera identificadores nuevos para el grafo y todos los recursos de la representación activa, manteniendo el orden y las posiciones `null`. La copia de esquema 2 usa un único mapa de ID original a ID nuevo para remapear `owner_container_id`, `global_variable_id` e `initial_state_id`; las referencias no resueltas se conservan para diagnóstico.
 
@@ -107,7 +107,7 @@ Todo elemento persistente posee un identificador interno estable, independiente 
 
 **Responsabilidad:** representar la definición persistente de un estado de una futura máquina de estados.
 
-**Estado inicial:** `is_initial` representa la selección del estado inicial. La futura máquina de estados será responsable de garantizar que exista un único estado inicial.
+**Estado inicial heredado:** `is_initial` se conserva solo como dato heredado de schema 1 para decidir la selección durante la migración v1→v2. No es fuente de verdad en schema 2.
 
 **Duplicación:** conserva el tipo `FlowStateDefinition`, el valor de `is_initial` y genera identificadores nuevos mediante la duplicación heredada.
 
@@ -152,6 +152,8 @@ Los identificadores no dependen del índice ni de la posición en estas coleccio
 La validación actual detecta grafos nulos, versiones de esquema no soportadas, identificadores vacíos, de longitud distinta de 32 caracteres, no hexadecimales o duplicados, instancias de recursos repetidas y tipos de contenedor que no pueden migrarse según el contrato planificado del esquema 2. También detecta el uso simultáneo de `containers` y las colecciones de esquema 2. Recorre de forma determinista el grafo, sus colecciones activas, máquinas de estados y bloques; acepta las posiciones `null` sin producir diagnósticos.
 
 En el esquema 2, `owner_container_id` debe resolver a un `FlowProcess` o `FlowStateDefinition` perteneciente al mismo grafo y `global_variable_id` debe resolver a una variable `GLOBAL` del mismo grafo. Las referencias ausentes o de tipo/ámbito no permitido se conservan y generan un diagnóstico.
+
+En cada `FlowStateMachineDefinition` de schema 2, `initial_state_id` es la fuente de verdad del estado inicial: debe estar vacío si no existen estados no nulos y, si los hay, debe señalar un estado no nulo de esa misma máquina. Los valores ausentes o inválidos se conservan y generan un diagnóstico.
 
 El validador pertenece al runtime, usa únicamente APIs portátiles y no depende del editor.
 

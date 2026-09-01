@@ -28,13 +28,7 @@ static func validate(graph: FlowGraph) -> FlowValidationResult:
 			"graph"
 		)
 
-	if not graph.containers.is_empty() and _has_schema_2_entries(graph):
-		_add_error(
-			result,
-			FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES,
-			"FlowGraph cannot use containers and schema 2 collections at the same time.",
-			"graph"
-		)
+	_validate_schema_sources(graph, result)
 
 	_validate_legacy_containers(
 		graph.containers,
@@ -82,6 +76,23 @@ static func _has_schema_2_entries(graph: FlowGraph) -> bool:
 	return not graph.processes.is_empty() \
 		or not graph.variables.is_empty() \
 		or not graph.state_machines.is_empty()
+
+
+static func _validate_schema_sources(graph: FlowGraph, result: FlowValidationResult) -> void:
+	if graph.schema_version == FlowGraph.CURRENT_SCHEMA_VERSION and _has_schema_2_entries(graph):
+		_add_error(
+			result,
+			FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES,
+			"FlowGraph schema 1 cannot contain schema 2 collections.",
+			"graph"
+		)
+	elif graph.schema_version == FlowGraph.SCHEMA_VERSION_2 and not graph.containers.is_empty():
+		_add_error(
+			result,
+			FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES,
+			"FlowGraph schema 2 cannot contain legacy containers.",
+			"graph"
+		)
 
 
 static func _validate_legacy_containers(
@@ -215,6 +226,50 @@ static func _validate_state_machines(
 
 			owner_container_ids[state.get_internal_id()] = true
 			_validate_blocks(state, state_path, result, seen_instances, seen_ids)
+
+		_validate_initial_state_reference(state_machine, machine_path, result)
+
+
+static func _validate_initial_state_reference(
+		state_machine: FlowStateMachineDefinition,
+		machine_path: String,
+		result: FlowValidationResult
+) -> void:
+	var state_ids: Dictionary[String, bool] = {}
+	for state: FlowStateDefinition in state_machine.states:
+		if state != null:
+			state_ids[state.get_internal_id()] = true
+
+	var reference_path: String = "%s.initial_state_id" % machine_path
+	if state_ids.is_empty():
+		if not state_machine.initial_state_id.is_empty():
+			_add_error(
+				result,
+				FlowDiagnostic.CODE_INVALID_INITIAL_STATE_REFERENCE,
+				"State machine has no states for its initial state reference.",
+				reference_path,
+				state_machine.initial_state_id
+			)
+		return
+
+	if state_machine.initial_state_id.is_empty():
+		_add_error(
+			result,
+			FlowDiagnostic.CODE_MISSING_INITIAL_STATE_REFERENCE,
+			"State machine with states requires an initial state reference.",
+			reference_path,
+			state_machine.get_internal_id()
+		)
+		return
+
+	if not state_ids.has(state_machine.initial_state_id):
+		_add_error(
+			result,
+			FlowDiagnostic.CODE_INVALID_INITIAL_STATE_REFERENCE,
+			"Initial state reference must resolve to a state in the same state machine.",
+			reference_path,
+			state_machine.initial_state_id
+		)
 
 
 static func _validate_blocks(

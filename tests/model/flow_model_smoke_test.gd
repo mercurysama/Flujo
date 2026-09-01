@@ -570,6 +570,187 @@ func _ready() -> void:
 	var mixed_sources_result: FlowValidationResult = FlowGraphValidator.validate(mixed_sources_graph)
 	assert(_has_diagnostic(mixed_sources_result, FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES))
 
+	var schema_1_processes_source: FlowGraph = FlowGraph.new()
+	schema_1_processes_source.processes.append(FlowProcess.new())
+	var schema_1_processes_result: FlowValidationResult = FlowGraphValidator.validate(
+		schema_1_processes_source
+	)
+	assert(_has_diagnostic(
+		schema_1_processes_result,
+		FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES
+	))
+
+	var schema_1_variables_source: FlowGraph = FlowGraph.new()
+	schema_1_variables_source.variables.append(FlowVariableDefinition.new())
+	var schema_1_variables_result: FlowValidationResult = FlowGraphValidator.validate(
+		schema_1_variables_source
+	)
+	assert(_has_diagnostic(
+		schema_1_variables_result,
+		FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES
+	))
+
+	var schema_1_machines_source: FlowGraph = FlowGraph.new()
+	schema_1_machines_source.state_machines.append(FlowStateMachineDefinition.new())
+	var schema_1_machines_result: FlowValidationResult = FlowGraphValidator.validate(
+		schema_1_machines_source
+	)
+	assert(_has_diagnostic(
+		schema_1_machines_result,
+		FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES
+	))
+
+	var schema_1_null_processes_source: FlowGraph = FlowGraph.new()
+	schema_1_null_processes_source.processes.append(null)
+	var schema_1_null_processes_result: FlowValidationResult = FlowGraphValidator.validate(
+		schema_1_null_processes_source
+	)
+	assert(_has_diagnostic(
+		schema_1_null_processes_result,
+		FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES
+	))
+
+	var schema_1_null_variables_source: FlowGraph = FlowGraph.new()
+	schema_1_null_variables_source.variables.append(null)
+	var schema_1_null_variables_result: FlowValidationResult = FlowGraphValidator.validate(
+		schema_1_null_variables_source
+	)
+	assert(_has_diagnostic(
+		schema_1_null_variables_result,
+		FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES
+	))
+
+	var schema_1_null_machines_source: FlowGraph = FlowGraph.new()
+	schema_1_null_machines_source.state_machines.append(null)
+	var schema_1_null_machines_result: FlowValidationResult = FlowGraphValidator.validate(
+		schema_1_null_machines_source
+	)
+	assert(_has_diagnostic(
+		schema_1_null_machines_result,
+		FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES
+	))
+
+	var schema_2_containers_source: FlowGraph = FlowGraph.new()
+	schema_2_containers_source.schema_version = FlowGraph.SCHEMA_VERSION_2
+	schema_2_containers_source.containers.append(null)
+	var schema_2_containers_result: FlowValidationResult = FlowGraphValidator.validate(
+		schema_2_containers_source
+	)
+	assert(_has_diagnostic(
+		schema_2_containers_result,
+		FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES
+	))
+
+	var incompatible_migration_process: FlowProcess = schema_1_processes_source.processes[0]
+	var incompatible_migration_graph_id: String = schema_1_processes_source.get_internal_id()
+	var incompatible_migration_result: FlowGraphMigrationResult = FlowGraphMigrator.migrate_schema_1_to_2(
+		schema_1_processes_source
+	)
+	assert(not incompatible_migration_result.is_successful())
+	assert(incompatible_migration_result.migrated_graph == null)
+	assert(_has_migration_diagnostic(
+		incompatible_migration_result,
+		FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES
+	))
+	assert(schema_1_processes_source.get_internal_id() == incompatible_migration_graph_id)
+	assert(schema_1_processes_source.processes[0] == incompatible_migration_process)
+	_assert_same_diagnostic_sequence(
+		schema_1_processes_result,
+		FlowGraphValidator.validate(schema_1_processes_source)
+	)
+
+	var empty_state_machine_graph: FlowGraph = FlowGraph.new()
+	empty_state_machine_graph.schema_version = FlowGraph.SCHEMA_VERSION_2
+	var empty_state_machine: FlowStateMachineDefinition = FlowStateMachineDefinition.new()
+	empty_state_machine_graph.state_machines.append(empty_state_machine)
+	var empty_state_machine_result: FlowValidationResult = FlowGraphValidator.validate(
+		empty_state_machine_graph
+	)
+	assert(not empty_state_machine_result.has_errors())
+
+	var valid_initial_state_graph: FlowGraph = FlowGraph.new()
+	valid_initial_state_graph.schema_version = FlowGraph.SCHEMA_VERSION_2
+	var valid_initial_state_machine: FlowStateMachineDefinition = FlowStateMachineDefinition.new()
+	var valid_initial_state: FlowStateDefinition = FlowStateDefinition.new()
+	valid_initial_state_machine.states.append(valid_initial_state)
+	valid_initial_state_machine.initial_state_id = valid_initial_state.get_internal_id()
+	valid_initial_state_graph.state_machines.append(valid_initial_state_machine)
+	assert(not FlowGraphValidator.validate(valid_initial_state_graph).has_errors())
+
+	var empty_initial_id_graph: FlowGraph = FlowGraph.new()
+	empty_initial_id_graph.schema_version = FlowGraph.SCHEMA_VERSION_2
+	var empty_initial_id_machine: FlowStateMachineDefinition = FlowStateMachineDefinition.new()
+	empty_initial_id_machine.states.append(FlowStateDefinition.new())
+	empty_initial_id_graph.state_machines.append(empty_initial_id_machine)
+	var empty_initial_id_result: FlowValidationResult = FlowGraphValidator.validate(empty_initial_id_graph)
+	var empty_initial_id_diagnostic: FlowDiagnostic = _find_diagnostic(
+		empty_initial_id_result,
+		FlowDiagnostic.CODE_MISSING_INITIAL_STATE_REFERENCE,
+		"state_machines[0].initial_state_id"
+	)
+	assert(empty_initial_id_diagnostic != null)
+	assert(empty_initial_id_diagnostic.related_id == empty_initial_id_machine.get_internal_id())
+	assert(empty_initial_id_machine.initial_state_id == "")
+
+	var missing_initial_id_graph: FlowGraph = FlowGraph.new()
+	missing_initial_id_graph.schema_version = FlowGraph.SCHEMA_VERSION_2
+	var missing_initial_id_machine: FlowStateMachineDefinition = FlowStateMachineDefinition.new()
+	missing_initial_id_machine.states.append(FlowStateDefinition.new())
+	missing_initial_id_machine.initial_state_id = "missing_state"
+	missing_initial_id_graph.state_machines.append(missing_initial_id_machine)
+	var missing_initial_id_result: FlowValidationResult = FlowGraphValidator.validate(missing_initial_id_graph)
+	var missing_initial_id_diagnostic: FlowDiagnostic = _find_diagnostic(
+		missing_initial_id_result,
+		FlowDiagnostic.CODE_INVALID_INITIAL_STATE_REFERENCE,
+		"state_machines[0].initial_state_id"
+	)
+	assert(missing_initial_id_diagnostic != null)
+	assert(missing_initial_id_diagnostic.related_id == "missing_state")
+	assert(missing_initial_id_machine.initial_state_id == "missing_state")
+
+	var foreign_initial_id_graph: FlowGraph = FlowGraph.new()
+	foreign_initial_id_graph.schema_version = FlowGraph.SCHEMA_VERSION_2
+	var first_foreign_machine: FlowStateMachineDefinition = FlowStateMachineDefinition.new()
+	var first_foreign_state: FlowStateDefinition = FlowStateDefinition.new()
+	first_foreign_machine.states.append(first_foreign_state)
+	var second_foreign_machine: FlowStateMachineDefinition = FlowStateMachineDefinition.new()
+	var second_foreign_state: FlowStateDefinition = FlowStateDefinition.new()
+	second_foreign_machine.states.append(second_foreign_state)
+	first_foreign_machine.initial_state_id = second_foreign_state.get_internal_id()
+	second_foreign_machine.initial_state_id = second_foreign_state.get_internal_id()
+	foreign_initial_id_graph.state_machines.append(first_foreign_machine)
+	foreign_initial_id_graph.state_machines.append(second_foreign_machine)
+	var foreign_initial_id_result: FlowValidationResult = FlowGraphValidator.validate(foreign_initial_id_graph)
+	var foreign_initial_id_diagnostic: FlowDiagnostic = _find_diagnostic(
+		foreign_initial_id_result,
+		FlowDiagnostic.CODE_INVALID_INITIAL_STATE_REFERENCE,
+		"state_machines[0].initial_state_id"
+	)
+	assert(foreign_initial_id_diagnostic != null)
+	assert(foreign_initial_id_diagnostic.related_id == second_foreign_state.get_internal_id())
+	assert(first_foreign_machine.initial_state_id == second_foreign_state.get_internal_id())
+
+	var empty_machine_reference_graph: FlowGraph = FlowGraph.new()
+	empty_machine_reference_graph.schema_version = FlowGraph.SCHEMA_VERSION_2
+	var empty_machine_reference: FlowStateMachineDefinition = FlowStateMachineDefinition.new()
+	empty_machine_reference.initial_state_id = "missing_state"
+	empty_machine_reference_graph.state_machines.append(empty_machine_reference)
+	var empty_machine_reference_result: FlowValidationResult = FlowGraphValidator.validate(
+		empty_machine_reference_graph
+	)
+	var empty_machine_reference_diagnostic: FlowDiagnostic = _find_diagnostic(
+		empty_machine_reference_result,
+		FlowDiagnostic.CODE_INVALID_INITIAL_STATE_REFERENCE,
+		"state_machines[0].initial_state_id"
+	)
+	assert(empty_machine_reference_diagnostic != null)
+	assert(empty_machine_reference_diagnostic.related_id == "missing_state")
+	assert(empty_machine_reference.initial_state_id == "missing_state")
+	_assert_same_diagnostic_sequence(
+		empty_machine_reference_result,
+		FlowGraphValidator.validate(empty_machine_reference_graph)
+	)
+
 	var repeated_schema_2_graph: FlowGraph = FlowGraph.new()
 	repeated_schema_2_graph.schema_version = FlowGraph.SCHEMA_VERSION_2
 	var repeated_schema_2_process: FlowProcess = FlowProcess.new()

@@ -23,6 +23,8 @@ const CODE_MISSING_OWNER_CONTAINER_REFERENCE: StringName = &"missing_owner_conta
 const CODE_INVALID_OWNER_CONTAINER_REFERENCE: StringName = &"invalid_owner_container_reference"
 const CODE_MISSING_GLOBAL_VARIABLE_REFERENCE: StringName = &"missing_global_variable_reference"
 const CODE_INVALID_GLOBAL_VARIABLE_REFERENCE: StringName = &"invalid_global_variable_reference"
+const CODE_MISSING_INITIAL_STATE_REFERENCE: StringName = &"missing_initial_state_reference"
+const CODE_INVALID_INITIAL_STATE_REFERENCE: StringName = &"invalid_initial_state_reference"
 const CODE_MIGRATION_SOURCE_SCHEMA: StringName = &"migration_source_schema"
 const CODE_MULTIPLE_INITIAL_STATES: StringName = &"multiple_initial_states"
 
