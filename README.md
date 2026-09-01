@@ -52,6 +52,7 @@ The visual block editor, runtime executor, debugger, user packages, and localiza
 - [Object-oriented architecture](docs/arquitectura_poo.md)
 - [Model contract](docs/model_contract.md)
 - [Iteration 1 notes](docs/iteracion_01.md)
+- [Iteration 5 closeout](docs/iteracion_05.md)
 
 ## AI-assisted development
 
