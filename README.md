@@ -2,20 +2,26 @@
 
 > Experimental pre-alpha software. Features and file formats may change during development.
 
-Flujo is an MIT-licensed visual programming plugin for Godot. It is designed to build game logic through readable containers and blocks while keeping runtime execution separate from editor tools.
+Flujo is an MIT-licensed visual programming plugin for Godot. It is designed to build game logic through readable definitions and blocks while keeping portable runtime code separate from editor tools.
 
-## Current features
+## Current status
 
-- Editor plugin located in `addons/vp_flujo/`.
-- `PVController` node with a typed `FlowGraph` model.
-- Stable internal identifiers for graphs, containers, states, processes, and blocks.
-- Flujo dock integrated into the Godot editor.
-- F4 adds a `PVController` to the selected node.
-- F4 opens or closes the Flujo dock when the selected node already contains a controller.
-- Controller creation supports Godot's undo and redo history.
-- Model smoke test for identifiers, duplication, types, and independent graph instances.
+### Implemented
 
-The visual block editor, runtime executor, debugger, user packages, and localization system are still under development.
+- An editor plugin under `addons/vp_flujo/` and the `PVController` scene facade.
+- Stable internal IDs, deterministic validation, deep duplication, and explicit schema 1→2 migration for `FlowGraph` definitions.
+- Schema 2 typed collections: `processes`, `variables`, and `state_machines`, including deliberate `null` positions and ID-based references.
+- A read-only and undoable Inspector workflow for the supported schema 2 collections.
+- Selection-based Flujo dock visibility and F4 controller support.
+- Model, editor, and PackedScene persistence regressions.
+
+### Current work
+
+Iteration 6 defines the architecture for schema 3 Constructor declarations and reusable methods. The contract is complete; the schema, runtime behavior, and editor workflow are not implemented yet.
+
+### Planned
+
+Visual block authoring, a runtime executor, debugging, packages, inherited-scene customization, and per-instance runtime state remain future work.
 
 ## Requirements
 
@@ -41,18 +47,21 @@ The visual block editor, runtime executor, debugger, user packages, and localiza
 
 ## Project structure
 
-- `addons/vp_flujo/editor/`: editor-only plugin and dock code.
-- `addons/vp_flujo/runtime/`: portable runtime code and data model.
+- `addons/vp_flujo/editor/`: editor-only plugin, Inspector, and dock code.
+- `addons/vp_flujo/runtime/`: portable runtime code and persistent model definitions.
 - `demo/`: demonstration scene.
-- `tests/`: model and integration tests.
-- `docs/`: architecture and model documentation.
+- `tests/`: model, editor, and persistence tests.
+- `docs/`: architecture, contracts, roadmap, and iteration documentation.
 
 ## Documentation
 
 - [Object-oriented architecture](docs/arquitectura_poo.md)
 - [Model contract](docs/model_contract.md)
+- [Schema 2 migration contract](docs/flow_graph_v2_migration.md)
+- [Constructor and Methods contract](docs/constructor_methods_contract.md)
 - [Iteration 1 notes](docs/iteracion_01.md)
-- [Iteration 5 closeout](docs/iteracion_05.md)
+- [Iteration 5 postmortem](docs/iteration_05.md)
+- [Roadmap](docs/roadmap.md)
 
 ## AI-assisted development
 

@@ -1,241 +1,241 @@
-# Contrato técnico del modelo de Flujo
+# Flujo Model Technical Contract
 
-## Propósito y alcance
+## Purpose and scope
 
-Este documento define el contrato del modelo central implementado de Flujo para Godot 4.7.2. Establece sus responsabilidades, identidad, persistencia y dependencias. No define todavía la implementación del ejecutor ni de la interfaz gráfica.
+This document defines the implemented Flujo core-model contract for Godot 4.7.2. It establishes its responsibilities, identity, persistence, and dependencies. It does not define the executor or graphical-interface implementation yet.
 
-## Principios generales
+## General principles
 
-- `FlowGraph` es la raíz persistente de cada programa visual y comienza con `schema_version = 1`.
-- El editor puede depender de clases del runtime. El runtime nunca puede depender de clases ni APIs exclusivas del editor.
-- La implementación utiliza GDScript portátil y únicamente APIs disponibles en juegos exportados cuando el código pertenece al runtime.
-- Los grafos y bloques creados por el usuario se guardan bajo `res://flow/`.
-- Los paquetes instalados se guardan bajo `res://flow_packages/<package_id>/`.
-- Ningún grafo, bloque, paquete ni otro contenido del usuario se guarda dentro de `res://addons/vp_flujo/`.
+- `FlowGraph` is the persistent root of each visual program and starts with `schema_version = 1`.
+- The editor may depend on runtime classes. Runtime must never depend on editor-only classes or APIs.
+- The implementation uses portable GDScript and only APIs available in exported games when code belongs to runtime.
+- User-created graphs and blocks are stored under `res://flow/`.
+- Installed packages are stored under `res://flow_packages/<package_id>/`.
+- No graph, block, package, or other user content is stored inside `res://addons/vp_flujo/`.
 
-## Identidad persistente
+## Persistent identity
 
-Todo elemento persistente posee un identificador interno estable, independiente de su nombre visible, ruta de recurso, índice o posición en una colección.
+Every persistent element has a stable internal ID independent of its visible name, resource path, index, or position in a collection.
 
-- `FlowId` centraliza la generación de identificadores de 32 caracteres mediante `FlowId.create()` y no depende del editor.
-- Los identificadores internos se almacenan en propiedades ocultas y serializables mediante `@export_storage`.
-- Renombrar un elemento no cambia su identificador.
-- Mover un elemento no cambia su identificador.
-- Reordenar un elemento no cambia su identificador.
-- Duplicar un elemento genera un identificador nuevo para la copia y para cada elemento persistente contenido que también se duplique.
+- `FlowId` centralizes the generation of random 32-character IDs through `FlowId.create()` and does not depend on the editor.
+- Internal IDs are stored in hidden, serializable properties through `@export_storage`.
+- Renaming an element does not change its ID.
+- Moving an element does not change its ID.
+- Reordering an element does not change its ID.
+- Duplicating an element generates a new ID for the copy and for every contained persistent element that is also duplicated.
 
-## Clases del modelo
+## Model classes
 
 ### FlowId
 
 **Base:** `RefCounted`.
 
-**Responsabilidad:** generar de forma centralizada identificadores aleatorios de 32 caracteres sin depender de APIs del editor.
+**Responsibility:** centrally generate random 32-character IDs without depending on editor APIs.
 
 ### FlowGraph
 
 **Base:** `Resource`.
 
-**Responsabilidad:** representar la raíz persistente de un programa visual.
+**Responsibility:** represent the persistent root of a visual program.
 
-**Datos mínimos:**
+**Minimum data:**
 
-- Identificador interno estable.
-- `CURRENT_SCHEMA_VERSION = 1` y `schema_version`, cuyo valor inicial es `1`, reservados para futuras migraciones.
-- El esquema 1 usa exclusivamente la colección ordenada `Array[FlowBlockContainer]` llamada `containers`, que conserva también las posiciones `null`.
-- La representación disponible para el esquema 2 usa exclusivamente las colecciones ordenadas y tipadas `processes`, `variables` y `state_machines`, que también conservan las posiciones `null`.
-- Las dos representaciones no se sincronizan. Schema 1 rechaza cualquier colección de esquema 2 con longitud mayor que cero, y schema 2 rechaza `containers` con longitud mayor que cero, incluso si contienen solo posiciones `null`.
+- Stable internal ID.
+- `CURRENT_SCHEMA_VERSION = 1` and `schema_version`, whose initial value is `1`, reserved for future migrations.
+- Schema 1 uses only the ordered `Array[FlowBlockContainer]` collection named `containers`, which also preserves `null` positions.
+- The available schema 2 representation uses only the ordered, typed collections `processes`, `variables`, and `state_machines`, which also preserve `null` positions.
+- The two representations are not synchronized. Schema 1 rejects every schema 2 collection with a length greater than zero, and schema 2 rejects `containers` with a length greater than zero, even if they contain only `null` positions.
 
-**Duplicación:** requiere un grafo que haya superado la validación. Crea otro `FlowGraph` y genera identificadores nuevos para el grafo y todos los recursos de la representación activa, manteniendo el orden y las posiciones `null`. La copia de esquema 2 usa un único mapa de ID original a ID nuevo para remapear `owner_container_id`, `global_variable_id` e `initial_state_id`; las referencias no resueltas se conservan para diagnóstico.
+**Duplication:** requires a graph that has passed validation. It creates another `FlowGraph` and generates new IDs for the graph and every resource in the active representation while preserving ordering and `null` positions. The schema 2 copy uses one original-ID-to-new-ID map to remap `owner_container_id`, `global_variable_id`, and `initial_state_id`; unresolved references are preserved for diagnostics.
 
-**Migración:** `FlowGraphMigrator.migrate_schema_1_to_2()` crea de forma atómica un nuevo grafo de esquema 2 a partir de un grafo de esquema 1 validado. Conserva el ID del grafo y los IDs válidos de procesos, estados y bloques, sin compartir recursos mutables con el origen. Los procesos y los estados conservan las posiciones de `containers`; los estados se agrupan en una máquina nueva llamada `Migrated States`.
+**Migration:** `FlowGraphMigrator.migrate_schema_1_to_2()` atomically creates a new schema 2 graph from a validated schema 1 graph. It preserves the graph ID and valid process, state, and block IDs without sharing mutable resources with the source. Processes and states preserve the positions from `containers`; states are grouped in a new machine named `Migrated States`.
 
-**Compartición en escenas:** `FlowGraph` es una definición de programa compartible entre instancias de una `PackedScene` y permanece inmutable durante la ejecución. El estado y los valores mutables por instancia corresponderán a un futuro contexto runtime propio de cada `PVController`.
+**Scene sharing:** `FlowGraph` is a program definition that can be shared by instances of a `PackedScene` and remains immutable during execution. Per-instance mutable state and values belong to a future runtime context owned by each `PVController`.
 
-**Dependencias permitidas:** puede depender de los tipos persistentes del modelo y de utilidades portátiles del runtime. No depende del editor ni de un ejecutor.
+**Allowed dependencies:** it may depend on persistent model types and portable runtime utilities. It does not depend on the editor or an executor.
 
 ### FlowBlockContainer
 
 **Base:** `Resource`.
 
-**Responsabilidad:** servir como clase base polimórfica persistente y agrupar una secuencia ordenada de bloques dentro de un grafo.
+**Responsibility:** serve as a persistent polymorphic base class and group an ordered sequence of blocks within a graph.
 
-**Datos mínimos:**
+**Minimum data:**
 
-- Identificador interno estable.
-- Nombre visible independiente del identificador.
-- Activación mediante `enabled`.
-- Nota del usuario mediante `user_note`.
-- Colección ordenada `Array[FlowBlock]` que conserva también las posiciones `null`.
+- Stable internal ID.
+- Visible name independent of the ID.
+- Activation through `enabled`.
+- User note through `user_note`.
+- Ordered `Array[FlowBlock]` collection that also preserves `null` positions.
 
-**Duplicación:** mantiene el tipo derivado del contenedor, genera un identificador nuevo para este y duplica sus bloques con identificadores nuevos, conservando el orden y las posiciones `null`.
+**Duplication:** preserves the derived container type, generates a new ID for it, and duplicates its blocks with new IDs while preserving ordering and `null` positions.
 
-**Dependencias permitidas:** puede depender de `FlowBlock` y de tipos de datos portátiles del runtime. No depende de nodos de escena, clases del editor ni controles gráficos.
+**Allowed dependencies:** it may depend on `FlowBlock` and portable runtime data types. It does not depend on scene nodes, editor classes, or graphical controls.
 
 ### FlowBlock
 
 **Base:** `Resource`.
 
-**Responsabilidad:** representar un bloque persistente con identidad, nombre visible, activación y nota del usuario.
+**Responsibility:** represent a persistent block with identity, visible name, activation, and user note.
 
-**Datos mínimos:**
+**Minimum data:**
 
-- Identificador interno estable.
-- Nombre visible mediante `display_name`.
-- Activación mediante `enabled`.
-- Nota del usuario mediante `user_note`.
+- Stable internal ID.
+- Visible name through `display_name`.
+- Activation through `enabled`.
+- User note through `user_note`.
 
-**Duplicación:** conserva sus datos persistentes y recibe un identificador nuevo.
+**Duplication:** preserves persistent data and receives a new ID.
 
-**Dependencias permitidas:** utiliza únicamente el contrato del modelo y APIs portátiles del runtime. No depende de clases del editor ni de la interfaz gráfica.
+**Allowed dependencies:** uses only the model contract and portable runtime APIs. It does not depend on editor classes or the graphical interface.
 
 ### FlowProcess
 
 **Base:** `FlowBlockContainer`.
 
-**Responsabilidad:** representar de forma persistente uno de los puntos de proceso admitidos.
+**Responsibility:** persistently represent one of the supported process entry points.
 
-**Tipo de proceso:** `ProcessType` admite exclusivamente `READY`, `PROCESS`, `PHYSICS_PROCESS`, `INPUT` y `UNHANDLED_INPUT`.
+**Process type:** `ProcessType` permits only `READY`, `PROCESS`, `PHYSICS_PROCESS`, `INPUT`, and `UNHANDLED_INPUT`.
 
-**Nombre visible:** comienza como `_ready`, pero `display_name` sigue siendo renombrable e independiente de `process_type`. Cambiar el tipo de proceso no cambia automáticamente el nombre visible.
+**Visible name:** starts as `_ready`, but `display_name` remains renameable and independent of `process_type`. Changing the process type does not automatically change the visible name.
 
-**Duplicación:** conserva el tipo `FlowProcess` y genera identificadores nuevos mediante la duplicación heredada.
+**Duplication:** preserves the `FlowProcess` type and generates new IDs through inherited duplication.
 
 ### FlowStateDefinition
 
 **Base:** `FlowBlockContainer`.
 
-**Responsabilidad:** representar la definición persistente de un estado de una futura máquina de estados.
+**Responsibility:** represent the persistent definition of a state in a future state machine.
 
-**Estado inicial heredado:** `is_initial` se conserva solo como dato heredado de schema 1 para decidir la selección durante la migración v1→v2. No es fuente de verdad en schema 2.
+**Legacy initial-state data:** `is_initial` is retained only as schema 1 legacy data used to choose the initial state during schema 1→2 migration. It is not the source of truth in schema 2.
 
-**Duplicación:** conserva el tipo `FlowStateDefinition`, el valor de `is_initial` y genera identificadores nuevos mediante la duplicación heredada.
+**Duplication:** preserves the `FlowStateDefinition` type, the `is_initial` value, and generates new IDs through inherited duplication.
 
 ### FlowGraphMigrationResult
 
 **Base:** `RefCounted`.
 
-**Responsabilidad:** representar una tentativa de migración con el grafo migrado, cuando existe, y los diagnósticos ordenados del origen, la transformación o la candidata.
+**Responsibility:** represent a migration attempt with the migrated graph, when available, and ordered diagnostics from the source, transformation, or candidate.
 
 ### FlowGraphMigrator
 
 **Base:** `RefCounted`.
 
-**Responsabilidad:** migrar un `FlowGraph` de esquema 1 a una copia independiente de esquema 2 sin modificar el origen. La migración valida el origen antes de construir la candidata y valida la candidata antes de devolverla como exitosa.
+**Responsibility:** migrate a schema 1 `FlowGraph` to an independent schema 2 copy without modifying the source. Migration validates the source before constructing the candidate and validates the candidate before returning success.
 
 ### FlowGraphInspectorPresenter
 
 **Base:** `RefCounted`.
 
-**Responsabilidad:** producir una representación determinista y de solo lectura de un `FlowGraph` para la interfaz del Inspector. Pertenece al editor, incluye versión de esquema, fuente activa, secciones ordenadas, índices, nombres, tipos, IDs internos y diagnósticos, y no modifica el grafo.
+**Responsibility:** produce a deterministic, read-only `FlowGraph` representation for the Inspector interface. It belongs to the editor, includes schema version, active source, ordered sections, indexes, names, types, internal IDs, and diagnostics, and does not modify the graph.
 
 ### PVController
 
 **Base:** `Node`.
 
-**Responsabilidad:** actuar como fachada de Flujo para una escena.
+**Responsibility:** act as the Flujo facade for a scene.
 
-**Modelo:** posee la propiedad exportada `flow_graph` de tipo `FlowGraph`. Cada controlador nuevo recibe su propio grafo predeterminado.
+**Model:** owns the exported `flow_graph` property of type `FlowGraph`. Each new controller receives its own default graph.
 
-**Ejecución:** todavía no está implementada.
+**Execution:** not implemented yet.
 
-## Referencias y orden
+## References and ordering
 
-El orden de `FlowGraph.containers` y `FlowBlockContainer.blocks` se conserva durante la duplicación. Las posiciones `null` también se conservan y no se eliminan ni compactan.
+The ordering of `FlowGraph.containers` and `FlowBlockContainer.blocks` is preserved during duplication. `null` positions are also preserved and are neither removed nor compacted.
 
-Los identificadores no dependen del índice ni de la posición en estas colecciones. La copia recibe identificadores nuevos en el grafo, los contenedores y los bloques.
+IDs do not depend on an index or position in these collections. The copy receives new IDs for the graph, containers, and blocks.
 
-## Validación implementada de los esquemas 1 y 2
+## Implemented schema 1 and schema 2 validation
 
-`FlowGraphValidator` valida el modelo sin modificarlo y devuelve un `FlowValidationResult` con diagnósticos estructurados `FlowDiagnostic`. Cada diagnóstico contiene un código estable, severidad, mensaje, ruta del elemento e identificador relacionado. El resultado permite consultar si existen errores.
+`FlowGraphValidator` validates the model without modifying it and returns a `FlowValidationResult` with structured `FlowDiagnostic` diagnostics. Each diagnostic contains a stable code, severity, message, element path, and related ID. The result can report whether errors exist.
 
-La validación actual detecta grafos nulos, versiones de esquema no soportadas, identificadores vacíos, de longitud distinta de 32 caracteres, no hexadecimales o duplicados, instancias de recursos repetidas y tipos de contenedor que no pueden migrarse según el contrato planificado del esquema 2. También detecta el uso simultáneo de `containers` y las colecciones de esquema 2. Recorre de forma determinista el grafo, sus colecciones activas, máquinas de estados y bloques; acepta las posiciones `null` sin producir diagnósticos.
+Current validation detects null graphs, unsupported schema versions, empty IDs, IDs whose length is not 32 characters, non-hexadecimal or duplicate IDs, repeated resource instances, and container types that cannot migrate under the schema 2 planned contract. It also detects simultaneous use of `containers` and schema 2 collections. It traverses the graph, its active collections, state machines, and blocks deterministically; it accepts `null` positions without diagnostics.
 
-En el esquema 2, `owner_container_id` debe resolver a un `FlowProcess` o `FlowStateDefinition` perteneciente al mismo grafo y `global_variable_id` debe resolver a una variable `GLOBAL` del mismo grafo. Las referencias ausentes o de tipo/ámbito no permitido se conservan y generan un diagnóstico.
+In schema 2, `owner_container_id` must resolve to a `FlowProcess` or `FlowStateDefinition` belonging to the same graph, and `global_variable_id` must resolve to a `GLOBAL` variable belonging to the same graph. Missing references or references to a disallowed type or scope are preserved and produce a diagnostic.
 
-En cada `FlowStateMachineDefinition` de schema 2, `initial_state_id` es la fuente de verdad del estado inicial: debe estar vacío si no existen estados no nulos y, si los hay, debe señalar un estado no nulo de esa misma máquina. Los valores ausentes o inválidos se conservan y generan un diagnóstico.
+For every schema 2 `FlowStateMachineDefinition`, `initial_state_id` is the source of truth for the initial state: it must be empty when no non-null states exist and, when states exist, it must point to a non-null state in that same machine. Missing or invalid values are preserved and produce a diagnostic.
 
-El validador pertenece al runtime, usa únicamente APIs portátiles y no depende del editor.
+The validator belongs to runtime, uses only portable APIs, and does not depend on the editor.
 
-## Presentación implementada del Inspector
+## Implemented Inspector presentation
 
-El editor usa `FlowGraphInspectorPresenter` para mostrar `flow_graph` de `PVController` sin modificar recursos. En esquema 1 muestra `Containers`; en esquema 2 muestra `Processes`, `Variables` y `State Machines`. Cada posición conserva su índice y las posiciones `null` se muestran como `Empty`. Los IDs internos se muestran como metadatos estables, mientras que `display_name` es solo texto de presentación.
+The editor uses `FlowGraphInspectorPresenter` to display the `flow_graph` of a `PVController` without modifying resources. In schema 1 it shows `Containers`; in schema 2 it shows `Processes`, `Variables`, and `State Machines`. Each position retains its index, and `null` positions are shown as `Empty`. Internal IDs are shown as stable metadata, while `display_name` is presentation text only.
 
-`PVControllerInspectorPlugin` y `FlowGraphInspectorProperty` pertenecen al editor y se registran desde el plugin principal. Las filas son seleccionables solo dentro de la interfaz; no escriben en el modelo. Los diagnósticos de `FlowGraphValidator` se muestran sin alterar el grafo.
+`PVControllerInspectorPlugin` and `FlowGraphInspectorProperty` belong to the editor and are registered from the main plugin. Rows are selectable only within the interface; they do not write to the model. `FlowGraphValidator` diagnostics are shown without changing the graph.
 
-## Edición deshacer/rehacer implementada del Inspector
+## Implemented undo/redo Inspector editing
 
-`FlowGraphEditorCommands` pertenece exclusivamente al editor y recibe un `EditorUndoRedoManager` desde el plugin principal. Cada modificación se registra antes de ejecutarse como una acción atómica con operaciones de hacer y deshacer; el modelo no se modifica previamente.
+`FlowGraphEditorCommands` belongs exclusively to the editor and receives an `EditorUndoRedoManager` from the main plugin. Every modification is registered before it runs as an atomic action with do and undo operations; the model is not modified beforehand.
 
-Cuando un `PVController` no tiene grafo, el Inspector puede asignarle mediante una acción un `FlowGraph` nuevo con `schema_version = 2`. Para un grafo válido de esquema 1, puede ejecutar `FlowGraphMigrator` y reemplazar la referencia únicamente por la candidata válida; deshacer restaura exactamente la instancia original y rehacer restaura la misma candidata migrada.
+When a `PVController` has no graph, the Inspector can assign a new `FlowGraph` with `schema_version = 2` through an action. For a valid schema 1 graph, it can run `FlowGraphMigrator` and replace the reference only with a valid candidate; undo restores the exact original instance and redo restores the same migrated candidate.
 
-En un esquema 2 sin fuentes mezcladas, el Inspector permite añadir `FlowProcess`, `FlowVariableDefinition` y `FlowStateMachineDefinition`, renombrar por ID interno, mover una posición y eliminar conservando el hueco `null`. Las acciones usan instantáneas de la colección activa, por lo que los recursos, IDs, orden y posiciones se recuperan al deshacer o rehacer. Antes de eliminar, se valida una candidata aislada: si deja referencias inválidas, la operación se rechaza, no entra al historial y sus diagnósticos se muestran en el Inspector.
+In a schema 2 graph without mixed sources, the Inspector can add `FlowProcess`, `FlowVariableDefinition`, and `FlowStateMachineDefinition`, rename by internal ID, move a position, and remove while preserving the `null` gap. Actions use active-collection snapshots, so resources, IDs, ordering, and positions are restored by undo or redo. Before removal, an isolated candidate is validated: if it leaves invalid references, the action is rejected, does not enter history, and its diagnostics are shown in the Inspector.
 
-Los recursos runtime involucrados en esta presentación se ejecutan también en modo `@tool` para que Godot los instancie correctamente dentro del Inspector, pero no importan ni referencian APIs de editor.
+Runtime resources involved in this presentation also execute in `@tool` mode so Godot can instantiate them inside the Inspector, but they do not import or reference editor APIs.
 
-## Migración implementada de esquema 1 a esquema 2
+## Implemented migration from schema 1 to schema 2
 
-`FlowGraphMigrator` solo acepta un origen de esquema 1 que supere `FlowGraphValidator`. Cualquier diagnóstico de error del origen impide la migración y se conserva en `FlowGraphMigrationResult`. La candidata se construye por separado, se valida y solo se expone cuando no tiene errores.
+`FlowGraphMigrator` accepts only a schema 1 source that passes `FlowGraphValidator`. Any source error diagnostic prevents migration and is retained in `FlowGraphMigrationResult`. The candidate is constructed separately, validated, and exposed only when it has no errors.
 
-Los `FlowProcess` se copian profundamente a `processes` manteniendo el tamaño, orden e índices de `containers`; las posiciones que no contienen procesos quedan como `null`. Los `FlowStateDefinition` se copian profundamente a una única máquina `Migrated States`, cuyo arreglo conserva esos mismos índices y posiciones. La máquina no se crea si no hay estados y recibe un ID nuevo si se crea.
+`FlowProcess` resources are copied deeply to `processes`, preserving the size, ordering, and indexes of `containers`; positions that do not contain processes remain `null`. `FlowStateDefinition` resources are copied deeply to a single `Migrated States` machine whose state array preserves the same indexes and positions. The machine is not created when there are no states and receives a new ID when it is created.
 
-Si existe exactamente un estado con `is_initial`, la máquina migrada lo selecciona; si no hay ninguno, selecciona el primer estado no nulo; más de uno produce un diagnóstico de error. Los tipos desconocidos de `FlowBlockContainer`, las referencias ausentes y cualquier otra invalidación estructural del origen impiden la migración sin cambiar el origen.
+If exactly one state has `is_initial`, the migrated machine selects it; if none do, it selects the first non-null state; more than one produces an error diagnostic. Unknown `FlowBlockContainer` types, missing references, and any other source structural invalidity prevent migration without changing the source.
 
-## Contrato planificado — todavía no implementado
+## Planned contract — not implemented yet
 
-Los requisitos de esta sección son decisiones de diseño futuras. No describen funciones disponibles en la implementación actual.
+The requirements in this section are future design decisions. They do not describe features available in the current implementation.
 
-El contrato planificado para la evolución posterior del esquema 2 se define en [`flow_graph_v2_migration.md`](flow_graph_v2_migration.md). Sus partes no cubiertas por la migración implementada siguen siendo diseño previo.
+The planned contract for further schema 2 evolution is defined in [`flow_graph_v2_migration.md`](flow_graph_v2_migration.md). Its portions not covered by the implemented migration remain prior design.
 
-El contrato planificado para schema 3, Constructor, bindings por `PVController`, métodos y llamadas se define en [`constructor_methods_contract.md`](constructor_methods_contract.md). No describe funciones implementadas todavía.
+The planned schema 3 contract for Constructor, `PVController` bindings, methods, and calls is defined in [`constructor_methods_contract.md`](constructor_methods_contract.md). It does not describe implemented features yet.
 
-### Ejecución y estado temporal
+### Execution and temporary state
 
-- Durante la futura ejecución, `FlowGraph` y todos sus recursos persistentes serán tratados como datos de solo lectura.
-- `FlowRuntimeState` será una clase `RefCounted` temporal, independiente para cada controlador y cada ejecución.
-- `FlowRuntimeState` contendrá únicamente datos mutables propios de la ejecución, nunca será serializado dentro del grafo y se liberará al terminar o descartar esa ejecución.
+- During future execution, `FlowGraph` and all its persistent resources will be treated as read-only data.
+- `FlowRuntimeState` will be a temporary `RefCounted` class, independent for each controller and execution.
+- `FlowRuntimeState` will contain only mutable execution-specific data, will never be serialized inside the graph, and will be released when that execution ends or is discarded.
 
-### Referencias internas y duplicación
+### Internal references and duplication
 
-- Las referencias internas persistentes usarán identificadores, nunca nombres visibles ni índices o posiciones de colecciones.
-- La duplicación futura de estructuras con referencias creará un mapa entre identificadores originales y nuevos, y actualizará con él las referencias internas que apunten a elementos incluidos en la copia.
+- Persistent internal references will use IDs, never visible names or collection indexes or positions.
+- Future duplication of structures with references will create a map between original and new IDs and use it to update internal references that point to elements included in the copy.
 
-### Validación
+### Validation
 
-- La validación rechazará identificadores vacíos, mal formados o duplicados dentro del espacio de identidad del grafo.
-- Cada referencia interna deberá resolver a un elemento existente y de un tipo permitido para esa relación.
-- Una referencia ausente o que resuelva al tipo incorrecto será un error; no se sustituirá buscando por nombre visible ni por posición.
+- Validation will reject empty, malformed, or duplicate IDs within the graph identity space.
+- Every internal reference must resolve to an existing element of a type allowed by that relationship.
+- A missing reference or one that resolves to the wrong type will be an error; it will not be replaced by searching for a visible name or position.
 
-### Versiones y migraciones
+### Versions and migrations
 
-- Las migraciones de `schema_version` se ejecutarán explícitamente en pasos ordenados antes de usar el grafo.
-- Una versión futura, posterior a la máxima soportada, o incompatible será rechazada de forma controlada sin sobrescribir ni guardar el recurso.
-- Las migraciones preservarán todos los identificadores existentes que sean válidos y generarán identificadores nuevos solo cuando la transformación lo requiera.
+- `schema_version` migrations will run explicitly in ordered steps before using a graph.
+- A future version later than the maximum supported version, or an incompatible version, will be rejected in a controlled way without overwriting or saving the resource.
+- Migrations will preserve all existing valid IDs and generate new IDs only where the transformation requires them.
 
-### Operaciones y separación del editor
+### Operations and editor separation
 
-- Las modificaciones del modelo se expresarán como operaciones pequeñas y deterministas, con entradas explícitas y la información necesaria para deshacerlas y rehacerlas.
-- El editor podrá adaptar esas operaciones a su sistema de deshacer y rehacer, sin trasladar dependencias del editor al runtime.
-- El runtime, incluidos sus futuros componentes de carga, validación, migración y ejecución, no dependerá de clases ni APIs exclusivas del editor.
+- Model modifications will be expressed as small, deterministic operations with explicit inputs and the information required to undo and redo them.
+- The editor may adapt those operations to its undo/redo system without moving editor dependencies into runtime.
+- Runtime, including its future loading, validation, migration, and execution components, will not depend on editor-only classes or APIs.
 
-### Portabilidad futura
+### Future portability
 
-- La carga, validación, migración y ejecución del modelo funcionarán también en juegos exportados mediante APIs portátiles disponibles en las plataformas compatibles con Godot 4.7.2.
+- Model loading, validation, migration, and execution will also work in exported games through portable APIs available on platforms supported by Godot 4.7.2.
 
-## Pruebas
+## Tests
 
-La escena `tests/model/flow_model_smoke_test.tscn` valida los identificadores, la duplicación, la conservación de tipos derivados y posiciones `null`, y que cada `PVController` nuevo posea un `FlowGraph` independiente.
+The `tests/model/flow_model_smoke_test.tscn` scene validates IDs, duplication, preservation of derived types and `null` positions, and that every new `PVController` owns an independent `FlowGraph`.
 
-Se ejecuta manualmente abriendo esa escena en Godot y pulsando **F6**.
+It can be run manually by opening that scene in Godot and pressing **F6**.
 
-`tests/editor/flow_graph_editor_commands_test.gd` se ejecuta en un editor headless y cubre creación, migración, renombrado, movimiento, eliminación válida y rechazada, conservación de instancias e IDs durante undo/redo, actualización del presenter y validación sin fuentes mezcladas.
+`tests/editor/flow_graph_editor_commands_test.gd` runs in a headless editor and covers creation, migration, renaming, moving, valid and rejected removal, preservation of instances and IDs during undo/redo, presenter refresh, and validation without mixed sources.
 
-## Auditoría final de la Iteración 5
+## Iteration 5 final audit
 
-La iteración entrega colecciones tipadas de esquema 2, validación determinista, migración explícita v1→v2, presentación de solo lectura y edición del Inspector basada en undo/redo. El valor predeterminado de `schema_version` se mantiene en `1` para recursos heredados. No se implementaron migración automática, edición de bloques o estados internos, cambios al dock o ejecutor, ni dependencias editoriales desde runtime.
+The iteration delivers schema 2 typed collections, deterministic validation, explicit schema 1→2 migration, read-only presentation, and undoable Inspector editing. The default `schema_version` remains `1` for legacy resources. Automatic migration, block or internal-state editing, dock or executor changes, and editor dependencies in runtime were not implemented.
 
-## Ubicación y portabilidad
+## Location and portability
 
-El contenido propio del proyecto se organiza bajo `res://flow/`. Los paquetes instalados usan `res://flow_packages/<package_id>/`, donde `package_id` es estable y apto para rutas portátiles. `res://addons/vp_flujo/` queda reservado exclusivamente al código y recursos distribuidos con el complemento.
+Project-owned content is organized under `res://flow/`. Installed packages use `res://flow_packages/<package_id>/`, where `package_id` is stable and suitable for portable paths. `res://addons/vp_flujo/` is reserved exclusively for plugin-distributed code and resources.
 
-El modelo no utiliza rutas absolutas, separadores específicos del sistema operativo, procesos externos ni APIs exclusivas del editor. Su código runtime utiliza APIs disponibles en juegos exportados en las plataformas compatibles con Godot 4.7.2.
+The model does not use absolute paths, operating-system-specific separators, external processes, or editor-only APIs. Its runtime code uses APIs available in exported games on platforms supported by Godot 4.7.2.
