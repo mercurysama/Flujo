@@ -61,6 +61,15 @@
 - Report warnings separately from project errors.
 - Report every modified file and the final Git status.
 
+# Fedora Flatpak Environment
+
+- For Codex sessions running inside the VS Code Flatpak on Fedora 43, VS Code uses `com.visualstudio.code` and Godot uses `org.godotengine.Godot`.
+- `flatpak` may not be available directly inside the sandbox. Use `/usr/bin/flatpak-spawn --host` to run Flatpak commands on the host.
+- Godot version: `/usr/bin/flatpak-spawn --host flatpak run org.godotengine.Godot --version`
+- Headless editor load: `/usr/bin/flatpak-spawn --host flatpak run org.godotengine.Godot --headless --editor --path . --quit-after 5`
+- Model smoke test: `/usr/bin/flatpak-spawn --host flatpak run org.godotengine.Godot --headless --path . tests/model/flow_model_smoke_test.tscn`
+- `WARNING: Scan thread aborted...` is acceptable only when the headless load exits with code 0 and the warning corresponds to the planned shutdown.
+
 # Portability and Safety
 
 - Runtime behavior must remain portable to Godot-supported export platforms.
