@@ -187,6 +187,8 @@ Los requisitos de esta sección son decisiones de diseño futuras. No describen 
 
 El contrato planificado para la evolución posterior del esquema 2 se define en [`flow_graph_v2_migration.md`](flow_graph_v2_migration.md). Sus partes no cubiertas por la migración implementada siguen siendo diseño previo.
 
+El contrato planificado para schema 3, Constructor, bindings por `PVController`, métodos y llamadas se define en [`constructor_methods_contract.md`](constructor_methods_contract.md). No describe funciones implementadas todavía.
+
 ### Ejecución y estado temporal
 
 - Durante la futura ejecución, `FlowGraph` y todos sus recursos persistentes serán tratados como datos de solo lectura.
