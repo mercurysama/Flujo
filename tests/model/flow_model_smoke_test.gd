@@ -80,7 +80,7 @@ func _ready() -> void:
 	assert(valid_state.get_internal_id() == valid_state_id)
 
 	var unsupported_schema_graph: FlowGraph = FlowGraph.new()
-	unsupported_schema_graph.schema_version = FlowGraph.SCHEMA_VERSION_2 + 1
+	unsupported_schema_graph.schema_version = FlowGraph.SCHEMA_VERSION_3 + 1
 	var unsupported_schema_result: FlowValidationResult = FlowGraphValidator.validate(
 		unsupported_schema_graph
 	)
@@ -640,6 +640,44 @@ func _ready() -> void:
 		schema_2_containers_result,
 		FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES
 	))
+	var schema_1_constructor_source: FlowGraph = FlowGraph.new()
+	var schema_1_constructor: FlowConstructorDefinition = FlowConstructorDefinition.new()
+	schema_1_constructor_source.constructor = schema_1_constructor
+	var schema_1_constructor_graph_id: String = schema_1_constructor_source.get_internal_id()
+	var schema_1_constructor_result: FlowValidationResult = FlowGraphValidator.validate(schema_1_constructor_source)
+	var schema_1_constructor_diagnostic: FlowDiagnostic = _find_diagnostic(schema_1_constructor_result, FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES, "graph")
+	assert(schema_1_constructor_diagnostic != null)
+	assert(schema_1_constructor_source.constructor == schema_1_constructor)
+	assert(schema_1_constructor_source.get_internal_id() == schema_1_constructor_graph_id)
+
+	var schema_1_null_methods_source: FlowGraph = FlowGraph.new()
+	schema_1_null_methods_source.methods.append(null)
+	var schema_1_null_methods_result: FlowValidationResult = FlowGraphValidator.validate(schema_1_null_methods_source)
+	var schema_1_null_methods_diagnostic: FlowDiagnostic = _find_diagnostic(schema_1_null_methods_result, FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES, "graph")
+	assert(schema_1_null_methods_diagnostic != null)
+	assert(schema_1_null_methods_source.methods.size() == 1)
+	assert(schema_1_null_methods_source.methods[0] == null)
+
+	var schema_2_constructor_source: FlowGraph = FlowGraph.new()
+	schema_2_constructor_source.schema_version = FlowGraph.SCHEMA_VERSION_2
+	var schema_2_constructor: FlowConstructorDefinition = FlowConstructorDefinition.new()
+	schema_2_constructor_source.constructor = schema_2_constructor
+	var schema_2_constructor_result: FlowValidationResult = FlowGraphValidator.validate(schema_2_constructor_source)
+	var schema_2_constructor_diagnostic: FlowDiagnostic = _find_diagnostic(schema_2_constructor_result, FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES, "graph")
+	assert(schema_2_constructor_diagnostic != null)
+	assert(schema_2_constructor_source.constructor == schema_2_constructor)
+	assert(schema_2_constructor_source.schema_version == FlowGraph.SCHEMA_VERSION_2)
+
+	var schema_2_null_methods_source: FlowGraph = FlowGraph.new()
+	schema_2_null_methods_source.schema_version = FlowGraph.SCHEMA_VERSION_2
+	schema_2_null_methods_source.methods.append(null)
+	var schema_2_null_methods_result: FlowValidationResult = FlowGraphValidator.validate(schema_2_null_methods_source)
+	var schema_2_null_methods_diagnostic: FlowDiagnostic = _find_diagnostic(schema_2_null_methods_result, FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES, "graph")
+	assert(schema_2_null_methods_diagnostic != null)
+	assert(schema_2_null_methods_source.methods.size() == 1)
+	assert(schema_2_null_methods_source.methods[0] == null)
+	assert(schema_2_null_methods_source.schema_version == FlowGraph.SCHEMA_VERSION_2)
+
 
 	var incompatible_migration_process: FlowProcess = schema_1_processes_source.processes[0]
 	var incompatible_migration_graph_id: String = schema_1_processes_source.get_internal_id()
@@ -1001,6 +1039,120 @@ func _ready() -> void:
 	assert(presenter_diagnostics.size() == 1)
 	assert((presenter_diagnostics[0] as Dictionary)["code"] == "empty_internal_id")
 	assert(presenter_invalid_graph._internal_id == "")
+
+	var schema_3_graph: FlowGraph = FlowGraph.new()
+	schema_3_graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	var schema_3_constructor: FlowConstructorDefinition = FlowConstructorDefinition.new()
+	var dependency_a: FlowDependencyDefinition = FlowDependencyDefinition.new()
+	dependency_a.display_name = "Collider"
+	var dependency_b: FlowDependencyDefinition = FlowDependencyDefinition.new()
+	dependency_b.display_name = "Target"
+	schema_3_constructor.dependencies = [dependency_a, null, dependency_b]
+	schema_3_graph.constructor = schema_3_constructor
+	var schema_3_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	schema_3_method.display_name = "Apply Damage"
+	var schema_3_parameter: FlowMethodParameterDefinition = FlowMethodParameterDefinition.new()
+	schema_3_parameter.display_name = "Amount"
+	schema_3_parameter.value_type = FlowVariableDefinition.ValueType.INT
+	var schema_3_block: FlowBlock = FlowBlock.new()
+	schema_3_block.display_name = "Damage Block"
+	schema_3_method.blocks = [schema_3_block, null]
+	schema_3_method.parameters = [schema_3_parameter, null]
+	schema_3_graph.methods = [schema_3_method, null]
+	var schema_3_variable: FlowVariableDefinition = FlowVariableDefinition.new()
+	schema_3_variable.value_type = FlowVariableDefinition.ValueType.INT
+	schema_3_graph.variables = [schema_3_variable, null]
+	var schema_3_validation: FlowValidationResult = FlowGraphValidator.validate(schema_3_graph)
+	assert(not schema_3_validation.has_errors())
+	var schema_3_graph_id: String = schema_3_graph.get_internal_id()
+	var dependency_a_id: String = dependency_a.get_internal_id()
+	var schema_3_method_id: String = schema_3_method.get_internal_id()
+	var schema_3_parameter_id: String = schema_3_parameter.get_internal_id()
+	var schema_3_block_id: String = schema_3_block.get_internal_id()
+	var schema_3_first_validation: FlowValidationResult = FlowGraphValidator.validate(schema_3_graph)
+	var schema_3_second_validation: FlowValidationResult = FlowGraphValidator.validate(schema_3_graph)
+	_assert_same_diagnostic_sequence(schema_3_first_validation, schema_3_second_validation)
+	assert(schema_3_graph.constructor == schema_3_constructor)
+	assert(schema_3_graph.constructor.dependencies[1] == null)
+	assert(schema_3_graph.methods[1] == null)
+	assert(schema_3_method.parameters[1] == null)
+	var schema_3_copy: FlowGraph = schema_3_graph.duplicate_with_new_ids()
+	assert(schema_3_copy.get_internal_id() != schema_3_graph_id)
+	assert(schema_3_copy.constructor != schema_3_constructor)
+	assert(schema_3_copy.constructor.dependencies[0] != dependency_a)
+	assert(schema_3_copy.constructor.dependencies[0].get_internal_id() != dependency_a_id)
+	assert(schema_3_copy.constructor.dependencies[1] == null)
+	assert(schema_3_copy.methods[0] != schema_3_method)
+	assert(schema_3_copy.methods[0].get_internal_id() != schema_3_method_id)
+	assert(schema_3_copy.methods[0].parameters[0] != schema_3_parameter)
+	assert(schema_3_copy.methods[0].parameters[0].get_internal_id() != schema_3_parameter_id)
+	assert(schema_3_copy.methods[0].blocks[0] != schema_3_block)
+	assert(schema_3_copy.methods[0].blocks[0].get_internal_id() != schema_3_block_id)
+	assert(schema_3_copy.methods[0].parameters[1] == null and schema_3_copy.methods[1] == null)
+	assert(schema_3_graph.get_internal_id() == schema_3_graph_id and dependency_a.get_internal_id() == dependency_a_id)
+	var schema_3_mixed_sources: FlowGraph = FlowGraph.new()
+	schema_3_mixed_sources.schema_version = FlowGraph.SCHEMA_VERSION_3
+	schema_3_mixed_sources.constructor = FlowConstructorDefinition.new()
+	schema_3_mixed_sources.containers.append(FlowProcess.new())
+	assert(_has_diagnostic(FlowGraphValidator.validate(schema_3_mixed_sources), FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES))
+	var schema_3_invalid: FlowGraph = FlowGraph.new()
+	schema_3_invalid.schema_version = FlowGraph.SCHEMA_VERSION_3
+	schema_3_invalid.constructor = FlowConstructorDefinition.new()
+	var invalid_dependency: FlowDependencyDefinition = FlowDependencyDefinition.new()
+	invalid_dependency.display_name = " "
+	invalid_dependency.required_class_name = &""
+	schema_3_invalid.constructor.dependencies = [invalid_dependency, invalid_dependency]
+	var invalid_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	invalid_method.display_name = ""
+	var invalid_parameter: FlowMethodParameterDefinition = FlowMethodParameterDefinition.new()
+	invalid_parameter.display_name = " "
+	invalid_method.parameters = [invalid_parameter, invalid_parameter]
+	schema_3_invalid.methods = [invalid_method]
+	var schema_3_invalid_validation: FlowValidationResult = FlowGraphValidator.validate(schema_3_invalid)
+	assert(_has_diagnostic(schema_3_invalid_validation, FlowDiagnostic.CODE_EMPTY_DISPLAY_NAME))
+	assert(_has_diagnostic(schema_3_invalid_validation, FlowDiagnostic.CODE_EMPTY_REQUIRED_CLASS_NAME))
+	assert(_has_diagnostic(schema_3_invalid_validation, FlowDiagnostic.CODE_REPEATED_RESOURCE_INSTANCE))
+	assert(invalid_dependency.required_class_name == &"")
+	assert(FlowVariableDefinition.ValueType.BOOL == 0 and FlowVariableDefinition.ValueType.COLOR == 6)
+	assert(schema_3_variable.value_type == FlowVariableDefinition.ValueType.INT)
+	assert(schema_3_parameter.value_type == FlowVariableDefinition.ValueType.INT)
+	assert(schema_3_variable.value_type == schema_3_parameter.value_type)
+	var value_type_regression_path: String = "res://.godot/flow_value_type_schema_3_regression.tres"
+	assert(ResourceSaver.save(schema_3_graph, value_type_regression_path) == OK)
+	var loaded_schema_3_graph: FlowGraph = load(value_type_regression_path) as FlowGraph
+	assert(loaded_schema_3_graph != null)
+	assert(loaded_schema_3_graph.variables[0].value_type == FlowVariableDefinition.ValueType.INT)
+	assert(loaded_schema_3_graph.methods[0].parameters[0].value_type == FlowVariableDefinition.ValueType.INT)
+	assert(not FlowGraphValidator.validate(loaded_schema_3_graph).has_errors())
+	var loaded_schema_3_copy: FlowGraph = loaded_schema_3_graph.duplicate_with_new_ids()
+	assert(loaded_schema_3_copy.variables[0].value_type == FlowVariableDefinition.ValueType.INT)
+	assert(loaded_schema_3_copy.methods[0].parameters[0].value_type == FlowVariableDefinition.ValueType.INT)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(value_type_regression_path))
+
+	var duplicate_names_graph: FlowGraph = FlowGraph.new()
+	duplicate_names_graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	duplicate_names_graph.constructor = FlowConstructorDefinition.new()
+	var first_named_dependency: FlowDependencyDefinition = FlowDependencyDefinition.new()
+	var second_named_dependency: FlowDependencyDefinition = FlowDependencyDefinition.new()
+	second_named_dependency.display_name = first_named_dependency.display_name
+	duplicate_names_graph.constructor.dependencies = [first_named_dependency, second_named_dependency]
+	var first_named_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	var second_named_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	second_named_method.display_name = first_named_method.display_name
+	var first_named_parameter: FlowMethodParameterDefinition = FlowMethodParameterDefinition.new()
+	var second_named_parameter: FlowMethodParameterDefinition = FlowMethodParameterDefinition.new()
+	second_named_parameter.display_name = first_named_parameter.display_name
+	first_named_method.parameters = [first_named_parameter, second_named_parameter]
+	duplicate_names_graph.methods = [first_named_method, second_named_method]
+	assert(_has_diagnostic(FlowGraphValidator.validate(duplicate_names_graph), FlowDiagnostic.CODE_DUPLICATE_DISPLAY_NAME))
+
+	var duplicate_schema_3_id_graph: FlowGraph = FlowGraph.new()
+	duplicate_schema_3_id_graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	duplicate_schema_3_id_graph.constructor = FlowConstructorDefinition.new()
+	var duplicate_schema_3_dependency: FlowDependencyDefinition = FlowDependencyDefinition.new()
+	duplicate_schema_3_dependency._internal_id = duplicate_schema_3_id_graph.get_internal_id()
+	duplicate_schema_3_id_graph.constructor.dependencies = [duplicate_schema_3_dependency]
+	assert(_has_diagnostic(FlowGraphValidator.validate(duplicate_schema_3_id_graph), FlowDiagnostic.CODE_DUPLICATE_INTERNAL_ID))
 
 	print("[Flujo] Model smoke test passed")
 	await get_tree().process_frame

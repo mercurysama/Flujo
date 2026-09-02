@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-This document defines planned schema 3 behavior for Constructor declarations, scene dependency bindings, reusable methods, and method calls. It does not implement runtime execution, Inspector UI, undo/redo actions, or persistent runtime state.
+This document defines schema 3 behavior for Constructor declarations and reusable methods. Its persistent structural foundation is implemented; runtime execution, Inspector UI, undo/redo actions, persistent runtime state, scene bindings, and method calls remain future work.
 
 Schema 3 extends the schema 2 definition model. `FlowGraph` remains an immutable, shareable program definition during execution. Per-instance mutable state belongs to a future runtime context owned by each `PVController`.
 
@@ -26,7 +26,9 @@ The default `FlowGraph.schema_version` remains 1 so existing resources continue 
 - A dependency named `Collider` can declare a required collider class. Its stable identity is the dependency internal ID, never its display name, collection index, or node path.
 - Dependency display names must be non-empty after trimming and unique within the constructor using exact, case-sensitive comparison. Display names remain presentation text; IDs are the only reference keys.
 
-The final list of allowed node class names and whether a dependency may accept derived node types must be decided before implementation. Validation must use portable runtime type information and must not depend on editor-only APIs.
+`required_class_name` is a persistent `StringName`. Any built-in Godot class derived from `Node` or any project global class registered with `class_name` that derives from `Node` may be declared. A derived instance may satisfy a dependency declared for a base class.
+
+The initial structural validator only requires `required_class_name` to be non-empty. Class resolution, inheritance checks, and matching declarations to real instances are deferred to the future `PVController` binding layer. An unresolved class name remains unchanged for future diagnostics; it is never cleared or substituted. Dependencies never store a `Node`, `NodePath`, or direct scene reference.
 
 ## PVController bindings
 
@@ -44,14 +46,14 @@ The exact serialized locator format is deliberately deferred. It must support sc
 
 ## Reusable methods
 
-`FlowMethodDefinition` is a future persistent `FlowBlockContainer` with its own internal ID, display name, enabled flag, user note, ordered typed parameters, and ordered blocks.
+`FlowMethodDefinition` is a persistent `FlowBlockContainer` with its own internal ID, display name, enabled flag, user note, ordered typed parameters, and ordered blocks.
 
 - `FlowGraph.methods` is an ordered `Array[FlowMethodDefinition]` that preserves `null` positions.
 - Method display names must be non-empty after trimming and unique within one graph using exact, case-sensitive comparison.
 - `FlowMethodParameterDefinition` has an internal ID, a display name, and a declared value type.
 - Parameter display names must be non-empty after trimming and unique within their method using exact, case-sensitive comparison.
 - Parameters are addressed by internal ID. Their display names and array positions are not call keys.
-- The value-type taxonomy must be shared deliberately with variables or extracted into a portable common value-type definition before implementation; parameter semantics must not inherit variable scope, binding, or persistence semantics accidentally.
+- `FlowVariableDefinition.ValueType` remains the single canonical value-type taxonomy. `FlowMethodParameterDefinition.value_type` deliberately reuses that enum directly, preserving every public member, numeric value, and existing variable serialization. This shared enum does not give parameters variable scope, ownership, binding, persistence, or runtime-value semantics.
 
 Methods are definitions only. Their local values, argument values, return behavior, and activation frames belong to the future runtime context.
 

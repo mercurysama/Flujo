@@ -4,6 +4,7 @@ extends Resource
 
 const CURRENT_SCHEMA_VERSION: int = 1
 const SCHEMA_VERSION_2: int = 2
+const SCHEMA_VERSION_3: int = 3
 
 @export_storage var _internal_id: String = FlowId.create()
 @export_storage var schema_version: int = CURRENT_SCHEMA_VERSION
@@ -11,6 +12,8 @@ const SCHEMA_VERSION_2: int = 2
 @export var processes: Array[FlowProcess] = []
 @export var variables: Array[FlowVariableDefinition] = []
 @export var state_machines: Array[FlowStateMachineDefinition] = []
+@export var constructor: FlowConstructorDefinition
+@export var methods: Array[FlowMethodDefinition] = []
 
 func get_internal_id() -> String:
 	return _internal_id
@@ -29,7 +32,7 @@ func duplicate_with_new_ids() -> FlowGraph:
 				copy.containers.append(null)
 			else:
 				copy.containers.append(_duplicate_legacy_container(container, id_map))
-	elif schema_version == SCHEMA_VERSION_2:
+	elif schema_version == SCHEMA_VERSION_2 or schema_version == SCHEMA_VERSION_3:
 		for process: FlowProcess in processes:
 			if process == null:
 				copy.processes.append(null)
@@ -49,6 +52,14 @@ func duplicate_with_new_ids() -> FlowGraph:
 				copy.state_machines.append(_duplicate_state_machine(state_machine, id_map))
 
 		_remap_variable_references(copy.variables, id_map)
+
+		if schema_version == SCHEMA_VERSION_3:
+			copy.constructor = _duplicate_constructor(constructor, id_map)
+			for method: FlowMethodDefinition in methods:
+				if method == null:
+					copy.methods.append(null)
+				else:
+					copy.methods.append(_duplicate_method(method, id_map))
 		_remap_state_machine_references(copy.state_machines, id_map)
 
 	return copy
@@ -135,6 +146,43 @@ func _duplicate_state_machine(
 	return copy
 
 
+func _duplicate_constructor(
+		constructor_definition: FlowConstructorDefinition,
+		id_map: Dictionary[String, String]
+) -> FlowConstructorDefinition:
+	var copy: FlowConstructorDefinition = constructor_definition.duplicate(false) as FlowConstructorDefinition
+	copy._internal_id = FlowId.create()
+	id_map[constructor_definition.get_internal_id()] = copy.get_internal_id()
+	copy.dependencies = []
+	for dependency: FlowDependencyDefinition in constructor_definition.dependencies:
+		if dependency == null:
+			copy.dependencies.append(null)
+			continue
+		var dependency_copy: FlowDependencyDefinition = dependency.duplicate(false) as FlowDependencyDefinition
+		dependency_copy._internal_id = FlowId.create()
+		id_map[dependency.get_internal_id()] = dependency_copy.get_internal_id()
+		copy.dependencies.append(dependency_copy)
+	return copy
+
+
+func _duplicate_method(
+		method: FlowMethodDefinition,
+		id_map: Dictionary[String, String]
+) -> FlowMethodDefinition:
+	var copy: FlowMethodDefinition = method.duplicate(false) as FlowMethodDefinition
+	copy._internal_id = FlowId.create()
+	id_map[method.get_internal_id()] = copy.get_internal_id()
+	_duplicate_blocks(method, copy, id_map)
+	copy.parameters = []
+	for parameter: FlowMethodParameterDefinition in method.parameters:
+		if parameter == null:
+			copy.parameters.append(null)
+			continue
+		var parameter_copy: FlowMethodParameterDefinition = parameter.duplicate(false) as FlowMethodParameterDefinition
+		parameter_copy._internal_id = FlowId.create()
+		id_map[parameter.get_internal_id()] = parameter_copy.get_internal_id()
+		copy.parameters.append(parameter_copy)
+	return copy
 func _remap_variable_references(
 		copy_variables: Array[FlowVariableDefinition],
 		id_map: Dictionary[String, String]

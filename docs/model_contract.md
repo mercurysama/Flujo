@@ -181,15 +181,35 @@ Runtime resources involved in this presentation also execute in `@tool` mode so 
 
 If exactly one state has `is_initial`, the migrated machine selects it; if none do, it selects the first non-null state; more than one produces an error diagnostic. Unknown `FlowBlockContainer` types, missing references, and any other source structural invalidity prevent migration without changing the source.
 
-## Planned contract — not implemented yet
+## Implemented schema 3 structural foundation
 
+`FlowGraph.SCHEMA_VERSION_3` reuses the ordered schema 2 `processes`, `variables`, and `state_machines` collections, requires exactly one `FlowConstructorDefinition`, and adds ordered `methods`. Its legacy `containers` collection must be empty. Schema 1 and schema 2 sources remain unchanged and are never synchronized with schema 3.
+
+`FlowConstructorDefinition` owns ordered, nullable `FlowDependencyDefinition` resources. A dependency stores its stable ID, display metadata, `required_class_name: StringName`, and `required` flag only; it stores no node, node path, or scene reference. The structural validator requires a non-empty class name but deliberately defers class resolution, inheritance, and `PVController` bindings. Declarations may name built-in or project global `Node` subclasses, and future resolution will allow derived instances for base declarations.
+
+`FlowMethodDefinition` is a `FlowBlockContainer` with ordered nullable blocks and `FlowMethodParameterDefinition` resources. Method, dependency, and parameter names are non-empty after trimming and unique in their own exact, case-sensitive namespaces. IDs and resource instances are globally unique throughout the graph, and validation remains deterministic and read-only.
+
+`FlowVariableDefinition.ValueType` remains the single canonical value-type enum. Parameters reuse it directly without inheriting variable scope, ownership, binding, persistence, or runtime-value behavior. Its existing public members, numeric values, serialized property name, and variable API are unchanged.
+
+Schema 3 duplication deeply copies constructor, dependencies, methods, parameters, blocks, and schema 2 collections with one old-ID-to-new-ID map, preserving order and `null` positions. No method calls, argument bindings, or controller bindings exist in this foundation.
+
+
+## Planned contract — not implemented yet
 The requirements in this section are future design decisions. They do not describe features available in the current implementation.
 
 The planned contract for further schema 2 evolution is defined in [`flow_graph_v2_migration.md`](flow_graph_v2_migration.md). Its portions not covered by the implemented migration remain prior design.
 
-The planned schema 3 contract for Constructor, `PVController` bindings, methods, and calls is defined in [`constructor_methods_contract.md`](constructor_methods_contract.md). It does not describe implemented features yet.
+The schema 3 contract in [`constructor_methods_contract.md`](constructor_methods_contract.md) also describes the future `PVController` bindings and method-call work not implemented by this structural foundation.
 
 ### Execution and temporary state
+### Deferred schema 3 work
+
+- Explicit schema 2→3 migration.
+- `PVController` dependency bindings and class-resolution/inheritance checks.
+- `FlowRuntimeState` and runtime execution.
+- Method-call blocks, arguments, argument validation, and call-cycle validation.
+- Inspector authoring and execution of Constructor or Methods.
+
 
 - During future execution, `FlowGraph` and all its persistent resources will be treated as read-only data.
 - `FlowRuntimeState` will be a temporary `RefCounted` class, independent for each controller and execution.
@@ -224,7 +244,7 @@ The planned schema 3 contract for Constructor, `PVController` bindings, methods,
 
 ## Tests
 
-The `tests/model/flow_model_smoke_test.tscn` scene validates IDs, duplication, preservation of derived types and `null` positions, and that every new `PVController` owns an independent `FlowGraph`.
+The `tests/model/flow_model_smoke_test.tscn` scene validates schemas 1 through 3, IDs, deep duplication, `null` positions, schema source exclusivity, structural persistence, and `FlowVariableDefinition.ValueType` compatibility for variables and method parameters.
 
 It can be run manually by opening that scene in Godot and pressing **F6**.
 
