@@ -75,3 +75,7 @@
 - Runtime behavior must remain portable to Godot-supported export platforms.
 - Do not introduce platform-specific runtime dependencies.
 - Do not add secrets, credentials, telemetry, or external network dependencies.
+- Never commit machine-specific absolute paths in shared configuration.
+- Tool paths belong in user configuration.
+- Report every emerging error, read/write failure, denied permission, or fallback recovery in the final report.
+- If the same resource fails twice, stop and report it even if an alternative exists.
