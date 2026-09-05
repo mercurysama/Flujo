@@ -55,19 +55,35 @@
 # Verification
 
 - Run `git diff --check`.
-- Run `godot --headless --editor --path . --quit-after 5`.
-- Run `godot --headless --path . tests/model/flow_model_smoke_test.tscn`.
+- Run the selected Godot command with `--headless --editor --path . --quit-after 5`.
+- Run the selected Godot command with `--headless --path . tests/model/flow_model_smoke_test.tscn`.
 - The smoke test must print `[Flujo] Model smoke test passed`.
 - Report warnings separately from project errors.
 - Report every modified file and the final Git status.
 
+# Visual Review
+
+- Any change that alters the Inspector, dock, controls, visible ordering, focus, shortcuts, or editor interaction requires a manual check in Godot.
+- When applicable, the review includes the empty state, the result after an action, undo/redo, keyboard navigation, save/reopen, and selection changes.
+- Headless tests do not replace visual review.
+- An internal class does not require visual review unless it produces or changes a visible representation.
+
 # Fedora Flatpak Environment
 
-- For Codex sessions running inside the VS Code Flatpak on Fedora 43, VS Code uses `com.visualstudio.code` and Godot uses `org.godotengine.Godot`.
-- `flatpak` may not be available directly inside the sandbox. Use `/usr/bin/flatpak-spawn --host` to run Flatpak commands on the host.
-- Godot version: `/usr/bin/flatpak-spawn --host flatpak run org.godotengine.Godot --version`
-- Headless editor load: `/usr/bin/flatpak-spawn --host flatpak run org.godotengine.Godot --headless --editor --path . --quit-after 5`
-- Model smoke test: `/usr/bin/flatpak-spawn --host flatpak run org.godotengine.Godot --headless --path . tests/model/flow_model_smoke_test.tscn`
+- On Fedora, select the Godot executor in this order. Confirm every selected executor reports Godot 4.7.2 before using it.
+  1. Use native `godot` when it is available in `PATH` and `godot --version` reports 4.7.2.
+  2. If Codex runs inside the VS Code Flatpak, use `flatpak-spawn --host flatpak run org.godotengine.Godot` when native Godot is unavailable or is not 4.7.2. VS Code uses `com.visualstudio.code` and Godot uses `org.godotengine.Godot`.
+  3. If Flatpak is available directly, use `flatpak run org.godotengine.Godot` when neither prior executor works.
+  4. If none of these executors works with Godot 4.7.2, stop and report the failure. Do not invent paths or reuse Windows paths.
+- Native Godot version: `godot --version`
+- Native headless editor load: `godot --headless --editor --path . --quit-after 5`
+- Native model smoke test: `godot --headless --path . tests/model/flow_model_smoke_test.tscn`
+- Host Flatpak version: `flatpak-spawn --host flatpak run org.godotengine.Godot --version`
+- Host Flatpak headless editor load: `flatpak-spawn --host flatpak run org.godotengine.Godot --headless --editor --path . --quit-after 5`
+- Host Flatpak model smoke test: `flatpak-spawn --host flatpak run org.godotengine.Godot --headless --path . tests/model/flow_model_smoke_test.tscn`
+- Direct Flatpak version: `flatpak run org.godotengine.Godot --version`
+- Direct Flatpak headless editor load: `flatpak run org.godotengine.Godot --headless --editor --path . --quit-after 5`
+- Direct Flatpak model smoke test: `flatpak run org.godotengine.Godot --headless --path . tests/model/flow_model_smoke_test.tscn`
 - `WARNING: Scan thread aborted...` is acceptable only when the headless load exits with code 0 and the warning corresponds to the planned shutdown.
 
 # Portability and Safety
