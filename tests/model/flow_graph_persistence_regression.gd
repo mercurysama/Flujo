@@ -2,6 +2,7 @@ extends SceneTree
 
 const TEMP_DIR_PATH: String = "res://.godot/flujo_tests"
 const TEMP_SCENE_PATH: String = TEMP_DIR_PATH + "/pv_controller_flow_graph_regression.tscn"
+const TEMP_SCHEMA_3_SCENE_PATH: String = TEMP_DIR_PATH + "/pv_controller_flow_constructor_regression.tscn"
 
 var _failures: Array[String] = []
 
@@ -102,6 +103,7 @@ func _run() -> void:
 	if root != null:
 		root.free()
 	_cleanup_temp_scene()
+	_run_schema_3_constructor_persistence_regression()
 	_finish()
 
 
@@ -180,7 +182,121 @@ func _build_controller_with_schema_2_graph() -> PVController:
 	return controller
 
 
-func _save_scene(root: Node) -> bool:
+func _run_schema_3_constructor_persistence_regression() -> void:
+	var root: Node = Node.new()
+	var controller: PVController = _build_controller_with_schema_3_graph()
+	var scene_path: String = ""
+	var loaded_scene: PackedScene = null
+	var instance_a: Node = null
+	var instance_b: Node = null
+	var controller_a: PVController = null
+	var controller_b: PVController = null
+	var graph_a: FlowGraph = null
+	var graph_b: FlowGraph = null
+	var original_graph_id: String = controller.flow_graph.get_internal_id()
+	var original_constructor_id: String = controller.flow_graph.constructor.get_internal_id()
+	var original_constructor_block_id: String = controller.flow_graph.constructor.blocks[1].get_internal_id()
+	var original_first_dependency_id: String = controller.flow_graph.constructor.dependencies[0].get_internal_id()
+	var original_second_dependency_id: String = controller.flow_graph.constructor.dependencies[2].get_internal_id()
+
+	root.name = "FlowConstructorPersistenceRoot"
+	root.add_child(controller)
+	controller.owner = root
+	_assert(_save_scene(root, TEMP_SCHEMA_3_SCENE_PATH), "Schema 3 constructor scene can be saved to the temp Godot project folder.")
+	scene_path = ProjectSettings.globalize_path(TEMP_SCHEMA_3_SCENE_PATH)
+	_assert(FileAccess.file_exists(scene_path), "Schema 3 constructor scene exists before reloading.")
+	root.free()
+	root = null
+	controller = null
+	loaded_scene = load(TEMP_SCHEMA_3_SCENE_PATH) as PackedScene
+	_assert(loaded_scene != null, "Schema 3 constructor scene can be loaded back from disk.")
+	if loaded_scene != null:
+		instance_a = loaded_scene.instantiate()
+		instance_b = loaded_scene.instantiate()
+	_assert(instance_a != null and instance_b != null, "Both schema 3 scene instances are created.")
+	if instance_a != null:
+		controller_a = instance_a.get_node_or_null("ControllerNode") as PVController
+	if instance_b != null:
+		controller_b = instance_b.get_node_or_null("ControllerNode") as PVController
+	_assert(controller_a != null and controller_b != null, "Schema 3 scene instances resolve PVController nodes.")
+	if controller_a != null:
+		graph_a = controller_a.flow_graph
+	if controller_b != null:
+		graph_b = controller_b.flow_graph
+	_assert(graph_a != null and graph_b != null, "Schema 3 scene instances retain FlowGraphs.")
+	if graph_a != null and graph_a.constructor != null:
+		_assert(graph_a.schema_version == FlowGraph.SCHEMA_VERSION_3, "Schema 3 graph version survives PackedScene serialization.")
+		_assert(graph_a.get_internal_id() == original_graph_id, "Schema 3 graph ID survives PackedScene serialization.")
+		_assert(graph_a.constructor is FlowConstructorDefinition, "Loaded constructor preserves its concrete type.")
+		_assert(graph_a.constructor is FlowBlockContainer, "Loaded constructor preserves its block-container type.")
+		_assert(graph_a.constructor.get_internal_id() == original_constructor_id, "Constructor ID survives PackedScene serialization.")
+		_assert(graph_a.constructor.display_name == "Scene Constructor", "Constructor display name survives PackedScene serialization.")
+		_assert(not graph_a.constructor.enabled, "Constructor enabled value survives PackedScene serialization.")
+		_assert(graph_a.constructor.user_note == "Scene constructor note", "Constructor note survives PackedScene serialization.")
+		_assert(graph_a.constructor.blocks.size() == 2, "Constructor block collection retains order and null positions.")
+		_assert(graph_a.constructor.blocks[0] == null, "Constructor leading null block position survives PackedScene serialization.")
+		_assert(graph_a.constructor.blocks[1] is FlowBlock, "Constructor block type survives PackedScene serialization.")
+		_assert(graph_a.constructor.blocks[1].get_internal_id() == original_constructor_block_id, "Constructor block ID survives PackedScene serialization.")
+		_assert(graph_a.constructor.blocks[1].display_name == "Scene Constructor Block", "Constructor block metadata survives PackedScene serialization.")
+		_assert(graph_a.constructor.dependencies.size() == 3, "Constructor dependency collection retains order and null positions.")
+		_assert(graph_a.constructor.dependencies[0] is FlowDependencyDefinition, "First constructor dependency type survives PackedScene serialization.")
+		_assert(graph_a.constructor.dependencies[0].get_internal_id() == original_first_dependency_id, "First constructor dependency ID survives PackedScene serialization.")
+		_assert(graph_a.constructor.dependencies[0].display_name == "Scene Dependency", "First constructor dependency metadata survives PackedScene serialization.")
+		_assert(graph_a.constructor.dependencies[1] == null, "Constructor dependency null position survives PackedScene serialization.")
+		_assert(graph_a.constructor.dependencies[2] is FlowDependencyDefinition, "Second constructor dependency type survives PackedScene serialization.")
+		_assert(graph_a.constructor.dependencies[2].get_internal_id() == original_second_dependency_id, "Second constructor dependency ID survives PackedScene serialization.")
+		_assert(graph_a.constructor.dependencies[2].required_class_name == &"Node2D", "Second constructor dependency class survives PackedScene serialization.")
+		_assert(not FlowGraphValidator.validate(graph_a).has_errors(), "Loaded schema 3 constructor graph remains valid.")
+	else:
+		_assert(false, "Loaded schema 3 graph retains a constructor.")
+	if graph_b != null and graph_b.constructor != null:
+		_assert(graph_b.schema_version == FlowGraph.SCHEMA_VERSION_3, "Second schema 3 scene instance preserves graph version.")
+		_assert(graph_b.constructor is FlowConstructorDefinition, "Second schema 3 scene instance preserves constructor type.")
+		_assert(graph_b.constructor.blocks.size() == 2 and graph_b.constructor.blocks[0] == null, "Second schema 3 scene instance preserves constructor block ordering.")
+		_assert(graph_b.constructor.dependencies.size() == 3 and graph_b.constructor.dependencies[1] == null, "Second schema 3 scene instance preserves dependency ordering.")
+	else:
+		_assert(false, "Second loaded schema 3 graph retains a constructor.")
+	if instance_a != null:
+		_assert(instance_a.scene_file_path == TEMP_SCHEMA_3_SCENE_PATH, "Schema 3 regression uses a normal PackedScene instance.")
+
+	if instance_a != null:
+		instance_a.free()
+	if instance_b != null:
+		instance_b.free()
+	if root != null:
+		root.free()
+	_cleanup_temp_scene()
+	_assert(not FileAccess.file_exists(scene_path), "Schema 3 temporary scene is removed after the regression.")
+	_assert(not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(TEMP_DIR_PATH)), "Schema 3 temporary directory is removed after the regression.")
+
+
+func _build_controller_with_schema_3_graph() -> PVController:
+	var graph: FlowGraph = FlowGraph.new()
+	graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	var constructor_definition: FlowConstructorDefinition = FlowConstructorDefinition.new()
+	constructor_definition.display_name = "Scene Constructor"
+	constructor_definition.enabled = false
+	constructor_definition.user_note = "Scene constructor note"
+	var constructor_block: FlowBlock = FlowBlock.new()
+	constructor_block.display_name = "Scene Constructor Block"
+	constructor_block.enabled = false
+	constructor_definition.blocks = [null, constructor_block]
+	var first_dependency: FlowDependencyDefinition = FlowDependencyDefinition.new()
+	first_dependency.display_name = "Scene Dependency"
+	first_dependency.required_class_name = &"Node"
+	var second_dependency: FlowDependencyDefinition = FlowDependencyDefinition.new()
+	second_dependency.display_name = "Scene Node2D Dependency"
+	second_dependency.required_class_name = &"Node2D"
+	second_dependency.required = false
+	constructor_definition.dependencies = [first_dependency, null, second_dependency]
+	graph.constructor = constructor_definition
+	var controller: PVController = PVController.new()
+	controller.name = "ControllerNode"
+	controller.flow_graph = graph
+	return controller
+
+
+func _save_scene(root: Node, resource_path: String = TEMP_SCENE_PATH) -> bool:
 	var packed_scene: PackedScene = PackedScene.new()
 	var save_result: Error = packed_scene.pack(root)
 	if save_result != OK:
@@ -188,14 +304,15 @@ func _save_scene(root: Node) -> bool:
 	var dir_path: String = ProjectSettings.globalize_path(TEMP_DIR_PATH)
 	if not DirAccess.dir_exists_absolute(dir_path):
 		DirAccess.make_dir_recursive_absolute(dir_path)
-	var save_status: Error = ResourceSaver.save(packed_scene, ProjectSettings.globalize_path(TEMP_SCENE_PATH))
+	var save_status: Error = ResourceSaver.save(packed_scene, ProjectSettings.globalize_path(resource_path))
 	return save_status == OK
 
 
 func _cleanup_temp_scene() -> void:
-	var scene_path: String = ProjectSettings.globalize_path(TEMP_SCENE_PATH)
-	if FileAccess.file_exists(scene_path):
-		DirAccess.remove_absolute(scene_path)
+	for resource_path: String in [TEMP_SCENE_PATH, TEMP_SCHEMA_3_SCENE_PATH]:
+		var scene_path: String = ProjectSettings.globalize_path(resource_path)
+		if FileAccess.file_exists(scene_path):
+			DirAccess.remove_absolute(scene_path)
 	var temp_dir: String = ProjectSettings.globalize_path(TEMP_DIR_PATH)
 	if DirAccess.dir_exists_absolute(temp_dir):
 		var dir_access: DirAccess = DirAccess.open(temp_dir)

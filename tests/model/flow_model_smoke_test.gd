@@ -229,6 +229,7 @@ func _ready() -> void:
 	assert(copy.containers[0] is FlowProcess)
 	assert(copy.containers[1] == null)
 	assert(copy.containers[2] is FlowStateDefinition)
+	assert(original.constructor == null and copy.constructor == null)
 
 	var process_copy: FlowProcess = copy.containers[0] as FlowProcess
 	var state_copy: FlowStateDefinition = copy.containers[2] as FlowStateDefinition
@@ -481,6 +482,7 @@ func _ready() -> void:
 	assert(schema_2_copy.get_internal_id() != schema_2_graph_id)
 	assert(schema_2_copy.schema_version == FlowGraph.SCHEMA_VERSION_2)
 	assert(schema_2_copy.containers.is_empty())
+	assert(schema_2_graph.constructor == null and schema_2_copy.constructor == null)
 	assert(schema_2_copy.processes.size() == 2)
 	assert(schema_2_copy.processes[1] == null)
 	assert(schema_2_copy.variables.size() == 3)
@@ -1043,6 +1045,12 @@ func _ready() -> void:
 	var schema_3_graph: FlowGraph = FlowGraph.new()
 	schema_3_graph.schema_version = FlowGraph.SCHEMA_VERSION_3
 	var schema_3_constructor: FlowConstructorDefinition = FlowConstructorDefinition.new()
+	schema_3_constructor.display_name = "Constructor Flow"
+	schema_3_constructor.enabled = false
+	schema_3_constructor.user_note = "Constructor note"
+	var schema_3_constructor_block: FlowBlock = FlowBlock.new()
+	schema_3_constructor_block.display_name = "Constructor Block"
+	schema_3_constructor.blocks = [schema_3_constructor_block, null]
 	var dependency_a: FlowDependencyDefinition = FlowDependencyDefinition.new()
 	dependency_a.display_name = "Collider"
 	var dependency_b: FlowDependencyDefinition = FlowDependencyDefinition.new()
@@ -1065,7 +1073,10 @@ func _ready() -> void:
 	var schema_3_validation: FlowValidationResult = FlowGraphValidator.validate(schema_3_graph)
 	assert(not schema_3_validation.has_errors())
 	var schema_3_graph_id: String = schema_3_graph.get_internal_id()
+	var schema_3_constructor_id: String = schema_3_constructor.get_internal_id()
+	var schema_3_constructor_block_id: String = schema_3_constructor_block.get_internal_id()
 	var dependency_a_id: String = dependency_a.get_internal_id()
+	var dependency_b_id: String = dependency_b.get_internal_id()
 	var schema_3_method_id: String = schema_3_method.get_internal_id()
 	var schema_3_parameter_id: String = schema_3_parameter.get_internal_id()
 	var schema_3_block_id: String = schema_3_block.get_internal_id()
@@ -1073,15 +1084,38 @@ func _ready() -> void:
 	var schema_3_second_validation: FlowValidationResult = FlowGraphValidator.validate(schema_3_graph)
 	_assert_same_diagnostic_sequence(schema_3_first_validation, schema_3_second_validation)
 	assert(schema_3_graph.constructor == schema_3_constructor)
+	assert(schema_3_constructor is FlowBlockContainer)
+	assert(schema_3_constructor.display_name == "Constructor Flow")
+	assert(not schema_3_constructor.enabled)
+	assert(schema_3_constructor.user_note == "Constructor note")
+	assert(schema_3_constructor.blocks.size() == 2)
+	assert(schema_3_constructor.blocks[0] == schema_3_constructor_block)
+	assert(schema_3_constructor.blocks[1] == null)
 	assert(schema_3_graph.constructor.dependencies[1] == null)
 	assert(schema_3_graph.methods[1] == null)
 	assert(schema_3_method.parameters[1] == null)
 	var schema_3_copy: FlowGraph = schema_3_graph.duplicate_with_new_ids()
 	assert(schema_3_copy.get_internal_id() != schema_3_graph_id)
 	assert(schema_3_copy.constructor != schema_3_constructor)
+	assert(schema_3_copy.constructor is FlowConstructorDefinition)
+	assert(schema_3_copy.constructor is FlowBlockContainer)
+	assert(schema_3_copy.constructor.get_internal_id() != schema_3_constructor_id)
+	assert(schema_3_copy.constructor.display_name == "Constructor Flow")
+	assert(not schema_3_copy.constructor.enabled)
+	assert(schema_3_copy.constructor.user_note == "Constructor note")
+	assert(schema_3_copy.constructor.blocks.size() == 2)
+	assert(schema_3_copy.constructor.blocks[0] != schema_3_constructor_block)
+	assert(schema_3_copy.constructor.blocks[0] is FlowBlock)
+	assert(schema_3_copy.constructor.blocks[0].get_internal_id() != schema_3_constructor_block_id)
+	assert(schema_3_copy.constructor.blocks[0].display_name == "Constructor Block")
+	assert(schema_3_copy.constructor.blocks[1] == null)
 	assert(schema_3_copy.constructor.dependencies[0] != dependency_a)
 	assert(schema_3_copy.constructor.dependencies[0].get_internal_id() != dependency_a_id)
 	assert(schema_3_copy.constructor.dependencies[1] == null)
+	assert(schema_3_copy.constructor.dependencies[2] != dependency_b)
+	assert(schema_3_copy.constructor.dependencies[2] is FlowDependencyDefinition)
+	assert(schema_3_copy.constructor.dependencies[2].get_internal_id() != dependency_b_id)
+	assert(schema_3_copy.constructor.dependencies[2].display_name == "Target")
 	assert(schema_3_copy.methods[0] != schema_3_method)
 	assert(schema_3_copy.methods[0].get_internal_id() != schema_3_method_id)
 	assert(schema_3_copy.methods[0].parameters[0] != schema_3_parameter)
@@ -1090,6 +1124,12 @@ func _ready() -> void:
 	assert(schema_3_copy.methods[0].blocks[0].get_internal_id() != schema_3_block_id)
 	assert(schema_3_copy.methods[0].parameters[1] == null and schema_3_copy.methods[1] == null)
 	assert(schema_3_graph.get_internal_id() == schema_3_graph_id and dependency_a.get_internal_id() == dependency_a_id)
+	schema_3_copy.constructor.display_name = "Copied Constructor"
+	schema_3_copy.constructor.blocks[0].display_name = "Copied Block"
+	schema_3_copy.constructor.dependencies[0].display_name = "Copied Dependency"
+	assert(schema_3_constructor.display_name == "Constructor Flow")
+	assert(schema_3_constructor_block.display_name == "Constructor Block")
+	assert(dependency_a.display_name == "Collider")
 	var schema_3_mixed_sources: FlowGraph = FlowGraph.new()
 	schema_3_mixed_sources.schema_version = FlowGraph.SCHEMA_VERSION_3
 	schema_3_mixed_sources.constructor = FlowConstructorDefinition.new()
@@ -1121,6 +1161,18 @@ func _ready() -> void:
 	assert(ResourceSaver.save(schema_3_graph, value_type_regression_path) == OK)
 	var loaded_schema_3_graph: FlowGraph = load(value_type_regression_path) as FlowGraph
 	assert(loaded_schema_3_graph != null)
+	assert(loaded_schema_3_graph.constructor is FlowBlockContainer)
+	assert(loaded_schema_3_graph.constructor.display_name == "Constructor Flow")
+	assert(not loaded_schema_3_graph.constructor.enabled)
+	assert(loaded_schema_3_graph.constructor.user_note == "Constructor note")
+	assert(loaded_schema_3_graph.constructor.blocks.size() == 2)
+	assert(loaded_schema_3_graph.constructor.blocks[0] is FlowBlock)
+	assert(loaded_schema_3_graph.constructor.blocks[0].display_name == "Constructor Block")
+	assert(loaded_schema_3_graph.constructor.blocks[1] == null)
+	assert(loaded_schema_3_graph.constructor.dependencies.size() == 3)
+	assert(loaded_schema_3_graph.constructor.dependencies[0].display_name == "Collider")
+	assert(loaded_schema_3_graph.constructor.dependencies[1] == null)
+	assert(loaded_schema_3_graph.constructor.dependencies[2].display_name == "Target")
 	assert(loaded_schema_3_graph.variables[0].value_type == FlowVariableDefinition.ValueType.INT)
 	assert(loaded_schema_3_graph.methods[0].parameters[0].value_type == FlowVariableDefinition.ValueType.INT)
 	assert(not FlowGraphValidator.validate(loaded_schema_3_graph).has_errors())
@@ -1153,6 +1205,99 @@ func _ready() -> void:
 	duplicate_schema_3_dependency._internal_id = duplicate_schema_3_id_graph.get_internal_id()
 	duplicate_schema_3_id_graph.constructor.dependencies = [duplicate_schema_3_dependency]
 	assert(_has_diagnostic(FlowGraphValidator.validate(duplicate_schema_3_id_graph), FlowDiagnostic.CODE_DUPLICATE_INTERNAL_ID))
+
+	var invalid_constructor_blocks_graph: FlowGraph = FlowGraph.new()
+	invalid_constructor_blocks_graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	invalid_constructor_blocks_graph.constructor = FlowConstructorDefinition.new()
+	var empty_id_constructor_block: FlowBlock = FlowBlock.new()
+	empty_id_constructor_block._internal_id = ""
+	var repeated_constructor_block: FlowBlock = FlowBlock.new()
+	var duplicate_id_constructor_block: FlowBlock = FlowBlock.new()
+	duplicate_id_constructor_block._internal_id = repeated_constructor_block.get_internal_id()
+	invalid_constructor_blocks_graph.constructor.blocks = [
+		empty_id_constructor_block,
+		null,
+		repeated_constructor_block,
+		repeated_constructor_block,
+		duplicate_id_constructor_block,
+	]
+	var first_invalid_constructor_blocks_result: FlowValidationResult = FlowGraphValidator.validate(
+		invalid_constructor_blocks_graph
+	)
+	var second_invalid_constructor_blocks_result: FlowValidationResult = FlowGraphValidator.validate(
+		invalid_constructor_blocks_graph
+	)
+	_assert_same_diagnostic_sequence(
+		first_invalid_constructor_blocks_result,
+		second_invalid_constructor_blocks_result
+	)
+	assert(first_invalid_constructor_blocks_result.diagnostics.size() == 3)
+	var empty_constructor_block_diagnostic: FlowDiagnostic = first_invalid_constructor_blocks_result.diagnostics[0]
+	var repeated_constructor_block_diagnostic: FlowDiagnostic = first_invalid_constructor_blocks_result.diagnostics[1]
+	var duplicate_constructor_block_diagnostic: FlowDiagnostic = first_invalid_constructor_blocks_result.diagnostics[2]
+	assert(empty_constructor_block_diagnostic.code == FlowDiagnostic.CODE_EMPTY_INTERNAL_ID)
+	assert(empty_constructor_block_diagnostic.element_path == "constructor.blocks[0]")
+	assert(empty_constructor_block_diagnostic.related_id == "")
+	assert(repeated_constructor_block_diagnostic.code == FlowDiagnostic.CODE_REPEATED_RESOURCE_INSTANCE)
+	assert(repeated_constructor_block_diagnostic.element_path == "constructor.blocks[3]")
+	assert(repeated_constructor_block_diagnostic.related_id == repeated_constructor_block.get_internal_id())
+	assert(duplicate_constructor_block_diagnostic.code == FlowDiagnostic.CODE_DUPLICATE_INTERNAL_ID)
+	assert(duplicate_constructor_block_diagnostic.element_path == "constructor.blocks[4]")
+	assert(duplicate_constructor_block_diagnostic.related_id == repeated_constructor_block.get_internal_id())
+
+	var invalid_constructor_dependencies_graph: FlowGraph = FlowGraph.new()
+	invalid_constructor_dependencies_graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	invalid_constructor_dependencies_graph.constructor = FlowConstructorDefinition.new()
+	var invalid_constructor_dependency: FlowDependencyDefinition = FlowDependencyDefinition.new()
+	invalid_constructor_dependency.display_name = " "
+	invalid_constructor_dependency.required_class_name = &""
+	invalid_constructor_dependencies_graph.constructor.dependencies = [null, invalid_constructor_dependency]
+	var first_invalid_constructor_dependencies_result: FlowValidationResult = FlowGraphValidator.validate(
+		invalid_constructor_dependencies_graph
+	)
+	var second_invalid_constructor_dependencies_result: FlowValidationResult = FlowGraphValidator.validate(
+		invalid_constructor_dependencies_graph
+	)
+	_assert_same_diagnostic_sequence(
+		first_invalid_constructor_dependencies_result,
+		second_invalid_constructor_dependencies_result
+	)
+	assert(first_invalid_constructor_dependencies_result.diagnostics.size() == 2)
+	var empty_constructor_dependency_name_diagnostic: FlowDiagnostic = first_invalid_constructor_dependencies_result.diagnostics[0]
+	var empty_constructor_dependency_class_diagnostic: FlowDiagnostic = first_invalid_constructor_dependencies_result.diagnostics[1]
+	assert(empty_constructor_dependency_name_diagnostic.code == FlowDiagnostic.CODE_EMPTY_DISPLAY_NAME)
+	assert(empty_constructor_dependency_name_diagnostic.element_path == "constructor.dependencies[1]")
+	assert(empty_constructor_dependency_name_diagnostic.related_id == invalid_constructor_dependency.get_internal_id())
+	assert(empty_constructor_dependency_class_diagnostic.code == FlowDiagnostic.CODE_EMPTY_REQUIRED_CLASS_NAME)
+	assert(empty_constructor_dependency_class_diagnostic.element_path == "constructor.dependencies[1].required_class_name")
+	assert(empty_constructor_dependency_class_diagnostic.related_id == invalid_constructor_dependency.get_internal_id())
+	assert(invalid_constructor_dependencies_graph.constructor.dependencies[0] == null)
+	assert(invalid_constructor_dependencies_graph.constructor.dependencies[1] == invalid_constructor_dependency)
+
+	var cross_container_block_graph: FlowGraph = FlowGraph.new()
+	cross_container_block_graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	cross_container_block_graph.constructor = FlowConstructorDefinition.new()
+	var cross_container_block: FlowBlock = FlowBlock.new()
+	cross_container_block_graph.constructor.blocks = [cross_container_block, null]
+	var cross_container_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	cross_container_method.display_name = "Cross Container Method"
+	cross_container_method.blocks = [cross_container_block]
+	cross_container_block_graph.methods = [cross_container_method]
+	var first_cross_container_block_result: FlowValidationResult = FlowGraphValidator.validate(
+		cross_container_block_graph
+	)
+	var second_cross_container_block_result: FlowValidationResult = FlowGraphValidator.validate(
+		cross_container_block_graph
+	)
+	_assert_same_diagnostic_sequence(first_cross_container_block_result, second_cross_container_block_result)
+	assert(first_cross_container_block_result.diagnostics.size() == 1)
+	var cross_container_block_diagnostic: FlowDiagnostic = first_cross_container_block_result.diagnostics[0]
+	assert(cross_container_block_diagnostic.code == FlowDiagnostic.CODE_REPEATED_RESOURCE_INSTANCE)
+	assert(cross_container_block_diagnostic.element_path == "methods[0].blocks[0]")
+	assert(cross_container_block_diagnostic.related_id == cross_container_block.get_internal_id())
+	assert(cross_container_block_graph.constructor.blocks[0] == cross_container_block)
+	assert(cross_container_block_graph.constructor.blocks[1] == null)
+	assert(cross_container_method.blocks[0] == cross_container_block)
 
 	var schema_2_to_3_source: FlowGraph = FlowGraph.new()
 	schema_2_to_3_source.schema_version = FlowGraph.SCHEMA_VERSION_2
@@ -1212,8 +1357,10 @@ func _ready() -> void:
 	assert(schema_2_to_3_state_copy.blocks[1].get_internal_id() == schema_2_to_3_state_block.get_internal_id())
 	assert(schema_2_to_3_machine_copy.initial_state_id == schema_2_to_3_state.get_internal_id())
 	assert(schema_2_to_3_candidate.constructor != null)
+	assert(schema_2_to_3_candidate.constructor is FlowBlockContainer)
 	assert(schema_2_to_3_candidate.constructor.get_internal_id().length() == 32)
 	assert(schema_2_to_3_candidate.constructor.get_internal_id() != schema_2_to_3_source_id)
+	assert(schema_2_to_3_candidate.constructor.blocks.is_empty())
 	assert(schema_2_to_3_candidate.constructor.dependencies.is_empty())
 	assert(schema_2_to_3_candidate.methods.is_empty())
 	assert(not FlowGraphValidator.validate(schema_2_to_3_candidate).has_errors())

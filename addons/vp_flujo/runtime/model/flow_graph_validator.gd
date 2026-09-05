@@ -435,6 +435,7 @@ static func _validate_schema_3(graph: FlowGraph, result: FlowValidationResult, s
 	else:
 		var constructor_path: String = "constructor"
 		if _validate_resource_identity(graph.constructor, constructor_path, result, seen_instances, seen_ids):
+			_validate_blocks(graph.constructor, constructor_path, result, seen_instances, seen_ids)
 			var dependency_names: Dictionary[String, bool] = {}
 			for dependency_index: int in graph.constructor.dependencies.size():
 				var dependency: FlowDependencyDefinition = graph.constructor.dependencies[dependency_index]

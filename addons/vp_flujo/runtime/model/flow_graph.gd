@@ -153,6 +153,7 @@ func _duplicate_constructor(
 	var copy: FlowConstructorDefinition = constructor_definition.duplicate(false) as FlowConstructorDefinition
 	copy._internal_id = FlowId.create()
 	id_map[constructor_definition.get_internal_id()] = copy.get_internal_id()
+	_duplicate_blocks(constructor_definition, copy, id_map)
 	copy.dependencies = []
 	for dependency: FlowDependencyDefinition in constructor_definition.dependencies:
 		if dependency == null:

@@ -185,19 +185,19 @@ If exactly one state has `is_initial`, the migrated machine selects it; if none 
 
 `FlowGraph.SCHEMA_VERSION_3` reuses the ordered schema 2 `processes`, `variables`, and `state_machines` collections, requires exactly one `FlowConstructorDefinition`, and adds ordered `methods`. Its legacy `containers` collection must be empty. Schema 1 and schema 2 sources remain unchanged and are never synchronized with schema 3.
 
-`FlowConstructorDefinition` owns ordered, nullable `FlowDependencyDefinition` resources. A dependency stores its stable ID, display metadata, `required_class_name: StringName`, and `required` flag only; it stores no node, node path, or scene reference. The structural validator requires a non-empty class name but deliberately defers class resolution, inheritance, and `PVController` bindings. Declarations may name built-in or project global `Node` subclasses, and future resolution will allow derived instances for base declarations.
+`FlowConstructorDefinition` is a specialized `FlowBlockContainer`. It inherits persistent identity, display name, activation, user note, and an ordered nullable block collection without duplicating those properties, and it owns an additional ordered nullable collection of `FlowDependencyDefinition` resources. A dependency stores its stable ID, display metadata, `required_class_name: StringName`, and `required` flag only; it stores no node, node path, or scene reference. The structural validator applies the same block identity and instance rules used by other block containers, requires a non-empty dependency class name, and deliberately defers class resolution, inheritance, and `PVController` bindings. Declarations may name built-in or project global `Node` subclasses, and future resolution will allow derived instances for base declarations.
 
 `FlowMethodDefinition` is a `FlowBlockContainer` with ordered nullable blocks and `FlowMethodParameterDefinition` resources. Method, dependency, and parameter names are non-empty after trimming and unique in their own exact, case-sensitive namespaces. IDs and resource instances are globally unique throughout the graph, and validation remains deterministic and read-only.
 
 `FlowVariableDefinition.ValueType` remains the single canonical value-type enum. Parameters reuse it directly without inheriting variable scope, ownership, binding, persistence, or runtime-value behavior. Its existing public members, numeric values, serialized property name, and variable API are unchanged.
 
-Schema 3 duplication deeply copies constructor, dependencies, methods, parameters, blocks, and schema 2 collections with one old-ID-to-new-ID map, preserving order and `null` positions. No method calls, argument bindings, or controller bindings exist in this foundation.
+Schema 3 duplication deeply copies the constructor, its blocks and dependencies, methods, parameters, and schema 2 collections with one old-ID-to-new-ID map, preserving concrete types, order, and `null` positions. No method calls, argument bindings, or controller bindings exist in this foundation.
 
 ## Implemented migration from schema 2 to schema 3
 
 `FlowGraphMigrator.migrate_schema_2_to_3()` accepts only a schema 2 source that passes `FlowGraphValidator`. It validates the source before creating a separate candidate and validates that candidate before returning it; any diagnostic error leaves `migrated_graph` null and never modifies the source.
 
-The candidate keeps the source graph ID and deeply copies `processes`, `variables`, and `state_machines`, including nested blocks and states. All valid IDs, references, order, and deliberate `null` positions are preserved. It has schema version 3, no legacy containers, exactly one newly generated empty `FlowConstructorDefinition`, and an empty `methods` collection. The migration creates no bindings, calls, arguments, runtime state, Inspector integration, or executor behavior.
+The candidate keeps the source graph ID and deeply copies `processes`, `variables`, and `state_machines`, including nested blocks and states. All valid IDs, references, order, and deliberate `null` positions are preserved. It has schema version 3, no legacy containers, exactly one newly generated `FlowConstructorDefinition` with empty `blocks` and `dependencies`, and an empty `methods` collection. The migration creates no bindings, calls, arguments, runtime state, Inspector integration, or executor behavior.
 
 
 ## Planned contract — not implemented yet
