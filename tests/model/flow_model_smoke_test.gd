@@ -1154,6 +1154,161 @@ func _ready() -> void:
 	duplicate_schema_3_id_graph.constructor.dependencies = [duplicate_schema_3_dependency]
 	assert(_has_diagnostic(FlowGraphValidator.validate(duplicate_schema_3_id_graph), FlowDiagnostic.CODE_DUPLICATE_INTERNAL_ID))
 
+	var schema_2_to_3_source: FlowGraph = FlowGraph.new()
+	schema_2_to_3_source.schema_version = FlowGraph.SCHEMA_VERSION_2
+	var schema_2_to_3_process: FlowProcess = FlowProcess.new()
+	var schema_2_to_3_block: FlowBlock = FlowBlock.new()
+	schema_2_to_3_process.blocks = [schema_2_to_3_block, null]
+	var schema_2_to_3_global: FlowVariableDefinition = FlowVariableDefinition.new()
+	schema_2_to_3_global.scope = FlowVariableDefinition.Scope.GLOBAL
+	var schema_2_to_3_local: FlowVariableDefinition = FlowVariableDefinition.new()
+	schema_2_to_3_local.owner_container_id = schema_2_to_3_process.get_internal_id()
+	schema_2_to_3_local.global_variable_id = schema_2_to_3_global.get_internal_id()
+	var schema_2_to_3_machine: FlowStateMachineDefinition = FlowStateMachineDefinition.new()
+	var schema_2_to_3_state: FlowStateDefinition = FlowStateDefinition.new()
+	var schema_2_to_3_state_block: FlowBlock = FlowBlock.new()
+	schema_2_to_3_state.blocks = [null, schema_2_to_3_state_block]
+	schema_2_to_3_machine.states = [schema_2_to_3_state, null]
+	schema_2_to_3_machine.initial_state_id = schema_2_to_3_state.get_internal_id()
+	schema_2_to_3_source.processes = [schema_2_to_3_process, null]
+	schema_2_to_3_source.variables = [schema_2_to_3_global, null, schema_2_to_3_local]
+	schema_2_to_3_source.state_machines = [null, schema_2_to_3_machine]
+	assert(not FlowGraphValidator.validate(schema_2_to_3_source).has_errors())
+	var schema_2_to_3_source_id: String = schema_2_to_3_source.get_internal_id()
+	var schema_2_to_3_result: FlowGraphMigrationResult = FlowGraphMigrator.migrate_schema_2_to_3(
+		schema_2_to_3_source
+	)
+	assert(schema_2_to_3_result.is_successful())
+	assert(schema_2_to_3_result.diagnostics.is_empty())
+	var schema_2_to_3_candidate: FlowGraph = schema_2_to_3_result.migrated_graph
+	var schema_2_to_3_process_copy: FlowProcess = schema_2_to_3_candidate.processes[0]
+	var schema_2_to_3_global_copy: FlowVariableDefinition = schema_2_to_3_candidate.variables[0]
+	var schema_2_to_3_local_copy: FlowVariableDefinition = schema_2_to_3_candidate.variables[2]
+	var schema_2_to_3_machine_copy: FlowStateMachineDefinition = schema_2_to_3_candidate.state_machines[1]
+	var schema_2_to_3_state_copy: FlowStateDefinition = schema_2_to_3_machine_copy.states[0]
+	assert(schema_2_to_3_candidate != schema_2_to_3_source)
+	assert(schema_2_to_3_candidate.schema_version == FlowGraph.SCHEMA_VERSION_3)
+	assert(schema_2_to_3_candidate.get_internal_id() == schema_2_to_3_source_id)
+	assert(schema_2_to_3_candidate.containers.is_empty())
+	assert(schema_2_to_3_candidate.processes.size() == 2 and schema_2_to_3_candidate.processes[1] == null)
+	assert(schema_2_to_3_candidate.variables.size() == 3 and schema_2_to_3_candidate.variables[1] == null)
+	assert(schema_2_to_3_candidate.state_machines.size() == 2 and schema_2_to_3_candidate.state_machines[0] == null)
+	assert(schema_2_to_3_process_copy != schema_2_to_3_process)
+	assert(schema_2_to_3_process_copy.get_internal_id() == schema_2_to_3_process.get_internal_id())
+	assert(schema_2_to_3_process_copy.blocks[0] != schema_2_to_3_block and schema_2_to_3_process_copy.blocks[1] == null)
+	assert(schema_2_to_3_process_copy.blocks[0].get_internal_id() == schema_2_to_3_block.get_internal_id())
+	assert(schema_2_to_3_global_copy != schema_2_to_3_global)
+	assert(schema_2_to_3_global_copy.get_internal_id() == schema_2_to_3_global.get_internal_id())
+	assert(schema_2_to_3_local_copy != schema_2_to_3_local)
+	assert(schema_2_to_3_local_copy.get_internal_id() == schema_2_to_3_local.get_internal_id())
+	assert(schema_2_to_3_local_copy.owner_container_id == schema_2_to_3_process.get_internal_id())
+	assert(schema_2_to_3_local_copy.global_variable_id == schema_2_to_3_global.get_internal_id())
+	assert(schema_2_to_3_machine_copy != schema_2_to_3_machine)
+	assert(schema_2_to_3_machine_copy.get_internal_id() == schema_2_to_3_machine.get_internal_id())
+	assert(schema_2_to_3_machine_copy.states.size() == 2 and schema_2_to_3_machine_copy.states[1] == null)
+	assert(schema_2_to_3_state_copy != schema_2_to_3_state)
+	assert(schema_2_to_3_state_copy.get_internal_id() == schema_2_to_3_state.get_internal_id())
+	assert(schema_2_to_3_state_copy.blocks[0] == null and schema_2_to_3_state_copy.blocks[1] != schema_2_to_3_state_block)
+	assert(schema_2_to_3_state_copy.blocks[1].get_internal_id() == schema_2_to_3_state_block.get_internal_id())
+	assert(schema_2_to_3_machine_copy.initial_state_id == schema_2_to_3_state.get_internal_id())
+	assert(schema_2_to_3_candidate.constructor != null)
+	assert(schema_2_to_3_candidate.constructor.get_internal_id().length() == 32)
+	assert(schema_2_to_3_candidate.constructor.get_internal_id() != schema_2_to_3_source_id)
+	assert(schema_2_to_3_candidate.constructor.dependencies.is_empty())
+	assert(schema_2_to_3_candidate.methods.is_empty())
+	assert(not FlowGraphValidator.validate(schema_2_to_3_candidate).has_errors())
+	schema_2_to_3_process_copy.display_name = "Candidate Process"
+	schema_2_to_3_local_copy.owner_container_id = ""
+	assert(schema_2_to_3_process.display_name != "Candidate Process")
+	assert(schema_2_to_3_local.owner_container_id == schema_2_to_3_process.get_internal_id())
+	assert(schema_2_to_3_source.schema_version == FlowGraph.SCHEMA_VERSION_2)
+	assert(schema_2_to_3_source.get_internal_id() == schema_2_to_3_source_id)
+	assert(schema_2_to_3_source.constructor == null and schema_2_to_3_source.methods.is_empty())
+	assert(not FlowGraphValidator.validate(schema_2_to_3_source).has_errors())
+
+	var schema_2_to_3_null_validation: FlowValidationResult = FlowGraphValidator.validate(null)
+	var schema_2_to_3_null_result: FlowGraphMigrationResult = FlowGraphMigrator.migrate_schema_2_to_3(
+		null
+	)
+	assert(schema_2_to_3_null_result.has_errors())
+	assert(not schema_2_to_3_null_result.is_successful())
+	assert(schema_2_to_3_null_result.migrated_graph == null)
+	assert(schema_2_to_3_null_result.diagnostics.size() == schema_2_to_3_null_validation.diagnostics.size())
+	for schema_2_to_3_null_diagnostic_index: int in schema_2_to_3_null_validation.diagnostics.size():
+		var expected_schema_2_to_3_null_diagnostic: FlowDiagnostic = schema_2_to_3_null_validation.diagnostics[schema_2_to_3_null_diagnostic_index]
+		var actual_schema_2_to_3_null_diagnostic: FlowDiagnostic = schema_2_to_3_null_result.diagnostics[schema_2_to_3_null_diagnostic_index]
+		assert(actual_schema_2_to_3_null_diagnostic.code == expected_schema_2_to_3_null_diagnostic.code)
+		assert(actual_schema_2_to_3_null_diagnostic.element_path == expected_schema_2_to_3_null_diagnostic.element_path)
+		assert(actual_schema_2_to_3_null_diagnostic.related_id == expected_schema_2_to_3_null_diagnostic.related_id)
+	assert(schema_2_to_3_null_result.diagnostics[0].code == FlowDiagnostic.CODE_NULL_GRAPH)
+	assert(schema_2_to_3_null_result.diagnostics[0].element_path == "graph")
+	assert(schema_2_to_3_null_result.diagnostics[0].related_id == "")
+
+	var schema_2_to_3_wrong_schema: FlowGraph = FlowGraph.new()
+	var schema_2_to_3_wrong_schema_result: FlowGraphMigrationResult = FlowGraphMigrator.migrate_schema_2_to_3(
+		schema_2_to_3_wrong_schema
+	)
+	assert(not schema_2_to_3_wrong_schema_result.is_successful())
+	assert(schema_2_to_3_wrong_schema_result.migrated_graph == null)
+	assert(schema_2_to_3_wrong_schema_result.diagnostics.size() == 1)
+	var schema_2_to_3_wrong_schema_diagnostic: FlowDiagnostic = schema_2_to_3_wrong_schema_result.diagnostics[0]
+	assert(schema_2_to_3_wrong_schema_diagnostic.code == FlowDiagnostic.CODE_MIGRATION_SOURCE_SCHEMA)
+	assert(schema_2_to_3_wrong_schema_diagnostic.element_path == "graph")
+	assert(schema_2_to_3_wrong_schema_diagnostic.related_id == "")
+
+	var schema_2_to_3_mixed_source: FlowGraph = FlowGraph.new()
+	schema_2_to_3_mixed_source.schema_version = FlowGraph.SCHEMA_VERSION_2
+	var schema_2_to_3_legacy_container: FlowProcess = FlowProcess.new()
+	schema_2_to_3_mixed_source.containers = [schema_2_to_3_legacy_container]
+	var schema_2_to_3_mixed_first: FlowGraphMigrationResult = FlowGraphMigrator.migrate_schema_2_to_3(
+		schema_2_to_3_mixed_source
+	)
+	var schema_2_to_3_mixed_second: FlowGraphMigrationResult = FlowGraphMigrator.migrate_schema_2_to_3(
+		schema_2_to_3_mixed_source
+	)
+	assert(not schema_2_to_3_mixed_first.is_successful())
+	assert(schema_2_to_3_mixed_first.migrated_graph == null)
+	assert(schema_2_to_3_mixed_first.diagnostics.size() == schema_2_to_3_mixed_second.diagnostics.size())
+	for schema_2_to_3_diagnostic_index: int in schema_2_to_3_mixed_first.diagnostics.size():
+		var first_schema_2_to_3_diagnostic: FlowDiagnostic = schema_2_to_3_mixed_first.diagnostics[schema_2_to_3_diagnostic_index]
+		var second_schema_2_to_3_diagnostic: FlowDiagnostic = schema_2_to_3_mixed_second.diagnostics[schema_2_to_3_diagnostic_index]
+		assert(first_schema_2_to_3_diagnostic.code == second_schema_2_to_3_diagnostic.code)
+		assert(first_schema_2_to_3_diagnostic.element_path == second_schema_2_to_3_diagnostic.element_path)
+		assert(first_schema_2_to_3_diagnostic.related_id == second_schema_2_to_3_diagnostic.related_id)
+	assert(_has_migration_diagnostic(schema_2_to_3_mixed_first, FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES))
+	assert(schema_2_to_3_mixed_source.containers[0] == schema_2_to_3_legacy_container)
+
+	var schema_2_to_3_schema_3_source: FlowGraph = FlowGraph.new()
+	schema_2_to_3_schema_3_source.schema_version = FlowGraph.SCHEMA_VERSION_2
+	var schema_2_to_3_incompatible_constructor: FlowConstructorDefinition = FlowConstructorDefinition.new()
+	schema_2_to_3_schema_3_source.constructor = schema_2_to_3_incompatible_constructor
+	var schema_2_to_3_schema_3_result: FlowGraphMigrationResult = FlowGraphMigrator.migrate_schema_2_to_3(
+		schema_2_to_3_schema_3_source
+	)
+	assert(not schema_2_to_3_schema_3_result.is_successful())
+	assert(schema_2_to_3_schema_3_result.migrated_graph == null)
+	assert(schema_2_to_3_schema_3_result.diagnostics.size() == 1)
+	var schema_2_to_3_schema_3_diagnostic: FlowDiagnostic = schema_2_to_3_schema_3_result.diagnostics[0]
+	assert(schema_2_to_3_schema_3_diagnostic.code == FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES)
+	assert(schema_2_to_3_schema_3_diagnostic.element_path == "graph")
+	assert(schema_2_to_3_schema_3_diagnostic.related_id == "")
+	assert(schema_2_to_3_schema_3_source.constructor == schema_2_to_3_incompatible_constructor)
+
+	var schema_2_to_3_invalid_source: FlowGraph = FlowGraph.new()
+	schema_2_to_3_invalid_source.schema_version = FlowGraph.SCHEMA_VERSION_2
+	schema_2_to_3_invalid_source._internal_id = ""
+	var schema_2_to_3_invalid_result: FlowGraphMigrationResult = FlowGraphMigrator.migrate_schema_2_to_3(
+		schema_2_to_3_invalid_source
+	)
+	assert(not schema_2_to_3_invalid_result.is_successful())
+	assert(schema_2_to_3_invalid_result.migrated_graph == null)
+	assert(schema_2_to_3_invalid_result.diagnostics.size() == 1)
+	var schema_2_to_3_invalid_diagnostic: FlowDiagnostic = schema_2_to_3_invalid_result.diagnostics[0]
+	assert(schema_2_to_3_invalid_diagnostic.code == FlowDiagnostic.CODE_EMPTY_INTERNAL_ID)
+	assert(schema_2_to_3_invalid_diagnostic.element_path == "graph")
+	assert(schema_2_to_3_invalid_diagnostic.related_id == "")
+	assert(schema_2_to_3_invalid_source._internal_id == "")
+
 	print("[Flujo] Model smoke test passed")
 	await get_tree().process_frame
 	get_tree().quit()

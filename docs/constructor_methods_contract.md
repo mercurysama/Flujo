@@ -101,7 +101,7 @@ Controller-owned bindings are not part of graph duplication. A future controller
 
 ## Atomic migration from schema 2
 
-`FlowGraphMigrator` will add an explicit schema 2→3 step.
+`FlowGraphMigrator.migrate_schema_2_to_3()` provides an explicit schema 2→3 step.
 
 1. Validate the schema 2 source without modifying it.
 2. Build a separate candidate graph.
@@ -109,6 +109,8 @@ Controller-owned bindings are not part of graph duplication. A future controller
 4. Create one empty constructor with a new ID and an empty methods collection.
 5. Validate the candidate as schema 3.
 6. Return it only if there are no errors; otherwise return diagnostics and no candidate.
+
+The implemented migration copies `processes`, `variables`, and `state_machines` deeply while retaining their valid IDs, references, ordering, and `null` positions. It preserves the graph ID, clears legacy `containers`, creates exactly one new empty constructor, and initializes `methods` as empty. It does not create bindings, calls, arguments, runtime state, Inspector integration, or execution behavior.
 
 The schema 1→2 migration remains explicit. A future migration chain must apply 1→2 and 2→3 as separate atomic steps rather than changing `schema_version` implicitly.
 
@@ -120,7 +122,6 @@ Constructor declarations and methods are persistent model metadata and must seri
 
 ## Required tests before implementation
 
-- Schema 2→3 migration success, failure, determinism, deep-copy isolation, and source immutability.
 - Constructor existence, dependency identity, name validation, `null` preservation, and duplication remapping.
 - Controller binding ownership, missing dependencies, invalid locators, inherited-scene customization, and two instances sharing one graph.
 - Method and parameter name/ID validation, typed argument compatibility, missing references, direct recursion, indirect recursion, and deterministic diagnostics.

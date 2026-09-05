@@ -48,7 +48,7 @@ Every persistent element has a stable internal ID independent of its visible nam
 
 **Duplication:** requires a graph that has passed validation. It creates another `FlowGraph` and generates new IDs for the graph and every resource in the active representation while preserving ordering and `null` positions. The schema 2 copy uses one original-ID-to-new-ID map to remap `owner_container_id`, `global_variable_id`, and `initial_state_id`; unresolved references are preserved for diagnostics.
 
-**Migration:** `FlowGraphMigrator.migrate_schema_1_to_2()` atomically creates a new schema 2 graph from a validated schema 1 graph. It preserves the graph ID and valid process, state, and block IDs without sharing mutable resources with the source. Processes and states preserve the positions from `containers`; states are grouped in a new machine named `Migrated States`.
+**Migration:** `FlowGraphMigrator.migrate_schema_1_to_2()` atomically creates a new schema 2 graph from a validated schema 1 graph. It preserves the graph ID and valid process, state, and block IDs without sharing mutable resources with the source. Processes and states preserve the positions from `containers`; states are grouped in a new machine named `Migrated States`. `FlowGraphMigrator.migrate_schema_2_to_3()` atomically creates a new schema 3 graph from a validated schema 2 graph. It preserves the graph ID and all schema 2 IDs, references, order, and `null` positions through deep copies, then creates one empty constructor with a new ID and an empty methods collection.
 
 **Scene sharing:** `FlowGraph` is a program definition that can be shared by instances of a `PackedScene` and remains immutable during execution. Per-instance mutable state and values belong to a future runtime context owned by each `PVController`.
 
@@ -121,7 +121,7 @@ Every persistent element has a stable internal ID independent of its visible nam
 
 **Base:** `RefCounted`.
 
-**Responsibility:** migrate a schema 1 `FlowGraph` to an independent schema 2 copy without modifying the source. Migration validates the source before constructing the candidate and validates the candidate before returning success.
+**Responsibility:** migrate a `FlowGraph` through explicit, independent schema 1→2 or 2→3 steps without modifying the source. Each migration validates the source before constructing the candidate and validates the candidate before returning success.
 
 ### FlowGraphInspectorPresenter
 
@@ -193,6 +193,12 @@ If exactly one state has `is_initial`, the migrated machine selects it; if none 
 
 Schema 3 duplication deeply copies constructor, dependencies, methods, parameters, blocks, and schema 2 collections with one old-ID-to-new-ID map, preserving order and `null` positions. No method calls, argument bindings, or controller bindings exist in this foundation.
 
+## Implemented migration from schema 2 to schema 3
+
+`FlowGraphMigrator.migrate_schema_2_to_3()` accepts only a schema 2 source that passes `FlowGraphValidator`. It validates the source before creating a separate candidate and validates that candidate before returning it; any diagnostic error leaves `migrated_graph` null and never modifies the source.
+
+The candidate keeps the source graph ID and deeply copies `processes`, `variables`, and `state_machines`, including nested blocks and states. All valid IDs, references, order, and deliberate `null` positions are preserved. It has schema version 3, no legacy containers, exactly one newly generated empty `FlowConstructorDefinition`, and an empty `methods` collection. The migration creates no bindings, calls, arguments, runtime state, Inspector integration, or executor behavior.
+
 
 ## Planned contract — not implemented yet
 The requirements in this section are future design decisions. They do not describe features available in the current implementation.
@@ -204,7 +210,6 @@ The schema 3 contract in [`constructor_methods_contract.md`](constructor_methods
 ### Execution and temporary state
 ### Deferred schema 3 work
 
-- Explicit schema 2→3 migration.
 - `PVController` dependency bindings and class-resolution/inheritance checks.
 - `FlowRuntimeState` and runtime execution.
 - Method-call blocks, arguments, argument validation, and call-cycle validation.
