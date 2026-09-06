@@ -5,6 +5,14 @@
 - Integration PR: [#6](https://github.com/mercurysama/Flujo/pull/6).
 - Integration commit: `1948f868cba3388c8c0d5444f0f2578672c343c9`.
 
+## Verified dates
+
+- **Start:** 2026-08-31T00:34:40-06:00 — `a4ca964742dd588bcb9193f4e55363cfbe759c63`, `feat: add FlowGraph validation foundation`.
+- **Close:** 2026-09-01T02:29:23-06:00 — `1948f868cba3388c8c0d5444f0f2578672c343c9`, the integration commit.
+- **Publication:** 2026-09-01T02:56:15-06:00 — `1bd134efaf6039a24d4ad325aaa2cec0c207690a`, `Merge pull request #7 from mercurysama/docs/iteracion-05-cierre`.
+
+These dates are taken from the reachable Git commit history. They document repository events, not an unverified earlier conceptual start.
+
 ## Planned objectives and achieved results
 
 The iteration was intended to introduce typed containers editable through the Inspector while preserving runtime/editor separation and `FlowGraph` schema 1 compatibility.

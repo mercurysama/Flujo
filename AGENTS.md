@@ -13,7 +13,7 @@
 - Editor code belongs under `addons/vp_flujo/editor/`.
 - Scripts executed by the editor must use `@tool`.
 - User-created packages must remain outside the plugin directory under `res://flow_packages/<package_id>/`.
-- Read `docs/model_contract.md` before changing the persistent model.
+- At the start of every task, read `docs/constitution.md`, `docs/current_iteration.md`, and the applicable contract before changing files. Read `docs/model_contract.md` before changing the persistent model.
 
 # Model Rules
 
@@ -29,21 +29,14 @@
 - Preserve `schema_version` compatibility.
 - Do not change `schema_version` without an implemented and tested migration.
 
-# Current Iteration
+# Task context
 
-- The current branch is implementing typed Inspector containers.
-- Processes, Variables, and State Machines will be edited in the Godot Inspector.
-- The Flujo `EditorDock` is reserved for the future Scratch-style block editor.
-- Do not place the container editor inside `EditorDock`.
-- `FlowGraph` schema version remains 1.
-- `FlowGraph.containers` remains the legacy collection for schema 1.
-- Schema 2 integrates the typed `processes`, `variables`, and `state_machines` collections in `FlowGraph`; it must not use `containers` at the same time.
-- `GLOBAL` variables currently mean global only inside one `FlowGraph`/`PVController`.
-- Cross-graph global variables are not implemented.
-- Persistent is currently model metadata; runtime save/load is not implemented.
+- `docs/current_iteration.md` and the applicable contract are the mandatory sources for the current branch, supported schemas, implemented scope, deferred work, and next task.
+- Do not duplicate dynamic iteration state in this file.
 
 # Scope Control
 
+- Every change begins by updating or confirming the applicable numbered specification. Follow the complete governance sequence in [`docs/development_workflow.md`](docs/development_workflow.md).
 - Inspect existing code before editing.
 - Implement only the explicitly requested step.
 - Prefer the smallest coherent change.
@@ -51,6 +44,12 @@
 - Do not rename existing internal `VP` or `PV` paths/classes unless explicitly requested.
 - Do not modify F4 behavior, dock visibility, runtime execution, schema migration, or Inspector UI unless the task explicitly requests it.
 - Do not perform commits, pushes, merges, rebases, or pull requests unless explicitly requested.
+
+## Required technical justification and traceability
+
+- Every delivery records a verifiable justification: what changed, why it was chosen, relevant alternatives rejected, protected invariants, risks, limitations, and test or review evidence.
+- Maintain an explicit trace from requirement to task, code, test, and commit. Link or name each artifact precisely enough to audit it.
+- Record only externally reviewable decisions and evidence. Do not request, infer, or store an agent's private internal reasoning.
 
 # Verification
 

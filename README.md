@@ -9,15 +9,16 @@ Flujo is an MIT-licensed visual programming plugin for Godot. It is designed to 
 ### Implemented
 
 - An editor plugin under `addons/vp_flujo/` and the `PVController` scene facade.
-- Stable internal IDs, deterministic validation, deep duplication, and explicit schema 1→2 migration for `FlowGraph` definitions.
+- Stable internal IDs, deterministic validation, deep duplication, and explicit schema 1→2 and schema 2→3 migrations for `FlowGraph` definitions.
 - Schema 2 typed collections: `processes`, `variables`, and `state_machines`, including deliberate `null` positions and ID-based references.
+- Schema 3 structural declarations: one `FlowConstructorDefinition` as a `FlowBlockContainer`, ordered dependencies and blocks, reusable methods, and typed parameters.
 - A read-only and undoable Inspector workflow for the supported schema 2 collections.
 - Selection-based Flujo dock visibility and F4 controller support.
 - Model, editor, and PackedScene persistence regressions.
 
 ### Current work
 
-Iteration 6 defines the architecture for schema 3 Constructor declarations and reusable methods. The contract is complete; the schema, runtime behavior, and editor workflow are not implemented yet.
+Iteration 6 has implemented the schema 3 structural model, its atomic migration, and constructor container foundation. Method calls, argument bindings, cycles, runtime behavior, and editor authoring remain pending. See the [current iteration](docs/current_iteration.md).
 
 ### Planned
 
@@ -56,6 +57,9 @@ Visual block authoring, a runtime executor, debugging, packages, inherited-scene
 ## Documentation
 
 - [Object-oriented architecture](docs/arquitectura_poo.md)
+- [Flujo Constitution](docs/constitution.md)
+- [Development workflow](docs/development_workflow.md)
+- [Current iteration](docs/current_iteration.md)
 - [Model contract](docs/model_contract.md)
 - [Schema 2 migration contract](docs/flow_graph_v2_migration.md)
 - [Constructor and Methods contract](docs/constructor_methods_contract.md)
@@ -65,7 +69,7 @@ Visual block authoring, a runtime executor, debugging, packages, inherited-scene
 
 ## AI-assisted development
 
-Flujo is developed with assistance from ChatGPT and OpenAI Codex for planning, code generation, review, and testing. Every change is reviewed and validated by the project maintainer before being included in a release.
+Flujo is developed with assistance from ChatGPT and Codex for planning, code generation, review, and testing. Flujo does not depend on either tool or provider. Every change requires validator and test evidence plus authorized human review before integration or release.
 
 ## License
 

@@ -11,17 +11,13 @@ Flujo is a visual programming plugin for Godot that keeps persistent program def
 
 ## Current milestone: Iteration 6 — Constructor and Reusable Methods
 
-Iteration 6 is currently at the architecture-contract stage. The planned work is:
+Iteration 6 has completed the schema 3 structural foundation: constructor and method definitions, typed parameters, deterministic validation, deep duplication, PackedScene persistence coverage, and atomic schema 2→3 migration. The current status is maintained in [Current Iteration](current_iteration.md). Remaining planned work is:
 
-1. Architecture contract.
-2. Schema 3 and atomic migration 2→3.
-3. Constructor and dependency declarations.
-4. Reusable methods and typed parameters.
-5. Method-call references and cycle validation.
-6. Inspector editing with undo/redo.
-7. Per-`PVController` runtime state design.
+1. Method-call references and cycle validation.
+2. Inspector editing with undo/redo.
+3. Per-`PVController` runtime state design.
 
-The [Constructor and Methods contract](constructor_methods_contract.md) defines the intended behavior. It does not mean that schema 3, Constructor resources, methods, calls, or `FlowRuntimeState` are implemented.
+The [Constructor and Methods contract](constructor_methods_contract.md) distinguishes implemented schema 3 structure from deferred method calls, arguments, cycles, bindings, `FlowRuntimeState`, execution, and editor workflow.
 
 ## Future milestones
 
