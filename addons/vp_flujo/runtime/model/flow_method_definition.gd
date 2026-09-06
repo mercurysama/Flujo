@@ -3,6 +3,7 @@ class_name FlowMethodDefinition
 extends FlowBlockContainer
 
 @export var parameters: Array[FlowMethodParameterDefinition] = []
+@export var return_definition: FlowMethodReturnDefinition
 
 func _init() -> void:
 	display_name = "Method"

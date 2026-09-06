@@ -468,6 +468,14 @@ static func _validate_schema_3(graph: FlowGraph, result: FlowValidationResult, s
 			if not _validate_resource_identity(parameter, parameter_path, result, seen_instances, seen_ids):
 				continue
 			_validate_display_name(parameter.display_name, parameter_names, result, parameter_path, parameter.get_internal_id())
+		if method.return_definition != null:
+			_validate_resource_identity(
+				method.return_definition,
+				"%s.return_definition" % method_path,
+				result,
+				seen_instances,
+				seen_ids
+			)
 
 
 static func _validate_display_name(display_name: String, names: Dictionary[String, bool], result: FlowValidationResult, element_path: String, internal_id: String) -> void:
@@ -622,6 +630,8 @@ static func _get_internal_id(resource: Resource) -> String:
 		return (resource as FlowDependencyDefinition).get_internal_id()
 	if resource is FlowMethodParameterDefinition:
 		return (resource as FlowMethodParameterDefinition).get_internal_id()
+	if resource is FlowMethodReturnDefinition:
+		return (resource as FlowMethodReturnDefinition).get_internal_id()
 	if resource is FlowBlockContainer:
 		return (resource as FlowBlockContainer).get_internal_id()
 	if resource is FlowBlock:

@@ -197,6 +197,7 @@ func _run_schema_3_constructor_persistence_regression() -> void:
 	var original_constructor_id: String = controller.flow_graph.constructor.get_internal_id()
 	var original_constructor_block_id: String = controller.flow_graph.constructor.blocks[1].get_internal_id()
 	var original_method_id: String = controller.flow_graph.methods[1].get_internal_id()
+	var original_return_id: String = controller.flow_graph.methods[1].return_definition.get_internal_id()
 	var original_first_dependency_id: String = controller.flow_graph.constructor.dependencies[0].get_internal_id()
 	var original_second_dependency_id: String = controller.flow_graph.constructor.dependencies[2].get_internal_id()
 
@@ -243,6 +244,10 @@ func _run_schema_3_constructor_persistence_regression() -> void:
 		_assert(graph_a.methods.size() == 2 and graph_a.methods[0] == null, "Method collection order and null position survive PackedScene serialization.")
 		_assert(graph_a.methods[1] is FlowMethodDefinition, "Method target type survives PackedScene serialization.")
 		_assert(graph_a.methods[1].get_internal_id() == original_method_id, "Method target ID survives PackedScene serialization.")
+		_assert(graph_a.methods[1].return_definition is FlowMethodReturnDefinition, "Method return type survives PackedScene serialization.")
+		_assert(graph_a.methods[1].return_definition.get_internal_id() == original_return_id, "Method return ID survives PackedScene serialization.")
+		_assert(graph_a.methods[1].return_definition.display_name == "Scene Result", "Method return name survives PackedScene serialization.")
+		_assert(graph_a.methods[1].return_definition.value_type == FlowVariableDefinition.ValueType.COLOR, "Method return value type survives PackedScene serialization.")
 		_assert(graph_a.constructor.dependencies.size() == 3, "Constructor dependency collection retains order and null positions.")
 		_assert(graph_a.constructor.dependencies[0] is FlowDependencyDefinition, "First constructor dependency type survives PackedScene serialization.")
 		_assert(graph_a.constructor.dependencies[0].get_internal_id() == original_first_dependency_id, "First constructor dependency ID survives PackedScene serialization.")
@@ -260,6 +265,8 @@ func _run_schema_3_constructor_persistence_regression() -> void:
 		_assert(graph_b.constructor.blocks.size() == 2 and graph_b.constructor.blocks[0] == null, "Second schema 3 scene instance preserves constructor block ordering.")
 		_assert(graph_b.constructor.blocks[1] is FlowMethodCallBlock, "Second schema 3 scene instance preserves method-call type.")
 		_assert((graph_b.constructor.blocks[1] as FlowMethodCallBlock).method_id == graph_b.methods[1].get_internal_id(), "Second schema 3 scene instance preserves the method-call reference.")
+		_assert(graph_b.methods[1].return_definition is FlowMethodReturnDefinition, "Second schema 3 scene instance preserves the method return type.")
+		_assert(graph_b.methods[1].return_definition.get_internal_id() == original_return_id, "Second schema 3 scene instance preserves the method return ID.")
 		_assert(graph_b.constructor.dependencies.size() == 3 and graph_b.constructor.dependencies[1] == null, "Second schema 3 scene instance preserves dependency ordering.")
 	else:
 		_assert(false, "Second loaded schema 3 graph retains a constructor.")
@@ -286,6 +293,10 @@ func _build_controller_with_schema_3_graph() -> PVController:
 	constructor_definition.user_note = "Scene constructor note"
 	var target_method: FlowMethodDefinition = FlowMethodDefinition.new()
 	target_method.display_name = "Scene Target Method"
+	var return_definition: FlowMethodReturnDefinition = FlowMethodReturnDefinition.new()
+	return_definition.display_name = "Scene Result"
+	return_definition.value_type = FlowVariableDefinition.ValueType.COLOR
+	target_method.return_definition = return_definition
 	var constructor_block: FlowMethodCallBlock = FlowMethodCallBlock.new()
 	constructor_block.display_name = "Scene Constructor Block"
 	constructor_block.enabled = false

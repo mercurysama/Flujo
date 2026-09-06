@@ -242,6 +242,146 @@ func _test_method_call_foundation() -> void:
 	assert(not FileAccess.file_exists(ProjectSettings.globalize_path(resource_path)))
 
 
+func _test_method_return_definition() -> void:
+	var graph: FlowGraph = FlowGraph.new()
+	graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	graph.constructor = FlowConstructorDefinition.new()
+	var method_without_return: FlowMethodDefinition = FlowMethodDefinition.new()
+	method_without_return.display_name = "No Return"
+	var method_with_return: FlowMethodDefinition = FlowMethodDefinition.new()
+	method_with_return.display_name = "Typed Return"
+	var return_definition: FlowMethodReturnDefinition = FlowMethodReturnDefinition.new()
+	return_definition.display_name = "Result"
+	return_definition.value_type = FlowVariableDefinition.ValueType.VECTOR3
+	method_with_return.return_definition = return_definition
+	graph.methods = [method_without_return, null, method_with_return]
+
+	var graph_id: String = graph.get_internal_id()
+	var method_with_return_id: String = method_with_return.get_internal_id()
+	var return_id: String = return_definition.get_internal_id()
+	var valid_result: FlowValidationResult = FlowGraphValidator.validate(graph)
+	assert(not valid_result.has_errors())
+	assert(method_without_return.return_definition == null)
+	assert(method_with_return.return_definition == return_definition)
+	assert(return_definition.value_type == FlowVariableDefinition.ValueType.VECTOR3)
+	assert(return_definition.value_type != FlowVariableDefinition.ValueType.BOOL)
+
+	var copy: FlowGraph = graph.duplicate_with_new_ids()
+	var method_copy: FlowMethodDefinition = copy.methods[2]
+	assert(copy != graph)
+	assert(copy.get_internal_id() != graph_id)
+	assert(copy.methods.size() == 3 and copy.methods[1] == null)
+	assert(copy.methods[0].return_definition == null)
+	assert(method_copy is FlowMethodDefinition)
+	assert(method_copy.get_internal_id() != method_with_return_id)
+	assert(method_copy.return_definition is FlowMethodReturnDefinition)
+	assert(method_copy.return_definition != return_definition)
+	assert(method_copy.return_definition.get_internal_id() != return_id)
+	assert(method_copy.return_definition.display_name == "Result")
+	assert(method_copy.return_definition.value_type == FlowVariableDefinition.ValueType.VECTOR3)
+	method_copy.return_definition.display_name = "Copied Result"
+	assert(return_definition.display_name == "Result")
+	assert(graph.get_internal_id() == graph_id)
+	assert(method_with_return.get_internal_id() == method_with_return_id)
+	assert(return_definition.get_internal_id() == return_id)
+	assert(not FlowGraphValidator.validate(graph).has_errors())
+
+	var empty_id_graph: FlowGraph = FlowGraph.new()
+	empty_id_graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	empty_id_graph.constructor = FlowConstructorDefinition.new()
+	var empty_id_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	empty_id_method.display_name = "Empty Return ID"
+	var empty_id_return: FlowMethodReturnDefinition = FlowMethodReturnDefinition.new()
+	empty_id_return._internal_id = ""
+	empty_id_method.return_definition = empty_id_return
+	empty_id_graph.methods = [empty_id_method]
+	var empty_id_first: FlowValidationResult = FlowGraphValidator.validate(empty_id_graph)
+	var empty_id_second: FlowValidationResult = FlowGraphValidator.validate(empty_id_graph)
+	_assert_same_diagnostic_sequence(empty_id_first, empty_id_second)
+	assert(empty_id_first.diagnostics.size() == 1)
+	assert(empty_id_first.diagnostics[0].code == FlowDiagnostic.CODE_EMPTY_INTERNAL_ID)
+	assert(empty_id_first.diagnostics[0].element_path == "methods[0].return_definition")
+	assert(empty_id_first.diagnostics[0].related_id == "")
+	assert(empty_id_method.return_definition == empty_id_return)
+	assert(empty_id_return.get_internal_id() == "")
+
+	var duplicate_id_graph: FlowGraph = FlowGraph.new()
+	duplicate_id_graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	duplicate_id_graph.constructor = FlowConstructorDefinition.new()
+	var duplicate_id_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	duplicate_id_method.display_name = "Duplicate Return ID"
+	var duplicate_id_return: FlowMethodReturnDefinition = FlowMethodReturnDefinition.new()
+	duplicate_id_return._internal_id = duplicate_id_method.get_internal_id()
+	duplicate_id_method.return_definition = duplicate_id_return
+	duplicate_id_graph.methods = [duplicate_id_method]
+	var duplicate_id_first: FlowValidationResult = FlowGraphValidator.validate(duplicate_id_graph)
+	var duplicate_id_second: FlowValidationResult = FlowGraphValidator.validate(duplicate_id_graph)
+	_assert_same_diagnostic_sequence(duplicate_id_first, duplicate_id_second)
+	assert(duplicate_id_first.diagnostics.size() == 1)
+	assert(duplicate_id_first.diagnostics[0].code == FlowDiagnostic.CODE_DUPLICATE_INTERNAL_ID)
+	assert(duplicate_id_first.diagnostics[0].element_path == "methods[0].return_definition")
+	assert(duplicate_id_first.diagnostics[0].related_id == duplicate_id_method.get_internal_id())
+	assert(duplicate_id_method.return_definition == duplicate_id_return)
+
+	var repeated_instance_graph: FlowGraph = FlowGraph.new()
+	repeated_instance_graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	repeated_instance_graph.constructor = FlowConstructorDefinition.new()
+	var repeated_return: FlowMethodReturnDefinition = FlowMethodReturnDefinition.new()
+	var first_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	first_method.display_name = "First Return Owner"
+	first_method.return_definition = repeated_return
+	var second_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	second_method.display_name = "Second Return Owner"
+	second_method.return_definition = repeated_return
+	repeated_instance_graph.methods = [first_method, second_method]
+	var repeated_first: FlowValidationResult = FlowGraphValidator.validate(repeated_instance_graph)
+	var repeated_second: FlowValidationResult = FlowGraphValidator.validate(repeated_instance_graph)
+	_assert_same_diagnostic_sequence(repeated_first, repeated_second)
+	assert(repeated_first.diagnostics.size() == 1)
+	assert(repeated_first.diagnostics[0].code == FlowDiagnostic.CODE_REPEATED_RESOURCE_INSTANCE)
+	assert(repeated_first.diagnostics[0].element_path == "methods[1].return_definition")
+	assert(repeated_first.diagnostics[0].related_id == repeated_return.get_internal_id())
+	assert(first_method.return_definition == repeated_return)
+	assert(second_method.return_definition == repeated_return)
+
+	for incompatible_schema: int in [FlowGraph.CURRENT_SCHEMA_VERSION, FlowGraph.SCHEMA_VERSION_2]:
+		var incompatible_graph: FlowGraph = FlowGraph.new()
+		incompatible_graph.schema_version = incompatible_schema
+		var incompatible_method: FlowMethodDefinition = FlowMethodDefinition.new()
+		incompatible_method.return_definition = FlowMethodReturnDefinition.new()
+		incompatible_graph.methods = [incompatible_method]
+		var incompatible_result: FlowValidationResult = FlowGraphValidator.validate(incompatible_graph)
+		assert(_has_diagnostic(incompatible_result, FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES))
+		assert(incompatible_method.return_definition is FlowMethodReturnDefinition)
+
+	var migration_source: FlowGraph = FlowGraph.new()
+	migration_source.schema_version = FlowGraph.SCHEMA_VERSION_2
+	var migration_result: FlowGraphMigrationResult = FlowGraphMigrator.migrate_schema_2_to_3(migration_source)
+	assert(migration_result.is_successful())
+	assert(migration_result.migrated_graph != null)
+	assert(migration_result.migrated_graph.methods.is_empty())
+	assert(migration_result.migrated_graph.constructor != null)
+	assert(migration_source.methods.is_empty())
+
+	var resource_path: String = "res://.godot/flow_method_return_regression.tres"
+	assert(ResourceSaver.save(graph, resource_path) == OK)
+	var loaded_graph: FlowGraph = ResourceLoader.load(
+		resource_path,
+		"",
+		ResourceLoader.CACHE_MODE_IGNORE
+	) as FlowGraph
+	assert(loaded_graph != null)
+	assert(loaded_graph.methods.size() == 3 and loaded_graph.methods[1] == null)
+	assert(loaded_graph.methods[0].return_definition == null)
+	assert(loaded_graph.methods[2].return_definition is FlowMethodReturnDefinition)
+	assert(loaded_graph.methods[2].return_definition.get_internal_id() == return_id)
+	assert(loaded_graph.methods[2].return_definition.display_name == "Result")
+	assert(loaded_graph.methods[2].return_definition.value_type == FlowVariableDefinition.ValueType.VECTOR3)
+	assert(not FlowGraphValidator.validate(loaded_graph).has_errors())
+	assert(DirAccess.remove_absolute(ProjectSettings.globalize_path(resource_path)) == OK)
+	assert(not FileAccess.file_exists(ProjectSettings.globalize_path(resource_path)))
+
+
 func _ready() -> void:
 	await get_tree().process_frame
 
@@ -1656,6 +1796,7 @@ func _ready() -> void:
 	assert(schema_2_to_3_invalid_diagnostic.related_id == "")
 	assert(schema_2_to_3_invalid_source._internal_id == "")
 	_test_method_call_foundation()
+	_test_method_return_definition()
 
 	print("[Flujo] Model smoke test passed")
 	await get_tree().process_frame

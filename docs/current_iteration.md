@@ -12,21 +12,22 @@
 - `FlowConstructorDefinition` as a specialized `FlowBlockContainer`, including inherited blocks and ordered nullable dependencies.
 - Reusable method definitions and typed parameter declarations as persistent structural data.
 - Persistent `FlowMethodCallBlock` references from constructor, method, process, and state containers, with deterministic schema/reference validation and order-independent duplication remapping.
+- Optional typed `FlowMethodReturnDefinition` declarations with global identity validation, deep duplication, and ResourceSaver/PackedScene persistence.
 
 ### Pending
 
-- Implementation of the planned `ARGRET-001` through `ARGRET-012` contract: argument bindings, one optional typed return, value-source validation, and incomplete-return-path validation.
+- Implementation of the remaining `ARGRET` contract: argument bindings, value-source validation, return blocks, and incomplete-return-path validation.
 - Recursion and call-cycle validation.
 - Dependency bindings, runtime state, and runtime execution.
 - Inspector and visual authoring workflow for constructor and methods.
 
 ### Outside this step
 
-This iteration has not introduced argument or return resources, value-source connections, cycle detection, an executor, scene bindings, method-call execution, runtime mutation, or editor interface for schema 3 declarations.
+This iteration has not introduced argument bindings, return blocks or runtime return values, value-source connections, cycle detection, an executor, scene bindings, method-call execution, runtime mutation, or editor interface for schema 3 declarations.
 
 ### Next step
 
-Implement the approved argument and single-return contract without adding execution, recursion, runtime state, visual connections, or editor authoring.
+Implement argument bindings and return blocks without adding execution, recursion, runtime state, visual connections, or editor authoring.
 
 Update this file after each integrated commit so it remains a brief, factual handoff.
 

@@ -184,6 +184,13 @@ func _duplicate_method(
 		parameter_copy._internal_id = FlowId.create()
 		id_map[parameter.get_internal_id()] = parameter_copy.get_internal_id()
 		copy.parameters.append(parameter_copy)
+	if method.return_definition == null:
+		copy.return_definition = null
+	else:
+		var return_copy: FlowMethodReturnDefinition = method.return_definition.duplicate(false) as FlowMethodReturnDefinition
+		return_copy._internal_id = FlowId.create()
+		id_map[method.return_definition.get_internal_id()] = return_copy.get_internal_id()
+		copy.return_definition = return_copy
 	return copy
 func _remap_variable_references(
 		copy_variables: Array[FlowVariableDefinition],

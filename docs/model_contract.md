@@ -101,7 +101,17 @@ Every persistent element has a stable internal ID independent of its visible nam
 
 **Duplication:** preserves the concrete block type, generates a new block ID, and remaps `method_id` only after the graph-wide old-ID → new-ID map is complete. Unknown references remain unchanged.
 
-**Deferred behavior:** arguments, returns, recursion, cycle detection, execution, bindings, Inspector support, and shortcuts are not implemented. Their planned identity, persistence, duplication, and validation rules are defined by `ARGRET-001` through `ARGRET-012` in [`constructor_methods_contract.md`](constructor_methods_contract.md).
+**Deferred behavior:** argument bindings, return blocks and values, recursion, cycle detection, execution, bindings, Inspector support, and shortcuts are not implemented. Their planned identity, persistence, duplication, and validation rules are defined by `ARGRET-001` through `ARGRET-012` in [`constructor_methods_contract.md`](constructor_methods_contract.md).
+
+### FlowMethodReturnDefinition
+
+**Base:** `Resource`.
+
+**Responsibility:** persist the one optional typed return declaration owned by a schema 3 `FlowMethodDefinition`; it does not provide a runtime value, assignment, or return block.
+
+**Minimum data:** stable internal ID, visible `display_name`, and `value_type` directly typed as `FlowVariableDefinition.ValueType`. `null` in `FlowMethodDefinition.return_definition` means no return, so no duplicate enum or sentinel value exists.
+
+**Validation and duplication:** its identity is in the schema 3 graph-wide resource and ID registries. Empty IDs, duplicate IDs, and repeated resource instances produce the existing deterministic identity diagnostics at `methods[i].return_definition` without modifying the graph. Deep graph duplication gives it a new ID through the sole old-ID → new-ID map and retains independent metadata.
 
 ### FlowProcess
 
@@ -201,13 +211,13 @@ If exactly one state has `is_initial`, the migrated machine selects it; if none 
 
 `FlowConstructorDefinition` is a specialized `FlowBlockContainer`. It inherits persistent identity, display name, activation, user note, and an ordered nullable block collection without duplicating those properties, and it owns an additional ordered nullable collection of `FlowDependencyDefinition` resources. A dependency stores its stable ID, display metadata, `required_class_name: StringName`, and `required` flag only; it stores no node, node path, or scene reference. The structural validator applies the same block identity and instance rules used by other block containers, requires a non-empty dependency class name, and deliberately defers class resolution, inheritance, and `PVController` bindings. Declarations may name built-in or project global `Node` subclasses, and future resolution will allow derived instances for base declarations.
 
-`FlowMethodDefinition` is a `FlowBlockContainer` with ordered nullable blocks and `FlowMethodParameterDefinition` resources. Method, dependency, and parameter names are non-empty after trimming and unique in their own exact, case-sensitive namespaces. IDs and resource instances are globally unique throughout the graph, and validation remains deterministic and read-only.
+`FlowMethodDefinition` is a `FlowBlockContainer` with ordered nullable blocks, `FlowMethodParameterDefinition` resources, and one nullable `FlowMethodReturnDefinition`. Its absent return definition represents no return. Method, dependency, and parameter names are non-empty after trimming and unique in their own exact, case-sensitive namespaces. IDs and resource instances, including a present return definition, are globally unique throughout the graph, and validation remains deterministic and read-only.
 
 `FlowVariableDefinition.ValueType` remains the single canonical value-type enum. Parameters reuse it directly without inheriting variable scope, ownership, binding, persistence, or runtime-value behavior. Its existing public members, numeric values, serialized property name, and variable API are unchanged.
 
-Schema 3 duplication deeply copies the constructor, its blocks and dependencies, methods, parameters, method-call blocks, and schema 2 collections with one old-ID-to-new-ID map, preserving concrete types, order, and `null` positions. Method-call references are remapped after the map is complete, so calls may target methods declared later in collection order. Unknown method references remain unchanged. Argument bindings and controller bindings do not exist in this foundation.
+Schema 3 duplication deeply copies the constructor, its blocks and dependencies, methods, parameters, optional return definitions, method-call blocks, and schema 2 collections with one old-ID-to-new-ID map, preserving concrete types, order, and `null` positions. Method-call references are remapped after the map is complete, so calls may target methods declared later in collection order. Unknown method references remain unchanged. Argument bindings and controller bindings do not exist in this foundation.
 
-Schema 3 validation builds the complete method-ID index before checking method calls. Calls are accepted in constructor, method, process, and state blocks. Empty, missing, and wrong-type targets produce deterministic diagnostics without modifying the graph. Schema 1 and schema 2 reject method-call blocks. Direct and indirect recursion are not rejected because call-cycle validation remains deferred.
+Schema 3 validation builds the complete method-ID index before checking method calls and includes optional return definitions in the global identity registry. Calls are accepted in constructor, method, process, and state blocks. Empty, missing, and wrong-type targets produce deterministic diagnostics without modifying the graph. Schema 1 and schema 2 reject method-call blocks and do not acquire method-return definitions implicitly. Direct and indirect recursion are not rejected because call-cycle validation remains deferred.
 
 ## Implemented migration from schema 2 to schema 3
 
@@ -228,12 +238,12 @@ The schema 3 contract in [`constructor_methods_contract.md`](constructor_methods
 
 - `PVController` dependency bindings and class-resolution/inheritance checks.
 - `FlowRuntimeState` and runtime execution.
-- Method-call arguments, returns, argument validation, and call-cycle validation.
+- Method-call argument bindings, return blocks and values, argument validation, and call-cycle validation.
 - Inspector authoring and execution of Constructor or Methods.
 
 ### Planned method arguments and returns
 
-`ARGRET-001` through `ARGRET-012` in [`constructor_methods_contract.md`](constructor_methods_contract.md) define the approved future contract for one optional typed method return, parameter-ID argument bindings, a future shared value-source abstraction, return blocks, deterministic validation, save/load persistence, and order-independent remapping through the one graph-wide ID map. They deliberately do not define concrete value-source fields, runtime execution, implicit conversion, visual connections, Inspector authoring, recursion or call-cycle validation, or multiple returns. No part of this planned contract is implemented in the current persistent model.
+`ARGRET-001`, `ARGRET-002`, and the return-definition portions of `ARGRET-008` and `ARGRET-009` are implemented. The remaining requirements in [`constructor_methods_contract.md`](constructor_methods_contract.md) define future parameter-ID argument bindings, a shared value-source abstraction, return blocks, compatibility validation, and order-independent reference remapping. They deliberately do not define concrete value-source fields, runtime execution, implicit conversion, visual connections, Inspector authoring, recursion or call-cycle validation, or multiple returns.
 
 
 - During future execution, `FlowGraph` and all its persistent resources will be treated as read-only data.
