@@ -15,17 +15,18 @@
 
 ### Pending
 
-- Arguments, returns, parameter-binding validation, recursion and call-cycle validation.
+- Implementation of the planned `ARGRET-001` through `ARGRET-012` contract: argument bindings, one optional typed return, value-source validation, and incomplete-return-path validation.
+- Recursion and call-cycle validation.
 - Dependency bindings, runtime state, and runtime execution.
 - Inspector and visual authoring workflow for constructor and methods.
 
 ### Outside this step
 
-This iteration has not introduced arguments, returns, cycle detection, an executor, scene bindings, method-call execution, runtime mutation, or editor interface for schema 3 declarations.
+This iteration has not introduced argument or return resources, value-source connections, cycle detection, an executor, scene bindings, method-call execution, runtime mutation, or editor interface for schema 3 declarations.
 
 ### Next step
 
-Specify method-call arguments and their parameter-ID/type validation without adding execution, recursion, runtime state, or editor authoring.
+Implement the approved argument and single-return contract without adding execution, recursion, runtime state, visual connections, or editor authoring.
 
 Update this file after each integrated commit so it remains a brief, factual handoff.
 

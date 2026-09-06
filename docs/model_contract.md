@@ -101,7 +101,7 @@ Every persistent element has a stable internal ID independent of its visible nam
 
 **Duplication:** preserves the concrete block type, generates a new block ID, and remaps `method_id` only after the graph-wide old-ID → new-ID map is complete. Unknown references remain unchanged.
 
-**Deferred behavior:** arguments, returns, recursion, cycle detection, execution, bindings, Inspector support, and shortcuts are not implemented.
+**Deferred behavior:** arguments, returns, recursion, cycle detection, execution, bindings, Inspector support, and shortcuts are not implemented. Their planned identity, persistence, duplication, and validation rules are defined by `ARGRET-001` through `ARGRET-012` in [`constructor_methods_contract.md`](constructor_methods_contract.md).
 
 ### FlowProcess
 
@@ -221,7 +221,7 @@ The requirements in this section are future design decisions. They do not descri
 
 The planned contract for further schema 2 evolution is defined in [`flow_graph_v2_migration.md`](flow_graph_v2_migration.md). Its portions not covered by the implemented migration remain prior design.
 
-The schema 3 contract in [`constructor_methods_contract.md`](constructor_methods_contract.md) also describes the future `PVController` bindings and method-call work not implemented by this structural foundation.
+The schema 3 contract in [`constructor_methods_contract.md`](constructor_methods_contract.md) defines the implemented method-call foundation and the planned `PVController` bindings, arguments, returns, and call-cycle work.
 
 ### Execution and temporary state
 ### Deferred schema 3 work
@@ -230,6 +230,10 @@ The schema 3 contract in [`constructor_methods_contract.md`](constructor_methods
 - `FlowRuntimeState` and runtime execution.
 - Method-call arguments, returns, argument validation, and call-cycle validation.
 - Inspector authoring and execution of Constructor or Methods.
+
+### Planned method arguments and returns
+
+`ARGRET-001` through `ARGRET-012` in [`constructor_methods_contract.md`](constructor_methods_contract.md) define the approved future contract for one optional typed method return, parameter-ID argument bindings, a future shared value-source abstraction, return blocks, deterministic validation, save/load persistence, and order-independent remapping through the one graph-wide ID map. They deliberately do not define concrete value-source fields, runtime execution, implicit conversion, visual connections, Inspector authoring, recursion or call-cycle validation, or multiple returns. No part of this planned contract is implemented in the current persistent model.
 
 
 - During future execution, `FlowGraph` and all its persistent resources will be treated as read-only data.

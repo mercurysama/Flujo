@@ -70,6 +70,23 @@ The implemented method-call foundation is governed by these numbered requirement
 - **MCALL-006 — Graph duplication:** a call preserves its concrete type, receives a new block ID, and remaps `method_id` through the same graph-wide old-ID → new-ID map after that map contains every copied resource. Unknown references remain unchanged.
 - **MCALL-007 — Deferred semantics:** calls are persistent definition data only. Arguments, returns, parameter bindings, recursion and cycle detection, execution, bindings, Inspector integration, and shortcuts are not implemented.
 
+## Planned method arguments and returns
+
+The requirements in this section are approved future design decisions. They do not add fields, resources, validation, persistence behavior, or execution to the current model.
+
+- **ARGRET-001 — One optional typed return:** a future `FlowMethodDefinition` may own zero or one `FlowMethodReturnDefinition`. A return definition has its own stable ID, a visible renameable name, and a type that directly reuses `FlowVariableDefinition.ValueType`. Multiple returns are out of scope. The absence of a return is represented by the absence of its definition, never by a false or sentinel enum value.
+- **ARGRET-002 — Return ownership and identity:** a return definition belongs exclusively to its containing `FlowMethodDefinition`; no call, variable, or other method may own or share it. Its ID is the only persistent return identity. Its name, method position, and any future block position are presentation or traversal data, never identity.
+- **ARGRET-003 — Parameter identity:** every future `FlowMethodArgumentBinding` has its own stable ID and identifies its target exclusively with `parameter_id: String`, referring to a `FlowMethodParameterDefinition` owned by the called method. A parameter name or collection position is never a call key. Reordering parameters changes presentation order only and cannot break a valid call.
+- **ARGRET-004 — Binding ownership:** argument bindings belong exclusively to their containing `FlowMethodCallBlock`. They are not shared with the target method, another call, a variable, or a runtime controller. A call may ignore an existing method return. A call to a method without a declared return cannot be used as a value source.
+- **ARGRET-005 — Ordered nullable collections:** future ordered parameter, argument-binding, and block collections preserve order and deliberate `null` positions. Binding traversal order is deterministic, but neither order nor a `null` position defines an argument-to-parameter relationship.
+- **ARGRET-006 — Future value sources:** an argument binding and a method-call return output require a common future value-source abstraction capable of representing a literal, a variable, or the output of another flow. Its concrete fields, resource types, connection representation, and ownership are deliberately unspecified until variables, literals, and connections have sufficient contracts. No direct result write to a variable is implied.
+- **ARGRET-007 — Return flow and ownership:** a future `FlowMethodReturnBlock` belongs only inside the block collection of the `FlowMethodDefinition` that owns its `FlowMethodReturnDefinition`, and supplies that method's optional typed return output. It is invalid in a constructor, process, state, or any other method. It is not an executor and does not define runtime control flow in this contract.
+- **ARGRET-008 — Persistence:** future return definitions, argument bindings, and return blocks are persistent model resources. Their IDs, visible names, declared value types, ordered collections, and deliberate `null` positions must survive `ResourceSaver` and `PackedScene` save/load without introducing runtime values into `FlowGraph`.
+- **ARGRET-009 — One global duplication map:** graph duplication must give every duplicated return definition, argument binding, return block, and future value-source resource a new ID through the existing single graph-wide old-ID → new-ID map. After all copied IDs are reserved, every valid `FlowMethodArgumentBinding.parameter_id` must remap from its original parameter ID to that parameter's duplicated ID through this same map; the remap is independent of collection order. If a `parameter_id` is absent from the map, it remains unchanged for diagnostics and is never cleared or silently substituted. Other references remap only when both ends are inside the copy, so calls and sources may refer to declarations encountered later. Unknown references remain unchanged for diagnostics.
+- **ARGRET-010 — Reference preservation:** empty, missing, duplicate, wrong-type, cross-owner, and unknown parameter, return, or value-source IDs must remain stored exactly as authored until corrected. Validation reports them; it never clears, substitutes, or resolves them by name or position.
+- **ARGRET-011 — Future deterministic validation:** future validation must check missing and additional argument bindings, duplicate bindings for one parameter, empty or unknown IDs, wrong ownership or type, incompatible declared value types without implicit conversion, use of a call without a return as a value source, incomplete return paths, and a `FlowMethodReturnBlock` outside the block collection of its return definition's owning method. A return block in a constructor, process, state, or another method is rejected without modifying the model. Every such rejection uses a stable code, deterministic path, and related ID; all diagnostics preserve deterministic traversal order.
+- **ARGRET-012 — Runtime separation and deferred scope:** definitions remain shared, immutable `FlowGraph` data. Parameter values, argument evaluation, return values, frames, and execution state belong only to a future per-`PVController` runtime context. This contract does not implement an executor, visual connections, Inspector support, shortcuts, implicit conversions, recursion or call-cycle validation, or multiple returns.
+
 ## Recursion and call cycles
 
 Recursion and call-cycle validation are not implemented in the current method-call foundation. Direct self-calls and indirect cycles are therefore preserved and are not rejected yet.
@@ -87,7 +104,7 @@ Schema 3 validation remains read-only and deterministic. In addition to existing
 - The existence and unique identity of the constructor, constructor blocks, dependencies, methods, parameters, and method-call blocks.
 - Required and unique names in their declared namespaces.
 - Dependency IDs referenced by controller bindings.
-- Implemented method-call target IDs. Parameter IDs, argument bindings, declared value-type compatibility, and call cycles remain deferred.
+- Implemented method-call target IDs. Planned parameter IDs, argument bindings, return definitions and blocks, declared value-type compatibility, incomplete return paths, and call cycles remain deferred.
 - Schema 3 source exclusivity: `containers` must be empty and schema 2 collections remain the active graph collections.
 - Deliberate `null` positions as valid positions, not compacted data.
 
@@ -97,7 +114,7 @@ Diagnostics preserve invalid values and use stable codes, element paths, related
 
 `FlowGraph.duplicate_with_new_ids()` for a validated schema 3 graph deeply duplicates the constructor, its blocks and dependencies, methods, parameters, their blocks, and method-call blocks while preserving concrete types, order, and `null` positions.
 
-One old-ID to new-ID map covers every copied persistent resource. After the map is complete, the duplicate remaps method-call `method_id` values and existing schema 2 references only when both ends are inside the copy. Missing references remain unchanged for diagnostics. Future dependency bindings, parameter bindings, and call arguments will require their own explicit contracts without creating another source of truth.
+One old-ID to new-ID map covers every copied persistent resource. After the map is complete, the duplicate remaps method-call `method_id` values and existing schema 2 references only when both ends are inside the copy. Missing references remain unchanged for diagnostics. Future dependency bindings, parameter bindings, call arguments, and returns will follow `ARGRET-001` through `ARGRET-012` without creating another source of truth.
 
 Controller-owned bindings are not part of graph duplication. A future controller duplication policy must explicitly decide whether to copy locators, clear them, or require rebinding; it must never mutate the original controller or graph.
 
@@ -127,5 +144,5 @@ Constructor declarations and methods are persistent model metadata and must seri
 - Constructor existence, dependency identity, name validation, `null` preservation, and duplication remapping.
 - Method-call references from every allowed container, empty/missing/wrong-type targets, schema boundaries, order-independent remapping, unknown-reference preservation, deterministic diagnostics, deep independence, and `null` preservation.
 - Resource and PackedScene persistence for schema 3 definitions and method-call concrete types.
-- Future controller bindings, argument compatibility, return behavior, recursion, and cycle validation require additional tests when specified.
+- Future controller bindings, `ARGRET-001` through `ARGRET-012`, recursion, and cycle validation require additional tests when implemented.
 - Headless editor load, model smoke test, editor-specific tests, and multiplatform runtime checks.
