@@ -11,7 +11,7 @@ These metrics describe the complete path from a requirement to an accepted deliv
 - Do not collect personal information, private prompts, credentials, or private internal reasoning.
 - Prefer reproducible repository evidence: requirement IDs, task records, Git timestamps and SHAs, diffs, test output, audit reports, and review records.
 - Record only evidence that is available for the task. Write `unknown` or `not measured` rather than estimating or inventing a value.
-- AI tools may be recorded when known as development context, but they are not a productivity score and are not a Flujo dependency.
+- Record an AI tool or model only when the user provides it voluntarily or the system reports it directly. Never infer, guess, or deduce a model. AI context is not a productivity score and is not a Flujo dependency.
 
 ## Per-task metrics
 
@@ -28,7 +28,7 @@ For each task, record when evidence is available:
 - Subsequent regressions.
 - Visual-review status: required, approved, or not applicable.
 - Manual interventions and environmental blockers.
-- AI tool or model used, when known.
+- AI tool or model used, only with a user-provided or system-reported source.
 - Credit consumption only when a user supplies it voluntarily.
 
 ## Per-iteration metrics
@@ -65,7 +65,8 @@ Use this template in future technical postmortems and Flujo Release Chronicles a
 | Audit findings / later regressions | `<H/M/L>` / `<none, list, or not measured>` |
 | Visual review | `<required, approved, or not applicable>` |
 | Manual interventions / blockers | `<evidence or none>` |
-| AI tool or model / voluntary credits | `<known, unknown, or not measured>` / `<provided value or not measured>` |
+| AI tool or model / source | `<value, unknown, or not measured>` / `<user-provided, system-reported, unknown, or not measured>` |
+| Voluntary credits | `<provided value or not measured>` |
 | Iteration bottleneck / corrective action | `<evidence or not measured>` |
 ```
 

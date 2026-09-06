@@ -12,13 +12,14 @@ Flujo is an MIT-licensed visual programming plugin for Godot. It is designed to 
 - Stable internal IDs, deterministic validation, deep duplication, and explicit schema 1→2 and schema 2→3 migrations for `FlowGraph` definitions.
 - Schema 2 typed collections: `processes`, `variables`, and `state_machines`, including deliberate `null` positions and ID-based references.
 - Schema 3 structural declarations: one `FlowConstructorDefinition` as a `FlowBlockContainer`, ordered dependencies and blocks, reusable methods, and typed parameters.
+- Persistent and validated `FlowMethodCallBlock` references for schema 3 containers, with ID-based targets and order-independent duplication remapping.
 - A read-only and undoable Inspector workflow for the supported schema 2 collections.
 - Selection-based Flujo dock visibility and F4 controller support.
 - Model, editor, and PackedScene persistence regressions.
 
 ### Current work
 
-Iteration 6 has implemented the schema 3 structural model, its atomic migration, and constructor container foundation. Method calls, argument bindings, cycles, runtime behavior, and editor authoring remain pending. See the [current iteration](docs/current_iteration.md).
+Iteration 6 has implemented the schema 3 structural model, its atomic migration, constructor container foundation, and persistent method-call references. Arguments, returns, call-cycle detection, runtime execution, and editor authoring remain pending. See the [current iteration](docs/current_iteration.md).
 
 ### Planned
 
