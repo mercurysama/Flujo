@@ -10,10 +10,10 @@ Every change follows this sequence. A step may be brief when its scope is small,
 4. **Plan:** define the smallest coherent path, invariants, boundaries, and verification.
 5. **Small tasks:** divide the plan into independently reviewable tasks with explicit acceptance criteria.
 6. **Implementation:** make only the authorized changes and preserve model, runtime, editor, and schema boundaries.
-7. **Tests:** run deterministic checks and any focused regression needed for the changed invariant.
-8. **Audit and traceability:** review the change against the specification and record the requirement-to-evidence chain.
+7. **Tests and measurement:** run deterministic checks and any focused regression needed for the changed invariant; record only available engineering-flow evidence.
+8. **Audit and traceability:** review the change against the specification, record the requirement-to-evidence chain, and review measurable bottlenecks without ranking individuals.
 9. **Applicable visual review:** manually inspect visible editor behavior when it changes; headless tests do not replace this review.
-10. **Documentation and postmortem:** update current state and contracts, and record verified lessons when a milestone closes.
+10. **Documentation and postmortem:** update current state and contracts, record verified lessons when a milestone closes, and include the applicable engineering-flow metrics and corrective actions.
 11. **Change control:** integrate only after an authorized human accepts the evidence and the Git state is verified.
 
 ## Specification and traceability
@@ -23,6 +23,8 @@ Every change begins by updating the corresponding specification or explicitly co
 `requirement → task → code or documentation → test or review evidence → commit`
 
 Use stable requirement labels, file paths, test names, and commit SHAs where available. A trace may live in a specification, issue, plan, audit, commit message, or delivery report, provided the links remain concrete and reviewable.
+
+Use the [Engineering Flow Metrics](engineering_metrics.md) policy to record repository evidence for a task or iteration. Metrics support system improvement and bottleneck review; they do not rank people, create quotas, or require unavailable data.
 
 ## Mandatory delivery justification
 

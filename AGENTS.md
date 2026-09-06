@@ -50,6 +50,7 @@
 - Every delivery records a verifiable justification: what changed, why it was chosen, relevant alternatives rejected, protected invariants, risks, limitations, and test or review evidence.
 - Maintain an explicit trace from requirement to task, code, test, and commit. Link or name each artifact precisely enough to audit it.
 - Record only externally reviewable decisions and evidence. Do not request, infer, or store an agent's private internal reasoning.
+- Each report includes only engineering-flow metrics available automatically from task evidence. Use `unknown` or `not measured` for unavailable values; never estimate, invent, or use metrics to classify individuals. See [`docs/engineering_metrics.md`](docs/engineering_metrics.md).
 
 # Verification
 

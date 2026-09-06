@@ -3,7 +3,6 @@
 ## Iteration 6 — Constructor and Reusable Methods
 
 - **Branch:** `feature/iteracion-06-constructor-metodos`.
-- **Last integrated commit:** `331ca8958879173ba151c076755e92fb68b74e04` — `refactor: make Flow constructor a block container`.
 - **Primary environment:** Fedora with Godot 4.7.2. Windows remains a supported compatible platform; no Windows-specific workflow is required.
 
 ### Implemented

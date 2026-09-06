@@ -59,6 +59,7 @@ Visual block authoring, a runtime executor, debugging, packages, inherited-scene
 - [Object-oriented architecture](docs/arquitectura_poo.md)
 - [Flujo Constitution](docs/constitution.md)
 - [Development workflow](docs/development_workflow.md)
+- [Engineering flow metrics](docs/engineering_metrics.md)
 - [Current iteration](docs/current_iteration.md)
 - [Model contract](docs/model_contract.md)
 - [Schema 2 migration contract](docs/flow_graph_v2_migration.md)
