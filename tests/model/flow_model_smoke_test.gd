@@ -42,6 +42,206 @@ func _assert_same_diagnostic_sequence(
 		assert(first.related_id == second.related_id)
 
 
+func _test_method_call_foundation() -> void:
+	var graph: FlowGraph = FlowGraph.new()
+	graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	graph.constructor = FlowConstructorDefinition.new()
+
+	var target_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	target_method.display_name = "Target Method"
+	var caller_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	caller_method.display_name = "Caller Method"
+
+	var constructor_call: FlowMethodCallBlock = FlowMethodCallBlock.new()
+	constructor_call.method_id = target_method.get_internal_id()
+	graph.constructor.blocks = [constructor_call, null]
+
+	var process: FlowProcess = FlowProcess.new()
+	var process_call: FlowMethodCallBlock = FlowMethodCallBlock.new()
+	process_call.method_id = target_method.get_internal_id()
+	process.blocks = [null, process_call]
+	graph.processes = [process, null]
+
+	var state: FlowStateDefinition = FlowStateDefinition.new()
+	var state_call: FlowMethodCallBlock = FlowMethodCallBlock.new()
+	state_call.method_id = target_method.get_internal_id()
+	state.blocks = [state_call, null]
+	var state_machine: FlowStateMachineDefinition = FlowStateMachineDefinition.new()
+	state_machine.states = [null, state]
+	state_machine.initial_state_id = state.get_internal_id()
+	graph.state_machines = [state_machine]
+
+	var method_call: FlowMethodCallBlock = FlowMethodCallBlock.new()
+	method_call.method_id = target_method.get_internal_id()
+	caller_method.blocks = [method_call, null]
+	var self_call: FlowMethodCallBlock = FlowMethodCallBlock.new()
+	self_call.method_id = target_method.get_internal_id()
+	target_method.blocks = [null, self_call]
+	graph.methods = [caller_method, null, target_method]
+
+	var graph_id: String = graph.get_internal_id()
+	var target_method_id: String = target_method.get_internal_id()
+	var constructor_call_id: String = constructor_call.get_internal_id()
+	var process_call_id: String = process_call.get_internal_id()
+	var state_call_id: String = state_call.get_internal_id()
+	var method_call_id: String = method_call.get_internal_id()
+	var self_call_id: String = self_call.get_internal_id()
+	var validation: FlowValidationResult = FlowGraphValidator.validate(graph)
+	assert(not validation.has_errors())
+	assert(validation.diagnostics.is_empty())
+	assert(graph.methods[2] == target_method)
+	assert(self_call.method_id == target_method_id)
+
+	var copy: FlowGraph = graph.duplicate_with_new_ids()
+	var target_method_copy: FlowMethodDefinition = copy.methods[2]
+	var constructor_call_copy: FlowMethodCallBlock = copy.constructor.blocks[0]
+	var process_call_copy: FlowMethodCallBlock = copy.processes[0].blocks[1]
+	var state_call_copy: FlowMethodCallBlock = copy.state_machines[0].states[1].blocks[0]
+	var method_call_copy: FlowMethodCallBlock = copy.methods[0].blocks[0]
+	var self_call_copy: FlowMethodCallBlock = target_method_copy.blocks[1]
+	assert(copy != graph)
+	assert(copy.get_internal_id() != graph_id)
+	assert(copy.processes.size() == 2 and copy.processes[1] == null)
+	assert(copy.processes[0].blocks.size() == 2 and copy.processes[0].blocks[0] == null)
+	assert(copy.state_machines[0].states.size() == 2 and copy.state_machines[0].states[0] == null)
+	assert(copy.constructor.blocks.size() == 2 and copy.constructor.blocks[1] == null)
+	assert(copy.methods.size() == 3 and copy.methods[1] == null)
+	assert(copy.methods[0].blocks.size() == 2 and copy.methods[0].blocks[1] == null)
+	assert(target_method_copy.blocks.size() == 2 and target_method_copy.blocks[0] == null)
+	for call_copy: FlowMethodCallBlock in [
+		constructor_call_copy,
+		process_call_copy,
+		state_call_copy,
+		method_call_copy,
+		self_call_copy,
+	]:
+		assert(call_copy is FlowMethodCallBlock)
+		assert(call_copy.method_id == target_method_copy.get_internal_id())
+	assert(target_method_copy.get_internal_id() != target_method_id)
+	assert(constructor_call_copy != constructor_call and constructor_call_copy.get_internal_id() != constructor_call_id)
+	assert(process_call_copy != process_call and process_call_copy.get_internal_id() != process_call_id)
+	assert(state_call_copy != state_call and state_call_copy.get_internal_id() != state_call_id)
+	assert(method_call_copy != method_call and method_call_copy.get_internal_id() != method_call_id)
+	assert(self_call_copy != self_call and self_call_copy.get_internal_id() != self_call_id)
+	constructor_call_copy.method_id = caller_method.get_internal_id()
+	constructor_call_copy.display_name = "Changed Copy"
+	assert(constructor_call.method_id == target_method_id)
+	assert(constructor_call.display_name == "Call Method")
+	assert(graph.get_internal_id() == graph_id)
+	assert(not FlowGraphValidator.validate(graph).has_errors())
+
+	var unknown_graph: FlowGraph = FlowGraph.new()
+	unknown_graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	unknown_graph.constructor = FlowConstructorDefinition.new()
+	var unknown_call: FlowMethodCallBlock = FlowMethodCallBlock.new()
+	unknown_call.method_id = "unknown_method_id"
+	unknown_graph.constructor.blocks = [null, unknown_call]
+	var unknown_copy: FlowGraph = unknown_graph.duplicate_with_new_ids()
+	assert(unknown_copy.constructor.blocks[0] == null)
+	assert(unknown_copy.constructor.blocks[1] is FlowMethodCallBlock)
+	assert(unknown_copy.constructor.blocks[1] != unknown_call)
+	assert(unknown_copy.constructor.blocks[1].get_internal_id() != unknown_call.get_internal_id())
+	assert((unknown_copy.constructor.blocks[1] as FlowMethodCallBlock).method_id == "unknown_method_id")
+	assert(unknown_call.method_id == "unknown_method_id")
+
+	var diagnostic_graph: FlowGraph = FlowGraph.new()
+	diagnostic_graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	diagnostic_graph.constructor = FlowConstructorDefinition.new()
+	var diagnostic_process: FlowProcess = FlowProcess.new()
+	var empty_process_call: FlowMethodCallBlock = FlowMethodCallBlock.new()
+	diagnostic_process.blocks = [empty_process_call]
+	diagnostic_graph.processes = [diagnostic_process]
+	var diagnostic_state: FlowStateDefinition = FlowStateDefinition.new()
+	var missing_state_call: FlowMethodCallBlock = FlowMethodCallBlock.new()
+	missing_state_call.method_id = "missing_method_id"
+	diagnostic_state.blocks = [missing_state_call]
+	var diagnostic_machine: FlowStateMachineDefinition = FlowStateMachineDefinition.new()
+	diagnostic_machine.states = [diagnostic_state]
+	diagnostic_machine.initial_state_id = diagnostic_state.get_internal_id()
+	diagnostic_graph.state_machines = [diagnostic_machine]
+	var wrong_type_constructor_call: FlowMethodCallBlock = FlowMethodCallBlock.new()
+	wrong_type_constructor_call.method_id = diagnostic_process.get_internal_id()
+	diagnostic_graph.constructor.blocks = [wrong_type_constructor_call]
+	var diagnostic_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	diagnostic_method.display_name = "Diagnostic Caller"
+	var empty_method_call: FlowMethodCallBlock = FlowMethodCallBlock.new()
+	diagnostic_method.blocks = [empty_method_call]
+	var diagnostic_target: FlowMethodDefinition = FlowMethodDefinition.new()
+	diagnostic_target.display_name = "Diagnostic Target"
+	diagnostic_graph.methods = [diagnostic_method, diagnostic_target]
+	var first_diagnostic_result: FlowValidationResult = FlowGraphValidator.validate(diagnostic_graph)
+	var second_diagnostic_result: FlowValidationResult = FlowGraphValidator.validate(diagnostic_graph)
+	_assert_same_diagnostic_sequence(first_diagnostic_result, second_diagnostic_result)
+	assert(first_diagnostic_result.diagnostics.size() == 4)
+	var expected_codes: Array[StringName] = [
+		FlowDiagnostic.CODE_EMPTY_METHOD_REFERENCE,
+		FlowDiagnostic.CODE_MISSING_METHOD_REFERENCE,
+		FlowDiagnostic.CODE_INVALID_METHOD_REFERENCE,
+		FlowDiagnostic.CODE_EMPTY_METHOD_REFERENCE,
+	]
+	var expected_paths: Array[String] = [
+		"processes[0].blocks[0].method_id",
+		"state_machines[0].states[0].blocks[0].method_id",
+		"constructor.blocks[0].method_id",
+		"methods[0].blocks[0].method_id",
+	]
+	var expected_related_ids: Array[String] = [
+		empty_process_call.get_internal_id(),
+		"missing_method_id",
+		diagnostic_process.get_internal_id(),
+		empty_method_call.get_internal_id(),
+	]
+	for diagnostic_index: int in first_diagnostic_result.diagnostics.size():
+		var diagnostic: FlowDiagnostic = first_diagnostic_result.diagnostics[diagnostic_index]
+		assert(diagnostic.code == expected_codes[diagnostic_index])
+		assert(diagnostic.element_path == expected_paths[diagnostic_index])
+		assert(diagnostic.related_id == expected_related_ids[diagnostic_index])
+	assert(empty_process_call.method_id == "")
+	assert(missing_state_call.method_id == "missing_method_id")
+	assert(wrong_type_constructor_call.method_id == diagnostic_process.get_internal_id())
+	assert(empty_method_call.method_id == "")
+
+	for incompatible_schema: int in [FlowGraph.CURRENT_SCHEMA_VERSION, FlowGraph.SCHEMA_VERSION_2]:
+		var incompatible_graph: FlowGraph = FlowGraph.new()
+		incompatible_graph.schema_version = incompatible_schema
+		var incompatible_process: FlowProcess = FlowProcess.new()
+		var incompatible_call: FlowMethodCallBlock = FlowMethodCallBlock.new()
+		incompatible_call.method_id = "preserved_incompatible_method"
+		incompatible_process.blocks = [incompatible_call]
+		if incompatible_schema == FlowGraph.CURRENT_SCHEMA_VERSION:
+			incompatible_graph.containers = [incompatible_process]
+		else:
+			incompatible_graph.processes = [incompatible_process]
+		var incompatible_first: FlowValidationResult = FlowGraphValidator.validate(incompatible_graph)
+		var incompatible_second: FlowValidationResult = FlowGraphValidator.validate(incompatible_graph)
+		_assert_same_diagnostic_sequence(incompatible_first, incompatible_second)
+		assert(incompatible_first.diagnostics.size() == 1)
+		var incompatible_diagnostic: FlowDiagnostic = incompatible_first.diagnostics[0]
+		assert(incompatible_diagnostic.code == FlowDiagnostic.CODE_METHOD_CALL_INCOMPATIBLE_SCHEMA)
+		assert(incompatible_diagnostic.element_path == (
+			"containers[0].blocks[0]"
+			if incompatible_schema == FlowGraph.CURRENT_SCHEMA_VERSION
+			else "processes[0].blocks[0]"
+		))
+		assert(incompatible_diagnostic.related_id == incompatible_call.get_internal_id())
+		assert(incompatible_call.method_id == "preserved_incompatible_method")
+
+	var resource_path: String = "res://.godot/flow_method_call_regression.tres"
+	assert(ResourceSaver.save(graph, resource_path) == OK)
+	var loaded_graph: FlowGraph = ResourceLoader.load(
+		resource_path,
+		"",
+		ResourceLoader.CACHE_MODE_IGNORE
+	) as FlowGraph
+	assert(loaded_graph != null)
+	assert(loaded_graph.constructor.blocks[0] is FlowMethodCallBlock)
+	assert((loaded_graph.constructor.blocks[0] as FlowMethodCallBlock).method_id == loaded_graph.methods[2].get_internal_id())
+	assert(loaded_graph.methods[0].blocks[0] is FlowMethodCallBlock)
+	assert(not FlowGraphValidator.validate(loaded_graph).has_errors())
+	assert(DirAccess.remove_absolute(ProjectSettings.globalize_path(resource_path)) == OK)
+	assert(not FileAccess.file_exists(ProjectSettings.globalize_path(resource_path)))
+
+
 func _ready() -> void:
 	await get_tree().process_frame
 
@@ -1455,6 +1655,7 @@ func _ready() -> void:
 	assert(schema_2_to_3_invalid_diagnostic.element_path == "graph")
 	assert(schema_2_to_3_invalid_diagnostic.related_id == "")
 	assert(schema_2_to_3_invalid_source._internal_id == "")
+	_test_method_call_foundation()
 
 	print("[Flujo] Model smoke test passed")
 	await get_tree().process_frame

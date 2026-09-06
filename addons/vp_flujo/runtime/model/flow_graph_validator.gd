@@ -1,5 +1,5 @@
 @tool
-## Validates FlowGraph schema 1 and schema 2 deterministically without modifying it.
+## Validates supported FlowGraph schemas deterministically without modifying them.
 class_name FlowGraphValidator
 extends RefCounted
 
@@ -72,6 +72,7 @@ static func validate(graph: FlowGraph) -> FlowValidationResult:
 	)
 	if graph.schema_version == FlowGraph.SCHEMA_VERSION_3:
 		_validate_schema_3(graph, result, seen_instances, seen_ids)
+	_validate_method_calls(graph, result, seen_ids)
 
 
 	return result
@@ -477,6 +478,140 @@ static func _validate_display_name(display_name: String, names: Dictionary[Strin
 		_add_error(result, FlowDiagnostic.CODE_DUPLICATE_DISPLAY_NAME, "Display name must be unique in its namespace.", element_path, internal_id)
 		return
 	names[display_name] = true
+
+
+static func _validate_method_calls(
+		graph: FlowGraph,
+		result: FlowValidationResult,
+		seen_ids: Dictionary[String, String]
+) -> void:
+	var method_ids: Dictionary[String, bool] = _build_method_id_index(graph.methods)
+
+	for container_index: int in graph.containers.size():
+		var container: FlowBlockContainer = graph.containers[container_index]
+		if container != null:
+			_validate_method_calls_in_blocks(
+				container.blocks,
+				"containers[%d]" % container_index,
+				graph.schema_version,
+				method_ids,
+				seen_ids,
+				result
+			)
+
+	for process_index: int in graph.processes.size():
+		var process: FlowProcess = graph.processes[process_index]
+		if process != null:
+			_validate_method_calls_in_blocks(
+				process.blocks,
+				"processes[%d]" % process_index,
+				graph.schema_version,
+				method_ids,
+				seen_ids,
+				result
+			)
+
+	for machine_index: int in graph.state_machines.size():
+		var state_machine: FlowStateMachineDefinition = graph.state_machines[machine_index]
+		if state_machine == null:
+			continue
+		for state_index: int in state_machine.states.size():
+			var state: FlowStateDefinition = state_machine.states[state_index]
+			if state != null:
+				_validate_method_calls_in_blocks(
+					state.blocks,
+					"state_machines[%d].states[%d]" % [machine_index, state_index],
+					graph.schema_version,
+					method_ids,
+					seen_ids,
+					result
+				)
+
+	if graph.constructor != null:
+		_validate_method_calls_in_blocks(
+			graph.constructor.blocks,
+			"constructor",
+			graph.schema_version,
+			method_ids,
+			seen_ids,
+			result
+		)
+
+	for method_index: int in graph.methods.size():
+		var method: FlowMethodDefinition = graph.methods[method_index]
+		if method != null:
+			_validate_method_calls_in_blocks(
+				method.blocks,
+				"methods[%d]" % method_index,
+				graph.schema_version,
+				method_ids,
+				seen_ids,
+				result
+			)
+
+
+static func _build_method_id_index(
+		methods: Array[FlowMethodDefinition]
+) -> Dictionary[String, bool]:
+	var method_ids: Dictionary[String, bool] = {}
+	for method: FlowMethodDefinition in methods:
+		if method != null and not method.get_internal_id().is_empty():
+			method_ids[method.get_internal_id()] = true
+	return method_ids
+
+
+static func _validate_method_calls_in_blocks(
+		blocks: Array[FlowBlock],
+		container_path: String,
+		schema_version: int,
+		method_ids: Dictionary[String, bool],
+		seen_ids: Dictionary[String, String],
+		result: FlowValidationResult
+) -> void:
+	for block_index: int in blocks.size():
+		var block: FlowBlock = blocks[block_index]
+		if not block is FlowMethodCallBlock:
+			continue
+
+		var method_call: FlowMethodCallBlock = block as FlowMethodCallBlock
+		var block_path: String = "%s.blocks[%d]" % [container_path, block_index]
+		if schema_version != FlowGraph.SCHEMA_VERSION_3:
+			_add_error(
+				result,
+				FlowDiagnostic.CODE_METHOD_CALL_INCOMPATIBLE_SCHEMA,
+				"Method-call blocks require FlowGraph schema 3.",
+				block_path,
+				method_call.get_internal_id()
+			)
+			continue
+
+		var reference_path: String = "%s.method_id" % block_path
+		if method_call.method_id.is_empty():
+			_add_error(
+				result,
+				FlowDiagnostic.CODE_EMPTY_METHOD_REFERENCE,
+				"Method-call target ID is empty.",
+				reference_path,
+				method_call.get_internal_id()
+			)
+		elif method_ids.has(method_call.method_id):
+			continue
+		elif seen_ids.has(method_call.method_id):
+			_add_error(
+				result,
+				FlowDiagnostic.CODE_INVALID_METHOD_REFERENCE,
+				"Method-call target has an invalid type.",
+				reference_path,
+				method_call.method_id
+			)
+		else:
+			_add_error(
+				result,
+				FlowDiagnostic.CODE_MISSING_METHOD_REFERENCE,
+				"Referenced method is missing from this FlowGraph.",
+				reference_path,
+				method_call.method_id
+			)
 
 static func _get_internal_id(resource: Resource) -> String:
 	if resource is FlowGraph:

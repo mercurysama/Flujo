@@ -89,6 +89,20 @@ Every persistent element has a stable internal ID independent of its visible nam
 
 **Allowed dependencies:** uses only the model contract and portable runtime APIs. It does not depend on editor classes or the graphical interface.
 
+### FlowMethodCallBlock
+
+**Base:** `FlowBlock`.
+
+**Responsibility:** persist a schema 3 method-call reference without execution behavior.
+
+**Persistent target:** `method_id: String` is the only target identity and must resolve to a `FlowMethodDefinition` in the same `FlowGraph`. Empty, missing, and wrong-type IDs are preserved and diagnosed deterministically. Names, indexes, direct resource references, `Callable`, `Node`, and `NodePath` are not target identities.
+
+**Placement:** constructor, method, process, and state block collections in schema 3. Schema 1 and schema 2 reject the type.
+
+**Duplication:** preserves the concrete block type, generates a new block ID, and remaps `method_id` only after the graph-wide old-ID → new-ID map is complete. Unknown references remain unchanged.
+
+**Deferred behavior:** arguments, returns, recursion, cycle detection, execution, bindings, Inspector support, and shortcuts are not implemented.
+
 ### FlowProcess
 
 **Base:** `FlowBlockContainer`.
@@ -191,7 +205,9 @@ If exactly one state has `is_initial`, the migrated machine selects it; if none 
 
 `FlowVariableDefinition.ValueType` remains the single canonical value-type enum. Parameters reuse it directly without inheriting variable scope, ownership, binding, persistence, or runtime-value behavior. Its existing public members, numeric values, serialized property name, and variable API are unchanged.
 
-Schema 3 duplication deeply copies the constructor, its blocks and dependencies, methods, parameters, and schema 2 collections with one old-ID-to-new-ID map, preserving concrete types, order, and `null` positions. No method calls, argument bindings, or controller bindings exist in this foundation.
+Schema 3 duplication deeply copies the constructor, its blocks and dependencies, methods, parameters, method-call blocks, and schema 2 collections with one old-ID-to-new-ID map, preserving concrete types, order, and `null` positions. Method-call references are remapped after the map is complete, so calls may target methods declared later in collection order. Unknown method references remain unchanged. Argument bindings and controller bindings do not exist in this foundation.
+
+Schema 3 validation builds the complete method-ID index before checking method calls. Calls are accepted in constructor, method, process, and state blocks. Empty, missing, and wrong-type targets produce deterministic diagnostics without modifying the graph. Schema 1 and schema 2 reject method-call blocks. Direct and indirect recursion are not rejected because call-cycle validation remains deferred.
 
 ## Implemented migration from schema 2 to schema 3
 
@@ -212,7 +228,7 @@ The schema 3 contract in [`constructor_methods_contract.md`](constructor_methods
 
 - `PVController` dependency bindings and class-resolution/inheritance checks.
 - `FlowRuntimeState` and runtime execution.
-- Method-call blocks, arguments, argument validation, and call-cycle validation.
+- Method-call arguments, returns, argument validation, and call-cycle validation.
 - Inspector authoring and execution of Constructor or Methods.
 
 

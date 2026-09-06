@@ -60,6 +60,7 @@ func duplicate_with_new_ids() -> FlowGraph:
 					copy.methods.append(null)
 				else:
 					copy.methods.append(_duplicate_method(method, id_map))
+			_remap_method_call_references(copy, id_map)
 		_remap_state_machine_references(copy.state_machines, id_map)
 
 	return copy
@@ -203,6 +204,39 @@ func _remap_state_machine_references(
 	for state_machine: FlowStateMachineDefinition in copy_state_machines:
 		if state_machine != null:
 			state_machine.initial_state_id = _remap_reference(state_machine.initial_state_id, id_map)
+
+
+func _remap_method_call_references(
+		copy: FlowGraph,
+		id_map: Dictionary[String, String]
+) -> void:
+	for process: FlowProcess in copy.processes:
+		if process != null:
+			_remap_method_calls_in_blocks(process.blocks, id_map)
+
+	for state_machine: FlowStateMachineDefinition in copy.state_machines:
+		if state_machine == null:
+			continue
+		for state: FlowStateDefinition in state_machine.states:
+			if state != null:
+				_remap_method_calls_in_blocks(state.blocks, id_map)
+
+	if copy.constructor != null:
+		_remap_method_calls_in_blocks(copy.constructor.blocks, id_map)
+
+	for method: FlowMethodDefinition in copy.methods:
+		if method != null:
+			_remap_method_calls_in_blocks(method.blocks, id_map)
+
+
+func _remap_method_calls_in_blocks(
+		blocks: Array[FlowBlock],
+		id_map: Dictionary[String, String]
+) -> void:
+	for block: FlowBlock in blocks:
+		if block is FlowMethodCallBlock:
+			var method_call: FlowMethodCallBlock = block as FlowMethodCallBlock
+			method_call.method_id = _remap_reference(method_call.method_id, id_map)
 
 
 func _remap_reference(

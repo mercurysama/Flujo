@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-This document defines schema 3 behavior for Constructor declarations and reusable methods. Its persistent structural foundation is implemented; runtime execution, Inspector UI, undo/redo actions, persistent runtime state, scene bindings, and method calls remain future work.
+This document defines schema 3 behavior for Constructor declarations and reusable methods. Its persistent structural foundation and method-call references are implemented; runtime execution, Inspector UI, undo/redo actions, persistent runtime state, scene bindings, arguments, returns, and call-cycle validation remain future work.
 
 Schema 3 extends the schema 2 definition model. `FlowGraph` remains an immutable, shareable program definition during execution. Per-instance mutable state belongs to a future runtime context owned by each `PVController`.
 
@@ -60,22 +60,23 @@ Methods are definitions only. Their local values, argument values, return behavi
 
 ## Method calls
 
-`FlowMethodCallBlock` is a future subtype of `FlowBlock`. It can be stored in process, state, or method block collections without depending on the editor.
+The implemented method-call foundation is governed by these numbered requirements:
 
-- A call stores `method_id`, never a method name or array index.
-- Its ordered argument bindings identify parameters by `parameter_id`, never by parameter position.
-- A call is valid only if its target method belongs to the same graph and every argument binding refers to a parameter of that target method.
-- Missing methods, missing parameters, duplicated parameter bindings, incompatible declared types, and arguments from another method are validation errors. Invalid IDs are preserved for diagnostics and are never silently replaced.
-- Calls from a process such as `_ready` are only definition data at this stage. Execution is deferred and must not require editor APIs.
+- **MCALL-001 — Persistent type:** `FlowMethodCallBlock` is a persistent subtype of `FlowBlock` and may be stored in constructor, method, process, and state block collections in schema 3.
+- **MCALL-002 — Single target identity:** a call stores only `method_id: String` as the identity of its target `FlowMethodDefinition`. It never stores a method name, collection index, direct method reference, `Callable`, `Node`, or `NodePath` as identity.
+- **MCALL-003 — Schema boundary:** schema 1 and schema 2 reject every nested `FlowMethodCallBlock` with a deterministic `method_call_incompatible_schema` diagnostic.
+- **MCALL-004 — Reference validation:** schema 3 builds the complete method-ID index before validating calls. An empty `method_id` produces `empty_method_reference`; an unknown ID produces `missing_method_reference`; an ID owned by a different resource type produces `invalid_method_reference`. Invalid values remain unchanged.
+- **MCALL-005 — Deterministic diagnostics:** reference diagnostics use the call's `blocks[i].method_id` path. Empty-reference and incompatible-schema diagnostics relate to the call block ID; missing and invalid references relate to the preserved `method_id`. Calls are checked after structural validation in process, state, constructor, and method collection order, preserving block order and `null` positions.
+- **MCALL-006 — Graph duplication:** a call preserves its concrete type, receives a new block ID, and remaps `method_id` through the same graph-wide old-ID → new-ID map after that map contains every copied resource. Unknown references remain unchanged.
+- **MCALL-007 — Deferred semantics:** calls are persistent definition data only. Arguments, returns, parameter bindings, recursion and cycle detection, execution, bindings, Inspector integration, and shortcuts are not implemented.
 
 ## Recursion and call cycles
 
-Initial schema 3 forbids recursion. Validation builds a deterministic directed graph of method-to-method calls in method collection order and block order.
+Recursion and call-cycle validation are not implemented in the current method-call foundation. Direct self-calls and indirect cycles are therefore preserved and are not rejected yet.
 
-- A direct call from a method to itself is an error.
-- An indirect cycle between two or more methods is an error.
-- Calls from processes or states may enter a method but do not create a method recursion edge by themselves.
-- Cycle diagnostics must report a stable code, deterministic path, and the relevant method or call ID.
+- Future cycle validation must use deterministic method collection and block order.
+- Calls from processes, states, or the constructor may enter a method but do not create method-recursion edges by themselves.
+- Future cycle diagnostics must report a stable code, deterministic path, and the relevant method or call ID.
 
 Whether controlled recursion is supported in a later schema is out of scope for schema 3.
 
@@ -83,10 +84,10 @@ Whether controlled recursion is supported in a later schema is out of scope for 
 
 Schema 3 validation remains read-only and deterministic. In addition to existing graph rules, it must validate:
 
-- The existence and unique identity of the constructor, constructor blocks, dependencies, methods, parameters, and future method-call blocks.
+- The existence and unique identity of the constructor, constructor blocks, dependencies, methods, parameters, and method-call blocks.
 - Required and unique names in their declared namespaces.
 - Dependency IDs referenced by controller bindings.
-- Method IDs, parameter IDs, argument bindings, declared value-type compatibility, and call cycles.
+- Implemented method-call target IDs. Parameter IDs, argument bindings, declared value-type compatibility, and call cycles remain deferred.
 - Schema 3 source exclusivity: `containers` must be empty and schema 2 collections remain the active graph collections.
 - Deliberate `null` positions as valid positions, not compacted data.
 
@@ -94,9 +95,9 @@ Diagnostics preserve invalid values and use stable codes, element paths, related
 
 ## Duplication
 
-`FlowGraph.duplicate_with_new_ids()` for a validated schema 3 graph deeply duplicates the constructor, its blocks and dependencies, methods, parameters, and their blocks while preserving concrete types, order, and `null` positions. Future calls will follow the same rule when implemented.
+`FlowGraph.duplicate_with_new_ids()` for a validated schema 3 graph deeply duplicates the constructor, its blocks and dependencies, methods, parameters, their blocks, and method-call blocks while preserving concrete types, order, and `null` positions.
 
-One old-ID to new-ID map covers every copied persistent resource. The duplicate remaps dependency references, method IDs, parameter IDs, call argument references, and existing schema 2 references only when both ends are inside the copy. Missing references remain unchanged for diagnostics.
+One old-ID to new-ID map covers every copied persistent resource. After the map is complete, the duplicate remaps method-call `method_id` values and existing schema 2 references only when both ends are inside the copy. Missing references remain unchanged for diagnostics. Future dependency bindings, parameter bindings, and call arguments will require their own explicit contracts without creating another source of truth.
 
 Controller-owned bindings are not part of graph duplication. A future controller duplication policy must explicitly decide whether to copy locators, clear them, or require rebinding; it must never mutate the original controller or graph.
 
@@ -121,10 +122,10 @@ Constructor declarations and methods are persistent model metadata and must seri
 
 `FlowRuntimeState` is future, temporary, and per `PVController` instance. It owns resolved dependency nodes, method frames, parameter values, local variables, and execution progress. It is not serialized into `FlowGraph`, is not shared between scene instances, and is released when its execution ends.
 
-## Required tests before implementation
+## Required regression coverage
 
 - Constructor existence, dependency identity, name validation, `null` preservation, and duplication remapping.
-- Controller binding ownership, missing dependencies, invalid locators, inherited-scene customization, and two instances sharing one graph.
-- Method and parameter name/ID validation, typed argument compatibility, missing references, direct recursion, indirect recursion, and deterministic diagnostics.
-- PackedScene persistence for schema 3 definitions and separation of shared graph data from per-instance runtime state.
+- Method-call references from every allowed container, empty/missing/wrong-type targets, schema boundaries, order-independent remapping, unknown-reference preservation, deterministic diagnostics, deep independence, and `null` preservation.
+- Resource and PackedScene persistence for schema 3 definitions and method-call concrete types.
+- Future controller bindings, argument compatibility, return behavior, recursion, and cycle validation require additional tests when specified.
 - Headless editor load, model smoke test, editor-specific tests, and multiplatform runtime checks.
