@@ -382,6 +382,112 @@ func _test_method_return_definition() -> void:
 	assert(not FileAccess.file_exists(ProjectSettings.globalize_path(resource_path)))
 
 
+func _make_method_return_identity_collision_case(category: String) -> Dictionary:
+	var graph: FlowGraph = FlowGraph.new()
+	graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	graph.constructor = FlowConstructorDefinition.new()
+	var method: FlowMethodDefinition = FlowMethodDefinition.new()
+	method.display_name = "Return Collision Owner"
+	var return_definition: FlowMethodReturnDefinition = FlowMethodReturnDefinition.new()
+	method.return_definition = return_definition
+	graph.methods = [method]
+	var target: Resource = graph
+
+	match category:
+		"graph":
+			target = graph
+		"constructor":
+			target = graph.constructor
+		"dependency":
+			var dependency: FlowDependencyDefinition = FlowDependencyDefinition.new()
+			dependency.display_name = "Collision Dependency"
+			graph.constructor.dependencies = [dependency]
+			target = dependency
+		"block":
+			var block: FlowBlock = FlowBlock.new()
+			graph.constructor.blocks = [block]
+			target = block
+		"process":
+			var process: FlowProcess = FlowProcess.new()
+			graph.processes = [process]
+			target = process
+		"variable":
+			var variable: FlowVariableDefinition = FlowVariableDefinition.new()
+			graph.variables = [variable]
+			target = variable
+		"state_machine":
+			var state_machine: FlowStateMachineDefinition = FlowStateMachineDefinition.new()
+			graph.state_machines = [state_machine]
+			target = state_machine
+		"state":
+			var state: FlowStateDefinition = FlowStateDefinition.new()
+			var state_machine: FlowStateMachineDefinition = FlowStateMachineDefinition.new()
+			state_machine.states = [state]
+			state_machine.initial_state_id = state.get_internal_id()
+			graph.state_machines = [state_machine]
+			target = state
+		"method":
+			target = method
+		"parameter":
+			var parameter: FlowMethodParameterDefinition = FlowMethodParameterDefinition.new()
+			parameter.display_name = "Collision Parameter"
+			method.parameters = [parameter]
+			target = parameter
+
+	return {
+		"graph": graph,
+		"return_definition": return_definition,
+		"target": target,
+	}
+
+
+func _test_method_return_global_identity_collisions() -> void:
+	var categories: Array[String] = [
+		"graph",
+		"constructor",
+		"dependency",
+		"block",
+		"process",
+		"variable",
+		"state_machine",
+		"state",
+		"method",
+		"parameter",
+	]
+	var seen_graph_instances: Dictionary[int, bool] = {}
+	var seen_return_instances: Dictionary[int, bool] = {}
+	var seen_target_instances: Dictionary[int, bool] = {}
+	for category: String in categories:
+		var case_data: Dictionary = _make_method_return_identity_collision_case(category)
+		var graph: FlowGraph = case_data["graph"] as FlowGraph
+		var return_definition: FlowMethodReturnDefinition = case_data["return_definition"] as FlowMethodReturnDefinition
+		var target: Resource = case_data["target"] as Resource
+		var target_id: String = String(target.get("_internal_id"))
+		var original_return_id: String = return_definition.get_internal_id()
+		assert(not seen_graph_instances.has(graph.get_instance_id()))
+		assert(not seen_return_instances.has(return_definition.get_instance_id()))
+		assert(not seen_target_instances.has(target.get_instance_id()))
+		seen_graph_instances[graph.get_instance_id()] = true
+		seen_return_instances[return_definition.get_instance_id()] = true
+		seen_target_instances[target.get_instance_id()] = true
+		assert(not target_id.is_empty())
+		assert(target_id != original_return_id)
+		assert(not FlowGraphValidator.validate(graph).has_errors())
+
+		return_definition._internal_id = target_id
+		var first_result: FlowValidationResult = FlowGraphValidator.validate(graph)
+		var second_result: FlowValidationResult = FlowGraphValidator.validate(graph)
+		_assert_same_diagnostic_sequence(first_result, second_result)
+		assert(first_result.diagnostics.size() == 1)
+		var diagnostic: FlowDiagnostic = first_result.diagnostics[0]
+		assert(diagnostic.code == FlowDiagnostic.CODE_DUPLICATE_INTERNAL_ID)
+		assert(diagnostic.element_path == "methods[0].return_definition")
+		assert(diagnostic.related_id == target_id)
+		assert(return_definition.get_internal_id() == target_id)
+		assert(String(target.get("_internal_id")) == target_id)
+		assert(graph.methods[0].return_definition == return_definition)
+
+
 func _ready() -> void:
 	await get_tree().process_frame
 
@@ -1797,6 +1903,7 @@ func _ready() -> void:
 	assert(schema_2_to_3_invalid_source._internal_id == "")
 	_test_method_call_foundation()
 	_test_method_return_definition()
+	_test_method_return_global_identity_collisions()
 
 	print("[Flujo] Model smoke test passed")
 	await get_tree().process_frame
