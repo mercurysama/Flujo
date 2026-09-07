@@ -3,11 +3,17 @@ class_name FlowGraphInspectorProperty
 extends EditorProperty
 
 
+const VISIBLE_LIST_ROWS: int = 5
+
+
 var _content: VBoxContainer
 var _commands: FlowGraphEditorCommands
 var _selected_collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.PROCESSES
 var _selected_id: String = ""
 var _rename_input: LineEdit
+var _rename_target_id: String = ""
+var _rename_target_collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.PROCESSES
+var _restore_selected_list_focus: bool = false
 var _rebuild_queued: bool = false
 
 
@@ -64,7 +70,7 @@ func _render(presentation: Dictionary, controller: PVController) -> void:
 
 	var sections: Array = presentation["sections"] as Array
 	if _uses_schema_2_collections(controller):
-		_render_schema_2_sections(sections)
+		_render_schema_2_sections(sections, controller)
 	else:
 		for section: Dictionary in sections:
 			_render_section(section, _content)
@@ -111,21 +117,8 @@ func _render_actions(controller: PVController) -> void:
 	if graph.schema_version != FlowGraph.SCHEMA_VERSION_2 or not graph.containers.is_empty():
 		return
 
-	if _selected_id.is_empty():
-		return
-	_rename_input = LineEdit.new()
-	_rename_input.placeholder_text = "Display name"
-	_rename_input.text = _selected_display_name(graph)
-	_content.add_child(_rename_input)
-	var selection_actions: HBoxContainer = HBoxContainer.new()
-	_content.add_child(selection_actions)
-	_add_button_to(selection_actions, "Rename", _on_rename_pressed)
-	_add_button_to(selection_actions, "Move Up", _on_move_up_pressed)
-	_add_button_to(selection_actions, "Move Down", _on_move_down_pressed)
-	_add_button_to(selection_actions, "Delete", _on_delete_pressed)
 
-
-func _render_schema_2_sections(sections: Array) -> void:
+func _render_schema_2_sections(sections: Array, controller: PVController) -> void:
 	for section: Dictionary in sections:
 		var category: VBoxContainer = VBoxContainer.new()
 		category.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -138,6 +131,8 @@ func _render_schema_2_sections(sections: Array) -> void:
 			"State Machines":
 				_add_button_to(category, "Add State Machine", _on_add_state_machine_pressed)
 		_render_section(section, category)
+		if _section_contains_selection(section):
+			_render_selected_actions(category, controller.flow_graph)
 
 
 func _render_section(section: Dictionary, parent: Container) -> void:
@@ -150,12 +145,84 @@ func _render_section(section: Dictionary, parent: Container) -> void:
 	list.select_mode = ItemList.SELECT_SINGLE
 	list.allow_reselect = true
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var selected_item_index: int = -1
 	var entries: Array = section["entries"] as Array
 	for entry: Dictionary in entries:
 		var item_index: int = list.add_item(_format_entry(entry))
 		list.set_item_metadata(item_index, entry)
+		list.set_item_tooltip(item_index, "")
+		if _entry_is_selected(entry):
+			list.select(item_index)
+			selected_item_index = item_index
 	list.item_selected.connect(_on_item_selected.bind(list))
 	parent.add_child(list)
+	call_deferred(&"_fit_list_to_first_row", list)
+	if selected_item_index >= 0 and _restore_selected_list_focus:
+		_restore_selected_list_focus = false
+		call_deferred(&"_focus_selected_list", list, selected_item_index, _selected_id)
+
+
+func _render_selected_actions(parent: Container, graph: FlowGraph) -> void:
+	var selection_actions: HBoxContainer = HBoxContainer.new()
+	parent.add_child(selection_actions)
+	_add_button_to(selection_actions, "Rename", _on_rename_pressed)
+	_add_button_to(selection_actions, "Move Up", _on_move_up_pressed)
+	_add_button_to(selection_actions, "Move Down", _on_move_down_pressed)
+	_add_button_to(selection_actions, "Delete", _on_delete_pressed)
+	if not _is_renaming_selection():
+		return
+	_rename_input = LineEdit.new()
+	_rename_input.placeholder_text = "Display name"
+	_rename_input.text = _selected_display_name(graph)
+	_rename_input.text_submitted.connect(_on_rename_submitted)
+	_rename_input.gui_input.connect(_on_rename_gui_input)
+	parent.add_child(_rename_input)
+	call_deferred(&"_focus_rename_input", _rename_input, _rename_target_id)
+
+
+## Keeps every schema 2 list at five theme-sized rows while ItemList supplies scrolling for overflow.
+func _fit_list_to_first_row(list: ItemList) -> void:
+	if not is_instance_valid(list) or not list.is_inside_tree():
+		return
+	var minimum_height: float = _theme_list_top_inset(list) + _theme_item_row_height(list) * float(VISIBLE_LIST_ROWS)
+	if list.item_count > 0:
+		var first_row_rect: Rect2 = list.get_item_rect(0)
+		if first_row_rect.size.y > 0.0:
+			minimum_height = maxf(
+				minimum_height,
+				first_row_rect.end.y + first_row_rect.size.y * float(VISIBLE_LIST_ROWS - 1)
+			)
+	list.custom_minimum_size.y = minimum_height
+
+
+func _theme_item_row_height(list: ItemList) -> float:
+	var font: Font = list.get_theme_font(&"font")
+	var font_size: int = list.get_theme_font_size(&"font_size")
+	return font.get_height(font_size) + float(list.get_theme_constant(&"v_separation"))
+
+
+func _theme_list_top_inset(list: ItemList) -> float:
+	var panel: StyleBox = list.get_theme_stylebox(&"panel")
+	return panel.get_margin(SIDE_TOP)
+
+
+func _section_contains_selection(section: Dictionary) -> bool:
+	for entry: Dictionary in section["entries"] as Array:
+		if _entry_is_selected(entry):
+			return true
+	return false
+
+
+func _entry_is_selected(entry: Dictionary) -> bool:
+	return not _selected_id.is_empty() \
+		and entry["internal_id"] == _selected_id \
+		and _collection_for_type(entry["type"]) == _selected_collection
+
+
+func _is_renaming_selection() -> bool:
+	return not _rename_target_id.is_empty() \
+		and _rename_target_id == _selected_id \
+		and _rename_target_collection == _selected_collection
 
 
 func _uses_schema_2_collections(controller: PVController) -> bool:
@@ -166,14 +233,9 @@ func _uses_schema_2_collections(controller: PVController) -> bool:
 
 
 func _format_entry(entry: Dictionary) -> String:
-	var internal_id: String = entry["internal_id"]
-	var id_text: String = "No ID" if internal_id.is_empty() else "ID: %s" % internal_id
-	return "[%d] %s — %s\n%s" % [
-		entry["index"],
-		entry["type"],
-		entry["name"],
-		id_text,
-	]
+	if entry["is_empty"]:
+		return "Empty"
+	return entry["name"]
 
 
 func _severity_name(severity: int) -> String:
@@ -205,19 +267,23 @@ func _on_item_selected(item_index: int, list: ItemList) -> void:
 		return
 	_selected_id = internal_id
 	_selected_collection = _collection_for_type(entry["type"])
-	_rebuild_interface()
+	_rename_target_id = ""
+	_restore_selected_list_focus = false
+	_request_rebuild()
 
 
 func _on_create_graph_pressed() -> void:
 	var controller: PVController = get_edited_object() as PVController
 	if _commands.create_schema_2_graph(controller):
 		_selected_id = ""
+		_rename_target_id = ""
 
 
 func _on_migrate_pressed() -> void:
 	var controller: PVController = get_edited_object() as PVController
 	if _commands.migrate_to_schema_2(controller):
 		_selected_id = ""
+		_rename_target_id = ""
 
 
 func _on_add_process_pressed() -> void:
@@ -234,14 +300,54 @@ func _on_add_state_machine_pressed() -> void:
 
 func _add_resource(collection: FlowGraphEditorCommands.Collection) -> void:
 	var controller: PVController = get_edited_object() as PVController
-	if controller != null and _commands.add_resource(controller.flow_graph, collection):
+	if controller != null and _commands.add_resource(controller, collection):
 		_selected_id = ""
+		_rename_target_id = ""
 
 
 func _on_rename_pressed() -> void:
+	if not _selected_id.is_empty():
+		_rename_target_id = _selected_id
+		_rename_target_collection = _selected_collection
+		_request_rebuild()
+
+
+func _on_rename_submitted(_display_name: String) -> void:
 	var controller: PVController = get_edited_object() as PVController
-	if controller != null and _rename_input != null:
-		_commands.rename_resource(controller.flow_graph, _selected_collection, _selected_id, _rename_input.text)
+	if controller == null or _rename_input == null or not _is_renaming_selection():
+		return
+	var display_name: String = _rename_input.text
+	_close_rename_editor()
+	if not _commands.rename_resource(controller, _selected_collection, _selected_id, display_name):
+		_request_rebuild()
+
+
+func _on_rename_gui_input(event: InputEvent) -> void:
+	if not event is InputEventKey:
+		return
+	var key_event: InputEventKey = event as InputEventKey
+	if not key_event.pressed or key_event.echo or key_event.keycode != KEY_ESCAPE:
+		return
+	if _rename_input != null and _is_renaming_selection():
+		_close_rename_editor()
+
+
+func _close_rename_editor() -> void:
+	_rename_target_id = ""
+	_restore_selected_list_focus = not _selected_id.is_empty()
+	_request_rebuild()
+
+
+func _focus_rename_input(input: LineEdit, target_id: String) -> void:
+	if target_id == _rename_target_id and is_instance_valid(input) and input.is_inside_tree():
+		input.grab_focus()
+		input.select_all()
+
+
+func _focus_selected_list(list: ItemList, item_index: int, selected_id: String) -> void:
+	if selected_id == _selected_id and is_instance_valid(list) and list.is_inside_tree():
+		list.select(item_index)
+		list.grab_focus()
 
 
 func _on_move_up_pressed() -> void:
@@ -255,13 +361,15 @@ func _on_move_down_pressed() -> void:
 func _move_selected(direction: int) -> void:
 	var controller: PVController = get_edited_object() as PVController
 	if controller != null:
-		_commands.move_resource(controller.flow_graph, _selected_collection, _selected_id, direction)
+		_commands.move_resource(controller, _selected_collection, _selected_id, direction)
 
 
 func _on_delete_pressed() -> void:
 	var controller: PVController = get_edited_object() as PVController
-	if controller != null and _commands.delete_resource(controller.flow_graph, _selected_collection, _selected_id):
+	if controller != null and _commands.delete_resource(controller, _selected_collection, _selected_id):
 		_selected_id = ""
+		_rename_target_id = ""
+		_restore_selected_list_focus = false
 
 
 func _selected_display_name(graph: FlowGraph) -> String:
