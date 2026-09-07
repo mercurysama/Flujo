@@ -70,7 +70,7 @@ The implemented method-call foundation is governed by these numbered requirement
 - **MCALL-004 — Reference validation:** schema 3 builds the complete method-ID index before validating calls. An empty `method_id` produces `empty_method_reference`; an unknown ID produces `missing_method_reference`; an ID owned by a different resource type produces `invalid_method_reference`. Invalid values remain unchanged.
 - **MCALL-005 — Deterministic diagnostics:** reference diagnostics use the call's `blocks[i].method_id` path. Empty-reference and incompatible-schema diagnostics relate to the call block ID; missing and invalid references relate to the preserved `method_id`. Calls are checked after structural validation in process, state, constructor, and method collection order, preserving block order and `null` positions.
 - **MCALL-006 — Graph duplication:** a call preserves its concrete type, receives a new block ID, and remaps `method_id` through the same graph-wide old-ID → new-ID map after that map contains every copied resource. Unknown references remain unchanged.
-- **MCALL-007 — Deferred semantics:** calls are persistent definition data only. Arguments, returns, parameter bindings, recursion and cycle detection, execution, bindings, Inspector integration, and shortcuts are not implemented.
+- **MCALL-007 — Deferred semantics:** calls are persistent definition data only. Argument bindings, return blocks and runtime return values, parameter bindings, recursion and cycle detection, execution, bindings, Inspector integration, and shortcuts are not implemented.
 
 ## Planned method arguments and returns
 
@@ -114,9 +114,9 @@ Diagnostics preserve invalid values and use stable codes, element paths, related
 
 ## Duplication
 
-`FlowGraph.duplicate_with_new_ids()` for a validated schema 3 graph deeply duplicates the constructor, its blocks and dependencies, methods, parameters, their blocks, and method-call blocks while preserving concrete types, order, and `null` positions.
+`FlowGraph.duplicate_with_new_ids()` for a validated schema 3 graph deeply duplicates the constructor, its blocks and dependencies, methods, parameters, optional return definitions, their blocks, and method-call blocks while preserving concrete types, order, and `null` positions. `FlowMethodDefinition.duplicate_method_with_new_ids()` applies the same deep-copy boundary to one isolated method, preserving its concrete type while renewing every owned ID.
 
-One old-ID to new-ID map covers every copied persistent resource. After the map is complete, the duplicate remaps method-call `method_id` values and existing schema 2 references only when both ends are inside the copy. Missing references remain unchanged for diagnostics. Future dependency bindings, parameter bindings, call arguments, and returns will follow `ARGRET-001` through `ARGRET-012` without creating another source of truth.
+One old-ID to new-ID map covers every copied persistent resource. After the map is complete, the duplicate remaps method-call `method_id` values and existing schema 2 references only when both ends are inside the copy. The isolated method duplication uses the same rule with its local ownership map, so self-calls remap while external method IDs remain unchanged. Missing references remain unchanged for diagnostics. Future dependency bindings, parameter bindings, call arguments, return blocks, and value sources will follow `ARGRET-001` through `ARGRET-012` without creating another source of truth.
 
 Controller-owned bindings are not part of graph duplication. A future controller duplication policy must explicitly decide whether to copy locators, clear them, or require rebinding; it must never mutate the original controller or graph.
 
@@ -145,6 +145,6 @@ Constructor declarations and methods are persistent model metadata and must seri
 
 - Constructor existence, dependency identity, name validation, `null` preservation, and duplication remapping.
 - Method-call references from every allowed container, empty/missing/wrong-type targets, schema boundaries, order-independent remapping, unknown-reference preservation, deterministic diagnostics, deep independence, and `null` preservation.
-- Resource and PackedScene persistence for schema 3 definitions and method-call concrete types.
-- Future controller bindings, `ARGRET-001` through `ARGRET-012`, recursion, and cycle validation require additional tests when implemented.
+- Resource and PackedScene persistence for schema 3 definitions, method-call concrete types, and optional return definitions.
+- The remaining `ARGRET` requirements, controller bindings, recursion, and cycle validation require additional tests when implemented.
 - Headless editor load, model smoke test, editor-specific tests, and multiplatform runtime checks.

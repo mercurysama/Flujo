@@ -382,6 +382,253 @@ func _test_method_return_definition() -> void:
 	assert(not FileAccess.file_exists(ProjectSettings.globalize_path(resource_path)))
 
 
+func _test_flow_id_validation() -> void:
+	var generated_id: String = FlowId.create()
+	assert(FlowId.is_valid(generated_id))
+	assert(not FlowId.is_valid(""))
+	assert(not FlowId.is_valid("1234"))
+	assert(not FlowId.is_valid("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"))
+
+	var malformed_graph: FlowGraph = FlowGraph.new()
+	malformed_graph._internal_id = "z"
+	var first_result: FlowValidationResult = FlowGraphValidator.validate(malformed_graph)
+	var second_result: FlowValidationResult = FlowGraphValidator.validate(malformed_graph)
+	_assert_same_diagnostic_sequence(first_result, second_result)
+	assert(first_result.diagnostics.size() == 2)
+	assert(first_result.diagnostics[0].code == FlowDiagnostic.CODE_INVALID_INTERNAL_ID_LENGTH)
+	assert(first_result.diagnostics[0].element_path == "graph")
+	assert(first_result.diagnostics[0].related_id == "z")
+	assert(first_result.diagnostics[1].code == FlowDiagnostic.CODE_NON_HEXADECIMAL_INTERNAL_ID)
+	assert(first_result.diagnostics[1].element_path == "graph")
+	assert(first_result.diagnostics[1].related_id == "z")
+
+
+func _test_isolated_method_invalid_id_duplication() -> void:
+	var malformed_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	malformed_method._internal_id = "malformed_method_id"
+	var malformed_call: FlowMethodCallBlock = FlowMethodCallBlock.new()
+	malformed_call.method_id = malformed_method.get_internal_id()
+	malformed_method.blocks = [malformed_call]
+	var malformed_copy: FlowMethodDefinition = malformed_method.duplicate_method_with_new_ids()
+	assert(malformed_copy.get_internal_id() == "malformed_method_id")
+	assert(malformed_copy.blocks[0] is FlowMethodCallBlock)
+	assert(malformed_copy.blocks[0] != malformed_call)
+	assert((malformed_copy.blocks[0] as FlowMethodCallBlock).method_id == "malformed_method_id")
+	assert(malformed_method.get_internal_id() == "malformed_method_id")
+	assert(malformed_call.method_id == "malformed_method_id")
+	var malformed_graph: FlowGraph = FlowGraph.new()
+	malformed_graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	malformed_graph.constructor = FlowConstructorDefinition.new()
+	malformed_graph.methods = [malformed_copy]
+	var malformed_first: FlowValidationResult = FlowGraphValidator.validate(malformed_graph)
+	var malformed_second: FlowValidationResult = FlowGraphValidator.validate(malformed_graph)
+	_assert_same_diagnostic_sequence(malformed_first, malformed_second)
+	assert(malformed_first.diagnostics.size() == 2)
+	assert(malformed_first.diagnostics[0].code == FlowDiagnostic.CODE_INVALID_INTERNAL_ID_LENGTH)
+	assert(malformed_first.diagnostics[0].element_path == "methods[0]")
+	assert(malformed_first.diagnostics[0].related_id == "malformed_method_id")
+	assert(malformed_first.diagnostics[1].code == FlowDiagnostic.CODE_NON_HEXADECIMAL_INTERNAL_ID)
+	assert(malformed_first.diagnostics[1].element_path == "methods[0]")
+	assert(malformed_first.diagnostics[1].related_id == "malformed_method_id")
+
+	var empty_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	empty_method._internal_id = ""
+	var empty_call: FlowMethodCallBlock = FlowMethodCallBlock.new()
+	empty_call.method_id = ""
+	empty_method.blocks = [empty_call]
+	var empty_copy: FlowMethodDefinition = empty_method.duplicate_method_with_new_ids()
+	assert(empty_copy.get_internal_id() == "")
+	assert((empty_copy.blocks[0] as FlowMethodCallBlock).method_id == "")
+	assert(empty_copy.blocks[0] != empty_call)
+	assert(empty_method.get_internal_id() == "")
+	assert(empty_call.method_id == "")
+	var empty_graph: FlowGraph = FlowGraph.new()
+	empty_graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	empty_graph.constructor = FlowConstructorDefinition.new()
+	empty_graph.methods = [empty_copy]
+	var empty_first: FlowValidationResult = FlowGraphValidator.validate(empty_graph)
+	var empty_second: FlowValidationResult = FlowGraphValidator.validate(empty_graph)
+	_assert_same_diagnostic_sequence(empty_first, empty_second)
+	assert(empty_first.diagnostics.size() == 2)
+	assert(empty_first.diagnostics[0].code == FlowDiagnostic.CODE_EMPTY_INTERNAL_ID)
+	assert(empty_first.diagnostics[0].element_path == "methods[0]")
+	assert(empty_first.diagnostics[1].code == FlowDiagnostic.CODE_EMPTY_METHOD_REFERENCE)
+	assert(empty_first.diagnostics[1].element_path == "methods[0].blocks[0].method_id")
+
+	var ambiguous_id: String = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	var first_order_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	first_order_method._internal_id = ambiguous_id
+	var first_order_call: FlowMethodCallBlock = FlowMethodCallBlock.new()
+	first_order_call.method_id = ambiguous_id
+	var first_order_block: FlowBlock = FlowBlock.new()
+	first_order_block._internal_id = ambiguous_id
+	first_order_method.blocks = [first_order_call, first_order_block]
+	var second_order_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	second_order_method._internal_id = ambiguous_id
+	var second_order_block: FlowBlock = FlowBlock.new()
+	second_order_block._internal_id = ambiguous_id
+	var second_order_call: FlowMethodCallBlock = FlowMethodCallBlock.new()
+	second_order_call.method_id = ambiguous_id
+	second_order_method.blocks = [second_order_block, second_order_call]
+	var first_order_copy: FlowMethodDefinition = first_order_method.duplicate_method_with_new_ids()
+	var second_order_copy: FlowMethodDefinition = second_order_method.duplicate_method_with_new_ids()
+	assert(first_order_copy.get_internal_id() == ambiguous_id)
+	assert(first_order_copy.blocks[1].get_internal_id() == ambiguous_id)
+	assert((first_order_copy.blocks[0] as FlowMethodCallBlock).method_id == ambiguous_id)
+	assert(second_order_copy.get_internal_id() == ambiguous_id)
+	assert(second_order_copy.blocks[0].get_internal_id() == ambiguous_id)
+	assert((second_order_copy.blocks[1] as FlowMethodCallBlock).method_id == ambiguous_id)
+	assert(first_order_copy.blocks[0] != first_order_call)
+	assert(first_order_copy.blocks[1] != first_order_block)
+	assert(second_order_copy.blocks[0] != second_order_block)
+	assert(second_order_copy.blocks[1] != second_order_call)
+	first_order_copy.blocks[1].display_name = "Copied Ambiguous Block"
+	assert(first_order_block.display_name == "Block")
+	var ambiguous_graph: FlowGraph = FlowGraph.new()
+	ambiguous_graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	ambiguous_graph.constructor = FlowConstructorDefinition.new()
+	ambiguous_graph.methods = [first_order_copy]
+	var ambiguous_first: FlowValidationResult = FlowGraphValidator.validate(ambiguous_graph)
+	var ambiguous_second: FlowValidationResult = FlowGraphValidator.validate(ambiguous_graph)
+	_assert_same_diagnostic_sequence(ambiguous_first, ambiguous_second)
+	assert(ambiguous_first.diagnostics.size() == 1)
+	assert(ambiguous_first.diagnostics[0].code == FlowDiagnostic.CODE_DUPLICATE_INTERNAL_ID)
+	assert(ambiguous_first.diagnostics[0].element_path == "methods[0].blocks[1]")
+	assert(ambiguous_first.diagnostics[0].related_id == ambiguous_id)
+
+
+func _test_isolated_method_duplication() -> void:
+	var original: FlowMethodDefinition = FlowMethodDefinition.new()
+	original.display_name = "Independent Method"
+	original.enabled = false
+	original.user_note = "Original method note"
+	var first_parameter: FlowMethodParameterDefinition = FlowMethodParameterDefinition.new()
+	first_parameter.display_name = "First Parameter"
+	first_parameter.value_type = FlowVariableDefinition.ValueType.INT
+	var second_parameter: FlowMethodParameterDefinition = FlowMethodParameterDefinition.new()
+	second_parameter.display_name = "Second Parameter"
+	second_parameter.value_type = FlowVariableDefinition.ValueType.COLOR
+	original.parameters = [first_parameter, null, second_parameter]
+	var return_definition: FlowMethodReturnDefinition = FlowMethodReturnDefinition.new()
+	return_definition.display_name = "Method Result"
+	return_definition.value_type = FlowVariableDefinition.ValueType.STRING
+	original.return_definition = return_definition
+	var self_call: FlowMethodCallBlock = FlowMethodCallBlock.new()
+	self_call.display_name = "Self Call"
+	self_call.method_id = original.get_internal_id()
+	var regular_block: FlowBlock = FlowBlock.new()
+	regular_block.display_name = "Regular Block"
+	var external_call: FlowMethodCallBlock = FlowMethodCallBlock.new()
+	external_call.display_name = "External Call"
+	external_call.method_id = "external_method_id"
+	original.blocks = [null, self_call, regular_block, external_call, null]
+
+	var original_id: String = original.get_internal_id()
+	var first_parameter_id: String = first_parameter.get_internal_id()
+	var second_parameter_id: String = second_parameter.get_internal_id()
+	var return_id: String = return_definition.get_internal_id()
+	var self_call_id: String = self_call.get_internal_id()
+	var regular_block_id: String = regular_block.get_internal_id()
+	var external_call_id: String = external_call.get_internal_id()
+	var first_copy: FlowMethodDefinition = original.duplicate_method_with_new_ids()
+	var second_copy: FlowMethodDefinition = original.duplicate_method_with_new_ids()
+
+	assert(first_copy is FlowMethodDefinition)
+	assert(first_copy != original and second_copy != original and second_copy != first_copy)
+	assert(first_copy.display_name == "Independent Method")
+	assert(not first_copy.enabled)
+	assert(first_copy.user_note == "Original method note")
+	assert(first_copy.get_internal_id() != original_id)
+	assert(second_copy.get_internal_id() != original_id)
+	assert(second_copy.get_internal_id() != first_copy.get_internal_id())
+	assert(first_copy.parameters.size() == 3 and first_copy.parameters[1] == null)
+	assert(first_copy.parameters[0] is FlowMethodParameterDefinition)
+	assert(first_copy.parameters[2] is FlowMethodParameterDefinition)
+	assert(first_copy.parameters[0] != first_parameter)
+	assert(first_copy.parameters[2] != second_parameter)
+	assert(first_copy.parameters[0].get_internal_id() != first_parameter_id)
+	assert(first_copy.parameters[2].get_internal_id() != second_parameter_id)
+	assert(first_copy.parameters[0].value_type == FlowVariableDefinition.ValueType.INT)
+	assert(first_copy.parameters[2].value_type == FlowVariableDefinition.ValueType.COLOR)
+	assert(first_copy.return_definition is FlowMethodReturnDefinition)
+	assert(first_copy.return_definition != return_definition)
+	assert(first_copy.return_definition.get_internal_id() != return_id)
+	assert(first_copy.return_definition.display_name == "Method Result")
+	assert(first_copy.return_definition.value_type == FlowVariableDefinition.ValueType.STRING)
+	assert(first_copy.blocks.size() == 5 and first_copy.blocks[0] == null and first_copy.blocks[4] == null)
+	assert(first_copy.blocks[1] is FlowMethodCallBlock)
+	assert(first_copy.blocks[2] is FlowBlock)
+	assert(first_copy.blocks[3] is FlowMethodCallBlock)
+	assert(first_copy.blocks[1] != self_call)
+	assert(first_copy.blocks[2] != regular_block)
+	assert(first_copy.blocks[3] != external_call)
+	assert(first_copy.blocks[1].get_internal_id() != self_call_id)
+	assert(first_copy.blocks[2].get_internal_id() != regular_block_id)
+	assert(first_copy.blocks[3].get_internal_id() != external_call_id)
+	assert((first_copy.blocks[1] as FlowMethodCallBlock).method_id == first_copy.get_internal_id())
+	assert((first_copy.blocks[3] as FlowMethodCallBlock).method_id == "external_method_id")
+
+	var reserved_ids: Dictionary[String, bool] = {}
+	for resource: Resource in [
+		original,
+		first_parameter,
+		second_parameter,
+		return_definition,
+		self_call,
+		regular_block,
+		external_call,
+	]:
+		var resource_id: String = String(resource.get("_internal_id"))
+		assert(not resource_id.is_empty())
+		assert(not reserved_ids.has(resource_id))
+		reserved_ids[resource_id] = true
+	for resource: Resource in [
+		first_copy,
+		first_copy.parameters[0],
+		first_copy.parameters[2],
+		first_copy.return_definition,
+		first_copy.blocks[1],
+		first_copy.blocks[2],
+		first_copy.blocks[3],
+	]:
+		var resource_id: String = String(resource.get("_internal_id"))
+		assert(not resource_id.is_empty())
+		assert(not reserved_ids.has(resource_id))
+		reserved_ids[resource_id] = true
+	for resource: Resource in [
+		second_copy,
+		second_copy.parameters[0],
+		second_copy.parameters[2],
+		second_copy.return_definition,
+		second_copy.blocks[1],
+		second_copy.blocks[2],
+		second_copy.blocks[3],
+	]:
+		var resource_id: String = String(resource.get("_internal_id"))
+		assert(not resource_id.is_empty())
+		assert(not reserved_ids.has(resource_id))
+		reserved_ids[resource_id] = true
+
+	first_copy.display_name = "Copied Method"
+	first_copy.parameters[0].display_name = "Copied Parameter"
+	first_copy.return_definition.display_name = "Copied Return"
+	first_copy.blocks[2].display_name = "Copied Block"
+	(first_copy.blocks[1] as FlowMethodCallBlock).method_id = "changed_copy_reference"
+	assert(original.display_name == "Independent Method")
+	assert(first_parameter.display_name == "First Parameter")
+	assert(return_definition.display_name == "Method Result")
+	assert(regular_block.display_name == "Regular Block")
+	assert(self_call.method_id == original_id)
+	assert(external_call.method_id == "external_method_id")
+	assert(original.get_internal_id() == original_id)
+	assert(first_parameter.get_internal_id() == first_parameter_id)
+	assert(second_parameter.get_internal_id() == second_parameter_id)
+	assert(return_definition.get_internal_id() == return_id)
+	assert(self_call.get_internal_id() == self_call_id)
+	assert(regular_block.get_internal_id() == regular_block_id)
+	assert(external_call.get_internal_id() == external_call_id)
+
+
 func _make_method_return_identity_collision_case(category: String) -> Dictionary:
 	var graph: FlowGraph = FlowGraph.new()
 	graph.schema_version = FlowGraph.SCHEMA_VERSION_3
@@ -1903,6 +2150,9 @@ func _ready() -> void:
 	assert(schema_2_to_3_invalid_source._internal_id == "")
 	_test_method_call_foundation()
 	_test_method_return_definition()
+	_test_flow_id_validation()
+	_test_isolated_method_invalid_id_duplication()
+	_test_isolated_method_duplication()
 	_test_method_return_global_identity_collisions()
 
 	print("[Flujo] Model smoke test passed")

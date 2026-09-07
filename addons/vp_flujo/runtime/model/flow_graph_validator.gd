@@ -409,6 +409,9 @@ static func _validate_internal_id(
 		_add_error(result, FlowDiagnostic.CODE_EMPTY_INTERNAL_ID, "Internal ID is empty.", element_path)
 		return
 
+	if FlowId.is_valid(internal_id):
+		return
+
 	if internal_id.length() != 32:
 		_add_error(
 			result,
@@ -418,16 +421,14 @@ static func _validate_internal_id(
 			internal_id
 		)
 
-	for character_index: int in internal_id.length():
-		if "0123456789abcdef".find(internal_id.substr(character_index, 1).to_lower()) == -1:
-			_add_error(
-				result,
-				FlowDiagnostic.CODE_NON_HEXADECIMAL_INTERNAL_ID,
-				"Internal ID must contain only hexadecimal characters.",
-				element_path,
-				internal_id
-			)
-			break
+	if not FlowId.has_only_hexadecimal_characters(internal_id):
+		_add_error(
+			result,
+			FlowDiagnostic.CODE_NON_HEXADECIMAL_INTERNAL_ID,
+			"Internal ID must contain only hexadecimal characters.",
+			element_path,
+			internal_id
+		)
 
 
 static func _validate_schema_3(graph: FlowGraph, result: FlowValidationResult, seen_instances: Dictionary[int, String], seen_ids: Dictionary[String, String]) -> void:
