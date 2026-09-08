@@ -42,6 +42,137 @@ func _assert_same_diagnostic_sequence(
 		assert(first.related_id == second.related_id)
 
 
+func _test_typed_variable_metadata_validation() -> void:
+	for scope: int in [FlowVariableDefinition.Scope.LOCAL, FlowVariableDefinition.Scope.GLOBAL]:
+		assert(FlowVariableDefinition.is_valid_scope(scope))
+	for binding: int in [
+		FlowVariableDefinition.Binding.OWN_VALUE,
+		FlowVariableDefinition.Binding.GLOBAL_REFERENCE,
+	]:
+		assert(FlowVariableDefinition.is_valid_binding(binding))
+	for value_type: int in [
+		FlowVariableDefinition.ValueType.BOOL,
+		FlowVariableDefinition.ValueType.INT,
+		FlowVariableDefinition.ValueType.FLOAT,
+		FlowVariableDefinition.ValueType.STRING,
+		FlowVariableDefinition.ValueType.VECTOR2,
+		FlowVariableDefinition.ValueType.VECTOR3,
+		FlowVariableDefinition.ValueType.COLOR,
+	]:
+		assert(FlowVariableDefinition.is_valid_value_type(value_type))
+	assert(not FlowVariableDefinition.is_valid_scope(-1))
+	assert(not FlowVariableDefinition.is_valid_scope(2))
+	assert(not FlowVariableDefinition.is_valid_binding(-1))
+	assert(not FlowVariableDefinition.is_valid_binding(2))
+	assert(not FlowVariableDefinition.is_valid_value_type(-1))
+	assert(not FlowVariableDefinition.is_valid_value_type(7))
+
+	var valid_schema_2: FlowGraph = FlowGraph.new()
+	valid_schema_2.schema_version = FlowGraph.SCHEMA_VERSION_2
+	for value_type: int in range(FlowVariableDefinition.ValueType.BOOL, FlowVariableDefinition.ValueType.COLOR + 1):
+		var variable: FlowVariableDefinition = FlowVariableDefinition.new()
+		variable.scope = FlowVariableDefinition.Scope.GLOBAL if value_type % 2 == 0 else FlowVariableDefinition.Scope.LOCAL
+		variable.binding = FlowVariableDefinition.Binding.GLOBAL_REFERENCE if value_type % 2 == 0 else FlowVariableDefinition.Binding.OWN_VALUE
+		variable.value_type = value_type
+		valid_schema_2.variables.append(variable)
+	assert(not FlowGraphValidator.validate(valid_schema_2).has_errors())
+	var valid_schema_3: FlowGraph = FlowGraph.new()
+	valid_schema_3.schema_version = FlowGraph.SCHEMA_VERSION_3
+	valid_schema_3.constructor = FlowConstructorDefinition.new()
+	var valid_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	valid_method.display_name = "All Value Types"
+	for value_type: int in range(FlowVariableDefinition.ValueType.BOOL, FlowVariableDefinition.ValueType.COLOR + 1):
+		var parameter: FlowMethodParameterDefinition = FlowMethodParameterDefinition.new()
+		parameter.display_name = "Parameter %d" % value_type
+		parameter.value_type = value_type
+		valid_method.parameters.append(parameter)
+	var valid_return: FlowMethodReturnDefinition = FlowMethodReturnDefinition.new()
+	valid_return.value_type = FlowVariableDefinition.ValueType.COLOR
+	valid_method.return_definition = valid_return
+	valid_schema_3.methods = [valid_method]
+	assert(not FlowGraphValidator.validate(valid_schema_3).has_errors())
+
+	var invalid_schema_2: FlowGraph = FlowGraph.new()
+	invalid_schema_2.schema_version = FlowGraph.SCHEMA_VERSION_2
+	var invalid_scope_negative: FlowVariableDefinition = FlowVariableDefinition.new()
+	invalid_scope_negative.scope = -1
+	var invalid_scope_upper: FlowVariableDefinition = FlowVariableDefinition.new()
+	invalid_scope_upper.scope = 2
+	var invalid_binding_negative: FlowVariableDefinition = FlowVariableDefinition.new()
+	invalid_binding_negative.binding = -1
+	var invalid_binding_upper: FlowVariableDefinition = FlowVariableDefinition.new()
+	invalid_binding_upper.binding = 2
+	var invalid_value_type_negative: FlowVariableDefinition = FlowVariableDefinition.new()
+	invalid_value_type_negative.value_type = -1
+	var invalid_value_type_upper: FlowVariableDefinition = FlowVariableDefinition.new()
+	invalid_value_type_upper.value_type = 7
+	invalid_schema_2.variables = [invalid_scope_negative, invalid_scope_upper, invalid_binding_negative, invalid_binding_upper, invalid_value_type_negative, invalid_value_type_upper]
+	var schema_2_first: FlowValidationResult = FlowGraphValidator.validate(invalid_schema_2)
+	var schema_2_second: FlowValidationResult = FlowGraphValidator.validate(invalid_schema_2)
+	_assert_same_diagnostic_sequence(schema_2_first, schema_2_second)
+	var schema_2_codes: Array[StringName] = [FlowDiagnostic.CODE_INVALID_VARIABLE_SCOPE, FlowDiagnostic.CODE_INVALID_VARIABLE_SCOPE, FlowDiagnostic.CODE_INVALID_VARIABLE_BINDING, FlowDiagnostic.CODE_INVALID_VARIABLE_BINDING, FlowDiagnostic.CODE_INVALID_VALUE_TYPE, FlowDiagnostic.CODE_INVALID_VALUE_TYPE]
+	var schema_2_paths: Array[String] = ["variables[0].scope", "variables[1].scope", "variables[2].binding", "variables[3].binding", "variables[4].value_type", "variables[5].value_type"]
+	var schema_2_ids: Array[String] = [invalid_scope_negative.get_internal_id(), invalid_scope_upper.get_internal_id(), invalid_binding_negative.get_internal_id(), invalid_binding_upper.get_internal_id(), invalid_value_type_negative.get_internal_id(), invalid_value_type_upper.get_internal_id()]
+	assert(schema_2_first.diagnostics.size() == schema_2_codes.size())
+	for diagnostic_index: int in schema_2_codes.size():
+		var diagnostic: FlowDiagnostic = schema_2_first.diagnostics[diagnostic_index]
+		assert(diagnostic.code == schema_2_codes[diagnostic_index])
+		assert(diagnostic.element_path == schema_2_paths[diagnostic_index])
+		assert(diagnostic.related_id == schema_2_ids[diagnostic_index])
+	assert(invalid_scope_negative.scope == -1)
+	assert(invalid_scope_upper.scope == 2)
+	assert(invalid_binding_negative.binding == -1)
+	assert(invalid_binding_upper.binding == 2)
+	assert(invalid_value_type_negative.value_type == -1)
+	assert(invalid_value_type_upper.value_type == 7)
+
+	var invalid_schema_3: FlowGraph = FlowGraph.new()
+	invalid_schema_3.schema_version = FlowGraph.SCHEMA_VERSION_3
+	invalid_schema_3.constructor = FlowConstructorDefinition.new()
+	var invalid_schema_3_variable: FlowVariableDefinition = FlowVariableDefinition.new()
+	invalid_schema_3_variable.scope = -1
+	invalid_schema_3_variable.binding = 2
+	invalid_schema_3_variable.value_type = 7
+	invalid_schema_3.variables = [invalid_schema_3_variable]
+	var invalid_metadata_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	invalid_metadata_method.display_name = "Invalid Metadata"
+	var invalid_parameter_negative: FlowMethodParameterDefinition = FlowMethodParameterDefinition.new()
+	invalid_parameter_negative.display_name = "Negative"
+	invalid_parameter_negative.value_type = -1
+	var invalid_parameter_upper: FlowMethodParameterDefinition = FlowMethodParameterDefinition.new()
+	invalid_parameter_upper.display_name = "Upper"
+	invalid_parameter_upper.value_type = 7
+	invalid_metadata_method.parameters = [invalid_parameter_negative, null, invalid_parameter_upper]
+	var invalid_return: FlowMethodReturnDefinition = FlowMethodReturnDefinition.new()
+	invalid_return.value_type = -1
+	invalid_metadata_method.return_definition = invalid_return
+	var invalid_upper_return_method: FlowMethodDefinition = FlowMethodDefinition.new()
+	invalid_upper_return_method.display_name = "Invalid Upper Return"
+	var invalid_upper_return: FlowMethodReturnDefinition = FlowMethodReturnDefinition.new()
+	invalid_upper_return.value_type = 7
+	invalid_upper_return_method.return_definition = invalid_upper_return
+	invalid_schema_3.methods = [invalid_metadata_method, invalid_upper_return_method]
+	var schema_3_first: FlowValidationResult = FlowGraphValidator.validate(invalid_schema_3)
+	var schema_3_second: FlowValidationResult = FlowGraphValidator.validate(invalid_schema_3)
+	_assert_same_diagnostic_sequence(schema_3_first, schema_3_second)
+	var schema_3_codes: Array[StringName] = [FlowDiagnostic.CODE_INVALID_VARIABLE_SCOPE, FlowDiagnostic.CODE_INVALID_VARIABLE_BINDING, FlowDiagnostic.CODE_INVALID_VALUE_TYPE, FlowDiagnostic.CODE_INVALID_VALUE_TYPE, FlowDiagnostic.CODE_INVALID_VALUE_TYPE, FlowDiagnostic.CODE_INVALID_VALUE_TYPE, FlowDiagnostic.CODE_INVALID_VALUE_TYPE]
+	var schema_3_paths: Array[String] = ["variables[0].scope", "variables[0].binding", "variables[0].value_type", "methods[0].parameters[0].value_type", "methods[0].parameters[2].value_type", "methods[0].return_definition.value_type", "methods[1].return_definition.value_type"]
+	var schema_3_ids: Array[String] = [invalid_schema_3_variable.get_internal_id(), invalid_schema_3_variable.get_internal_id(), invalid_schema_3_variable.get_internal_id(), invalid_parameter_negative.get_internal_id(), invalid_parameter_upper.get_internal_id(), invalid_return.get_internal_id(), invalid_upper_return.get_internal_id()]
+	assert(schema_3_first.diagnostics.size() == schema_3_codes.size())
+	for diagnostic_index: int in schema_3_codes.size():
+		var diagnostic: FlowDiagnostic = schema_3_first.diagnostics[diagnostic_index]
+		assert(diagnostic.code == schema_3_codes[diagnostic_index])
+		assert(diagnostic.element_path == schema_3_paths[diagnostic_index])
+		assert(diagnostic.related_id == schema_3_ids[diagnostic_index])
+	assert(invalid_schema_3_variable.scope == -1)
+	assert(invalid_schema_3_variable.binding == 2)
+	assert(invalid_schema_3_variable.value_type == 7)
+	assert(invalid_parameter_negative.value_type == -1)
+	assert(invalid_parameter_upper.value_type == 7)
+	assert(invalid_return.value_type == -1)
+	assert(invalid_upper_return.value_type == 7)
+
+
 func _test_method_call_foundation() -> void:
 	var graph: FlowGraph = FlowGraph.new()
 	graph.schema_version = FlowGraph.SCHEMA_VERSION_3
@@ -2150,6 +2281,7 @@ func _ready() -> void:
 	assert(schema_2_to_3_invalid_source._internal_id == "")
 	_test_method_call_foundation()
 	_test_method_return_definition()
+	_test_typed_variable_metadata_validation()
 	_test_flow_id_validation()
 	_test_isolated_method_invalid_id_duplication()
 	_test_isolated_method_duplication()

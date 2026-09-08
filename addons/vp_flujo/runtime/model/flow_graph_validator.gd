@@ -197,10 +197,52 @@ static func _validate_variables(
 		):
 			continue
 
+		_validate_variable_metadata(variable, variable_path, result)
 		variables_to_validate.append(variable)
 		variable_indices.append(variable_index)
 		if variable.scope == FlowVariableDefinition.Scope.GLOBAL:
 			global_variable_ids[variable.get_internal_id()] = true
+
+
+static func _validate_variable_metadata(
+		variable: FlowVariableDefinition,
+		variable_path: String,
+		result: FlowValidationResult
+) -> void:
+	var variable_id: String = variable.get_internal_id()
+	if not FlowVariableDefinition.is_valid_scope(variable.scope):
+		_add_error(
+			result,
+			FlowDiagnostic.CODE_INVALID_VARIABLE_SCOPE,
+			"Variable scope is not a declared FlowVariableDefinition.Scope member.",
+			"%s.scope" % variable_path,
+			variable_id
+		)
+	if not FlowVariableDefinition.is_valid_binding(variable.binding):
+		_add_error(
+			result,
+			FlowDiagnostic.CODE_INVALID_VARIABLE_BINDING,
+			"Variable binding is not a declared FlowVariableDefinition.Binding member.",
+			"%s.binding" % variable_path,
+			variable_id
+		)
+	_validate_value_type(variable.value_type, "%s.value_type" % variable_path, variable_id, result)
+
+
+static func _validate_value_type(
+		value_type: int,
+		element_path: String,
+		related_id: String,
+		result: FlowValidationResult
+) -> void:
+	if not FlowVariableDefinition.is_valid_value_type(value_type):
+		_add_error(
+			result,
+			FlowDiagnostic.CODE_INVALID_VALUE_TYPE,
+			"Value type is not a declared FlowVariableDefinition.ValueType member.",
+			element_path,
+			related_id
+		)
 
 
 static func _validate_state_machines(
@@ -469,14 +511,27 @@ static func _validate_schema_3(graph: FlowGraph, result: FlowValidationResult, s
 			if not _validate_resource_identity(parameter, parameter_path, result, seen_instances, seen_ids):
 				continue
 			_validate_display_name(parameter.display_name, parameter_names, result, parameter_path, parameter.get_internal_id())
+			_validate_value_type(
+				parameter.value_type,
+				"%s.value_type" % parameter_path,
+				parameter.get_internal_id(),
+				result
+			)
 		if method.return_definition != null:
-			_validate_resource_identity(
+			var return_path: String = "%s.return_definition" % method_path
+			if _validate_resource_identity(
 				method.return_definition,
-				"%s.return_definition" % method_path,
+				return_path,
 				result,
 				seen_instances,
 				seen_ids
-			)
+			):
+				_validate_value_type(
+					method.return_definition.value_type,
+					"%s.value_type" % return_path,
+					method.return_definition.get_internal_id(),
+					result
+				)
 
 
 static func _validate_display_name(display_name: String, names: Dictionary[String, bool], result: FlowValidationResult, element_path: String, internal_id: String) -> void:

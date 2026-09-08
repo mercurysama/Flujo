@@ -34,7 +34,7 @@ Iteration 6 implemented schema 3 structure, method-call references, and optional
 ## Planned deliveries
 
 1. **Contract:** approve this contract, the compatibility boundary, and the numbered acceptance criteria.
-2. **Validation:** inspect and add only compatibility-preserving deterministic validation for current typed variables and ID references.
+2. **Validation (implemented):** deterministic validation now rejects numeric values outside the declared `Scope`, `Binding`, and `ValueType` members without changing stored values. Variable metadata is checked after its resource identity and before deferred variable-reference diagnostics; parameter metadata follows parameter identity and name validation; return metadata follows return identity. New diagnostics are `invalid_variable_scope`, `invalid_variable_binding`, and `invalid_value_type`, with the metadata-property path and owning resource ID as `related_id`. Existing diagnostic order remains unchanged when metadata is valid.
 3. **Persistence and duplication:** extend smoke and persistence regressions for all seven types, defaults, IDs, references, order, `null` positions, migration, and independence.
 4. **Schema 3 Inspector:** implement variable-only schema 3 authoring with scene-context undo/redo; do not add Constructor or Method authoring.
 5. **Keyboard and visual review:** add focused keyboard/focus regressions and manually review empty state, edits, undo/redo, save/reopen, selection, and navigation.

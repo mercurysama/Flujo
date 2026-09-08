@@ -22,6 +22,25 @@ enum ValueType {
 	COLOR,
 }
 
+
+static func is_valid_scope(value: int) -> bool:
+	return value == Scope.LOCAL or value == Scope.GLOBAL
+
+
+static func is_valid_binding(value: int) -> bool:
+	return value == Binding.OWN_VALUE or value == Binding.GLOBAL_REFERENCE
+
+
+static func is_valid_value_type(value: int) -> bool:
+	return value == ValueType.BOOL \
+			or value == ValueType.INT \
+			or value == ValueType.FLOAT \
+			or value == ValueType.STRING \
+			or value == ValueType.VECTOR2 \
+			or value == ValueType.VECTOR3 \
+			or value == ValueType.COLOR
+
+
 @export_storage var _internal_id: String = FlowId.create()
 
 @export var display_name: String = "Variable"

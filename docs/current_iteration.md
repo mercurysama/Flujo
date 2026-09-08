@@ -19,7 +19,8 @@
 ### Iteration 7 scope
 
 - Preserve the existing seven-member `FlowVariableDefinition.ValueType` taxonomy and its typed defaults without changing numeric serialization values.
-- Add only validation compatible with existing schema 2/3 data, then cover persistence and duplication for every canonical type.
+- Delivery 2 implemented: deterministic validation rejects out-of-range `Scope`, `Binding`, and shared `ValueType` metadata while preserving invalid values and existing schema 2/3 compatibility.
+- Next, cover persistence and duplication for every canonical type.
 - Add schema 3 variable Inspector editing with scene-context undo/redo and basic keyboard accessibility.
 - Translate remaining public Spanish text and comments, retain a friendly English pre-alpha warning, and add a separate user guide after the interface is implemented.
 
@@ -37,7 +38,7 @@ This iteration has not introduced argument bindings, return blocks or runtime re
 
 ### Next delivery
 
-Begin Delivery 1 of the [Typed Variables contract](typed_variables_contract.md): confirm the contract and compatibility boundary before model, editor, or test changes. The Constructor and Methods contract continues to govern deferred argument bindings, return blocks, value sources, cycle validation, runtime state, execution, and schema 3 Constructor or Method authoring.
+Begin Delivery 3 of the [Typed Variables contract](typed_variables_contract.md): extend persistence and duplication evidence for every canonical type, default, ID reference, order, and `null` position. The Constructor and Methods contract continues to govern deferred argument bindings, return blocks, value sources, cycle validation, runtime state, execution, and schema 3 Constructor or Method authoring.
 
 Update this file after each approved Iteration 7 delivery so it remains a brief, factual handoff.
 
