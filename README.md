@@ -63,6 +63,7 @@ Visual block authoring, a runtime executor, debugging, packages, inherited-scene
 - [Engineering flow metrics](docs/engineering_metrics.md)
 - [Current iteration](docs/current_iteration.md)
 - [Model contract](docs/model_contract.md)
+- [Typed Variables contract](docs/typed_variables_contract.md)
 - [Schema 2 migration contract](docs/flow_graph_v2_migration.md)
 - [Constructor and Methods contract](docs/constructor_methods_contract.md)
 - [Iteration 1 notes](docs/iteracion_01.md)
