@@ -17,9 +17,9 @@ Flujo is an MIT-licensed visual programming plugin for Godot. It is designed to 
 - Selection-based Flujo dock visibility and F4 controller support.
 - Model, editor, and PackedScene persistence regressions.
 
-### Current work
+### Completed iteration
 
-Iteration 6 has implemented the schema 3 structural model, its atomic migration, constructor container foundation, persistent method-call references, and optional typed return declarations. Argument bindings, value sources, return blocks and value transport, conversions, call-cycle detection, runtime execution, Inspector authoring, and visual connections remain pending. See the [current iteration](docs/current_iteration.md).
+Iteration 6 completed the schema 3 structural model, its atomic migration, constructor container foundation, persistent method-call references, optional typed return declarations, and schema 2 Inspector stabilization. Argument bindings, value sources, return blocks and value transport, conversions, call-cycle detection, runtime execution, schema 3 Inspector authoring, and visual connections remain pending. See the [Iteration 6 postmortem](docs/iteration_06.md) and [current iteration](docs/current_iteration.md).
 
 ### Planned
 
@@ -67,6 +67,7 @@ Visual block authoring, a runtime executor, debugging, packages, inherited-scene
 - [Constructor and Methods contract](docs/constructor_methods_contract.md)
 - [Iteration 1 notes](docs/iteracion_01.md)
 - [Iteration 5 postmortem](docs/iteration_05.md)
+- [Iteration 6 postmortem](docs/iteration_06.md)
 - [Roadmap](docs/roadmap.md)
 
 ## AI-assisted development
@@ -76,3 +77,5 @@ Flujo is developed with assistance from ChatGPT and Codex for planning, code gen
 ## License
 
 Flujo is distributed under the [MIT License](LICENSE).
+
+Todo es Flujo; todo fluye. 🌊

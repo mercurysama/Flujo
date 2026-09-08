@@ -183,7 +183,7 @@ The validator belongs to runtime, uses only portable APIs, and does not depend o
 
 ## Implemented Inspector presentation
 
-The editor uses `FlowGraphInspectorPresenter` to display the `flow_graph` of a `PVController` without modifying resources. In schema 1 it shows `Containers`; in schema 2 it shows `Processes`, `Variables`, and `State Machines`. Each position retains its index, and `null` positions are shown as `Empty`. Internal IDs are shown as stable metadata, while `display_name` is presentation text only.
+The editor uses `FlowGraphInspectorPresenter` to display the `flow_graph` of a `PVController` without modifying resources. In schema 1 it shows `Containers`; in schema 2 it shows `Processes`, `Variables`, and `State Machines`. Each position remains represented in the model, and `null` positions are shown as `Empty`. Schema 2 row labels and tooltips show only visible names or `Empty`; internal IDs remain editor metadata used for selection and commands, not user-facing text.
 
 `PVControllerInspectorPlugin` and `FlowGraphInspectorProperty` belong to the editor and are registered from the main plugin. Rows are selectable only within the interface; they do not write to the model. `FlowGraphValidator` diagnostics are shown without changing the graph.
 
@@ -193,7 +193,7 @@ The editor uses `FlowGraphInspectorPresenter` to display the `flow_graph` of a `
 
 When a `PVController` has no graph, the Inspector can assign a new `FlowGraph` with `schema_version = 2` through an action. For a valid schema 1 graph, it can run `FlowGraphMigrator` and replace the reference only with a valid candidate; undo restores the exact original instance and redo restores the same migrated candidate.
 
-In a schema 2 graph without mixed sources, the Inspector can add `FlowProcess`, `FlowVariableDefinition`, and `FlowStateMachineDefinition`, rename by internal ID, move a position, and remove while preserving the `null` gap. Actions use active-collection snapshots, so resources, IDs, ordering, and positions are restored by undo or redo. Before removal, an isolated candidate is validated: if it leaves invalid references, the action is rejected, does not enter history, and its diagnostics are shown in the Inspector.
+In a schema 2 graph without mixed sources, the Inspector can add `FlowProcess`, `FlowVariableDefinition`, and `FlowStateMachineDefinition`, rename by internal ID, move a position, and explicitly remove one selected entry by its internal ID. Removal compacts only that removed entry; unrelated deliberate `null` positions remain. Actions use active-collection snapshots and the edited `PVController` as their undo/redo context, so resources, IDs, ordering, positions, and native scene dirty-state transitions are restored by undo or redo. Before removal, an isolated candidate is validated: if it leaves invalid references, the action is rejected, does not enter history, and its diagnostics are shown in the Inspector.
 
 Runtime resources involved in this presentation also execute in `@tool` mode so Godot can instantiate them inside the Inspector, but they do not import or reference editor APIs.
 
@@ -294,3 +294,5 @@ The iteration delivers schema 2 typed collections, deterministic validation, exp
 Project-owned content is organized under `res://flow/`. Installed packages use `res://flow_packages/<package_id>/`, where `package_id` is stable and suitable for portable paths. `res://addons/vp_flujo/` is reserved exclusively for plugin-distributed code and resources.
 
 The model does not use absolute paths, operating-system-specific separators, external processes, or editor-only APIs. Its runtime code uses APIs available in exported games on platforms supported by Godot 4.7.2.
+
+Todo es Flujo; todo fluye. 🌊
