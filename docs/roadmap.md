@@ -8,13 +8,14 @@ Flujo is a visual programming plugin for Godot that keeps persistent program def
 
 - **Iteration 1 — Plugin Foundation:** established the Godot plugin, `PVController`, and scene-aware dock foundation.
 - **Iteration 5 — Typed Inspector Containers:** delivered schema 2 typed collections, deterministic validation, atomic schema 1→2 migration, Inspector presentation and editing with undo/redo, dock visibility rules, and PackedScene persistence regression coverage. See the [Iteration 5 postmortem](iteration_05.md).
+- **Iteration 6 — Constructor and Reusable Methods:** delivered the schema 3 structural foundation, atomic schema 2→3 migration, constructor dependencies, reusable methods, typed parameters, optional typed return declarations, persistent method-call references, deterministic validation, deep duplication, persistence coverage, and schema 2 Inspector stabilization. See the [Iteration 6 postmortem](iteration_06.md).
 
-## Current milestone: Iteration 6 — Constructor and Reusable Methods
+## Planning status
 
-Iteration 6 has completed the schema 3 structural foundation: constructor and method definitions, typed parameters, persistent and validated `FlowMethodCallBlock` references, optional typed `FlowMethodReturnDefinition` declarations, deterministic validation, deep duplication, ResourceSaver/PackedScene persistence coverage, and atomic schema 2→3 migration. The current status is maintained in [Current Iteration](current_iteration.md). Remaining planned work is:
+No implementation cycle is active until maintainers approve the next numbered plan. The remaining planned work is:
 
 1. Argument bindings, value sources, return blocks and value transport, conversions, and call-cycle validation.
-2. Inspector editing with undo/redo.
+2. Schema 3 Inspector editing with undo/redo.
 3. Per-`PVController` runtime state design.
 
 The [Constructor and Methods contract](constructor_methods_contract.md) distinguishes implemented schema 3 structure, method-call references, and optional return declarations from deferred argument bindings, value sources, return blocks, conversions, cycles, `FlowRuntimeState`, execution, and editor workflow.
@@ -36,3 +37,5 @@ Before beta, Flujo should have a validated authoring flow for its supported defi
 ## Planning note
 
 This roadmap is not a commitment to fixed scope or ordering. Priorities, sequence, and scope may change after audits, validation results, and implementation discoveries.
+
+Todo es Flujo; todo fluye. 🌊
