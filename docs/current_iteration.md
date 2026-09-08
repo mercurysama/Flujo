@@ -20,7 +20,7 @@
 
 - Preserve the existing seven-member `FlowVariableDefinition.ValueType` taxonomy and its typed defaults without changing numeric serialization values.
 - Delivery 2 implemented: deterministic validation rejects out-of-range `Scope`, `Binding`, and shared `ValueType` metadata while preserving invalid values and existing schema 2/3 compatibility.
-- Next, cover persistence and duplication for every canonical type.
+- Delivery 3 implemented: smoke, `ResourceSaver`, and `PackedScene` regressions cover every canonical typed field through schema 2/schema 3 duplication and schema 2 to 3 migration, preserving IDs, references, order, `null` positions, and independent copies.
 - Add schema 3 variable Inspector editing with scene-context undo/redo and basic keyboard accessibility.
 - Translate remaining public Spanish text and comments, retain a friendly English pre-alpha warning, and add a separate user guide after the interface is implemented.
 
@@ -38,7 +38,7 @@ This iteration has not introduced argument bindings, return blocks or runtime re
 
 ### Next delivery
 
-Begin Delivery 3 of the [Typed Variables contract](typed_variables_contract.md): extend persistence and duplication evidence for every canonical type, default, ID reference, order, and `null` position. The Constructor and Methods contract continues to govern deferred argument bindings, return blocks, value sources, cycle validation, runtime state, execution, and schema 3 Constructor or Method authoring.
+Begin Delivery 4 of the [Typed Variables contract](typed_variables_contract.md): implement schema 3 variable-only Inspector authoring with scene-context undo/redo. The Constructor and Methods contract continues to govern deferred argument bindings, return blocks, value sources, cycle validation, runtime state, execution, and schema 3 Constructor or Method authoring.
 
 Update this file after each approved Iteration 7 delivery so it remains a brief, factual handoff.
 

@@ -27,6 +27,7 @@ func _run() -> void:
 	var original_global_variable_id: String = ""
 	var original_machine_id: String = ""
 	var original_idle_state_id: String = ""
+	var original_typed_variable_ids: Array[String] = []
 
 	controller = _build_controller_with_schema_2_graph()
 	original_graph_id = controller.flow_graph.get_internal_id()
@@ -34,6 +35,8 @@ func _run() -> void:
 	original_global_variable_id = controller.flow_graph.variables[2].get_internal_id()
 	original_machine_id = controller.flow_graph.state_machines[0].get_internal_id()
 	original_idle_state_id = controller.flow_graph.state_machines[0].states[0].get_internal_id()
+	for variable_index: int in range(4, 11):
+		original_typed_variable_ids.append(controller.flow_graph.variables[variable_index].get_internal_id())
 	root.name = "FlowGraphPersistenceRoot"
 	root.add_child(controller)
 	controller.owner = root
@@ -64,7 +67,7 @@ func _run() -> void:
 	_assert(graph_a.processes[0].get_internal_id() == original_process_id, "Process internal ID is preserved.")
 	_assert(graph_a.processes[0].get_internal_id() != graph_a.processes[2].get_internal_id(), "Process IDs remain stable and unique.")
 	_assert(graph_a.processes[0].blocks[0].display_name == "Initialize", "Block metadata survives serialization.")
-	_assert(graph_a.variables.size() == 4, "Variable list retains order and null slots.")
+	_assert(graph_a.variables.size() == 11, "Variable list retains order and null slots.")
 	_assert(graph_a.variables[0] is FlowVariableDefinition and graph_a.variables[2] is FlowVariableDefinition, "Variable resource types survive serialization.")
 	_assert(graph_a.variables[1] == null, "Null position is preserved in variable arrays.")
 	_assert(graph_a.variables[0].int_value == 42, "Persistent primitive value survives round-trip.")
@@ -72,6 +75,8 @@ func _run() -> void:
 	_assert(graph_a.variables[2].scope == FlowVariableDefinition.Scope.GLOBAL, "Global variable scope survives serialization.")
 	_assert(graph_a.variables[2].get_internal_id() == original_global_variable_id, "Variable internal ID is preserved.")
 	_assert(graph_a.variables[3].global_variable_id == graph_a.variables[2].get_internal_id(), "Global variable reference resolves by internal ID.")
+	_assert_schema_2_typed_variables(graph_a, "First schema 2 scene instance")
+	_assert_typed_variable_ids(graph_a, 4, original_typed_variable_ids, "First schema 2 scene instance")
 	_assert(graph_a.state_machines.size() == 1, "State machine list is preserved.")
 	_assert(graph_a.state_machines[0] is FlowStateMachineDefinition, "State machine resource type survives serialization.")
 	_assert(graph_a.state_machines[0].display_name == "Combat States", "State machine name survives round-trip.")
@@ -86,10 +91,12 @@ func _run() -> void:
 	_assert(graph_b.processes.size() == 4 and graph_b.processes[1] == null, "The second instance observes process order and null slots.")
 	_assert(graph_b.processes[0] is FlowProcess and graph_b.processes[0].display_name == "Spawn", "The second instance observes persisted process type and name.")
 	_assert(graph_b.processes[0].get_internal_id() == original_process_id, "The second instance observes the persisted process ID.")
-	_assert(graph_b.variables.size() == 4 and graph_b.variables[1] == null, "The second instance observes variable order and null slots.")
+	_assert(graph_b.variables.size() == 11 and graph_b.variables[1] == null, "The second instance observes variable order and null slots.")
 	_assert(graph_b.variables[0] is FlowVariableDefinition and graph_b.variables[0].int_value == 42, "The second instance observes the persisted variable value.")
 	_assert(graph_b.variables[0].owner_container_id == graph_b.processes[0].get_internal_id(), "The second instance observes the persisted owner reference.")
 	_assert(graph_b.variables[3].global_variable_id == graph_b.variables[2].get_internal_id(), "The second instance observes the persisted global reference.")
+	_assert_schema_2_typed_variables(graph_b, "Second schema 2 scene instance")
+	_assert_typed_variable_ids(graph_b, 4, original_typed_variable_ids, "Second schema 2 scene instance")
 	_assert(graph_b.state_machines.size() == 1 and graph_b.state_machines[0] is FlowStateMachineDefinition, "The second instance observes the persisted state machine type.")
 	_assert(graph_b.state_machines[0].get_internal_id() == original_machine_id, "The second instance observes the persisted state machine ID.")
 	_assert(graph_b.state_machines[0].states[0] is FlowStateDefinition and graph_b.state_machines[0].states[0].get_internal_id() == original_idle_state_id, "The second instance observes the persisted state ID.")
@@ -158,7 +165,14 @@ func _build_controller_with_schema_2_graph() -> PVController:
 	reference_variable.owner_container_id = process_b.get_internal_id()
 	reference_variable.global_variable_id = global_variable.get_internal_id()
 
+	var typed_variables: Array[FlowVariableDefinition] = []
+	for value_type: int in range(FlowVariableDefinition.ValueType.BOOL, FlowVariableDefinition.ValueType.COLOR + 1):
+		var typed_variable: FlowVariableDefinition = _make_typed_variable(value_type, value_type)
+		typed_variable.owner_container_id = process_a.get_internal_id()
+		typed_variables.append(typed_variable)
 	graph.variables = [local_variable, null, global_variable, reference_variable]
+	for typed_variable: FlowVariableDefinition in typed_variables:
+		graph.variables.append(typed_variable)
 
 	var state_idle: FlowStateDefinition = FlowStateDefinition.new()
 	state_idle.display_name = "Idle"
@@ -200,6 +214,10 @@ func _run_schema_3_constructor_persistence_regression() -> void:
 	var original_return_id: String = controller.flow_graph.methods[1].return_definition.get_internal_id()
 	var original_first_dependency_id: String = controller.flow_graph.constructor.dependencies[0].get_internal_id()
 	var original_second_dependency_id: String = controller.flow_graph.constructor.dependencies[2].get_internal_id()
+	var original_typed_variable_ids: Array[String] = []
+	for variable_index: int in controller.flow_graph.variables.size():
+		if controller.flow_graph.variables[variable_index] != null:
+			original_typed_variable_ids.append(controller.flow_graph.variables[variable_index].get_internal_id())
 
 	root.name = "FlowConstructorPersistenceRoot"
 	root.add_child(controller)
@@ -248,6 +266,8 @@ func _run_schema_3_constructor_persistence_regression() -> void:
 		_assert(graph_a.methods[1].return_definition.get_internal_id() == original_return_id, "Method return ID survives PackedScene serialization.")
 		_assert(graph_a.methods[1].return_definition.display_name == "Scene Result", "Method return name survives PackedScene serialization.")
 		_assert(graph_a.methods[1].return_definition.value_type == FlowVariableDefinition.ValueType.COLOR, "Method return value type survives PackedScene serialization.")
+		_assert_typed_variables(graph_a, "First schema 3 scene instance")
+		_assert_typed_variable_ids(graph_a, 0, original_typed_variable_ids, "First schema 3 scene instance")
 		_assert(graph_a.constructor.dependencies.size() == 3, "Constructor dependency collection retains order and null positions.")
 		_assert(graph_a.constructor.dependencies[0] is FlowDependencyDefinition, "First constructor dependency type survives PackedScene serialization.")
 		_assert(graph_a.constructor.dependencies[0].get_internal_id() == original_first_dependency_id, "First constructor dependency ID survives PackedScene serialization.")
@@ -268,6 +288,8 @@ func _run_schema_3_constructor_persistence_regression() -> void:
 		_assert(graph_b.methods[1].return_definition is FlowMethodReturnDefinition, "Second schema 3 scene instance preserves the method return type.")
 		_assert(graph_b.methods[1].return_definition.get_internal_id() == original_return_id, "Second schema 3 scene instance preserves the method return ID.")
 		_assert(graph_b.constructor.dependencies.size() == 3 and graph_b.constructor.dependencies[1] == null, "Second schema 3 scene instance preserves dependency ordering.")
+		_assert_typed_variables(graph_b, "Second schema 3 scene instance")
+		_assert_typed_variable_ids(graph_b, 0, original_typed_variable_ids, "Second schema 3 scene instance")
 	else:
 		_assert(false, "Second loaded schema 3 graph retains a constructor.")
 	if instance_a != null:
@@ -312,10 +334,98 @@ func _build_controller_with_schema_3_graph() -> PVController:
 	constructor_definition.dependencies = [first_dependency, null, second_dependency]
 	graph.constructor = constructor_definition
 	graph.methods = [null, target_method]
+	var typed_variables: Array[FlowVariableDefinition] = []
+	for value_type: int in range(FlowVariableDefinition.ValueType.BOOL, FlowVariableDefinition.ValueType.COLOR + 1):
+		typed_variables.append(_make_typed_variable(value_type, value_type))
+	graph.variables = [typed_variables[0], null]
+	for variable: FlowVariableDefinition in typed_variables.slice(1):
+		graph.variables.append(variable)
 	var controller: PVController = PVController.new()
 	controller.name = "ControllerNode"
 	controller.flow_graph = graph
 	return controller
+
+
+func _make_typed_variable(value_type: int, suffix: int) -> FlowVariableDefinition:
+	var variable: FlowVariableDefinition = FlowVariableDefinition.new()
+	variable.display_name = "Packed Typed %d" % value_type
+	variable.value_type = value_type
+	variable.bool_value = suffix % 2 == 0
+	variable.int_value = -41 + suffix * 17
+	variable.float_value = 0.375 + suffix * 1.25
+	variable.string_value = "packed-typed-value-%d" % suffix
+	variable.vector2_value = Vector2(0.5 + suffix, -1.25 - suffix)
+	variable.vector3_value = Vector3(-2.0 - suffix, 3.5 + suffix, 4.25 - suffix)
+	variable.color_value = Color(0.1 * (suffix + 1), 0.2, 0.3, 0.4 + 0.05 * suffix)
+	variable.persistent = suffix % 2 == 1
+	variable.user_note = "Packed typed note %d" % suffix
+	return variable
+
+
+func _assert_schema_2_typed_variables(graph: FlowGraph, instance_name: String) -> void:
+	_assert(graph.variables.size() == 11 and graph.variables[1] == null, "%s preserves schema 2 typed variable order and the existing null position." % instance_name)
+	for type_index: int in range(FlowVariableDefinition.ValueType.BOOL, FlowVariableDefinition.ValueType.COLOR + 1):
+		var variable: FlowVariableDefinition = graph.variables[type_index + 4]
+		_assert(variable is FlowVariableDefinition, "%s preserves schema 2 typed variable resource %d." % [instance_name, type_index])
+		if variable == null:
+			continue
+		_assert(variable.value_type == type_index, "%s preserves schema 2 ValueType numeric member %d." % [instance_name, type_index])
+		_assert(variable.display_name == "Packed Typed %d" % type_index, "%s preserves schema 2 typed variable names." % instance_name)
+		_assert(variable.bool_value == (type_index % 2 == 0), "%s preserves schema 2 bool values without reinterpretation." % instance_name)
+		_assert(variable.int_value == -41 + type_index * 17, "%s preserves schema 2 int values without reinterpretation." % instance_name)
+		_assert(is_equal_approx(variable.float_value, 0.375 + type_index * 1.25), "%s preserves schema 2 float values without reinterpretation." % instance_name)
+		_assert(variable.string_value == "packed-typed-value-%d" % type_index, "%s preserves schema 2 String values without reinterpretation." % instance_name)
+		_assert(variable.vector2_value == Vector2(0.5 + type_index, -1.25 - type_index), "%s preserves schema 2 Vector2 values without reinterpretation." % instance_name)
+		_assert(variable.vector3_value == Vector3(-2.0 - type_index, 3.5 + type_index, 4.25 - type_index), "%s preserves schema 2 Vector3 values without reinterpretation." % instance_name)
+		_assert(variable.color_value == Color(0.1 * (type_index + 1), 0.2, 0.3, 0.4 + 0.05 * type_index), "%s preserves schema 2 Color values without reinterpretation." % instance_name)
+		_assert(variable.persistent == (type_index % 2 == 1), "%s preserves schema 2 active and inactive persistence values." % instance_name)
+		_assert(variable.user_note == "Packed typed note %d" % type_index, "%s preserves schema 2 typed variable notes." % instance_name)
+
+
+func _assert_typed_variable_ids(
+		graph: FlowGraph,
+		first_variable_index: int,
+		expected_ids: Array[String],
+		instance_name: String
+) -> void:
+	for type_index: int in expected_ids.size():
+		var variable_index: int = first_variable_index + type_index
+		if first_variable_index == 0 and type_index > 0:
+			variable_index += 1
+		var variable: FlowVariableDefinition = graph.variables[variable_index]
+		_assert(variable is FlowVariableDefinition, "%s retains typed variable ID resource %d." % [instance_name, type_index])
+		if variable != null:
+			_assert(variable.get_internal_id() == expected_ids[type_index], "%s preserves typed variable ID %d." % [instance_name, type_index])
+
+
+func _assert_typed_variables(graph: FlowGraph, instance_name: String) -> void:
+	var expected_types: Array[int] = [
+		FlowVariableDefinition.ValueType.BOOL,
+		FlowVariableDefinition.ValueType.INT,
+		FlowVariableDefinition.ValueType.FLOAT,
+		FlowVariableDefinition.ValueType.STRING,
+		FlowVariableDefinition.ValueType.VECTOR2,
+		FlowVariableDefinition.ValueType.VECTOR3,
+		FlowVariableDefinition.ValueType.COLOR,
+	]
+	_assert(graph.variables.size() == 8 and graph.variables[1] == null, "%s preserves typed variable order and the null position." % instance_name)
+	for type_index: int in expected_types.size():
+		var variable_index: int = type_index if type_index < 1 else type_index + 1
+		var variable: FlowVariableDefinition = graph.variables[variable_index]
+		_assert(variable is FlowVariableDefinition, "%s preserves typed variable resource %d." % [instance_name, type_index])
+		if variable == null:
+			continue
+		_assert(variable.value_type == expected_types[type_index], "%s preserves ValueType numeric member %d." % [instance_name, type_index])
+		_assert(variable.display_name == "Packed Typed %d" % type_index, "%s preserves typed variable names." % instance_name)
+		_assert(variable.bool_value == (type_index % 2 == 0), "%s preserves bool values without reinterpretation." % instance_name)
+		_assert(variable.int_value == -41 + type_index * 17, "%s preserves int values without reinterpretation." % instance_name)
+		_assert(is_equal_approx(variable.float_value, 0.375 + type_index * 1.25), "%s preserves float values without reinterpretation." % instance_name)
+		_assert(variable.string_value == "packed-typed-value-%d" % type_index, "%s preserves String values without reinterpretation." % instance_name)
+		_assert(variable.vector2_value == Vector2(0.5 + type_index, -1.25 - type_index), "%s preserves Vector2 values without reinterpretation." % instance_name)
+		_assert(variable.vector3_value == Vector3(-2.0 - type_index, 3.5 + type_index, 4.25 - type_index), "%s preserves Vector3 values without reinterpretation." % instance_name)
+		_assert(variable.color_value == Color(0.1 * (type_index + 1), 0.2, 0.3, 0.4 + 0.05 * type_index), "%s preserves Color values without reinterpretation." % instance_name)
+		_assert(variable.persistent == (type_index % 2 == 1), "%s preserves active and inactive persistence values." % instance_name)
+		_assert(variable.user_note == "Packed typed note %d" % type_index, "%s preserves typed variable notes." % instance_name)
 
 
 func _save_scene(root: Node, resource_path: String = TEMP_SCENE_PATH) -> bool:
