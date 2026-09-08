@@ -1,35 +1,35 @@
-# Iteración 1 — Base del complemento
+# Iteration 1 — Plugin Foundation
 
-## Objetivo
+## Objective
 
-Disponer de un proyecto Godot válido con un complemento `@tool`, un nodo `PVController` registrado, un panel lateral sensible a la escena activa y una arquitectura orientada a objetos que separe responsabilidades.
+Provide a valid Godot project with an `@tool` plugin, a registered `PVController` node, a side dock that responds to the active scene, and an object-oriented architecture that separates responsibilities.
 
-## Criterios de aceptación
+## Acceptance criteria
 
-- Godot reconoce `addons/vp_flujo/plugin.cfg`.
-- `PVController` aparece en el diálogo **Añadir nodo**.
-- El panel `VPFlujo` se abre cuando la escena contiene al menos un `PVController`.
-- El panel se cierra cuando la escena no contiene ninguno.
-- Una clase derivada de `PVController` también es reconocida.
-- La vista, el análisis de escenas y la coordinación del complemento están en clases separadas.
-- Desactivar el complemento elimina el panel sin dejar conexiones activas.
+- Godot recognizes `addons/vp_flujo/plugin.cfg`.
+- `PVController` appears in the **Add Node** dialog.
+- The `VPFlujo` dock opens when the scene contains at least one `PVController`.
+- The dock closes when the scene contains none.
+- A class derived from `PVController` is also recognized.
+- The view, scene analysis, and plugin coordination are in separate classes.
+- Disabling the plugin removes the dock without leaving active connections.
 
-## Prueba manual
+## Manual test
 
-1. Importa el proyecto en Godot 4.7.2 y abre `demo/main.tscn`.
-2. Confirma que no haya errores del analizador GDScript.
-3. Comprueba que el panel `VPFlujo` muestre “PVController detectado”.
-4. Elimina temporalmente `PVController` y confirma que el panel se cierre.
-5. Añade un nodo `PVController` desde el diálogo de nodos y confirma que vuelva a abrirse.
-6. Crea temporalmente una clase que herede de `PVController` y comprueba que también active el panel.
-7. Usa `Ctrl+S`, cierra y vuelve a abrir la escena para verificar la persistencia.
+1. Import the project in Godot 4.7.2 and open `demo/main.tscn`.
+2. Confirm that there are no GDScript parser errors.
+3. Confirm that the `VPFlujo` dock displays “PVController detected”.
+4. Temporarily remove `PVController` and confirm that the dock closes.
+5. Add a `PVController` node through the node dialog and confirm that the dock opens again.
+6. Temporarily create a class that inherits from `PVController` and confirm that it also activates the dock.
+7. Use `Ctrl+S`, close and reopen the scene, and verify persistence.
 
-## Prompt para ChatGPT/Codex en VS Code
+## Prompt for ChatGPT/Codex in VS Code
 
 ```text
-Revisa la iteración 1 del proyecto VPFlujo para Godot 4.7.2 bajo programación orientada a objetos. Analiza project.godot, addons/vp_flujo/plugin.cfg, todos los scripts de addons/vp_flujo/editor, addons/vp_flujo/runtime/pv_controller.gd, demo/main.tscn y docs/arquitectura_poo.md. Verifica: sintaxis de GDScript, encapsulación, responsabilidad única, composición, dependencias entre clases, ciclo de vida _enter_tree/_exit_tree, registro global de PVController, reconocimiento de clases derivadas, conexiones y desconexiones de señales y eliminación segura del EditorDock. No agregues todavía el modelo de datos ni la ejecución. Si encuentras un problema, aplica el cambio mínimo y explica cómo validarlo manualmente en Godot.
+Review iteration 1 of the VPFlujo project for Godot 4.7.2 using object-oriented programming. Analyze project.godot, addons/vp_flujo/plugin.cfg, all scripts under addons/vp_flujo/editor, addons/vp_flujo/runtime/pv_controller.gd, demo/main.tscn, and docs/arquitectura_poo.md. Verify: GDScript syntax, encapsulation, single responsibility, composition, dependencies between classes, the _enter_tree/_exit_tree lifecycle, global PVController registration, recognition of derived classes, signal connections and disconnections, and safe removal of the EditorDock. Do not add the data model or execution yet. If you find a problem, apply the smallest change and explain how to validate it manually in Godot.
 ```
 
-## Próxima iteración
+## Next iteration
 
-Crear con clases `Resource` el modelo serializable `PVProgram → PVProcess → PVRoutine → PVBlock`, con nombres, orden y listas inicialmente vacías de bloques.
+Create the serializable `PVProgram → PVProcess → PVRoutine → PVBlock` model with `Resource` classes, names, ordering, and initially empty block lists.

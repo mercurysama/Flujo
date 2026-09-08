@@ -74,6 +74,47 @@ static func migrate_schema_1_to_2(source: FlowGraph) -> FlowGraphMigrationResult
 	return result
 
 
+## Migrates a schema 2 graph without modifying the source graph or its resources.
+static func migrate_schema_2_to_3(source: FlowGraph) -> FlowGraphMigrationResult:
+	var result: FlowGraphMigrationResult = FlowGraphMigrationResult.new()
+	var source_validation: FlowValidationResult = FlowGraphValidator.validate(source)
+	result.add_validation_result(source_validation)
+	if source_validation.has_errors() or source == null:
+		return result
+
+	if source.schema_version != FlowGraph.SCHEMA_VERSION_2:
+		_add_error(
+			result,
+			FlowDiagnostic.CODE_MIGRATION_SOURCE_SCHEMA,
+			"FlowGraph migration requires schema version 2.",
+			"graph"
+		)
+		return result
+
+	var candidate: FlowGraph = FlowGraph.new()
+	candidate._internal_id = source.get_internal_id()
+	candidate.schema_version = FlowGraph.SCHEMA_VERSION_3
+	candidate.containers = []
+	for process: FlowProcess in source.processes:
+		candidate.processes.append(null if process == null else _copy_process(process))
+	for variable: FlowVariableDefinition in source.variables:
+		candidate.variables.append(null if variable == null else _copy_variable(variable))
+	for state_machine: FlowStateMachineDefinition in source.state_machines:
+		candidate.state_machines.append(
+			null if state_machine == null else _copy_state_machine(state_machine)
+		)
+	candidate.constructor = FlowConstructorDefinition.new()
+	candidate.methods = []
+
+	var candidate_validation: FlowValidationResult = FlowGraphValidator.validate(candidate)
+	result.add_validation_result(candidate_validation)
+	if candidate_validation.has_errors():
+		return result
+
+	result.migrated_graph = candidate
+	return result
+
+
 static func _copy_process(source: FlowProcess) -> FlowProcess:
 	var copy: FlowProcess = source.duplicate(false) as FlowProcess
 	copy._internal_id = source.get_internal_id()
@@ -100,6 +141,23 @@ static func _copy_blocks(source: FlowBlockContainer, target: FlowBlockContainer)
 static func _copy_block(source: FlowBlock) -> FlowBlock:
 	var copy: FlowBlock = source.duplicate(false) as FlowBlock
 	copy._internal_id = source.get_internal_id()
+	return copy
+
+
+static func _copy_variable(source: FlowVariableDefinition) -> FlowVariableDefinition:
+	var copy: FlowVariableDefinition = source.duplicate(false) as FlowVariableDefinition
+	copy._internal_id = source.get_internal_id()
+	return copy
+
+
+static func _copy_state_machine(
+		source: FlowStateMachineDefinition
+) -> FlowStateMachineDefinition:
+	var copy: FlowStateMachineDefinition = source.duplicate(false) as FlowStateMachineDefinition
+	copy._internal_id = source.get_internal_id()
+	copy.states = []
+	for state: FlowStateDefinition in source.states:
+		copy.states.append(null if state == null else _copy_state(state))
 	return copy
 
 

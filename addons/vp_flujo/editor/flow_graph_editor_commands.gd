@@ -7,6 +7,9 @@ extends RefCounted
 signal changed
 
 
+const DEFAULT_DISPLAY_NAME: String = "Flujo"
+
+
 enum Collection {
 	PROCESSES,
 	VARIABLES,
@@ -56,18 +59,20 @@ func migrate_to_schema_2(controller: PVController) -> bool:
 
 
 ## Adds a new resource to one active schema 2 collection.
-func add_resource(graph: FlowGraph, collection: Collection) -> bool:
+func add_resource(controller: PVController, collection: Collection) -> bool:
+	var graph: FlowGraph = controller.flow_graph if controller != null else null
 	if not _can_edit_collection(graph, collection):
 		return false
 
 	var updated: Array = _collection_values(graph, collection)
-	updated.append(_new_resource(collection))
-	_commit_collection("Add %s" % _collection_name(collection), graph, collection, updated)
+	updated.append(_new_resource(collection, updated))
+	_commit_collection("Add %s" % _collection_name(collection), controller, collection, updated)
 	return true
 
 
 ## Renames the resource identified by its stable internal ID.
-func rename_resource(graph: FlowGraph, collection: Collection, internal_id: String, display_name: String) -> bool:
+func rename_resource(controller: PVController, collection: Collection, internal_id: String, display_name: String) -> bool:
+	var graph: FlowGraph = controller.flow_graph if controller != null else null
 	if not _can_edit_collection(graph, collection) or internal_id.is_empty():
 		return false
 
@@ -78,7 +83,7 @@ func rename_resource(graph: FlowGraph, collection: Collection, internal_id: Stri
 	var previous_name: String = _display_name(resource)
 	if previous_name == display_name:
 		return false
-	_undo_redo.create_action("Rename %s" % _collection_name(collection))
+	_undo_redo.create_action("Rename %s" % _collection_name(collection), UndoRedo.MERGE_DISABLE, controller, false, true)
 	_undo_redo.add_do_method(self, &"_set_display_name", resource, display_name)
 	_undo_redo.add_undo_method(self, &"_set_display_name", resource, previous_name)
 	_undo_redo.commit_action()
@@ -86,7 +91,8 @@ func rename_resource(graph: FlowGraph, collection: Collection, internal_id: Stri
 
 
 ## Moves a selected resource by one array position, including across deliberate null slots.
-func move_resource(graph: FlowGraph, collection: Collection, internal_id: String, direction: int) -> bool:
+func move_resource(controller: PVController, collection: Collection, internal_id: String, direction: int) -> bool:
+	var graph: FlowGraph = controller.flow_graph if controller != null else null
 	if not _can_edit_collection(graph, collection) or internal_id.is_empty() or direction == 0:
 		return false
 
@@ -100,12 +106,13 @@ func move_resource(graph: FlowGraph, collection: Collection, internal_id: String
 	var displaced: Variant = moved[target_index]
 	moved[target_index] = moved[source_index]
 	moved[source_index] = displaced
-	_commit_collection("Move %s" % _collection_name(collection), graph, collection, moved)
+	_commit_collection("Move %s" % _collection_name(collection), controller, collection, moved)
 	return true
 
 
 ## Removes a resource only when the candidate graph remains structurally valid.
-func delete_resource(graph: FlowGraph, collection: Collection, internal_id: String) -> bool:
+func delete_resource(controller: PVController, collection: Collection, internal_id: String) -> bool:
+	var graph: FlowGraph = controller.flow_graph if controller != null else null
 	if not _can_edit_collection(graph, collection) or internal_id.is_empty():
 		return false
 
@@ -113,14 +120,14 @@ func delete_resource(graph: FlowGraph, collection: Collection, internal_id: Stri
 	var index: int = _find_index(updated, internal_id)
 	if index == -1:
 		return false
-	updated[index] = null
+	updated.remove_at(index)
 	var validation: FlowValidationResult = FlowGraphValidator.validate(_candidate_with_collection(graph, collection, updated))
 	_last_diagnostics = validation.diagnostics.duplicate()
 	if validation.has_errors():
 		emit_signal(&"changed")
 		return false
 
-	_commit_collection("Delete %s" % _collection_name(collection), graph, collection, updated)
+	_commit_collection("Delete %s" % _collection_name(collection), controller, collection, updated)
 	return true
 
 
@@ -130,15 +137,16 @@ func _commit_graph_replacement(
 		do_graph: FlowGraph,
 		undo_graph: FlowGraph
 ) -> void:
-	_undo_redo.create_action(action_name)
+	_undo_redo.create_action(action_name, UndoRedo.MERGE_DISABLE, controller, false, true)
 	_undo_redo.add_do_method(self, &"_assign_graph", controller, do_graph)
 	_undo_redo.add_undo_method(self, &"_assign_graph", controller, undo_graph)
 	_undo_redo.commit_action()
 
 
-func _commit_collection(action_name: String, graph: FlowGraph, collection: Collection, updated: Array) -> void:
+func _commit_collection(action_name: String, controller: PVController, collection: Collection, updated: Array) -> void:
+	var graph: FlowGraph = controller.flow_graph
 	var original: Array = _collection_values(graph, collection)
-	_undo_redo.create_action(action_name)
+	_undo_redo.create_action(action_name, UndoRedo.MERGE_DISABLE, controller, false, true)
 	_undo_redo.add_do_method(self, &"_assign_collection", graph, collection, updated)
 	_undo_redo.add_undo_method(self, &"_assign_collection", graph, collection, original)
 	_undo_redo.commit_action()
@@ -163,14 +171,18 @@ func _assign_collection(graph: FlowGraph, collection: Collection, values: Array)
 
 
 func _set_display_name(resource: Resource, display_name: String) -> void:
+	_assign_display_name(resource, display_name)
+	_refresh_diagnostics_for_resource(resource)
+	emit_signal(&"changed")
+
+
+func _assign_display_name(resource: Resource, display_name: String) -> void:
 	if resource is FlowBlockContainer:
 		(resource as FlowBlockContainer).display_name = display_name
 	elif resource is FlowVariableDefinition:
 		(resource as FlowVariableDefinition).display_name = display_name
 	elif resource is FlowStateMachineDefinition:
 		(resource as FlowStateMachineDefinition).display_name = display_name
-	_refresh_diagnostics_for_resource(resource)
-	emit_signal(&"changed")
 
 
 func _can_edit_collection(graph: FlowGraph, collection: Collection) -> bool:
@@ -190,15 +202,31 @@ func _collection_values(graph: FlowGraph, collection: Collection) -> Array:
 	return []
 
 
-func _new_resource(collection: Collection) -> Resource:
+func _new_resource(collection: Collection, existing_values: Array) -> Resource:
+	var resource: Resource = null
 	match collection:
 		Collection.PROCESSES:
-			return FlowProcess.new()
+			resource = FlowProcess.new()
 		Collection.VARIABLES:
-			return FlowVariableDefinition.new()
+			resource = FlowVariableDefinition.new()
 		Collection.STATE_MACHINES:
-			return FlowStateMachineDefinition.new()
-	return null
+			resource = FlowStateMachineDefinition.new()
+	if resource != null:
+		_assign_display_name(resource, _first_available_display_name(existing_values))
+	return resource
+
+
+func _first_available_display_name(values: Array) -> String:
+	var existing_names: Dictionary[String, bool] = {}
+	for value: Variant in values:
+		if value is Resource:
+			existing_names[_display_name(value as Resource)] = true
+	if not existing_names.has(DEFAULT_DISPLAY_NAME):
+		return DEFAULT_DISPLAY_NAME
+	var suffix: int = 2
+	while existing_names.has("%s %d" % [DEFAULT_DISPLAY_NAME, suffix]):
+		suffix += 1
+	return "%s %d" % [DEFAULT_DISPLAY_NAME, suffix]
 
 
 func _find_resource(graph: FlowGraph, collection: Collection, internal_id: String) -> Resource:

@@ -1,5 +1,5 @@
 @tool
-## Validates FlowGraph schema 1 and schema 2 deterministically without modifying it.
+## Validates supported FlowGraph schemas deterministically without modifying them.
 class_name FlowGraphValidator
 extends RefCounted
 
@@ -19,7 +19,9 @@ static func validate(graph: FlowGraph) -> FlowValidationResult:
 	var variable_indices: Array[int] = []
 	_validate_resource_identity(graph, "graph", result, seen_instances, seen_ids)
 
-	if graph.schema_version != FlowGraph.CURRENT_SCHEMA_VERSION \
+	if graph.schema_version == FlowGraph.SCHEMA_VERSION_3:
+		pass
+	elif graph.schema_version != FlowGraph.CURRENT_SCHEMA_VERSION \
 			and graph.schema_version != FlowGraph.SCHEMA_VERSION_2:
 		_add_error(
 			result,
@@ -68,6 +70,10 @@ static func validate(graph: FlowGraph) -> FlowValidationResult:
 		seen_ids,
 		result
 	)
+	if graph.schema_version == FlowGraph.SCHEMA_VERSION_3:
+		_validate_schema_3(graph, result, seen_instances, seen_ids)
+	_validate_method_calls(graph, result, seen_ids)
+
 
 	return result
 
@@ -76,6 +82,9 @@ static func _has_schema_2_entries(graph: FlowGraph) -> bool:
 	return not graph.processes.is_empty() \
 		or not graph.variables.is_empty() \
 		or not graph.state_machines.is_empty()
+
+static func _has_schema_3_entries(graph: FlowGraph) -> bool:
+	return graph.constructor != null or not graph.methods.is_empty()
 
 
 static func _validate_schema_sources(graph: FlowGraph, result: FlowValidationResult) -> void:
@@ -94,6 +103,13 @@ static func _validate_schema_sources(graph: FlowGraph, result: FlowValidationRes
 			"graph"
 		)
 
+
+	if graph.schema_version == FlowGraph.CURRENT_SCHEMA_VERSION and _has_schema_3_entries(graph):
+		_add_error(result, FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES, "FlowGraph schema 1 cannot contain schema 3 definitions.", "graph")
+	if graph.schema_version == FlowGraph.SCHEMA_VERSION_2 and _has_schema_3_entries(graph):
+		_add_error(result, FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES, "FlowGraph schema 2 cannot contain schema 3 definitions.", "graph")
+	if graph.schema_version == FlowGraph.SCHEMA_VERSION_3 and not graph.containers.is_empty():
+		_add_error(result, FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES, "FlowGraph schema 3 cannot contain legacy containers.", "graph")
 
 static func _validate_legacy_containers(
 		containers: Array[FlowBlockContainer],
@@ -393,6 +409,9 @@ static func _validate_internal_id(
 		_add_error(result, FlowDiagnostic.CODE_EMPTY_INTERNAL_ID, "Internal ID is empty.", element_path)
 		return
 
+	if FlowId.is_valid(internal_id):
+		return
+
 	if internal_id.length() != 32:
 		_add_error(
 			result,
@@ -402,21 +421,218 @@ static func _validate_internal_id(
 			internal_id
 		)
 
-	for character_index: int in internal_id.length():
-		if "0123456789abcdef".find(internal_id.substr(character_index, 1).to_lower()) == -1:
+	if not FlowId.has_only_hexadecimal_characters(internal_id):
+		_add_error(
+			result,
+			FlowDiagnostic.CODE_NON_HEXADECIMAL_INTERNAL_ID,
+			"Internal ID must contain only hexadecimal characters.",
+			element_path,
+			internal_id
+		)
+
+
+static func _validate_schema_3(graph: FlowGraph, result: FlowValidationResult, seen_instances: Dictionary[int, String], seen_ids: Dictionary[String, String]) -> void:
+	if graph.constructor == null:
+		_add_error(result, FlowDiagnostic.CODE_MISSING_CONSTRUCTOR, "FlowGraph schema 3 requires a constructor.", "constructor")
+	else:
+		var constructor_path: String = "constructor"
+		if _validate_resource_identity(graph.constructor, constructor_path, result, seen_instances, seen_ids):
+			_validate_blocks(graph.constructor, constructor_path, result, seen_instances, seen_ids)
+			var dependency_names: Dictionary[String, bool] = {}
+			for dependency_index: int in graph.constructor.dependencies.size():
+				var dependency: FlowDependencyDefinition = graph.constructor.dependencies[dependency_index]
+				if dependency == null:
+					continue
+				var dependency_path: String = "%s.dependencies[%d]" % [constructor_path, dependency_index]
+				if not _validate_resource_identity(dependency, dependency_path, result, seen_instances, seen_ids):
+					continue
+				_validate_display_name(dependency.display_name, dependency_names, result, dependency_path, dependency.get_internal_id())
+				if String(dependency.required_class_name).is_empty():
+					_add_error(result, FlowDiagnostic.CODE_EMPTY_REQUIRED_CLASS_NAME, "Dependency required class name is empty.", "%s.required_class_name" % dependency_path, dependency.get_internal_id())
+
+	var method_names: Dictionary[String, bool] = {}
+	for method_index: int in graph.methods.size():
+		var method: FlowMethodDefinition = graph.methods[method_index]
+		if method == null:
+			continue
+		var method_path: String = "methods[%d]" % method_index
+		if not _validate_resource_identity(method, method_path, result, seen_instances, seen_ids):
+			continue
+		_validate_display_name(method.display_name, method_names, result, method_path, method.get_internal_id())
+		_validate_blocks(method, method_path, result, seen_instances, seen_ids)
+		var parameter_names: Dictionary[String, bool] = {}
+		for parameter_index: int in method.parameters.size():
+			var parameter: FlowMethodParameterDefinition = method.parameters[parameter_index]
+			if parameter == null:
+				continue
+			var parameter_path: String = "%s.parameters[%d]" % [method_path, parameter_index]
+			if not _validate_resource_identity(parameter, parameter_path, result, seen_instances, seen_ids):
+				continue
+			_validate_display_name(parameter.display_name, parameter_names, result, parameter_path, parameter.get_internal_id())
+		if method.return_definition != null:
+			_validate_resource_identity(
+				method.return_definition,
+				"%s.return_definition" % method_path,
+				result,
+				seen_instances,
+				seen_ids
+			)
+
+
+static func _validate_display_name(display_name: String, names: Dictionary[String, bool], result: FlowValidationResult, element_path: String, internal_id: String) -> void:
+	if display_name.strip_edges().is_empty():
+		_add_error(result, FlowDiagnostic.CODE_EMPTY_DISPLAY_NAME, "Display name must not be empty.", element_path, internal_id)
+		return
+	if names.has(display_name):
+		_add_error(result, FlowDiagnostic.CODE_DUPLICATE_DISPLAY_NAME, "Display name must be unique in its namespace.", element_path, internal_id)
+		return
+	names[display_name] = true
+
+
+static func _validate_method_calls(
+		graph: FlowGraph,
+		result: FlowValidationResult,
+		seen_ids: Dictionary[String, String]
+) -> void:
+	var method_ids: Dictionary[String, bool] = _build_method_id_index(graph.methods)
+
+	for container_index: int in graph.containers.size():
+		var container: FlowBlockContainer = graph.containers[container_index]
+		if container != null:
+			_validate_method_calls_in_blocks(
+				container.blocks,
+				"containers[%d]" % container_index,
+				graph.schema_version,
+				method_ids,
+				seen_ids,
+				result
+			)
+
+	for process_index: int in graph.processes.size():
+		var process: FlowProcess = graph.processes[process_index]
+		if process != null:
+			_validate_method_calls_in_blocks(
+				process.blocks,
+				"processes[%d]" % process_index,
+				graph.schema_version,
+				method_ids,
+				seen_ids,
+				result
+			)
+
+	for machine_index: int in graph.state_machines.size():
+		var state_machine: FlowStateMachineDefinition = graph.state_machines[machine_index]
+		if state_machine == null:
+			continue
+		for state_index: int in state_machine.states.size():
+			var state: FlowStateDefinition = state_machine.states[state_index]
+			if state != null:
+				_validate_method_calls_in_blocks(
+					state.blocks,
+					"state_machines[%d].states[%d]" % [machine_index, state_index],
+					graph.schema_version,
+					method_ids,
+					seen_ids,
+					result
+				)
+
+	if graph.constructor != null:
+		_validate_method_calls_in_blocks(
+			graph.constructor.blocks,
+			"constructor",
+			graph.schema_version,
+			method_ids,
+			seen_ids,
+			result
+		)
+
+	for method_index: int in graph.methods.size():
+		var method: FlowMethodDefinition = graph.methods[method_index]
+		if method != null:
+			_validate_method_calls_in_blocks(
+				method.blocks,
+				"methods[%d]" % method_index,
+				graph.schema_version,
+				method_ids,
+				seen_ids,
+				result
+			)
+
+
+static func _build_method_id_index(
+		methods: Array[FlowMethodDefinition]
+) -> Dictionary[String, bool]:
+	var method_ids: Dictionary[String, bool] = {}
+	for method: FlowMethodDefinition in methods:
+		if method != null and not method.get_internal_id().is_empty():
+			method_ids[method.get_internal_id()] = true
+	return method_ids
+
+
+static func _validate_method_calls_in_blocks(
+		blocks: Array[FlowBlock],
+		container_path: String,
+		schema_version: int,
+		method_ids: Dictionary[String, bool],
+		seen_ids: Dictionary[String, String],
+		result: FlowValidationResult
+) -> void:
+	for block_index: int in blocks.size():
+		var block: FlowBlock = blocks[block_index]
+		if not block is FlowMethodCallBlock:
+			continue
+
+		var method_call: FlowMethodCallBlock = block as FlowMethodCallBlock
+		var block_path: String = "%s.blocks[%d]" % [container_path, block_index]
+		if schema_version != FlowGraph.SCHEMA_VERSION_3:
 			_add_error(
 				result,
-				FlowDiagnostic.CODE_NON_HEXADECIMAL_INTERNAL_ID,
-				"Internal ID must contain only hexadecimal characters.",
-				element_path,
-				internal_id
+				FlowDiagnostic.CODE_METHOD_CALL_INCOMPATIBLE_SCHEMA,
+				"Method-call blocks require FlowGraph schema 3.",
+				block_path,
+				method_call.get_internal_id()
 			)
-			break
+			continue
 
+		var reference_path: String = "%s.method_id" % block_path
+		if method_call.method_id.is_empty():
+			_add_error(
+				result,
+				FlowDiagnostic.CODE_EMPTY_METHOD_REFERENCE,
+				"Method-call target ID is empty.",
+				reference_path,
+				method_call.get_internal_id()
+			)
+		elif method_ids.has(method_call.method_id):
+			continue
+		elif seen_ids.has(method_call.method_id):
+			_add_error(
+				result,
+				FlowDiagnostic.CODE_INVALID_METHOD_REFERENCE,
+				"Method-call target has an invalid type.",
+				reference_path,
+				method_call.method_id
+			)
+		else:
+			_add_error(
+				result,
+				FlowDiagnostic.CODE_MISSING_METHOD_REFERENCE,
+				"Referenced method is missing from this FlowGraph.",
+				reference_path,
+				method_call.method_id
+			)
 
 static func _get_internal_id(resource: Resource) -> String:
 	if resource is FlowGraph:
 		return (resource as FlowGraph).get_internal_id()
+	if resource is FlowConstructorDefinition:
+		return (resource as FlowConstructorDefinition).get_internal_id()
+	if resource is FlowDependencyDefinition:
+		return (resource as FlowDependencyDefinition).get_internal_id()
+	if resource is FlowMethodParameterDefinition:
+		return (resource as FlowMethodParameterDefinition).get_internal_id()
+	if resource is FlowMethodReturnDefinition:
+		return (resource as FlowMethodReturnDefinition).get_internal_id()
 	if resource is FlowBlockContainer:
 		return (resource as FlowBlockContainer).get_internal_id()
 	if resource is FlowBlock:

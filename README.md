@@ -2,20 +2,28 @@
 
 > Experimental pre-alpha software. Features and file formats may change during development.
 
-Flujo is an MIT-licensed visual programming plugin for Godot. It is designed to build game logic through readable containers and blocks while keeping runtime execution separate from editor tools.
+Flujo is an MIT-licensed visual programming plugin for Godot. It is designed to build game logic through readable definitions and blocks while keeping portable runtime code separate from editor tools.
 
-## Current features
+## Current status
 
-- Editor plugin located in `addons/vp_flujo/`.
-- `PVController` node with a typed `FlowGraph` model.
-- Stable internal identifiers for graphs, containers, states, processes, and blocks.
-- Flujo dock integrated into the Godot editor.
-- F4 adds a `PVController` to the selected node.
-- F4 opens or closes the Flujo dock when the selected node already contains a controller.
-- Controller creation supports Godot's undo and redo history.
-- Model smoke test for identifiers, duplication, types, and independent graph instances.
+### Implemented
 
-The visual block editor, runtime executor, debugger, user packages, and localization system are still under development.
+- An editor plugin under `addons/vp_flujo/` and the `PVController` scene facade.
+- Stable internal IDs, deterministic validation, deep duplication, and explicit schema 1→2 and schema 2→3 migrations for `FlowGraph` definitions.
+- Schema 2 typed collections: `processes`, `variables`, and `state_machines`, including deliberate `null` positions and ID-based references.
+- Schema 3 structural declarations: one `FlowConstructorDefinition` as a `FlowBlockContainer`, ordered dependencies and blocks, reusable methods, typed parameters, and one optional typed `FlowMethodReturnDefinition` per method.
+- Persistent and validated `FlowMethodCallBlock` references for schema 3 containers, with ID-based targets, order-independent duplication remapping, and ResourceSaver/PackedScene persistence coverage for calls and optional return definitions.
+- A read-only and undoable Inspector workflow for the supported schema 2 collections.
+- Selection-based Flujo dock visibility and F4 controller support.
+- Model, editor, and PackedScene persistence regressions.
+
+### Current work
+
+Iteration 6 has implemented the schema 3 structural model, its atomic migration, constructor container foundation, persistent method-call references, and optional typed return declarations. Argument bindings, value sources, return blocks and value transport, conversions, call-cycle detection, runtime execution, Inspector authoring, and visual connections remain pending. See the [current iteration](docs/current_iteration.md).
+
+### Planned
+
+Visual block authoring, a runtime executor, debugging, packages, inherited-scene customization, and per-instance runtime state remain future work.
 
 ## Requirements
 
@@ -41,22 +49,29 @@ The visual block editor, runtime executor, debugger, user packages, and localiza
 
 ## Project structure
 
-- `addons/vp_flujo/editor/`: editor-only plugin and dock code.
-- `addons/vp_flujo/runtime/`: portable runtime code and data model.
+- `addons/vp_flujo/editor/`: editor-only plugin, Inspector, and dock code.
+- `addons/vp_flujo/runtime/`: portable runtime code and persistent model definitions.
 - `demo/`: demonstration scene.
-- `tests/`: model and integration tests.
-- `docs/`: architecture and model documentation.
+- `tests/`: model, editor, and persistence tests.
+- `docs/`: architecture, contracts, roadmap, and iteration documentation.
 
 ## Documentation
 
 - [Object-oriented architecture](docs/arquitectura_poo.md)
+- [Flujo Constitution](docs/constitution.md)
+- [Development workflow](docs/development_workflow.md)
+- [Engineering flow metrics](docs/engineering_metrics.md)
+- [Current iteration](docs/current_iteration.md)
 - [Model contract](docs/model_contract.md)
+- [Schema 2 migration contract](docs/flow_graph_v2_migration.md)
+- [Constructor and Methods contract](docs/constructor_methods_contract.md)
 - [Iteration 1 notes](docs/iteracion_01.md)
-- [Iteration 5 closeout](docs/iteracion_05.md)
+- [Iteration 5 postmortem](docs/iteration_05.md)
+- [Roadmap](docs/roadmap.md)
 
 ## AI-assisted development
 
-Flujo is developed with assistance from ChatGPT and OpenAI Codex for planning, code generation, review, and testing. Every change is reviewed and validated by the project maintainer before being included in a release.
+Flujo is developed with assistance from ChatGPT and Codex for planning, code generation, review, and testing. Flujo does not depend on either tool or provider. Every change requires validator and test evidence plus authorized human review before integration or release.
 
 ## License
 
