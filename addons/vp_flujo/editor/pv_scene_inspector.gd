@@ -11,16 +11,22 @@ func _init(controller_script: Script) -> void:
 
 
 func contains_controller(scene_root: Node) -> bool:
+	return find_controller(scene_root) != null
+
+
+## Returns the first controller in the supplied selection or scene subtree.
+func find_controller(scene_root: Node) -> PVController:
 	if scene_root == null:
-		return false
+		return null
 	if _node_is_controller(scene_root):
-		return true
+		return scene_root as PVController
 
-	for child in scene_root.get_children():
-		if contains_controller(child):
-			return true
+	for child: Node in scene_root.get_children():
+		var controller: PVController = find_controller(child)
+		if controller != null:
+			return controller
 
-	return false
+	return null
 
 
 func _node_is_controller(node: Node) -> bool:
@@ -32,4 +38,3 @@ func _node_is_controller(node: Node) -> bool:
 		candidate_script = candidate_script.get_base_script()
 
 	return false
-

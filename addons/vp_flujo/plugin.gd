@@ -13,17 +13,24 @@ var _scene_inspector
 var _controller_inspector_plugin: EditorInspectorPlugin
 var _editor_selection: EditorSelection
 var _selected_node: Node
+var _dock_refresh_queued: bool = false
+var _dock_controller: PVController
+var _selected_schema_3_variable_id: String = ""
 
 
 func _enter_tree() -> void:
 	_scene_inspector = PV_SCENE_INSPECTOR_CLASS.new(PV_CONTROLLER_SCRIPT)
 	_controller_inspector_plugin = PV_CONTROLLER_INSPECTOR_PLUGIN_CLASS.new()
 	_controller_inspector_plugin.set_undo_redo(get_undo_redo())
+	_controller_inspector_plugin.schema_3_variable_selection_changed.connect(
+		_on_schema_3_variable_selection_changed
+	)
 	add_inspector_plugin(_controller_inspector_plugin)
 	_dock = VP_FLUJO_DOCK_CLASS.new()
+	_dock.configure(get_undo_redo())
 	add_dock(_dock)
 	_connect_editor_signals()
-	_refresh_current_scene.call_deferred()
+	_request_dock_refresh()
 
 
 func _exit_tree() -> void:
@@ -70,10 +77,13 @@ func _disconnect_editor_signals() -> void:
 
 	_editor_selection = null
 	_selected_node = null
+	_dock_controller = null
+	_selected_schema_3_variable_id = ""
+	_dock_refresh_queued = false
 
 
 func _on_selection_changed() -> void:
-	_update_dock_visibility()
+	_request_dock_refresh()
 
 
 func _shortcut_input(event: InputEvent) -> void:
@@ -133,14 +143,24 @@ func _add_controller_to_selected_node() -> bool:
 
 
 func _on_scene_changed(_scene_root: Node) -> void:
-	_refresh_current_scene.call_deferred()
+	_request_dock_refresh()
 
 
-func _on_scene_tree_changed(_node: Node) -> void:
+func _on_scene_tree_changed(node: Node) -> void:
+	if not _is_relevant_scene_tree_change(node, _scene_inspector):
+		return
+	_request_dock_refresh()
+
+
+func _request_dock_refresh() -> void:
+	if _dock_refresh_queued:
+		return
+	_dock_refresh_queued = true
 	_refresh_current_scene.call_deferred()
 
 
 func _refresh_current_scene() -> void:
+	_dock_refresh_queued = false
 	_update_dock_visibility()
 
 
@@ -152,9 +172,41 @@ func _update_dock_visibility() -> void:
 	if _editor_selection != null:
 		selected_nodes = _editor_selection.get_selected_nodes()
 	var scene_root: Node = EditorInterface.get_edited_scene_root()
-	var should_show: bool = _should_show_dock(selected_nodes, scene_root, _scene_inspector)
+	var controller: PVController = _controller_for_selection(selected_nodes, scene_root)
+	var should_show: bool = controller != null
 	_selected_node = selected_nodes[0] if selected_nodes.size() == 1 else null
+	var current_controller: PVController = _dock_controller if is_instance_valid(_dock_controller) else null
+	if current_controller != controller:
+		_dock_controller = controller
+		_selected_schema_3_variable_id = ""
+		_dock.set_controller(controller)
+		_dock.set_variable_selection(controller, FlowGraphEditorCommands.Collection.VARIABLES, "")
 	_dock.set_controller_present(should_show)
+
+
+func _on_schema_3_variable_selection_changed(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	variable_id: String
+) -> void:
+	if not is_instance_valid(_dock) or controller != _dock_controller:
+		return
+	if _selected_schema_3_variable_id == variable_id:
+		return
+	_selected_schema_3_variable_id = variable_id
+	_dock.set_variable_selection(controller, collection, variable_id)
+
+
+func _controller_for_selection(selected_nodes: Array[Node], scene_root: Node) -> PVController:
+	if selected_nodes.size() == 1:
+		return _scene_inspector.find_controller(selected_nodes[0])
+	if selected_nodes.size() > 1:
+		return null
+	return _scene_inspector.find_controller(scene_root)
+
+
+static func _is_relevant_scene_tree_change(node: Node, scene_inspector) -> bool:
+	return node != null and scene_inspector != null and scene_inspector.contains_controller(node)
 
 
 static func _should_show_dock(

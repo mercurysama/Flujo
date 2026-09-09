@@ -1,5 +1,5 @@
 @tool
-## Encapsulates atomic, undoable Inspector edits for FlowGraph schema 2.
+## Encapsulates atomic, undoable Inspector edits for supported FlowGraph collections.
 class_name FlowGraphEditorCommands
 extends RefCounted
 
@@ -58,7 +58,23 @@ func migrate_to_schema_2(controller: PVController) -> bool:
 	return true
 
 
-## Adds a new resource to one active schema 2 collection.
+## Migrates a valid schema 2 graph and makes replacing the controller reference undoable.
+func migrate_to_schema_3(controller: PVController) -> bool:
+	if controller == null or controller.flow_graph == null or _undo_redo == null:
+		return false
+
+	var original_graph: FlowGraph = controller.flow_graph
+	var migration: FlowGraphMigrationResult = FlowGraphMigrator.migrate_schema_2_to_3(original_graph)
+	_last_diagnostics = migration.diagnostics.duplicate()
+	if not migration.is_successful():
+		emit_signal(&"changed")
+		return false
+
+	_commit_graph_replacement("Migrate FlowGraph to Schema 3", controller, migration.migrated_graph, original_graph)
+	return true
+
+
+## Adds a resource to an editable schema 2 or schema 3 structural collection.
 func add_resource(controller: PVController, collection: Collection) -> bool:
 	var graph: FlowGraph = controller.flow_graph if controller != null else null
 	if not _can_edit_collection(graph, collection):
@@ -73,7 +89,8 @@ func add_resource(controller: PVController, collection: Collection) -> bool:
 ## Renames the resource identified by its stable internal ID.
 func rename_resource(controller: PVController, collection: Collection, internal_id: String, display_name: String) -> bool:
 	var graph: FlowGraph = controller.flow_graph if controller != null else null
-	if not _can_edit_collection(graph, collection) or internal_id.is_empty():
+	if not _can_edit_collection(graph, collection) \
+			or internal_id.is_empty():
 		return false
 
 	var resource: Resource = _find_resource(graph, collection, internal_id)
@@ -90,10 +107,51 @@ func rename_resource(controller: PVController, collection: Collection, internal_
 	return true
 
 
+## Updates one explicitly supported schema 3 variable property by stable ID.
+func set_variable_property(
+		controller: PVController,
+		internal_id: String,
+		property_name: StringName,
+		value: Variant
+) -> bool:
+	var graph: FlowGraph = controller.flow_graph if controller != null else null
+	if not _can_edit_schema_3_variable(graph, Collection.VARIABLES) or internal_id.is_empty():
+		return false
+	var variable: FlowVariableDefinition = _find_resource(
+		graph,
+		Collection.VARIABLES,
+		internal_id
+	) as FlowVariableDefinition
+	if variable == null or not _is_supported_variable_property(property_name, value):
+		return false
+	var previous_value: Variant = _variable_property_value(variable, property_name)
+	if previous_value == value:
+		return false
+	_undo_redo.create_action(
+		"Edit Variable %s" % _variable_property_label(property_name),
+		UndoRedo.MERGE_DISABLE,
+		controller,
+		false,
+		true
+	)
+	_undo_redo.add_do_method(self, &"_assign_variable_property", controller, variable, property_name, value)
+	_undo_redo.add_undo_method(
+		self,
+		&"_assign_variable_property",
+		controller,
+		variable,
+		property_name,
+		previous_value
+	)
+	_undo_redo.commit_action()
+	return true
+
+
 ## Moves a selected resource by one array position, including across deliberate null slots.
 func move_resource(controller: PVController, collection: Collection, internal_id: String, direction: int) -> bool:
 	var graph: FlowGraph = controller.flow_graph if controller != null else null
-	if not _can_edit_collection(graph, collection) or internal_id.is_empty() or direction == 0:
+	if not _can_edit_collection(graph, collection) \
+			or internal_id.is_empty() or direction == 0:
 		return false
 
 	var values: Array = _collection_values(graph, collection)
@@ -113,7 +171,8 @@ func move_resource(controller: PVController, collection: Collection, internal_id
 ## Removes a resource only when the candidate graph remains structurally valid.
 func delete_resource(controller: PVController, collection: Collection, internal_id: String) -> bool:
 	var graph: FlowGraph = controller.flow_graph if controller != null else null
-	if not _can_edit_collection(graph, collection) or internal_id.is_empty():
+	if not _can_edit_collection(graph, collection) \
+			or internal_id.is_empty():
 		return false
 
 	var updated: Array = _collection_values(graph, collection)
@@ -147,18 +206,19 @@ func _commit_collection(action_name: String, controller: PVController, collectio
 	var graph: FlowGraph = controller.flow_graph
 	var original: Array = _collection_values(graph, collection)
 	_undo_redo.create_action(action_name, UndoRedo.MERGE_DISABLE, controller, false, true)
-	_undo_redo.add_do_method(self, &"_assign_collection", graph, collection, updated)
-	_undo_redo.add_undo_method(self, &"_assign_collection", graph, collection, original)
+	_undo_redo.add_do_method(self, &"_assign_collection", controller, graph, collection, updated)
+	_undo_redo.add_undo_method(self, &"_assign_collection", controller, graph, collection, original)
 	_undo_redo.commit_action()
 
 
 func _assign_graph(controller: PVController, graph: FlowGraph) -> void:
 	controller.flow_graph = graph
+	controller.notify_property_list_changed()
 	_refresh_diagnostics(graph)
 	emit_signal(&"changed")
 
 
-func _assign_collection(graph: FlowGraph, collection: Collection, values: Array) -> void:
+func _assign_collection(controller: PVController, graph: FlowGraph, collection: Collection, values: Array) -> void:
 	match collection:
 		Collection.PROCESSES:
 			graph.processes.assign(values)
@@ -166,6 +226,8 @@ func _assign_collection(graph: FlowGraph, collection: Collection, values: Array)
 			graph.variables.assign(values)
 		Collection.STATE_MACHINES:
 			graph.state_machines.assign(values)
+	if controller != null:
+		controller.notify_property_list_changed()
 	_refresh_diagnostics(graph)
 	emit_signal(&"changed")
 
@@ -173,6 +235,44 @@ func _assign_collection(graph: FlowGraph, collection: Collection, values: Array)
 func _set_display_name(resource: Resource, display_name: String) -> void:
 	_assign_display_name(resource, display_name)
 	_refresh_diagnostics_for_resource(resource)
+	emit_signal(&"changed")
+
+
+func _assign_variable_property(
+		controller: PVController,
+		variable: FlowVariableDefinition,
+		property_name: StringName,
+		value: Variant
+) -> void:
+	match property_name:
+		&"display_name":
+			variable.display_name = value as String
+		&"scope":
+			variable.scope = int(value)
+		&"binding":
+			variable.binding = int(value)
+		&"value_type":
+			variable.value_type = int(value)
+		&"bool_value":
+			variable.bool_value = value as bool
+		&"int_value":
+			variable.int_value = int(value)
+		&"float_value":
+			variable.float_value = float(value)
+		&"string_value":
+			variable.string_value = value as String
+		&"vector2_value":
+			variable.vector2_value = value as Vector2
+		&"vector3_value":
+			variable.vector3_value = value as Vector3
+		&"color_value":
+			variable.color_value = value as Color
+		&"persistent":
+			variable.persistent = value as bool
+		&"user_note":
+			variable.user_note = value as String
+	controller.notify_property_list_changed()
+	_refresh_diagnostics(controller.flow_graph)
 	emit_signal(&"changed")
 
 
@@ -186,9 +286,64 @@ func _assign_display_name(resource: Resource, display_name: String) -> void:
 
 
 func _can_edit_collection(graph: FlowGraph, collection: Collection) -> bool:
-	if graph == null or graph.schema_version != FlowGraph.SCHEMA_VERSION_2 or not graph.containers.is_empty():
+	if graph == null or not graph.containers.is_empty():
+		return false
+	if graph.schema_version != FlowGraph.SCHEMA_VERSION_2 \
+			and graph.schema_version != FlowGraph.SCHEMA_VERSION_3:
 		return false
 	return collection >= Collection.PROCESSES and collection <= Collection.STATE_MACHINES
+
+
+func _can_edit_schema_3_variable(graph: FlowGraph, collection: Collection) -> bool:
+	return graph != null \
+		and graph.schema_version == FlowGraph.SCHEMA_VERSION_3 \
+		and graph.containers.is_empty() \
+		and collection == Collection.VARIABLES
+
+
+func _is_supported_variable_property(property_name: StringName, value: Variant) -> bool:
+	match property_name:
+		&"display_name", &"string_value", &"user_note":
+			return value is String
+		&"scope":
+			return value is int and FlowVariableDefinition.is_valid_scope(value as int)
+		&"binding":
+			return value is int and FlowVariableDefinition.is_valid_binding(value as int)
+		&"value_type":
+			return value is int and FlowVariableDefinition.is_valid_value_type(value as int)
+		&"bool_value", &"persistent":
+			return value is bool
+		&"int_value", &"float_value":
+			return value is int or value is float
+		&"vector2_value":
+			return value is Vector2
+		&"vector3_value":
+			return value is Vector3
+		&"color_value":
+			return value is Color
+	return false
+
+
+func _variable_property_value(variable: FlowVariableDefinition, property_name: StringName) -> Variant:
+	match property_name:
+		&"display_name": return variable.display_name
+		&"scope": return variable.scope
+		&"binding": return variable.binding
+		&"value_type": return variable.value_type
+		&"bool_value": return variable.bool_value
+		&"int_value": return variable.int_value
+		&"float_value": return variable.float_value
+		&"string_value": return variable.string_value
+		&"vector2_value": return variable.vector2_value
+		&"vector3_value": return variable.vector3_value
+		&"color_value": return variable.color_value
+		&"persistent": return variable.persistent
+		&"user_note": return variable.user_note
+	return null
+
+
+func _variable_property_label(property_name: StringName) -> String:
+	return property_name.capitalize().replace("_", " ")
 
 
 func _collection_values(graph: FlowGraph, collection: Collection) -> Array:
@@ -247,11 +402,14 @@ func _find_index(values: Array, internal_id: String) -> int:
 
 func _candidate_with_collection(graph: FlowGraph, collection: Collection, values: Array) -> FlowGraph:
 	var candidate: FlowGraph = FlowGraph.new()
+	candidate._internal_id = graph.get_internal_id()
 	candidate.schema_version = graph.schema_version
 	candidate.containers.assign(graph.containers)
 	candidate.processes.assign(graph.processes)
 	candidate.variables.assign(graph.variables)
 	candidate.state_machines.assign(graph.state_machines)
+	candidate.constructor = graph.constructor
+	candidate.methods.assign(graph.methods)
 	match collection:
 		Collection.PROCESSES:
 			candidate.processes.assign(values)

@@ -6,6 +6,13 @@ extends EditorInspectorPlugin
 const FLOW_GRAPH_PROPERTY: StringName = &"flow_graph"
 const FLOW_GRAPH_INSPECTOR_PROPERTY := preload("res://addons/vp_flujo/editor/flow_graph_inspector_property.gd")
 
+## Relays the structural schema 3 selection without making the Inspector depend on the dock.
+signal schema_3_variable_selection_changed(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	variable_id: String
+)
+
 var _undo_redo: EditorUndoRedoManager
 
 
@@ -32,8 +39,17 @@ func _parse_property(
 		return false
 	var property: FlowGraphInspectorProperty = FLOW_GRAPH_INSPECTOR_PROPERTY.new()
 	property.configure(_undo_redo)
+	property.schema_3_variable_selection_changed.connect(_on_schema_3_variable_selection_changed)
 	add_property_editor(property_name, property, false, "Flow Graph")
 	return true
+
+
+func _on_schema_3_variable_selection_changed(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	variable_id: String
+) -> void:
+	emit_signal(&"schema_3_variable_selection_changed", controller, collection, variable_id)
 
 
 ## Returns whether a property name is the FlowGraph reference intercepted by this plugin.

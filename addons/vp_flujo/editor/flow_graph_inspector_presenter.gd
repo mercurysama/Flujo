@@ -32,7 +32,8 @@ static func present(graph: FlowGraph) -> Dictionary:
 	elif graph.schema_version == FlowGraph.CURRENT_SCHEMA_VERSION:
 		presentation["active_source"] = "Containers"
 		sections.append(_present_containers(graph.containers))
-	elif graph.schema_version == FlowGraph.SCHEMA_VERSION_2:
+	elif graph.schema_version == FlowGraph.SCHEMA_VERSION_2 \
+			or graph.schema_version == FlowGraph.SCHEMA_VERSION_3:
 		presentation["active_source"] = "Typed collections"
 		sections.append(_present_processes(graph.processes))
 		sections.append(_present_variables(graph.variables))
