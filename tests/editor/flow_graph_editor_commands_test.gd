@@ -10,6 +10,7 @@ var _selection_event_count: int = 0
 const TEMP_DIR_PATH: String = "res://.godot/flujo_tests"
 const TEMP_HISTORY_SCENE_PATH: String = TEMP_DIR_PATH + "/flow_graph_editor_history.tscn"
 const VP_FLUJO_DOCK_SCRIPT := preload("res://addons/vp_flujo/editor/vp_flujo_dock.gd")
+const VP_FLUJO_PLUGIN_SCRIPT := preload("res://addons/vp_flujo/plugin.gd")
 
 
 func _init() -> void:
@@ -64,10 +65,9 @@ func _run() -> void:
 	dock.call(&"configure", undo_redo)
 	get_root().add_child(dock)
 	var dock_control: Control = dock as Control
-	var initial_dock_minimum_width: float = VP_FLUJO_DOCK_SCRIPT.INITIAL_LOGICAL_MINIMUM_WIDTH * EditorInterface.get_editor_scale()
-	_expect(dock_control != null and is_equal_approx(dock_control.custom_minimum_size.x, initial_dock_minimum_width), "Flujo dock applies its scaled initial minimum width once at creation.")
+	_expect(dock_control != null and is_zero_approx(dock_control.custom_minimum_size.x), "Flujo dock leaves width to the native editor layout instead of enforcing a permanent minimum.")
 	if dock_control != null:
-		dock_control.size.x = initial_dock_minimum_width + 80.0
+		dock_control.size.x = 160.0
 	dock.call(&"set_controller", controller)
 	var dock_property: FlowGraphInspectorProperty = dock.call(&"get_variable_editor") as FlowGraphInspectorProperty
 	_expect(dock_property != null, "Flujo dock creates one schema 3 Variables editor.")
@@ -75,9 +75,15 @@ func _run() -> void:
 		inspector_property.schema_3_variable_selection_changed.connect(
 			Callable(dock, &"set_variable_selection")
 		)
+		inspector_property.schema_3_variable_editor_focus_requested.connect(
+			Callable(dock, &"focus_variable_editor")
+		)
+		dock.schema_3_variable_list_focus_requested.connect(
+			Callable(inspector_property, &"focus_schema_3_variable_list")
+		)
 	await process_frame
 	await process_frame
-	_expect(dock_control != null and dock_control.size.x >= initial_dock_minimum_width + 80.0 and is_equal_approx(dock_control.custom_minimum_size.x, initial_dock_minimum_width), "Flujo dock preserves manual expansion without reapplying its initial minimum width.")
+	_expect(dock_control != null and dock_control.size.x < 320.0 and is_zero_approx(dock_control.custom_minimum_size.x), "Flujo dock permits native SplitContainer reduction without resetting its layout.")
 	var create_graph_button: Button = _find_button(inspector_property, "Create Schema 2 Graph")
 	_expect(create_graph_button != null and create_graph_button.visible, "Null FlowGraph builds a visible create button after ready without _update_property().")
 	var inspector_content: Node = inspector_property.get_child(0)
@@ -176,9 +182,11 @@ func _run() -> void:
 	await process_frame
 	_expect(not is_instance_valid(dock), "The schema 3 dock is released before the editor test continues.")
 	_expect(not is_instance_valid(inspector_scroll), "The inspector test host is released before the editor test continues.")
+	await _test_plugin_variable_selection_relay(undo_redo)
 	controller.flow_graph = null
 	_test_dock_visibility_conditions()
 	_test_debug_instrumentation_removed()
+	_test_public_plugin_language()
 
 	_expect(commands.create_schema_2_graph(controller), "A missing graph can be created.")
 	var created_graph: FlowGraph = controller.flow_graph
@@ -915,6 +923,12 @@ func _test_schema_3_variable_inspector(
 	var variable_list: ItemList = _section_list(inspector_property, "Variables")
 	_expect(variable_list != null and variable_list.item_count == graph.variables.size(), "Schema 3 Inspector keeps nullable variable row order.")
 	_expect(_has_label_containing(dock_property, "Select a Schema 3 Variable"), "Schema 3 dock gives an English instruction without a selection.")
+	await _test_schema_3_selection_without_list_rebuild(
+		inspector_property,
+		dock_property,
+		graph,
+		history
+	)
 	var process_list: ItemList = _section_list(inspector_property, "Processes")
 	if process_list != null:
 		process_list.emit_signal(&"item_selected", 0)
@@ -929,6 +943,8 @@ func _test_schema_3_variable_inspector(
 		_expect(_has_label_containing(dock_property, "Select a Schema 3 Variable"), "Selecting a State Machine clears schema 3 Variable options.")
 	if variable_list == null:
 		return
+	await _test_schema_3_keyboard_accessibility(inspector_property, dock_property, graph)
+	await _test_schema_3_variable_escape_navigation(inspector_property, dock_property, graph)
 	for value_type: int in range(FlowVariableDefinition.ValueType.BOOL, FlowVariableDefinition.ValueType.COLOR + 1):
 		await _select_variable_row(inspector_property, value_type)
 		var value_control: Control = _find_node_by_name(dock_property, _value_control_name(value_type)) as Control
@@ -940,7 +956,7 @@ func _test_schema_3_variable_inspector(
 	await _select_variable_row(inspector_property, FlowVariableDefinition.ValueType.STRING)
 	var name_input: LineEdit = _find_node_by_name(dock_property, &"VariableNameInput") as LineEdit
 	var selected_list: ItemList = _section_list(inspector_property, "Variables")
-	_expect(name_input != null and name_input.text == original_name and selected_list != null and selected_list.has_focus(), "Schema 3 dock Name field follows the Inspector-owned selected row.")
+	_expect(name_input != null and name_input.text == original_name and selected_list != null and selected_list.is_selected(FlowVariableDefinition.ValueType.STRING), "Schema 3 dock Name field follows the Inspector-owned selected row without requiring a focus transfer.")
 	if name_input == null:
 		return
 	name_input.text = "Renamed Schema 3 Variable"
@@ -968,8 +984,9 @@ func _test_schema_3_variable_inspector(
 	name_input.emit_signal(&"gui_input", cancel_name)
 	await process_frame
 	await process_frame
-	name_input = _find_node_by_name(dock_property, &"VariableNameInput") as LineEdit
-	_expect(string_variable.display_name == "Renamed Schema 3 Variable" and name_input != null and name_input.text == "Renamed Schema 3 Variable" and name_input.has_focus(), "Schema 3 dock Name Escape cancels without mutation and restores a valid dock focus.")
+	selected_list = _section_list(inspector_property, "Variables")
+	var cancelled_name_index: int = _item_index_for_internal_id(selected_list, string_variable.get_internal_id())
+	_expect(string_variable.display_name == "Renamed Schema 3 Variable" and selected_list != null and cancelled_name_index >= 0 and selected_list.is_selected(cancelled_name_index) and selected_list.has_focus(), "Schema 3 dock Name Escape cancels without mutation and returns focus to the selected Inspector row.")
 	var string_input: TextEdit = _find_node_by_name(dock_property, &"VariableStringValue") as TextEdit
 	_expect(string_input != null and string_input.custom_minimum_size.y > 0.0, "Schema 3 dock String uses a visibly sized themed TextEdit.")
 	if string_input == null:
@@ -1080,7 +1097,22 @@ func _test_schema_3_variable_inspector(
 	note_input = _find_node_by_name(dock_property, &"VariableNoteInput") as TextEdit
 	if note_input == null:
 		return
-	note_input.text = "Schema 3 note"
+	_expect(
+		note_input.focus_mode != Control.FOCUS_NONE and note_input.custom_minimum_size.y > 0.0 \
+			and note_input.size.y >= note_input.custom_minimum_size.y \
+			and note_input.wrap_mode != TextEdit.LINE_WRAPPING_NONE,
+		"Schema 3 Note uses a visibly sized multiline TextEdit."
+	)
+	note_input.grab_focus()
+	_expect(note_input.has_focus(), "Schema 3 Note accepts native keyboard focus.")
+	note_input.text = "Schema 3 note\n"
+	var note_enter: InputEventKey = InputEventKey.new()
+	note_enter.pressed = true
+	note_enter.keycode = KEY_ENTER
+	note_input.emit_signal(&"gui_input", note_enter)
+	await process_frame
+	_expect(note_input.text == "Schema 3 note\n" and bool_variable.user_note.is_empty(), "Schema 3 Note keeps its multiline Enter buffer without committing it.")
+	var note_history_version: int = history.get_version()
 	var submit_note: InputEventKey = InputEventKey.new()
 	submit_note.pressed = true
 	submit_note.keycode = KEY_ENTER
@@ -1088,7 +1120,25 @@ func _test_schema_3_variable_inspector(
 	note_input.emit_signal(&"gui_input", submit_note)
 	await process_frame
 	await process_frame
-	_expect(bool_variable.user_note == "Schema 3 note", "Schema 3 Note applies only by its explicit keyboard action.")
+	_expect(bool_variable.user_note == "Schema 3 note\n" and history.get_version() == note_history_version + 1, "Schema 3 Note applies only by its explicit Ctrl+Enter action.")
+	note_input = _find_node_by_name(dock_property, &"VariableNoteInput") as TextEdit
+	if note_input == null:
+		return
+	note_input.grab_focus()
+	note_input.text = "Discarded note"
+	var cancel_note: InputEventKey = InputEventKey.new()
+	cancel_note.pressed = true
+	cancel_note.keycode = KEY_ESCAPE
+	note_input.emit_signal(&"gui_input", cancel_note)
+	await process_frame
+	await process_frame
+	var note_list: ItemList = _section_list(inspector_property, "Variables")
+	var note_row_index: int = _item_index_for_internal_id(note_list, bool_variable.get_internal_id())
+	_expect(
+		bool_variable.user_note == "Schema 3 note\n" and note_list != null and note_row_index >= 0 \
+			and note_list.is_selected(note_row_index) and note_list.has_focus(),
+		"Schema 3 Note Escape discards its buffer and returns to the selected Inspector row."
+	)
 
 	var color_variable: FlowVariableDefinition = graph.variables[FlowVariableDefinition.ValueType.COLOR]
 	var original_color: Color = color_variable.color_value
@@ -1267,6 +1317,405 @@ func _test_schema_3_variable_inspector(
 	await process_frame
 	await process_frame
 	_expect(_section_list_count(inspector_property, "Variables") == 1, "Schema 3 Inspector repeated rebuilds do not duplicate variable lists.")
+
+
+## Exercises native keyboard delivery instead of directly selecting an ItemList row.
+func _test_schema_3_keyboard_accessibility(
+		inspector_property: FlowGraphInspectorProperty,
+		dock_property: FlowGraphInspectorProperty,
+		graph: FlowGraph
+) -> void:
+	var variable_list: ItemList = _section_list(inspector_property, "Variables")
+	_expect(
+		variable_list != null and variable_list.is_inside_tree() \
+			and variable_list.focus_mode != Control.FOCUS_NONE,
+		"Schema 3 Variables list is reachable by native keyboard focus before a row is selected."
+	)
+	if variable_list == null:
+		return
+	_expect(
+		inspector_property.auto_translate_mode == Node.AUTO_TRANSLATE_MODE_DISABLED \
+			and dock_property.auto_translate_mode == Node.AUTO_TRANSLATE_MODE_DISABLED,
+		"Flujo Inspector and dock surfaces retain their English source text without Godot auto-translation."
+	)
+	variable_list.deselect_all()
+	variable_list.grab_focus()
+	_expect(variable_list.has_focus(), "Schema 3 Variables list accepts keyboard focus without a prior selection.")
+	var list_instance_id: int = variable_list.get_instance_id()
+	var inspector_scroll: ScrollContainer = _inspector_scroll_for(inspector_property)
+	var scroll_before: int = inspector_scroll.scroll_vertical if inspector_scroll != null else 0
+	var down_event: InputEventKey = InputEventKey.new()
+	down_event.pressed = true
+	down_event.keycode = KEY_DOWN
+	Input.parse_input_event(down_event)
+	await process_frame
+	await process_frame
+	variable_list = _section_list(inspector_property, "Variables")
+	_expect(
+		variable_list != null and variable_list.get_instance_id() == list_instance_id \
+			and variable_list.is_selected(0) and variable_list.has_focus() \
+			and (inspector_scroll == null or inspector_scroll.scroll_vertical == scroll_before),
+		"Schema 3 Variables keyboard selection preserves its ItemList instance, focus, scroll, and selected row."
+	)
+	if variable_list == null:
+		return
+	var first_entry: Dictionary = variable_list.get_item_metadata(0) as Dictionary
+	var first_id: String = first_entry.get("internal_id", "") as String
+	_expect(
+		not first_id.is_empty() and _find_node_by_name(dock_property, &"Schema3VariableEditor") != null,
+		"Keyboard row selection publishes the stable ID to the Flujo panel."
+	)
+	variable_list.emit_signal(&"item_activated", 0)
+	await process_frame
+	await process_frame
+	var entered_name_input: LineEdit = _find_node_by_name(dock_property, &"VariableNameInput") as LineEdit
+	_expect(
+		entered_name_input != null and entered_name_input.has_focus(),
+		"Enter transfers focus from the selected schema 3 Variable row to its Name editor."
+	)
+	if entered_name_input != null:
+		var escape_event: InputEventKey = InputEventKey.new()
+		escape_event.pressed = true
+		escape_event.keycode = KEY_ESCAPE
+		entered_name_input.emit_signal(&"gui_input", escape_event)
+		await process_frame
+		await process_frame
+		variable_list = _section_list(inspector_property, "Variables")
+		var returned_index: int = _item_index_for_internal_id(variable_list, first_id)
+		_expect(
+			variable_list != null and returned_index >= 0 and variable_list.is_selected(returned_index) \
+				and variable_list.has_focus(),
+			"Escape after cancelling Name returns focus to the same stable-ID-selected Inspector row."
+		)
+	var first_variable: FlowVariableDefinition = graph.variables[0] as FlowVariableDefinition
+	_expect(first_variable != null, "Schema 3 keyboard fixture retains its first typed Variable resource.")
+	if first_variable == null:
+		return
+	var name_input: LineEdit = _find_node_by_name(dock_property, &"VariableNameInput") as LineEdit
+	var type_option: OptionButton = _find_node_by_name(dock_property, &"VariableTypeOption") as OptionButton
+	var value_control: Control = _find_node_by_name(
+		dock_property,
+		_value_control_name(first_variable.value_type)
+	) as Control
+	_expect(
+		name_input != null and type_option != null and value_control != null \
+			and name_input.focus_mode != Control.FOCUS_NONE \
+			and type_option.focus_mode != Control.FOCUS_NONE \
+			and value_control.focus_mode != Control.FOCUS_NONE,
+		"Schema 3 Name, Type, and Value controls remain in native Tab/Shift+Tab navigation."
+	)
+	if name_input != null:
+		name_input.grab_focus()
+		var tab_event: InputEventKey = InputEventKey.new()
+		tab_event.pressed = true
+		tab_event.keycode = KEY_TAB
+		Input.parse_input_event(tab_event)
+		await process_frame
+		var focus_owner: Control = get_root().gui_get_focus_owner() as Control
+		_expect(
+			focus_owner != null and focus_owner != name_input and focus_owner.is_inside_tree(),
+			"Tab moves focus from Name through the current schema 3 editor without rebuilding it."
+		)
+		var reverse_tab_event: InputEventKey = InputEventKey.new()
+		reverse_tab_event.pressed = true
+		reverse_tab_event.keycode = KEY_TAB
+		reverse_tab_event.shift_pressed = true
+		Input.parse_input_event(reverse_tab_event)
+		await process_frame
+		focus_owner = get_root().gui_get_focus_owner() as Control
+		_expect(
+			focus_owner != null and focus_owner.is_inside_tree(),
+			"Shift+Tab retains a valid focus owner in the current schema 3 editor."
+		)
+
+
+## Covers one-press Escape from each schema 3 Variable editor control family.
+func _test_schema_3_variable_escape_navigation(
+		inspector_property: FlowGraphInspectorProperty,
+		dock_property: FlowGraphInspectorProperty,
+		graph: FlowGraph
+) -> void:
+	var name_variable: FlowVariableDefinition = graph.variables[FlowVariableDefinition.ValueType.BOOL] as FlowVariableDefinition
+	_expect(name_variable != null, "Schema 3 Escape fixture retains the Name Variable resource.")
+	if name_variable == null:
+		return
+	await _select_variable_row(inspector_property, FlowVariableDefinition.ValueType.BOOL)
+	var name_input: LineEdit = _find_node_by_name(dock_property, &"VariableNameInput") as LineEdit
+	_expect(name_input != null, "Schema 3 Escape exposes Name for the selected stable-ID Variable.")
+	if name_input == null:
+		return
+	var original_name: String = name_variable.display_name
+	name_input.text = "Pending Escape Name"
+	await _escape_to_selected_variable_list(inspector_property, name_input, name_variable.get_internal_id(), "Name")
+	_expect(name_variable.display_name == original_name, "Schema 3 Name Escape discards its pending buffer without mutation.")
+
+	await _select_variable_row(inspector_property, FlowVariableDefinition.ValueType.BOOL)
+	var type_option: OptionButton = _find_node_by_name(dock_property, &"VariableTypeOption") as OptionButton
+	_expect(type_option != null, "Schema 3 Escape exposes Type for the selected stable-ID Variable.")
+	if type_option != null:
+		await _escape_to_selected_variable_list(inspector_property, type_option, name_variable.get_internal_id(), "Type")
+	_expect(name_variable.value_type == FlowVariableDefinition.ValueType.BOOL, "Schema 3 Type Escape does not create a replacement type action.")
+
+	for value_type: int in range(FlowVariableDefinition.ValueType.BOOL, FlowVariableDefinition.ValueType.COLOR + 1):
+		await _select_variable_row(inspector_property, value_type)
+		var variable: FlowVariableDefinition = graph.variables[value_type] as FlowVariableDefinition
+		_expect(variable != null, "Schema 3 Escape fixture retains the Value resource for type %d." % value_type)
+		if variable == null:
+			continue
+		var value_control: Control = _find_node_by_name(dock_property, _value_control_name(value_type)) as Control
+		_expect(value_control != null, "Schema 3 Escape exposes the Value control for type %d." % value_type)
+		if value_control == null:
+			continue
+		if value_control is SpinBox:
+			var spin_box: SpinBox = value_control as SpinBox
+			var spin_line_edit: LineEdit = spin_box.get_line_edit()
+			spin_line_edit.text = "999"
+			await _escape_to_selected_variable_list(inspector_property, spin_line_edit, variable.get_internal_id(), "Value type %d" % value_type)
+		elif value_control is TextEdit:
+			var text_edit: TextEdit = value_control as TextEdit
+			text_edit.text = "pending Escape value"
+			await _escape_to_selected_variable_list(inspector_property, text_edit, variable.get_internal_id(), "Value type %d" % value_type)
+		elif value_control is ColorPickerButton:
+			var color_button: ColorPickerButton = value_control as ColorPickerButton
+			color_button.emit_signal(&"pressed")
+			color_button.emit_signal(&"popup_closed")
+			await process_frame
+			var color_list: ItemList = _section_list(inspector_property, "Variables")
+			var color_index: int = _item_index_for_internal_id(color_list, variable.get_internal_id())
+			_expect(
+				color_list != null and color_index >= 0 and color_list.is_selected(color_index),
+				"COLOR popup Escape-close context preserves its stable-ID row for the next Escape."
+			)
+			await _escape_to_selected_variable_list(inspector_property, color_button, variable.get_internal_id(), "COLOR Value")
+		else:
+			await _escape_to_selected_variable_list(inspector_property, value_control, variable.get_internal_id(), "Value type %d" % value_type)
+
+	await _select_variable_row(inspector_property, FlowVariableDefinition.ValueType.BOOL)
+	var advanced_toggle: Button = _find_node_by_name(dock_property, &"VariableAdvancedToggle") as Button
+	_expect(advanced_toggle != null, "Schema 3 Escape exposes Advanced for the selected stable-ID Variable.")
+	if advanced_toggle == null:
+		return
+	await _escape_to_selected_variable_list(inspector_property, advanced_toggle, name_variable.get_internal_id(), "Advanced")
+	await _select_variable_row(inspector_property, FlowVariableDefinition.ValueType.BOOL)
+	advanced_toggle = _find_node_by_name(dock_property, &"VariableAdvancedToggle") as Button
+	if advanced_toggle == null:
+		return
+	advanced_toggle.emit_signal(&"toggled", true)
+	await process_frame
+	await process_frame
+	var scope_option: OptionButton = _find_node_by_name(dock_property, &"VariableScopeOption") as OptionButton
+	var binding_option: OptionButton = _find_node_by_name(dock_property, &"VariableBindingOption") as OptionButton
+	var persistent_input: CheckBox = _find_node_by_name(dock_property, &"VariablePersistentCheckBox") as CheckBox
+	var note_input: TextEdit = _find_node_by_name(dock_property, &"VariableNoteInput") as TextEdit
+	_expect(
+		scope_option != null and binding_option != null and persistent_input != null and note_input != null,
+		"Schema 3 Escape exposes every focusable Advanced configuration control."
+	)
+	if scope_option == null or binding_option == null or persistent_input == null or note_input == null:
+		return
+	var original_scope: int = name_variable.scope
+	var original_binding: int = name_variable.binding
+	var original_persistent: bool = name_variable.persistent
+	await _escape_to_selected_variable_list(inspector_property, scope_option, name_variable.get_internal_id(), "Scope")
+	await _escape_to_selected_variable_list(inspector_property, binding_option, name_variable.get_internal_id(), "Binding")
+	await _escape_to_selected_variable_list(inspector_property, persistent_input, name_variable.get_internal_id(), "Persistent")
+	_expect(
+		name_variable.scope == original_scope and name_variable.binding == original_binding \
+			and name_variable.persistent == original_persistent,
+		"Schema 3 Advanced Escape creates no configuration Undo/Redo action."
+	)
+	var original_note: String = name_variable.user_note
+	note_input.text = "Pending Escape note"
+	await _escape_to_selected_variable_list(inspector_property, note_input, name_variable.get_internal_id(), "Note")
+	_expect(name_variable.user_note == original_note, "Schema 3 Note Escape discards its pending multiline buffer without mutation.")
+
+
+## Delivers Escape through the public Control signal and verifies stable-ID list restoration.
+func _escape_to_selected_variable_list(
+		inspector_property: FlowGraphInspectorProperty,
+		control: Control,
+		variable_id: String,
+		control_label: String
+) -> void:
+	control.grab_focus()
+	_expect(control.has_focus(), "Schema 3 %s accepts focus before Escape." % control_label)
+	var escape_event: InputEventKey = InputEventKey.new()
+	escape_event.pressed = true
+	escape_event.keycode = KEY_ESCAPE
+	control.emit_signal(&"gui_input", escape_event)
+	await process_frame
+	await process_frame
+	var variable_list: ItemList = _section_list(inspector_property, "Variables")
+	var item_index: int = _item_index_for_internal_id(variable_list, variable_id)
+	_expect(
+		variable_list != null and item_index >= 0 and variable_list.is_selected(item_index) \
+			and variable_list.has_focus(),
+		"Schema 3 %s Escape returns focus to the same stable-ID-selected Variables row." % control_label
+	)
+
+
+## Covers the mouse selection signal without replacing the mounted schema 3 ItemList.
+func _test_schema_3_selection_without_list_rebuild(
+		inspector_property: FlowGraphInspectorProperty,
+		dock_property: FlowGraphInspectorProperty,
+		graph: FlowGraph,
+		history: UndoRedo
+) -> void:
+	var variable_list: ItemList = _section_list(inspector_property, "Variables")
+	_expect(variable_list != null and variable_list.item_count >= 2, "Schema 3 selection fixture has two Variable rows.")
+	if variable_list == null:
+		return
+	var selected_variable: FlowVariableDefinition = graph.variables[0] as FlowVariableDefinition
+	_expect(selected_variable != null, "Schema 3 selection fixture retains its first Variable resource.")
+	if selected_variable == null:
+		return
+	var inspector_scroll: ScrollContainer = _inspector_scroll_for(inspector_property)
+	variable_list.grab_focus()
+	await process_frame
+	if inspector_scroll != null:
+		var maximum_scroll: float = inspector_scroll.get_v_scroll_bar().max_value
+		inspector_scroll.scroll_vertical = int(minf(24.0, maximum_scroll))
+		await process_frame
+	var list_instance_id: int = variable_list.get_instance_id()
+	var scroll_before: int = inspector_scroll.scroll_vertical if inspector_scroll != null else 0
+	variable_list.select(0)
+	variable_list.emit_signal(&"item_selected", 0)
+	await process_frame
+	await process_frame
+	var selected_list: ItemList = _section_list(inspector_property, "Variables")
+	var selected_index: int = _item_index_for_internal_id(selected_list, selected_variable.get_internal_id())
+	_expect(
+		selected_list != null and selected_list.get_instance_id() == list_instance_id \
+			and selected_list.has_focus() and selected_index >= 0 and selected_list.is_selected(selected_index) \
+			and (inspector_scroll == null or inspector_scroll.scroll_vertical == scroll_before),
+		"Schema 3 mouse selection preserves the mounted ItemList, its focus, scroll, and stable-ID row."
+	)
+	_expect(
+		_find_node_by_name(dock_property, &"VariableNameInput") != null,
+		"Schema 3 mouse selection publishes the stable ID to the Flujo panel without rebuilding the Inspector list."
+	)
+	var move_down: Button = _find_button(inspector_property, "Move Down")
+	_expect(move_down != null, "Schema 3 selection updates only the selected row structural actions.")
+	if move_down == null:
+		return
+	move_down.emit_signal(&"pressed")
+	await process_frame
+	await process_frame
+	_expect(
+		graph.variables[1] == selected_variable,
+		"Schema 3 Move acts on the stable ID selected by the preserved ItemList."
+	)
+	history.undo()
+	await process_frame
+	await process_frame
+	_expect(
+		graph.variables[0] == selected_variable,
+		"Schema 3 Move Undo restores the resource selected by stable ID."
+	)
+
+
+func _inspector_scroll_for(property: FlowGraphInspectorProperty) -> ScrollContainer:
+	var column: Node = property.get_parent()
+	return column.get_parent() as ScrollContainer if column != null else null
+
+
+## Exercises the production Inspector-plugin-main-plugin-dock selection relay.
+func _test_plugin_variable_selection_relay(undo_redo: EditorUndoRedoManager) -> void:
+	var controller: PVController = PVController.new()
+	controller.flow_graph = _schema_3_variable_fixture()
+	get_root().add_child(controller)
+	var relay_inspector: PVControllerInspectorPlugin = PVControllerInspectorPlugin.new()
+	relay_inspector.set_undo_redo(undo_redo)
+	var flow_graph_property: Dictionary = _find_property(controller.get_property_list(), &"flow_graph")
+	_expect(
+		relay_inspector._parse_property(
+			controller,
+			flow_graph_property["type"],
+			"flow_graph",
+			flow_graph_property["hint"],
+			flow_graph_property["hint_string"],
+			flow_graph_property["usage"],
+			false
+		),
+		"The production Inspector plugin creates the FlowGraph relay property."
+	)
+	var inspector_property: FlowGraphInspectorProperty = relay_inspector.get("_active_flow_graph_property") as FlowGraphInspectorProperty
+	_expect(inspector_property != null, "The production Inspector relay exposes its current FlowGraph property.")
+	if inspector_property == null:
+		controller.queue_free()
+		return
+	get_root().add_child(inspector_property)
+	inspector_property.set_object_and_property(controller, &"flow_graph")
+	var dock: Node = VP_FLUJO_DOCK_SCRIPT.new()
+	dock.call(&"configure", undo_redo)
+	get_root().add_child(dock)
+	dock.set("_controller_presence_initialized", true)
+	dock.set("_controller_present", true)
+	var dock_control: Control = dock as Control
+	_expect(dock_control != null and is_zero_approx(dock_control.custom_minimum_size.x), "The production relay dock retains native resize freedom.")
+	if dock_control != null:
+		dock_control.size.x = 160.0
+	var main_plugin: EditorPlugin = VP_FLUJO_PLUGIN_SCRIPT.new()
+	main_plugin.set(&"_dock", dock)
+	main_plugin.set(&"_dock_controller", null)
+	main_plugin.set(&"_controller_inspector_plugin", relay_inspector)
+	relay_inspector.schema_3_variable_selection_changed.connect(
+		Callable(main_plugin, &"_on_schema_3_variable_selection_changed")
+	)
+	relay_inspector.schema_3_variable_editor_focus_requested.connect(
+		Callable(main_plugin, &"_on_schema_3_variable_editor_focus_requested")
+	)
+	inspector_property.call(&"_rebuild_interface")
+	await process_frame
+	await process_frame
+	var variable_list: ItemList = _section_list(inspector_property, "Variables")
+	_expect(variable_list != null and variable_list.item_count > 0, "The production relay property exposes a schema 3 Variables row.")
+	if variable_list != null:
+		variable_list.select(0)
+		variable_list.emit_signal(&"item_selected", 0)
+		await process_frame
+		await process_frame
+	var dock_property: FlowGraphInspectorProperty = dock.call(&"get_variable_editor") as FlowGraphInspectorProperty
+	_expect(
+		dock_property != null \
+			and _find_node_by_name(dock_property, &"VariableNameInput") != null \
+			and _find_node_by_name(dock_property, &"VariableTypeOption") != null \
+			and _find_node_by_name(dock_property, &"VariableBoolValue") != null,
+		"A public schema 3 selection crosses Inspector, plugin, and dock to render Name, Type, and Value."
+	)
+	if variable_list != null:
+		variable_list.emit_signal(&"item_activated", 0)
+		await process_frame
+		await process_frame
+	var name_input: LineEdit = _find_node_by_name(dock_property, &"VariableNameInput") as LineEdit
+	_expect(name_input != null and name_input.has_focus(), "A public schema 3 activation crosses the production relay to focus Name.")
+	_expect(dock_control != null and dock_control.size.x < 320.0, "The production dock can reduce below the retired 320-pixel initial width.")
+	inspector_property.queue_free()
+	dock.queue_free()
+	controller.queue_free()
+	main_plugin.free()
+	await process_frame
+	await process_frame
+
+
+func _test_public_plugin_language() -> void:
+	var plugin_configuration: String = FileAccess.get_file_as_string("res://addons/vp_flujo/plugin.cfg")
+	_expect(
+		plugin_configuration.contains('description="Pre-alpha visual programming foundation for Godot."'),
+		"Plugin metadata presents an English pre-alpha description."
+	)
+	_expect(plugin_configuration.contains('author="Flujo Project"'), "Plugin metadata presents its author in English.")
+	var sources: Array[String] = [
+		FileAccess.get_file_as_string("res://addons/vp_flujo/plugin.gd"),
+		FileAccess.get_file_as_string("res://addons/vp_flujo/editor/pv_scene_inspector.gd"),
+		FileAccess.get_file_as_string("res://addons/vp_flujo/runtime/pv_controller.gd"),
+	]
+	for source: String in sources:
+		_expect(
+			not source.contains("Punto de") and not source.contains("Actuará") \
+				and not source.contains("Servicio que conoce"),
+			"Mechanically translatable plugin comments remain in English."
+		)
 
 
 func _test_schema_3_dock_controller_switch(
@@ -1456,6 +1905,7 @@ func _select_variable_row(property: FlowGraphInspectorProperty, index: int) -> v
 	if list == null or index < 0 or index >= list.item_count:
 		_expect(false, "Schema 3 variable selection has a current in-range list row.")
 		return
+	list.select(index)
 	list.emit_signal(&"item_selected", index)
 	await process_frame
 	await process_frame
@@ -1692,7 +2142,9 @@ func _test_debug_instrumentation_removed() -> void:
 		FileAccess.get_file_as_string("res://addons/vp_flujo/plugin.gd"),
 		FileAccess.get_file_as_string("res://addons/vp_flujo/editor/pv_controller_inspector_plugin.gd"),
 		FileAccess.get_file_as_string("res://addons/vp_flujo/editor/flow_graph_inspector_property.gd"),
+		FileAccess.get_file_as_string("res://addons/vp_flujo/editor/vp_flujo_dock.gd"),
 	]
 	for source: String in sources:
 		_expect(not source.contains("InspectorDebug") and not source.contains("DockDebug"), "Temporary debug output is removed.")
 		_expect(not source.contains("DEBUG_INSPECTOR") and not source.contains("DEBUG_DOCK"), "Temporary debug constants are removed.")
+		_expect(not source.contains("VariableRoute") and not source.contains("DEBUG_VARIABLE_ROUTE"), "Temporary selection-route tracing is removed.")

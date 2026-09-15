@@ -3,7 +3,7 @@ extends EditorDock
 
 ## Vista del editor. No busca nodos ni administra el ciclo de vida del plugin.
 
-const INITIAL_LOGICAL_MINIMUM_WIDTH: float = 320.0
+signal schema_3_variable_list_focus_requested(controller: PVController, variable_id: String)
 
 var _controller_present: bool
 var _controller_presence_initialized: bool = false
@@ -14,8 +14,8 @@ var _content: VBoxContainer
 
 
 func _init() -> void:
+	auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	_configure_dock()
-	_apply_initial_minimum_width()
 	_build_interface()
 
 
@@ -42,6 +42,7 @@ func configure(undo_redo: EditorUndoRedoManager) -> void:
 	_variable_editor.name = &"Schema3VariablesDockEditor"
 	_variable_editor.configure(undo_redo)
 	_variable_editor.configure_for_dock()
+	_variable_editor.schema_3_variable_list_focus_requested.connect(_on_variable_editor_list_focus_requested)
 	_variable_editor.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_variable_editor.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_content.add_child(_variable_editor)
@@ -79,6 +80,15 @@ func set_variable_selection(
 		_variable_editor.set_dock_variable_selection(controller, collection, variable_id)
 
 
+func focus_variable_editor(controller: PVController, variable_id: String) -> void:
+	if _variable_editor != null:
+		_variable_editor.focus_selected_variable_editor(controller, variable_id)
+
+
+func _on_variable_editor_list_focus_requested(controller: PVController, variable_id: String) -> void:
+	emit_signal(&"schema_3_variable_list_focus_requested", controller, variable_id)
+
+
 func _on_controller_property_list_changed() -> void:
 	if _variable_editor != null:
 		_variable_editor.refresh_dock_controller()
@@ -102,11 +112,6 @@ func _configure_dock() -> void:
 	global = false
 	closable = false
 	icon_name = &"VisualShader"
-
-
-## Applies only at dock creation; saved layouts and user resizing remain authoritative afterward.
-func _apply_initial_minimum_width() -> void:
-	custom_minimum_size.x = INITIAL_LOGICAL_MINIMUM_WIDTH * EditorInterface.get_editor_scale()
 
 
 func _build_interface() -> void:

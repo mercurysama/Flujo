@@ -12,8 +12,10 @@ signal schema_3_variable_selection_changed(
 	collection: FlowGraphEditorCommands.Collection,
 	variable_id: String
 )
+signal schema_3_variable_editor_focus_requested(controller: PVController, variable_id: String)
 
 var _undo_redo: EditorUndoRedoManager
+var _active_flow_graph_property: FlowGraphInspectorProperty
 
 
 ## Receives the editor-owned undo/redo manager from the main plugin.
@@ -40,6 +42,8 @@ func _parse_property(
 	var property: FlowGraphInspectorProperty = FLOW_GRAPH_INSPECTOR_PROPERTY.new()
 	property.configure(_undo_redo)
 	property.schema_3_variable_selection_changed.connect(_on_schema_3_variable_selection_changed)
+	property.schema_3_variable_editor_focus_requested.connect(_on_schema_3_variable_editor_focus_requested)
+	_active_flow_graph_property = property
 	add_property_editor(property_name, property, false, "Flow Graph")
 	return true
 
@@ -50,6 +54,24 @@ func _on_schema_3_variable_selection_changed(
 	variable_id: String
 ) -> void:
 	emit_signal(&"schema_3_variable_selection_changed", controller, collection, variable_id)
+
+
+func _on_schema_3_variable_editor_focus_requested(controller: PVController, variable_id: String) -> void:
+	emit_signal(&"schema_3_variable_editor_focus_requested", controller, variable_id)
+
+
+func focus_schema_3_variable_list(controller: PVController, variable_id: String) -> void:
+	if not is_instance_valid(_active_flow_graph_property):
+		return
+	if _active_flow_graph_property.get_edited_object() != controller:
+		return
+	_active_flow_graph_property.focus_schema_3_variable_list(controller, variable_id)
+
+
+## Returns whether the current Inspector property belongs to this controller.
+func is_active_controller(controller: PVController) -> bool:
+	return is_instance_valid(_active_flow_graph_property) \
+		and _active_flow_graph_property.get_edited_object() == controller
 
 
 ## Returns whether a property name is the FlowGraph reference intercepted by this plugin.

@@ -12,6 +12,8 @@ signal schema_3_variable_selection_changed(
 	collection: FlowGraphEditorCommands.Collection,
 	variable_id: String
 )
+signal schema_3_variable_editor_focus_requested(controller: PVController, variable_id: String)
+signal schema_3_variable_list_focus_requested(controller: PVController, variable_id: String)
 
 var _content: VBoxContainer
 var _commands: FlowGraphEditorCommands
@@ -21,6 +23,7 @@ var _rename_input: LineEdit
 var _rename_target_id: String = ""
 var _rename_target_collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.PROCESSES
 var _restore_selected_list_focus: bool = false
+var _schema_3_structural_action_containers: Dictionary = {}
 var _rebuild_queued: bool = false
 var _rebuild_generation: int = 0
 var _variable_advanced_open: bool = false
@@ -42,8 +45,6 @@ func configure(undo_redo: EditorUndoRedoManager) -> void:
 
 
 func _on_commands_changed() -> void:
-	if not _dock_mode and not _selected_id.is_empty():
-		_restore_selected_list_focus = true
 	_request_rebuild()
 
 
@@ -110,6 +111,7 @@ func set_dock_variable_selection(
 
 
 func _init() -> void:
+	auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	_content = VBoxContainer.new()
 	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_content.add_theme_constant_override("separation", 6)
@@ -158,6 +160,7 @@ func _rebuild_interface(generation: int = -1) -> void:
 
 
 func _render(presentation: Dictionary, controller: PVController, generation: int) -> void:
+	_schema_3_structural_action_containers.clear()
 	for child: Node in _content.get_children():
 		_content.remove_child(child)
 		child.queue_free()
@@ -248,6 +251,7 @@ func _render_dock_schema_3_variable_options(controller: PVController, generation
 
 func _render_typed_sections(sections: Array, controller: PVController, generation: int) -> void:
 	for section: Dictionary in sections:
+		var collection: FlowGraphEditorCommands.Collection = _section_collection(section["title"])
 		var category: VBoxContainer = VBoxContainer.new()
 		category.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_content.add_child(category)
@@ -259,11 +263,15 @@ func _render_typed_sections(sections: Array, controller: PVController, generatio
 			"State Machines":
 				_add_button_to(category, "Add State Machine", _on_add_state_machine_pressed)
 		_render_section(section, category, generation)
-		if _section_contains_selection(section):
-			if controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_3:
-				_render_schema_3_structural_actions(category)
-			elif controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_2:
-				_render_selected_actions(category, controller.flow_graph, generation)
+		if controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_3:
+			var selection_actions: HBoxContainer = HBoxContainer.new()
+			selection_actions.name = &"Schema3StructuralActions"
+			category.add_child(selection_actions)
+			_schema_3_structural_action_containers[collection] = selection_actions
+			if _section_contains_selection(section):
+				_render_schema_3_structural_actions(selection_actions)
+		elif _section_contains_selection(section) and controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_2:
+			_render_selected_actions(category, controller.flow_graph, generation)
 
 
 func _render_section(section: Dictionary, parent: Container, generation: int) -> void:
@@ -287,6 +295,9 @@ func _render_section(section: Dictionary, parent: Container, generation: int) ->
 			list.select(item_index)
 			selected_item_index = item_index
 	list.item_selected.connect(_on_item_selected.bind(list))
+	if _is_schema_3_graph() and _section_collection(section["title"]) == FlowGraphEditorCommands.Collection.VARIABLES:
+		list.item_activated.connect(_on_schema_3_variable_item_activated.bind(list))
+	list.gui_input.connect(_on_list_gui_input.bind(list))
 	parent.add_child(list)
 	call_deferred(&"_fit_list_to_first_row", list, generation)
 	if _restore_selected_list_focus and _section_collection(section["title"]) == _selected_collection:
@@ -313,12 +324,23 @@ func _render_selected_actions(parent: Container, graph: FlowGraph, generation: i
 	call_deferred(&"_focus_rename_input", _rename_input, _rename_target_id, generation)
 
 
-func _render_schema_3_structural_actions(parent: Container) -> void:
-	var selection_actions: HBoxContainer = HBoxContainer.new()
-	parent.add_child(selection_actions)
+func _render_schema_3_structural_actions(selection_actions: Container) -> void:
 	_add_button_to(selection_actions, "Move Up", _on_move_up_pressed)
 	_add_button_to(selection_actions, "Move Down", _on_move_down_pressed)
 	_add_button_to(selection_actions, "Delete", _on_delete_pressed)
+
+
+## Updates only schema 3 selection actions so row selection keeps its ItemList mounted.
+func _update_schema_3_structural_actions() -> void:
+	for collection: int in _schema_3_structural_action_containers:
+		var selection_actions: HBoxContainer = _schema_3_structural_action_containers[collection] as HBoxContainer
+		if not is_instance_valid(selection_actions) or not selection_actions.is_inside_tree():
+			continue
+		for child: Node in selection_actions.get_children():
+			selection_actions.remove_child(child)
+			child.queue_free()
+		if collection == _selected_collection:
+			_render_schema_3_structural_actions(selection_actions)
 
 
 ## Renders the schema 3 variable-only editor inside the selected Variables category.
@@ -348,6 +370,7 @@ func _render_schema_3_variable_editor(parent: Container, graph: FlowGraph, gener
 	advanced_toggle.toggle_mode = true
 	advanced_toggle.button_pressed = _variable_advanced_open
 	advanced_toggle.toggled.connect(_on_variable_advanced_toggled)
+	advanced_toggle.gui_input.connect(_on_variable_control_gui_input.bind(advanced_toggle))
 	editor.add_child(advanced_toggle)
 	if not _variable_advanced_open:
 		_focus_requested_variable_control(editor, variable.get_internal_id(), generation)
@@ -379,6 +402,7 @@ func _render_schema_3_variable_editor(parent: Container, graph: FlowGraph, gener
 	persistent.text = "Persistent"
 	persistent.button_pressed = variable.persistent
 	persistent.toggled.connect(_on_variable_persistent_toggled.bind(variable.get_internal_id()))
+	persistent.gui_input.connect(_on_variable_control_gui_input.bind(persistent))
 	advanced.add_child(persistent)
 	var note_label: Label = Label.new()
 	note_label.text = "Note (Ctrl+Enter to apply)"
@@ -386,7 +410,9 @@ func _render_schema_3_variable_editor(parent: Container, graph: FlowGraph, gener
 	var note: TextEdit = TextEdit.new()
 	note.name = &"VariableNoteInput"
 	note.focus_mode = Control.FOCUS_ALL
+	note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	note.custom_minimum_size.y = _theme_text_edit_height(note, 3)
+	note.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	note.text = variable.user_note
 	note.gui_input.connect(_on_variable_note_gui_input.bind(note, variable.get_internal_id(), variable.user_note))
 	advanced.add_child(note)
@@ -443,6 +469,7 @@ func _add_variable_enum_field(
 			selected_index = option.item_count - 1
 	option.select(selected_index)
 	option.item_selected.connect(_on_variable_option_selected.bind(option, property_name, control_name))
+	option.gui_input.connect(_on_variable_control_gui_input.bind(option))
 	parent.add_child(option)
 
 
@@ -465,6 +492,7 @@ func _add_variable_value_field(parent: Container, variable: FlowVariableDefiniti
 			bool_input.text = "Enabled"
 			bool_input.button_pressed = variable.bool_value
 			bool_input.toggled.connect(_on_variable_value_changed.bind(&"bool_value", variable.get_internal_id(), bool_input.name))
+			bool_input.gui_input.connect(_on_variable_control_gui_input.bind(bool_input))
 			parent.add_child(bool_input)
 		FlowVariableDefinition.ValueType.INT:
 			_add_variable_spin_box(parent, &"VariableIntValue", float(variable.int_value), 1.0, &"int_value", variable.get_internal_id())
@@ -485,6 +513,7 @@ func _add_variable_value_field(parent: Container, variable: FlowVariableDefiniti
 			color_input.pressed.connect(_on_color_picker_opened.bind(color_input, variable.get_internal_id(), variable.color_value))
 			color_input.color_changed.connect(_on_color_picker_preview.bind(color_input, variable.get_internal_id()))
 			color_input.popup_closed.connect(_on_color_picker_closed.bind(color_input, variable.get_internal_id()))
+			color_input.gui_input.connect(_on_variable_control_gui_input.bind(color_input))
 			parent.add_child(color_input)
 			color_input.custom_minimum_size.y = _theme_color_swatch_height(color_input)
 
@@ -558,6 +587,8 @@ func _add_variable_spin_box(
 	input.allow_lesser = true
 	input.value = value
 	input.value_changed.connect(_on_variable_value_changed.bind(property_name, variable_id, control_name))
+	input.gui_input.connect(_on_variable_spin_box_gui_input.bind(input))
+	input.get_line_edit().gui_input.connect(_on_variable_spin_box_gui_input.bind(input))
 	parent.add_child(input)
 
 
@@ -573,6 +604,8 @@ func _add_variable_vector_field(parent: Container, variable_id: String, value: V
 		input.allow_lesser = true
 		input.value = value[component]
 		input.value_changed.connect(_on_variable_vector_component_changed.bind(variable_id, component, components, input.name))
+		input.gui_input.connect(_on_variable_spin_box_gui_input.bind(input))
+		input.get_line_edit().gui_input.connect(_on_variable_spin_box_gui_input.bind(input))
 		parent.add_child(input)
 
 
@@ -590,14 +623,9 @@ func _on_variable_text_submitted(value: String, property_name: StringName, contr
 
 
 func _on_variable_text_gui_input(event: InputEvent, input: LineEdit, original_value: String) -> void:
-	if not event is InputEventKey:
-		return
-	var key_event: InputEventKey = event as InputEventKey
-	if key_event.pressed and not key_event.echo and key_event.keycode == KEY_ESCAPE:
+	if _is_escape_press(event):
 		input.text = original_value
-		_restore_selected_list_focus = not _dock_mode
-		_variable_focus_control = input.name if _dock_mode else &""
-		_request_rebuild()
+		_return_variable_escape_to_list(event, input)
 
 
 func _on_variable_string_gui_input(
@@ -606,14 +634,14 @@ func _on_variable_string_gui_input(
 		variable_id: String,
 		original_value: String
 ) -> void:
+	if _is_escape_press(event):
+		input.text = original_value
+		_return_variable_escape_to_list(event, input)
+		return
 	if not event is InputEventKey:
 		return
 	var key_event: InputEventKey = event as InputEventKey
 	if not key_event.pressed or key_event.echo:
-		return
-	if key_event.keycode == KEY_ESCAPE:
-		input.text = original_value
-		input.accept_event()
 		return
 	if key_event.keycode == KEY_ENTER and key_event.ctrl_pressed:
 		_update_variable(variable_id, &"string_value", input.text, input.name)
@@ -628,6 +656,20 @@ func _on_variable_option_selected(index: int, option: OptionButton, property_nam
 
 func _on_variable_value_changed(value: Variant, property_name: StringName, variable_id: String, control_name: StringName) -> void:
 	_update_variable(variable_id, property_name, value, control_name)
+
+
+## Returns Escape from immediate-value controls to the Inspector-owned selected row.
+func _on_variable_control_gui_input(event: InputEvent, control: Control) -> void:
+	if _is_escape_press(event):
+		_return_variable_escape_to_list(event, control)
+
+
+## Clears uncommitted SpinBox text before returning to the Inspector-owned selected row.
+func _on_variable_spin_box_gui_input(event: InputEvent, input: SpinBox) -> void:
+	if not _is_escape_press(event):
+		return
+	input.get_line_edit().text = str(input.value)
+	_return_variable_escape_to_list(event, input)
 
 
 func _on_variable_vector_component_changed(
@@ -660,13 +702,14 @@ func _on_variable_note_gui_input(
 		variable_id: String,
 		original_value: String
 ) -> void:
+	if _is_escape_press(event):
+		input.text = original_value
+		_return_variable_escape_to_list(event, input)
+		return
 	if not event is InputEventKey:
 		return
 	var key_event: InputEventKey = event as InputEventKey
 	if not key_event.pressed or key_event.echo:
-		return
-	if key_event.keycode == KEY_ESCAPE:
-		input.text = original_value
 		return
 	if key_event.keycode == KEY_ENTER and key_event.ctrl_pressed:
 		_update_variable(variable_id, &"user_note", input.text, input.name)
@@ -720,6 +763,44 @@ func _focus_variable_control(control: Control, variable_id: String, control_name
 		control.grab_focus()
 	if generation == _rebuild_generation:
 		_variable_focus_control = &""
+
+
+## Handles only an explicit Enter request from the selected Inspector variable row.
+func focus_selected_variable_editor(controller: PVController, variable_id: String) -> void:
+	if not _dock_mode or controller != _active_controller() or variable_id != _selected_id:
+		return
+	var input: Control = _content.find_child("VariableNameInput", true, false) as Control
+	if input != null:
+		_variable_focus_control = &"VariableNameInput"
+		call_deferred(&"_focus_variable_control", input, variable_id, &"VariableNameInput", _rebuild_generation)
+		return
+	_variable_focus_control = &"VariableNameInput"
+	_request_rebuild()
+
+
+## Requests Inspector focus only after Escape cancels a dock text buffer.
+func _request_inspector_variable_list_focus() -> void:
+	var controller: PVController = _active_controller()
+	if _dock_mode and controller != null and not _selected_id.is_empty():
+		emit_signal(&"schema_3_variable_list_focus_requested", controller, _selected_id)
+
+
+## Returns true only for a single non-repeated Escape key press.
+func _is_escape_press(event: InputEvent) -> bool:
+	if not event is InputEventKey:
+		return false
+	var key_event: InputEventKey = event as InputEventKey
+	return key_event.pressed and not key_event.echo and key_event.keycode == KEY_ESCAPE
+
+
+## Cancels a dock-local edit without changing the Inspector's stable-ID selection.
+func _return_variable_escape_to_list(_event: InputEvent, control: Control) -> void:
+	control.accept_event()
+	if _dock_mode:
+		_request_inspector_variable_list_focus()
+	else:
+		_restore_selected_list_focus = true
+		_request_rebuild()
 
 
 func _can_grab_focus(control: Control) -> bool:
@@ -845,12 +926,57 @@ func _on_item_selected(item_index: int, list: ItemList) -> void:
 	_selected_id = internal_id
 	_selected_collection = _collection_for_type(entry["type"])
 	_rename_target_id = ""
+	if _is_schema_3_graph():
+		_restore_selected_list_focus = false
+		if _selected_collection == FlowGraphEditorCommands.Collection.VARIABLES:
+			_publish_schema_3_variable_selection()
+		else:
+			_clear_schema_3_variable_selection()
+		_update_schema_3_structural_actions()
+		return
 	_restore_selected_list_focus = true
 	if _selected_collection == FlowGraphEditorCommands.Collection.VARIABLES:
 		_publish_schema_3_variable_selection()
 	else:
 		_clear_schema_3_variable_selection()
 	_request_rebuild()
+
+
+func _on_list_gui_input(event: InputEvent, list: ItemList) -> void:
+	if not event is InputEventKey:
+		return
+	var key_event: InputEventKey = event as InputEventKey
+	if not key_event.pressed or key_event.echo:
+		return
+	if key_event.keycode == KEY_ESCAPE:
+		if _is_schema_3_variable_list(list):
+			var selected_items: PackedInt32Array = list.get_selected_items()
+			if selected_items.size() == 1:
+				list.select(selected_items[0])
+				list.accept_event()
+
+
+## Uses ItemList's public activation signal so native Enter and mouse activation share one path.
+func _on_schema_3_variable_item_activated(item_index: int, list: ItemList) -> void:
+	if not _is_schema_3_variable_list(list):
+		return
+	var entry: Dictionary = list.get_item_metadata(item_index) as Dictionary
+	var variable_id: String = entry.get("internal_id", "") as String
+	var controller: PVController = _active_controller()
+	if controller == null or variable_id.is_empty() or variable_id != _selected_id:
+		return
+	emit_signal(&"schema_3_variable_editor_focus_requested", controller, variable_id)
+
+
+func _is_schema_3_variable_list(list: ItemList) -> bool:
+	return not _dock_mode and list != null and _is_schema_3_graph() \
+		and _selected_collection == FlowGraphEditorCommands.Collection.VARIABLES
+
+
+func _is_schema_3_graph() -> bool:
+	var controller: PVController = _active_controller()
+	return controller != null and controller.flow_graph != null \
+		and controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_3
 
 
 func _publish_schema_3_variable_selection() -> void:
@@ -973,6 +1099,16 @@ func _focus_selected_list(list: ItemList, item_index: int, selected_id: String, 
 		list.grab_focus()
 
 
+## Returns to the stable-ID-selected schema 3 row only after a deliberate dock Escape.
+func focus_schema_3_variable_list(controller: PVController, variable_id: String) -> void:
+	if _dock_mode or controller != _active_controller() or variable_id != _selected_id:
+		return
+	if not _is_schema_3_graph() or _selected_collection != FlowGraphEditorCommands.Collection.VARIABLES:
+		return
+	_restore_selected_list_focus = true
+	_request_rebuild()
+
+
 func _on_move_up_pressed() -> void:
 	_move_selected(-1)
 
@@ -984,7 +1120,7 @@ func _on_move_down_pressed() -> void:
 func _move_selected(direction: int) -> void:
 	var controller: PVController = _active_controller()
 	if controller != null:
-		_restore_selected_list_focus = true
+		_restore_selected_list_focus = not _is_schema_3_graph()
 		if not _commands.move_resource(controller, _selected_collection, _selected_id, direction):
 			_restore_selected_list_focus = false
 
@@ -1029,7 +1165,7 @@ func _on_delete_confirmed() -> void:
 
 func _on_delete_cancelled() -> void:
 	_close_delete_confirmation()
-	_restore_selected_list_focus = true
+	_restore_selected_list_focus = not _is_schema_3_graph()
 	_request_rebuild()
 
 

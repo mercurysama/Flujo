@@ -1,7 +1,7 @@
 @tool
 extends EditorPlugin
 
-## Punto de composición de las clases que forman el complemento.
+## Composition root for the classes that form the plugin.
 
 const PV_CONTROLLER_SCRIPT := preload("res://addons/vp_flujo/runtime/pv_controller.gd")
 const PV_SCENE_INSPECTOR_CLASS := preload("res://addons/vp_flujo/editor/pv_scene_inspector.gd")
@@ -25,9 +25,13 @@ func _enter_tree() -> void:
 	_controller_inspector_plugin.schema_3_variable_selection_changed.connect(
 		_on_schema_3_variable_selection_changed
 	)
+	_controller_inspector_plugin.schema_3_variable_editor_focus_requested.connect(
+		_on_schema_3_variable_editor_focus_requested
+	)
 	add_inspector_plugin(_controller_inspector_plugin)
 	_dock = VP_FLUJO_DOCK_CLASS.new()
 	_dock.configure(get_undo_redo())
+	_dock.schema_3_variable_list_focus_requested.connect(_on_schema_3_variable_list_focus_requested)
 	add_dock(_dock)
 	_connect_editor_signals()
 	_request_dock_refresh()
@@ -189,12 +193,41 @@ func _on_schema_3_variable_selection_changed(
 	collection: FlowGraphEditorCommands.Collection,
 	variable_id: String
 ) -> void:
-	if not is_instance_valid(_dock) or controller != _dock_controller:
+	if not _activate_dock_controller(controller):
 		return
 	if _selected_schema_3_variable_id == variable_id:
 		return
 	_selected_schema_3_variable_id = variable_id
 	_dock.set_variable_selection(controller, collection, variable_id)
+
+
+func _on_schema_3_variable_editor_focus_requested(controller: PVController, variable_id: String) -> void:
+	if _activate_dock_controller(controller):
+		_dock.set_variable_selection(controller, FlowGraphEditorCommands.Collection.VARIABLES, variable_id)
+		_dock.focus_variable_editor(controller, variable_id)
+
+
+func _on_schema_3_variable_list_focus_requested(controller: PVController, variable_id: String) -> void:
+	if controller == _dock_controller and is_instance_valid(_controller_inspector_plugin):
+		_controller_inspector_plugin.focus_schema_3_variable_list(controller, variable_id)
+
+
+## Synchronizes a valid Inspector source before applying its schema 3 selection.
+func _activate_dock_controller(controller: PVController) -> bool:
+	if not is_instance_valid(_dock) or not is_instance_valid(controller):
+		return false
+	var inspector_plugin: PVControllerInspectorPlugin = _controller_inspector_plugin as PVControllerInspectorPlugin
+	if inspector_plugin != null and not inspector_plugin.is_active_controller(controller):
+		return false
+	var current_controller: PVController = _dock_controller if is_instance_valid(_dock_controller) else null
+	if current_controller == controller:
+		return true
+	_dock_controller = controller
+	_selected_schema_3_variable_id = ""
+	_dock.set_controller(controller)
+	_dock.set_variable_selection(controller, FlowGraphEditorCommands.Collection.VARIABLES, "")
+	_dock.set_controller_present(true)
+	return true
 
 
 func _controller_for_selection(selected_nodes: Array[Node], scene_root: Node) -> PVController:

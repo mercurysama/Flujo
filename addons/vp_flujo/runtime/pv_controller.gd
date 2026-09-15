@@ -2,8 +2,8 @@
 class_name PVController
 extends Node
 
-## Punto de entrada de VPFlujo para una escena.
-## Actuará como fachada entre la escena y el futuro modelo visual.
+## VPFlujo entry point for a scene.
+## Acts as the facade between the scene and the future visual model.
 
 signal visual_program_enabled_changed(is_enabled: bool)
 

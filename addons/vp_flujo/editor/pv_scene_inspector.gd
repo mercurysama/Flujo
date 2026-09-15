@@ -1,7 +1,7 @@
 @tool
 extends RefCounted
 
-## Servicio que conoce cómo localizar PVController y sus clases derivadas.
+## Service that locates PVController and its derived classes.
 
 var _controller_script: Script
 
