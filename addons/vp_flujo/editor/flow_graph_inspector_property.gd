@@ -36,6 +36,7 @@ var _dock_controller: PVController
 var _color_preview_id: String = ""
 var _color_preview_original: Color = Color.WHITE
 var _color_preview_value: Color = Color.WHITE
+var _color_preview_button_reference: WeakRef
 
 
 ## Supplies the editor undo/redo manager used by all model-changing controls.
@@ -522,6 +523,7 @@ func _on_color_picker_opened(button: ColorPickerButton, variable_id: String, ori
 	_color_preview_id = variable_id
 	_color_preview_original = original_value
 	_color_preview_value = button.color
+	_color_preview_button_reference = weakref(button)
 
 
 func _on_color_picker_preview(value: Color, button: ColorPickerButton, variable_id: String) -> void:
@@ -536,6 +538,7 @@ func _on_color_picker_closed(button: ColorPickerButton, variable_id: String) -> 
 		return
 	var preview: Color = _color_preview_value
 	_color_preview_id = ""
+	_color_preview_button_reference = null
 	if preview != _color_preview_original:
 		_commit_color_preview.call_deferred(button, variable_id, preview, _rebuild_generation)
 
@@ -780,6 +783,34 @@ func focus_selected_variable_editor(controller: PVController, variable_id: Strin
 		return
 	_variable_focus_control = &"VariableNameInput"
 	_request_rebuild()
+
+
+## Returns the current semantic Variable editor destination without exposing its storage to the dock coordinator.
+func get_preferred_interaction_focus_target() -> Control:
+	if not _dock_mode or _selected_id.is_empty():
+		return null
+	var requested: Control = null
+	if not _variable_focus_control.is_empty():
+		requested = _content.find_child(String(_variable_focus_control), true, false) as Control
+	if _can_grab_focus(requested):
+		return requested
+	var name_input: Control = _content.find_child("VariableNameInput", true, false) as Control
+	return name_input if _can_grab_focus(name_input) else null
+
+
+## Cancels only local transient editor state while preserving the stable-ID selection.
+func close_transient_interfaces() -> void:
+	_close_delete_confirmation()
+	_color_preview_id = ""
+	var color_button: ColorPickerButton = _color_preview_button_reference.get_ref() as ColorPickerButton \
+		if _color_preview_button_reference != null else null
+	_color_preview_button_reference = null
+	if is_instance_valid(color_button) and color_button.is_inside_tree():
+		var picker: ColorPicker = color_button.get_picker()
+		var popup_parent: Control = picker.get_parent() as Control if picker != null else null
+		if popup_parent != null:
+			popup_parent.hide()
+	_variable_focus_control = &""
 
 
 ## Requests Inspector focus only after Escape cancels a dock text buffer.

@@ -7,6 +7,8 @@ const PV_CONTROLLER_SCRIPT := preload("res://addons/vp_flujo/runtime/pv_controll
 const PV_SCENE_INSPECTOR_CLASS := preload("res://addons/vp_flujo/editor/pv_scene_inspector.gd")
 const VP_FLUJO_DOCK_CLASS := preload("res://addons/vp_flujo/editor/vp_flujo_dock.gd")
 const PV_CONTROLLER_INSPECTOR_PLUGIN_CLASS := preload("res://addons/vp_flujo/editor/pv_controller_inspector_plugin.gd")
+const FLOW_INTERACTION_COORDINATOR_CLASS := preload("res://addons/vp_flujo/editor/flow_interaction_coordinator.gd")
+const INTERACTION_SHORTCUT_PATH: String = "flujo/toggle_interaction"
 
 var _dock
 var _scene_inspector
@@ -16,6 +18,8 @@ var _selected_node: Node
 var _dock_refresh_queued: bool = false
 var _dock_controller: PVController
 var _selected_schema_3_variable_id: String = ""
+var _interaction_coordinator: FlowInteractionCoordinator
+var _interaction_shortcut: Shortcut
 
 
 func _enter_tree() -> void:
@@ -32,13 +36,27 @@ func _enter_tree() -> void:
 	_dock = VP_FLUJO_DOCK_CLASS.new()
 	_dock.configure(get_undo_redo())
 	_dock.schema_3_variable_list_focus_requested.connect(_on_schema_3_variable_list_focus_requested)
+	_dock.interaction_toggle_requested.connect(_on_interaction_toggle_requested)
 	add_dock(_dock)
+	var editor_settings: EditorSettings = EditorInterface.get_editor_settings()
+	if editor_settings != null:
+		if not editor_settings.has_shortcut(INTERACTION_SHORTCUT_PATH):
+			editor_settings.add_shortcut(
+				INTERACTION_SHORTCUT_PATH,
+				FlowInteractionCoordinator.create_default_shortcut()
+			)
+		_interaction_shortcut = editor_settings.get_shortcut(INTERACTION_SHORTCUT_PATH)
+	_interaction_coordinator = FLOW_INTERACTION_COORDINATOR_CLASS.new(_dock)
 	_connect_editor_signals()
 	_request_dock_refresh()
 
 
 func _exit_tree() -> void:
 	_disconnect_editor_signals()
+	if _interaction_coordinator != null:
+		_interaction_coordinator.shutdown()
+	_interaction_coordinator = null
+	_interaction_shortcut = null
 	if is_instance_valid(_controller_inspector_plugin):
 		remove_inspector_plugin(_controller_inspector_plugin)
 	_controller_inspector_plugin = null
@@ -87,73 +105,32 @@ func _disconnect_editor_signals() -> void:
 
 
 func _on_selection_changed() -> void:
+	_update_interaction_selected_controller()
 	_request_dock_refresh()
 
 
 func _shortcut_input(event: InputEvent) -> void:
-	if not event is InputEventKey:
+	if _interaction_coordinator == null or _interaction_shortcut == null:
 		return
-
-	var key_event: InputEventKey = event as InputEventKey
-	if not key_event.pressed or key_event.echo:
-		return
-	if key_event.keycode != KEY_F4:
-		return
-	if (
-		key_event.alt_pressed
-		or key_event.ctrl_pressed
-		or key_event.meta_pressed
-		or key_event.shift_pressed
-	):
-		return
-	if not is_instance_valid(_selected_node):
-		return
-	if _scene_inspector == null or not is_instance_valid(_dock):
-		return
-
-	if _scene_inspector.contains_controller(_selected_node):
-		_dock.toggle_visibility()
+	if _interaction_coordinator.handle_shortcut(event, _interaction_shortcut, get_viewport()):
 		get_viewport().set_input_as_handled()
-		return
-
-	if _add_controller_to_selected_node():
-		get_viewport().set_input_as_handled()
-
-
-func _add_controller_to_selected_node() -> bool:
-	var scene_root: Node = EditorInterface.get_edited_scene_root()
-	if not is_instance_valid(scene_root):
-		return false
-
-	var selected_node: Node = _selected_node
-	if selected_node != scene_root and not scene_root.is_ancestor_of(selected_node):
-		return false
-
-	var undo_redo: EditorUndoRedoManager = get_undo_redo()
-	if undo_redo == null:
-		return false
-
-	var controller: Node = PV_CONTROLLER_SCRIPT.new()
-	controller.name = "PVController"
-
-	undo_redo.create_action("Add Flujo Controller")
-	undo_redo.add_do_method(selected_node, &"add_child", controller, true)
-	undo_redo.add_do_method(controller, &"set_owner", scene_root)
-	undo_redo.add_undo_method(selected_node, &"remove_child", controller)
-	undo_redo.add_do_reference(controller)
-	undo_redo.commit_action()
-
-	return controller.get_parent() == selected_node and controller.owner == scene_root
 
 
 func _on_scene_changed(_scene_root: Node) -> void:
+	_update_interaction_selected_controller()
 	_request_dock_refresh()
 
 
 func _on_scene_tree_changed(node: Node) -> void:
 	if not _is_relevant_scene_tree_change(node, _scene_inspector):
 		return
+	_update_interaction_selected_controller()
 	_request_dock_refresh()
+
+
+func _process(_delta: float) -> void:
+	if _interaction_coordinator != null:
+		_interaction_coordinator.update_playing_scene(EditorInterface.is_playing_scene(), get_viewport())
 
 
 func _request_dock_refresh() -> void:
@@ -179,6 +156,7 @@ func _update_dock_visibility() -> void:
 	var controller: PVController = _controller_for_selection(selected_nodes, scene_root)
 	var should_show: bool = controller != null
 	_selected_node = selected_nodes[0] if selected_nodes.size() == 1 else null
+	_set_interaction_selected_controller(_interaction_controller_for_selection(selected_nodes))
 	_set_dock_controller(controller)
 	_dock.set_controller_present(should_show)
 
@@ -207,6 +185,11 @@ func _on_schema_3_variable_list_focus_requested(controller: PVController, variab
 		_controller_inspector_plugin.focus_schema_3_variable_list(controller, variable_id)
 
 
+func _on_interaction_toggle_requested() -> void:
+	if _interaction_coordinator != null:
+		_interaction_coordinator.toggle_flow_interaction(get_viewport())
+
+
 ## Synchronizes a valid Inspector source before applying its schema 3 selection.
 func _activate_dock_controller(controller: PVController) -> bool:
 	if not is_instance_valid(_dock) or not is_instance_valid(controller):
@@ -229,6 +212,26 @@ func _set_dock_controller(controller: PVController) -> bool:
 		_dock.set_variable_selection(controller, FlowGraphEditorCommands.Collection.VARIABLES, "")
 		return true
 	return false
+
+
+## Updates only the exact hierarchy selection used by the interaction coordinator.
+func _update_interaction_selected_controller() -> void:
+	var selected_nodes: Array[Node] = []
+	if _editor_selection != null:
+		selected_nodes = _editor_selection.get_selected_nodes()
+	_set_interaction_selected_controller(_interaction_controller_for_selection(selected_nodes))
+
+
+func _set_interaction_selected_controller(controller: PVController) -> void:
+	if _interaction_coordinator != null:
+		_interaction_coordinator.set_selected_controller(controller)
+
+
+static func _interaction_controller_for_selection(selected_nodes: Array[Node]) -> PVController:
+	if selected_nodes.size() != 1:
+		return null
+	var selected_node: Node = selected_nodes[0]
+	return selected_node as PVController if selected_node is PVController else null
 
 
 func _controller_for_selection(selected_nodes: Array[Node], scene_root: Node) -> PVController:

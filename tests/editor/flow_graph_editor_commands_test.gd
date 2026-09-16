@@ -11,6 +11,13 @@ const TEMP_DIR_PATH: String = "res://.godot/flujo_tests"
 const TEMP_HISTORY_SCENE_PATH: String = TEMP_DIR_PATH + "/flow_graph_editor_history.tscn"
 const VP_FLUJO_DOCK_SCRIPT := preload("res://addons/vp_flujo/editor/vp_flujo_dock.gd")
 const VP_FLUJO_PLUGIN_SCRIPT := preload("res://addons/vp_flujo/plugin.gd")
+const FLOW_INTERACTION_COORDINATOR_SCRIPT := preload("res://addons/vp_flujo/editor/flow_interaction_coordinator.gd")
+
+
+class CoordinatorTestDock extends VPFlujoDock:
+	func activate_flow_interaction() -> void:
+		show()
+		call(&"_set_interaction_presentation", "Flow", "Leave Flow (F4)", false)
 
 
 func _init() -> void:
@@ -183,6 +190,7 @@ func _run() -> void:
 	_expect(not is_instance_valid(dock), "The schema 3 dock is released before the editor test continues.")
 	_expect(not is_instance_valid(inspector_scroll), "The inspector test host is released before the editor test continues.")
 	await _test_plugin_variable_selection_relay(undo_redo)
+	await _test_flow_interaction_coordinator(undo_redo)
 	controller.flow_graph = null
 	_test_dock_visibility_conditions()
 	_test_debug_instrumentation_removed()
@@ -1696,6 +1704,224 @@ func _test_plugin_variable_selection_relay(undo_redo: EditorUndoRedoManager) -> 
 	main_plugin.free()
 	await process_frame
 	await process_frame
+
+
+## Exercises the editor-only coordinator through its public shortcut and dock-button paths.
+func _test_flow_interaction_coordinator(undo_redo: EditorUndoRedoManager) -> void:
+	var host: Control = Control.new()
+	host.name = &"FlowInteractionCoordinatorHost"
+	host.size = Vector2(800.0, 600.0)
+	get_root().add_child(host)
+	var focus_before_flow: LineEdit = LineEdit.new()
+	focus_before_flow.name = &"FocusBeforeFlow"
+	focus_before_flow.focus_mode = Control.FOCUS_ALL
+	host.add_child(focus_before_flow)
+	var temporary_editor_focus: Button = Button.new()
+	temporary_editor_focus.name = &"TemporaryGodotEditorFocus"
+	temporary_editor_focus.focus_mode = Control.FOCUS_ALL
+	temporary_editor_focus.text = "Temporary editor focus"
+	host.add_child(temporary_editor_focus)
+	var controller_a: PVController = _new_interaction_controller("Coordinator A")
+	var controller_b: PVController = _new_interaction_controller("Coordinator B")
+	host.add_child(controller_a)
+	host.add_child(controller_b)
+	var dock: VPFlujoDock = CoordinatorTestDock.new()
+	dock.configure(undo_redo)
+	get_root().add_child(dock)
+	dock.show()
+	dock.set_controller(controller_a)
+	var variable_a: FlowVariableDefinition = controller_a.flow_graph.variables[0] as FlowVariableDefinition
+	var variable_b: FlowVariableDefinition = controller_b.flow_graph.variables[0] as FlowVariableDefinition
+	_expect(variable_a != null and variable_b != null, "Interaction coordinator fixtures expose valid schema 3 Variables.")
+	if variable_a == null or variable_b == null:
+		dock.queue_free()
+		host.queue_free()
+		await process_frame
+		return
+	dock.set_variable_selection(
+		controller_a,
+		FlowGraphEditorCommands.Collection.VARIABLES,
+		variable_a.get_internal_id()
+	)
+	await process_frame
+	await process_frame
+	var coordinator: FlowInteractionCoordinator = FLOW_INTERACTION_COORDINATOR_SCRIPT.new(dock)
+	var shortcut: Shortcut = FlowInteractionCoordinator.create_default_shortcut()
+	var f4_pressed: InputEventKey = InputEventKey.new()
+	f4_pressed.pressed = true
+	f4_pressed.keycode = KEY_F4
+	var f4_released: InputEventKey = InputEventKey.new()
+	f4_released.pressed = false
+	f4_released.keycode = KEY_F4
+	var f4_echo: InputEventKey = InputEventKey.new()
+	f4_echo.pressed = true
+	f4_echo.echo = true
+	f4_echo.keycode = KEY_F4
+
+	_expect(
+		not coordinator.handle_shortcut(f4_pressed, shortcut, get_root()),
+		"F4 remains unconsumed when no exact PVController is selected."
+	)
+	_expect(
+		not coordinator.handle_shortcut(f4_released, shortcut, get_root())
+			and not coordinator.handle_shortcut(f4_echo, shortcut, get_root()),
+		"Only a deliberate non-repeated F4 key press changes Flujo interaction."
+	)
+	coordinator.set_selected_controller(controller_a)
+	focus_before_flow.grab_focus()
+	_expect(focus_before_flow.has_focus(), "Flow records a focusable Godot control before F4 enters interaction.")
+	_expect(
+		coordinator.handle_shortcut(f4_pressed, shortcut, get_root()),
+		"F4 enters FLOW for the exactly selected PVController."
+	)
+	await process_frame
+	await process_frame
+	var dock_editor: FlowGraphInspectorProperty = dock.get_variable_editor()
+	var interaction_label: Label = _find_node_by_name(dock, &"FlowInteractionState") as Label
+	var interaction_button: Button = _find_node_by_name(dock, &"FlowInteractionToggle") as Button
+	_expect(
+		coordinator.get_state() == FlowInteractionCoordinator.State.FLOW \
+			and dock_editor != null and dock_editor.visible \
+			and interaction_label != null and interaction_label.text == "Interaction: Flow" \
+			and interaction_button != null and interaction_button.text == "Leave Flow (F4)",
+		"FLOW exposes the dock editing surface and its accessible state indicator."
+	)
+	_expect(
+		coordinator.handle_shortcut(f4_pressed, shortcut, get_root()),
+		"The same F4 transition leaves FLOW."
+	)
+	await process_frame
+	await process_frame
+	_expect(
+		coordinator.get_state() == FlowInteractionCoordinator.State.GODOT and focus_before_flow.has_focus(),
+		"Leaving FLOW safely restores the prior valid Godot focus target."
+	)
+
+	var invalid_focus_target: LineEdit = LineEdit.new()
+	invalid_focus_target.name = &"InvalidWeakFocusTarget"
+	invalid_focus_target.focus_mode = Control.FOCUS_ALL
+	host.add_child(invalid_focus_target)
+	invalid_focus_target.grab_focus()
+	_expect(coordinator.handle_shortcut(f4_pressed, shortcut, get_root()), "FLOW can begin before a prior focus target is released.")
+	await process_frame
+	invalid_focus_target.queue_free()
+	await process_frame
+	_expect(coordinator.handle_shortcut(f4_pressed, shortcut, get_root()), "FLOW can end after its weak focus target becomes invalid.")
+	await process_frame
+	_expect(
+		coordinator.get_state() == FlowInteractionCoordinator.State.GODOT,
+		"An invalid WeakRef skips restoration without retaining Flow interaction."
+	)
+
+	_expect(coordinator.handle_shortcut(f4_pressed, shortcut, get_root()), "FLOW re-enters for a selected controller.")
+	await process_frame
+	temporary_editor_focus.grab_focus()
+	await process_frame
+	_expect(
+		coordinator.is_flow_active(),
+		"Temporary focus outside Flujo does not end FLOW while hierarchy selection is unchanged."
+	)
+	coordinator.set_selected_controller(controller_b)
+	await process_frame
+	_expect(
+		coordinator.get_state() == FlowInteractionCoordinator.State.GODOT,
+		"Selecting another PVController ends FLOW without applying a focus-restoration transition."
+	)
+	dock.set_controller(controller_b)
+	dock.set_variable_selection(
+		controller_b,
+		FlowGraphEditorCommands.Collection.VARIABLES,
+		variable_b.get_internal_id()
+	)
+	coordinator.set_selected_controller(controller_b)
+	await process_frame
+	await process_frame
+	_expect(coordinator.handle_shortcut(f4_pressed, shortcut, get_root()), "A second selected PVController enters its own FLOW context.")
+	await process_frame
+	coordinator.update_playing_scene(true, get_root())
+	_expect(
+		coordinator.get_state() == FlowInteractionCoordinator.State.GAME \
+			and dock_editor != null and not dock_editor.visible \
+			and interaction_label != null and interaction_label.text == "Interaction: Game" \
+			and interaction_button != null and interaction_button.disabled,
+		"Actual editor play state suspends only Flujo editing and announces GAME."
+	)
+	_expect(
+		not coordinator.handle_shortcut(f4_pressed, shortcut, get_root()),
+		"F4 is never consumed by Flujo while GAME is active."
+	)
+	temporary_editor_focus.grab_focus()
+	coordinator.update_playing_scene(false, get_root())
+	await process_frame
+	_expect(
+		coordinator.get_state() == FlowInteractionCoordinator.State.FLOW \
+			and dock_editor != null and dock_editor.visible \
+			and temporary_editor_focus.has_focus(),
+		"Leaving GAME restores valid FLOW visibility without stealing current Godot focus."
+	)
+	coordinator.update_playing_scene(true, get_root())
+	coordinator.set_selected_controller(null)
+	coordinator.update_playing_scene(false, get_root())
+	await process_frame
+	_expect(
+		coordinator.get_state() == FlowInteractionCoordinator.State.GODOT and dock_editor != null and not dock_editor.visible,
+		"A lost hierarchy selection prevents stale FLOW restoration after GAME."
+	)
+
+	var dock_button_handler: Callable = Callable(coordinator, &"toggle_flow_interaction").bind(get_root())
+	dock.interaction_toggle_requested.connect(dock_button_handler)
+	dock.set_controller(controller_a)
+	dock.set_variable_selection(
+		controller_a,
+		FlowGraphEditorCommands.Collection.VARIABLES,
+		variable_a.get_internal_id()
+	)
+	coordinator.set_selected_controller(controller_a)
+	await process_frame
+	await process_frame
+	if interaction_button != null:
+		interaction_button.emit_signal(&"pressed")
+		await process_frame
+		_expect(
+			coordinator.get_state() == FlowInteractionCoordinator.State.FLOW,
+			"The public dock button follows the same GODOT-to-FLOW transition as F4."
+		)
+		interaction_button.emit_signal(&"pressed")
+		await process_frame
+		_expect(
+			coordinator.get_state() == FlowInteractionCoordinator.State.GODOT,
+			"The public dock button follows the same FLOW-to-GODOT transition as F4."
+		)
+	else:
+		_expect(false, "The Flow interaction button is available for the equivalent public transition.")
+	if dock.interaction_toggle_requested.is_connected(dock_button_handler):
+		dock.interaction_toggle_requested.disconnect(dock_button_handler)
+	coordinator.set_selected_controller(controller_a)
+	_expect(coordinator.handle_shortcut(f4_pressed, shortcut, get_root()), "FLOW starts before coordinator shutdown cleanup.")
+	coordinator.shutdown()
+	await process_frame
+	_expect(
+		coordinator.get_state() == FlowInteractionCoordinator.State.GODOT and dock_editor != null and not dock_editor.visible,
+		"Coordinator shutdown clears editor interaction without retaining a dock shortcut path."
+	)
+	dock.queue_free()
+	host.queue_free()
+	await process_frame
+	await process_frame
+	_expect(not is_instance_valid(dock) and not is_instance_valid(host), "Coordinator fixtures release dock and controller controls cleanly.")
+
+
+func _new_interaction_controller(variable_name: String) -> PVController:
+	var graph: FlowGraph = FlowGraph.new()
+	graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	graph.constructor = FlowConstructorDefinition.new()
+	var variable: FlowVariableDefinition = FlowVariableDefinition.new()
+	variable.display_name = variable_name
+	variable.scope = FlowVariableDefinition.Scope.GLOBAL
+	graph.variables = [variable]
+	var controller: PVController = PVController.new()
+	controller.flow_graph = graph
+	return controller
 
 
 func _test_public_plugin_language() -> void:

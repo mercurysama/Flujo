@@ -38,6 +38,10 @@
 
 This iteration has not introduced argument bindings, return blocks or runtime return values, value-source connections, cycle detection, an executor, scene bindings, method-call execution, runtime mutation, or editor interface for schema 3 declarations.
 
+### Current delivery
+
+- Delivery 7 is implemented: the editor-only Flow interaction coordinator specified by `TVAR-016` now provides explicit `GODOT`, `FLOW`, and `GAME` states, an editor-configurable F4 default, and an equivalent dock button. It uses only weak focus references and the exact selected `PVController`, suspends editing during actual game execution, and does not change persistent data, schemas, runtime execution, or the existing local variable-editor workflows. Automated coverage is complete; the required manual visual review remains pending.
+
 ### Next delivery
 
 Iteration 7 is ready for final audit and the required manual visual review. The Constructor and Methods contract continues to govern deferred argument bindings, return blocks, value sources, cycle validation, runtime state, execution, and schema 3 Constructor or Method authoring. The friendly user guide requires separate approval.
