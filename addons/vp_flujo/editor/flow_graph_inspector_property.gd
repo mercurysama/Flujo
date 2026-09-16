@@ -732,17 +732,21 @@ func _update_variable(variable_id: String, property_name: StringName, value: Var
 
 
 func _selected_variable(graph: FlowGraph) -> FlowVariableDefinition:
-	for variable: FlowVariableDefinition in graph.variables:
-		if variable != null and variable.get_internal_id() == _selected_id:
-			return variable
-	return null
+	return _variable_with_id(graph, _selected_id)
 
 
 func _selected_variable_from_controller(variable_id: String) -> FlowVariableDefinition:
 	var controller: PVController = _active_controller()
 	if controller == null or controller.flow_graph == null:
 		return null
-	for variable: FlowVariableDefinition in controller.flow_graph.variables:
+	return _variable_with_id(controller.flow_graph, variable_id)
+
+
+## Resolves a schema 3 variable by its stable identity without coupling callers to storage order.
+func _variable_with_id(graph: FlowGraph, variable_id: String) -> FlowVariableDefinition:
+	if graph == null or variable_id.is_empty():
+		return null
+	for variable: FlowVariableDefinition in graph.variables:
 		if variable != null and variable.get_internal_id() == variable_id:
 			return variable
 	return null

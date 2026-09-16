@@ -179,12 +179,7 @@ func _update_dock_visibility() -> void:
 	var controller: PVController = _controller_for_selection(selected_nodes, scene_root)
 	var should_show: bool = controller != null
 	_selected_node = selected_nodes[0] if selected_nodes.size() == 1 else null
-	var current_controller: PVController = _dock_controller if is_instance_valid(_dock_controller) else null
-	if current_controller != controller:
-		_dock_controller = controller
-		_selected_schema_3_variable_id = ""
-		_dock.set_controller(controller)
-		_dock.set_variable_selection(controller, FlowGraphEditorCommands.Collection.VARIABLES, "")
+	_set_dock_controller(controller)
 	_dock.set_controller_present(should_show)
 
 
@@ -219,15 +214,21 @@ func _activate_dock_controller(controller: PVController) -> bool:
 	var inspector_plugin: PVControllerInspectorPlugin = _controller_inspector_plugin as PVControllerInspectorPlugin
 	if inspector_plugin != null and not inspector_plugin.is_active_controller(controller):
 		return false
-	var current_controller: PVController = _dock_controller if is_instance_valid(_dock_controller) else null
-	if current_controller == controller:
-		return true
-	_dock_controller = controller
-	_selected_schema_3_variable_id = ""
-	_dock.set_controller(controller)
-	_dock.set_variable_selection(controller, FlowGraphEditorCommands.Collection.VARIABLES, "")
-	_dock.set_controller_present(true)
+	if _set_dock_controller(controller):
+		_dock.set_controller_present(true)
 	return true
+
+
+## Applies the single editor-owned controller context shared by the dock and relay.
+func _set_dock_controller(controller: PVController) -> bool:
+	var current_controller: PVController = _dock_controller if is_instance_valid(_dock_controller) else null
+	if current_controller != controller:
+		_dock_controller = controller
+		_selected_schema_3_variable_id = ""
+		_dock.set_controller(controller)
+		_dock.set_variable_selection(controller, FlowGraphEditorCommands.Collection.VARIABLES, "")
+		return true
+	return false
 
 
 func _controller_for_selection(selected_nodes: Array[Node], scene_root: Node) -> PVController:

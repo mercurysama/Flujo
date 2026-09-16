@@ -55,15 +55,23 @@ func set_controller(controller: PVController) -> void:
 	var current_controller: PVController = _controller if is_instance_valid(_controller) else null
 	if current_controller == next_controller:
 		return
-	if current_controller != null \
-			and current_controller.property_list_changed.is_connected(_on_controller_property_list_changed):
-		current_controller.property_list_changed.disconnect(_on_controller_property_list_changed)
+	_disconnect_controller(current_controller)
 	_controller = next_controller
-	if _controller != null \
-			and not _controller.property_list_changed.is_connected(_on_controller_property_list_changed):
-		_controller.property_list_changed.connect(_on_controller_property_list_changed)
+	_connect_controller(_controller)
 	if _variable_editor != null:
 		_variable_editor.set_dock_controller(_controller)
+
+
+## Removes the current controller observer before replacing the dock context.
+func _disconnect_controller(controller: PVController) -> void:
+	if controller != null and controller.property_list_changed.is_connected(_on_controller_property_list_changed):
+		controller.property_list_changed.disconnect(_on_controller_property_list_changed)
+
+
+## Observes exactly one active controller for graph replacement notifications.
+func _connect_controller(controller: PVController) -> void:
+	if controller != null and not controller.property_list_changed.is_connected(_on_controller_property_list_changed):
+		controller.property_list_changed.connect(_on_controller_property_list_changed)
 
 
 func get_variable_editor() -> FlowGraphInspectorProperty:
