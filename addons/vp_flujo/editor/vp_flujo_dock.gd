@@ -5,12 +5,20 @@ extends EditorDock
 ## Editor surface. It does not locate scene nodes or manage plugin lifecycle.
 
 signal schema_3_variable_list_focus_requested(controller: PVController, variable_id: String)
+signal schema_3_delete_selection_recovery_requested(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	deleted_id: String,
+	replacement_id: String,
+	view_title: String,
+	restore_focus: bool
+)
 signal interaction_toggle_requested
 
 var _controller_present: bool
 var _controller_presence_initialized: bool = false
 var _is_open: bool = false
-var _controller: PVController
+var _controller_reference: WeakRef
 var _variable_editor: FlowGraphInspectorProperty
 var _content: VBoxContainer
 var _interaction_state_label: Label
@@ -34,6 +42,8 @@ func _exit_tree() -> void:
 	var viewport: Viewport = get_viewport()
 	if viewport != null and viewport.gui_focus_changed.is_connected(_on_gui_focus_changed):
 		viewport.gui_focus_changed.disconnect(_on_gui_focus_changed)
+	_disconnect_controller(_controller_instance())
+	_controller_reference = null
 
 
 func set_controller_present(is_present: bool) -> void:
@@ -60,35 +70,58 @@ func configure(undo_redo: EditorUndoRedoManager) -> void:
 	_variable_editor.configure(undo_redo)
 	_variable_editor.configure_for_dock()
 	_variable_editor.schema_3_variable_list_focus_requested.connect(_on_variable_editor_list_focus_requested)
+	_variable_editor.schema_3_delete_selection_recovery_requested.connect(_on_delete_selection_recovery_requested)
 	_variable_editor.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_variable_editor.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_content.add_child(_variable_editor)
-	_variable_editor.set_dock_controller(_controller)
+	_variable_editor.set_dock_controller(_controller_instance())
 
 
 ## Receives the controller resolved by the plugin's existing selection integration.
 func set_controller(controller: PVController) -> void:
 	var next_controller: PVController = controller if is_instance_valid(controller) else null
-	var current_controller: PVController = _controller if is_instance_valid(_controller) else null
-	if current_controller == next_controller:
+	var current_controller: PVController = _controller_instance()
+	if current_controller == next_controller \
+			and (next_controller != null or _controller_reference == null):
 		return
 	_disconnect_controller(current_controller)
-	_controller = next_controller
-	_connect_controller(_controller)
+	_controller_reference = weakref(next_controller) if next_controller != null else null
+	_connect_controller(next_controller)
 	if _variable_editor != null:
-		_variable_editor.set_dock_controller(_controller)
+		_variable_editor.set_dock_controller(next_controller)
 
 
 ## Removes the current controller observer before replacing the dock context.
 func _disconnect_controller(controller: PVController) -> void:
 	if controller != null and controller.property_list_changed.is_connected(_on_controller_property_list_changed):
 		controller.property_list_changed.disconnect(_on_controller_property_list_changed)
+	if controller != null and controller.tree_exited.is_connected(_on_controller_tree_exited):
+		controller.tree_exited.disconnect(_on_controller_tree_exited)
 
 
 ## Observes exactly one active controller for graph replacement notifications.
 func _connect_controller(controller: PVController) -> void:
 	if controller != null and not controller.property_list_changed.is_connected(_on_controller_property_list_changed):
 		controller.property_list_changed.connect(_on_controller_property_list_changed)
+	if controller != null and controller.is_inside_tree() \
+			and not controller.tree_exited.is_connected(_on_controller_tree_exited):
+		controller.tree_exited.connect(_on_controller_tree_exited, CONNECT_ONE_SHOT)
+
+
+func _controller_instance() -> PVController:
+	if _controller_reference == null:
+		return null
+	var controller: PVController = _controller_reference.get_ref() as PVController
+	return controller if is_instance_valid(controller) else null
+
+
+func _on_controller_tree_exited() -> void:
+	var controller: PVController = _controller_instance()
+	if controller != null and controller.property_list_changed.is_connected(_on_controller_property_list_changed):
+		controller.property_list_changed.disconnect(_on_controller_property_list_changed)
+	_controller_reference = null
+	if _variable_editor != null:
+		_variable_editor.set_dock_controller(null)
 
 
 func get_variable_editor() -> FlowGraphInspectorProperty:
@@ -151,6 +184,25 @@ func suspend_for_game() -> void:
 
 func _on_variable_editor_list_focus_requested(controller: PVController, variable_id: String) -> void:
 	emit_signal(&"schema_3_variable_list_focus_requested", controller, variable_id)
+
+
+func _on_delete_selection_recovery_requested(
+		controller: PVController,
+		collection: FlowGraphEditorCommands.Collection,
+		deleted_id: String,
+		replacement_id: String,
+		view_title: String,
+		restore_focus: bool
+) -> void:
+	emit_signal(
+		&"schema_3_delete_selection_recovery_requested",
+		controller,
+		collection,
+		deleted_id,
+		replacement_id,
+		view_title,
+		restore_focus
+	)
 
 
 func _on_controller_property_list_changed() -> void:

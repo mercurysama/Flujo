@@ -4,6 +4,7 @@ extends VBoxContainer
 
 ## Dock configuration for a stable-ID-selected Ready process or Timer.
 signal block_selected(block_id: String)
+signal block_delete_requested(block_id: String)
 signal focus_requested(control_name: StringName, select_all: bool)
 signal process_move_requested(direction: int)
 signal process_delete_requested
@@ -18,7 +19,7 @@ var _details: VBoxContainer
 var _confirmation: ConfirmationDialog
 
 
-func configure(commands: FlowGraphEditorCommands, controller: PVController, process: FlowProcess, block_id: String) -> void:
+func configure(commands: FlowGraphEditorCommands, controller: PVController, process: FlowBlockContainer, block_id: String) -> void:
 	auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	_commands = commands
 	_controller = controller
@@ -28,7 +29,10 @@ func configure(commands: FlowGraphEditorCommands, controller: PVController, proc
 	name = &"ReadyProcessEditor"
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var title: Label = Label.new()
-	title.text = "Type: Timer" if process is FlowTimerDefinition else "Type: Ready — runs once"
+	var prefix: String = _container_label(process)
+	title.text = "Type: " + prefix
+	if process is FlowConstructorDefinition:
+		title.text += " — once before Ready (not native _init)"
 	add_child(title)
 	var name_input: LineEdit = LineEdit.new()
 	name_input.name = &"ReadyProcessName"
@@ -40,7 +44,7 @@ func configure(commands: FlowGraphEditorCommands, controller: PVController, proc
 	add_child(name_input)
 	var enabled: CheckBox = CheckBox.new()
 	enabled.name = &"ReadyProcessEnabled"
-	enabled.text = "Timer Enabled" if process is FlowTimerDefinition else "Process Enabled"
+	enabled.text = prefix + " Enabled"
 	enabled.button_pressed = process.enabled
 	enabled.toggled.connect(_on_enabled.bind(""))
 	add_child(enabled)
@@ -72,16 +76,18 @@ func configure(commands: FlowGraphEditorCommands, controller: PVController, proc
 	add_child(add_row)
 	_add_button(add_row, "Add Print", _on_add.bind(true))
 	_add_button(add_row, "Add Everything Flows", _on_add.bind(false))
+	if process is FlowProcess:
+		_add_button(add_row, "Add Call Method", _on_add_call)
 	var process_actions: VBoxContainer = VBoxContainer.new()
 	process_actions.name = &"ProcessActions"
 	add_child(process_actions)
-	var prefix: String = "Timer" if process is FlowTimerDefinition else "Process"
 	var action_title: Label = Label.new()
 	action_title.text = prefix + " actions"
 	process_actions.add_child(action_title)
-	_add_button(process_actions, "Move " + prefix + " Up", func() -> void: process_move_requested.emit(-1))
-	_add_button(process_actions, "Move " + prefix + " Down", func() -> void: process_move_requested.emit(1))
-	_add_button(process_actions, "Delete " + prefix, func() -> void: process_delete_requested.emit())
+	if not process is FlowConstructorDefinition:
+		_add_button(process_actions, "Move " + prefix + " Up", func() -> void: process_move_requested.emit(-1))
+		_add_button(process_actions, "Move " + prefix + " Down", func() -> void: process_move_requested.emit(1))
+		_add_button(process_actions, "Delete " + prefix, func() -> void: process_delete_requested.emit())
 	_list = ItemList.new()
 	_list.name = &"ReadyBlocksList"
 	_list.focus_mode = Control.FOCUS_ALL
@@ -106,7 +112,15 @@ func configure(commands: FlowGraphEditorCommands, controller: PVController, proc
 
 func _current() -> bool:
 	return is_inside_tree() and not is_queued_for_deletion() and is_instance_valid(_controller) \
-		and _controller.flow_graph == _graph and _commands.find_ready_process(_controller, _process_id) != null
+		and _controller.flow_graph == _graph and _commands.find_block_container(_controller, _process_id) != null
+
+
+func _container_label(container: FlowBlockContainer) -> String:
+	if container is FlowConstructorDefinition:
+		return "Constructor"
+	if container is FlowMethodDefinition:
+		return "Method"
+	return "Timer" if container is FlowTimerDefinition else "Process"
 
 
 func _on_name_submitted(value: String) -> void:
@@ -131,6 +145,13 @@ func _on_add(print_block: bool) -> void:
 		_block_id = _commands.add_ready_block(_controller, _process_id, print_block)
 		block_selected.emit(_block_id)
 		focus_requested.emit(&"ReadyPrintText" if print_block else &"ReadyBlocksList", false)
+
+
+func _on_add_call() -> void:
+	if _current():
+		_block_id = _commands.add_method_call(_controller, _process_id)
+		block_selected.emit(_block_id)
+		focus_requested.emit(&"ReadyMethodTarget", false)
 
 
 func _on_interval_changed(value: float) -> void:
@@ -185,7 +206,7 @@ func _render_block() -> void:
 	for child: Node in _details.get_children():
 		_details.remove_child(child)
 		child.queue_free()
-	var process: FlowProcess = _commands.find_ready_process(_controller, _process_id)
+	var process: FlowBlockContainer = _commands.find_block_container(_controller, _process_id)
 	if process == null:
 		return
 	var selected: FlowBlock = null
@@ -217,6 +238,8 @@ func _render_block() -> void:
 	_add_button(actions, "Move Block Up", _on_move.bind(-1))
 	_add_button(actions, "Move Block Down", _on_move.bind(1))
 	_add_button(actions, "Delete Block", _on_delete)
+	if selected is FlowMethodCallBlock:
+		_render_method_target(selected as FlowMethodCallBlock)
 	if selected is FlowPrintBlock:
 		var label: Label = Label.new()
 		label.text = "Print text (Ctrl+Enter to apply)"
@@ -231,6 +254,39 @@ func _render_block() -> void:
 		_apply_themed_print_text_surface(input)
 		input.gui_input.connect(_on_text_input.bind(input, _block_id, input.text))
 		_details.add_child(input)
+
+
+func _render_method_target(call: FlowMethodCallBlock) -> void:
+	var label: Label = Label.new()
+	label.text = "Method"
+	_details.add_child(label)
+	var target: OptionButton = OptionButton.new()
+	target.name = &"ReadyMethodTarget"
+	target.focus_mode = Control.FOCUS_ALL
+	target.add_item("Select a method" if call.method_id.is_empty() else "Missing or invalid method")
+	target.set_item_metadata(0, call.method_id)
+	for method: FlowMethodDefinition in _graph.methods:
+		if method == null:
+			continue
+		var index: int = target.item_count
+		target.add_item(method.display_name)
+		target.set_item_metadata(index, method.get_internal_id())
+		if method.get_internal_id() == call.method_id:
+			target.select(index)
+	target.item_selected.connect(_on_method_target_selected.bind(target, call.get_internal_id()))
+	target.gui_input.connect(_on_method_target_input.bind(target))
+	_details.add_child(target)
+
+
+func _on_method_target_input(event: InputEvent, target: OptionButton) -> void:
+	if _is_escape(event) and _current() and not target.get_popup().visible:
+		target.accept_event()
+		_list.grab_focus()
+
+
+func _on_method_target_selected(index: int, target: OptionButton, block_id: String) -> void:
+	if _current() and block_id == _block_id and index > 0 and index < target.item_count:
+		_commands.set_ready_property(_controller, _process_id, block_id, &"method_id", target.get_item_metadata(index))
 
 
 func _block_display_name(block: FlowBlock) -> String:
@@ -296,7 +352,7 @@ func _on_delete() -> void:
 func _on_delete_confirmed(block_id: String) -> void:
 	_close_confirmation()
 	if _current() and block_id == _block_id:
-		_commands.delete_ready_block(_controller, _process_id, block_id)
+		emit_signal(&"block_delete_requested", block_id)
 
 
 func _close_confirmation() -> void:

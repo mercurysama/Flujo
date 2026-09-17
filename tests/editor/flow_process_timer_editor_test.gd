@@ -2,6 +2,7 @@
 extends SceneTree
 
 const TEMP_PATH: String = "res://.godot/flujo_tests/process_timer_editor.tscn"
+const NAME_SEQUENCE_PATH: String = "res://.godot/flujo_tests/process_timer_name_sequence.tres"
 const PLUGIN: Script = preload("res://addons/vp_flujo/plugin.gd")
 var _failures: Array[String] = []
 var _host: HBoxContainer
@@ -78,6 +79,7 @@ func _run() -> void:
 	)
 	await _test_process()
 	await _test_timer_and_variable()
+	await _test_semantic_process_timer_names()
 	await _cleanup()
 
 
@@ -393,6 +395,108 @@ func _test_timer_and_variable() -> void:
 	_check(_button(_dock, "Delete Variable") != null and _button(_property, "Delete") == null, "Variable structural actions belong in panel.")
 
 
+func _test_semantic_process_timer_names() -> void:
+	var graph: FlowGraph = FlowGraph.new()
+	graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	graph.constructor = FlowConstructorDefinition.new()
+	_controller.flow_graph = graph
+	_controller.notify_property_list_changed()
+	await _frames()
+	var commands: FlowGraphEditorCommands = FlowGraphEditorCommands.new(EditorInterface.get_editor_undo_redo())
+	var first_timer_id: String = commands.add_timer(_controller)
+	var second_timer_id: String = commands.add_timer(_controller)
+	var first_process_id: String = _add_named_resource(commands, FlowGraphEditorCommands.Collection.PROCESSES)
+	var second_process_id: String = _add_named_resource(commands, FlowGraphEditorCommands.Collection.PROCESSES)
+	if not _check(
+		first_timer_id != "" and second_timer_id != "" and first_process_id != "" and second_process_id != "",
+		"Independent Process and Timer naming fixture creates its first four resources."
+	):
+		return
+	_check(
+		_process_names(graph, true) == ["Flujo", "Flujo 1"] \
+			and _process_names(graph, false) == ["Flujo", "Flujo 1"],
+		"Timer Flujo/Flujo 1 and Process Flujo/Flujo 1 use independent visible collections."
+	)
+	_check(_add_named_resource(commands, FlowGraphEditorCommands.Collection.METHODS) != "", "Interleave a Method without consuming Process names.")
+	_check(_add_named_resource(commands, FlowGraphEditorCommands.Collection.STATE_MACHINES) != "", "Interleave a State Machine without consuming Process names.")
+	_check(_add_named_resource(commands, FlowGraphEditorCommands.Collection.VARIABLES) != "", "Interleave a Variable without consuming Process names.")
+	var third_timer_id: String = commands.add_timer(_controller)
+	var third_process_id: String = _add_named_resource(commands, FlowGraphEditorCommands.Collection.PROCESSES)
+	if not _check(third_timer_id != "" and third_process_id != "", "Interleaved fixture creates third Timer and Process."):
+		return
+	_check(
+		_process_names(graph, true) == ["Flujo", "Flujo 1", "Flujo 2"] \
+			and _process_names(graph, false) == ["Flujo", "Flujo 1", "Flujo 2"],
+		"Timer Flujo 2 and Process Flujo 2 ignore Methods, State Machines, Variables, and the opposite Process subtype."
+	)
+	var third_process: FlowProcess = _process_by_id(graph, third_process_id)
+	if not _check(third_process != null and third_process.display_name == "Flujo 2", "The third Process is identifiable before Undo/Redo."):
+		return
+	_history.undo()
+	await _frames()
+	_check(_process_by_id(graph, third_process_id) == null and _process_names(graph, false) == ["Flujo", "Flujo 1"], "Undo removes only the third Process and preserves Timer names.")
+	_history.redo()
+	await _frames()
+	third_process = _process_by_id(graph, third_process_id)
+	_check(third_process != null and third_process.display_name == "Flujo 2" and _process_names(graph, true) == ["Flujo", "Flujo 1", "Flujo 2"], "Redo restores the same Process ID and independent name sequence.")
+	if not _check(ResourceSaver.save(graph, NAME_SEQUENCE_PATH) == OK, "Save independent Process and Timer names."):
+		return
+	var reopened: FlowGraph = ResourceLoader.load(NAME_SEQUENCE_PATH, "", ResourceLoader.CACHE_MODE_IGNORE) as FlowGraph
+	_check(
+		reopened != null and _process_names(reopened, true) == ["Flujo", "Flujo 1", "Flujo 2"] \
+			and _process_names(reopened, false) == ["Flujo", "Flujo 1", "Flujo 2"],
+		"Save and reopen preserve independent Timer and Process visible names."
+	)
+
+
+func _add_named_resource(commands: FlowGraphEditorCommands, collection: FlowGraphEditorCommands.Collection) -> String:
+	var graph: FlowGraph = _controller.flow_graph
+	var values: Array = _collection_for_test(graph, collection)
+	var size_before: int = values.size()
+	if not commands.add_resource(_controller, collection):
+		return ""
+	values = _collection_for_test(graph, collection)
+	var added: Resource = values[values.size() - 1] as Resource if values.size() == size_before + 1 else null
+	return _test_internal_id(added)
+
+
+func _collection_for_test(graph: FlowGraph, collection: FlowGraphEditorCommands.Collection) -> Array:
+	match collection:
+		FlowGraphEditorCommands.Collection.VARIABLES:
+			return graph.variables
+		FlowGraphEditorCommands.Collection.STATE_MACHINES:
+			return graph.state_machines
+		FlowGraphEditorCommands.Collection.METHODS:
+			return graph.methods
+		_:
+			return graph.processes
+
+
+func _process_names(graph: FlowGraph, timers: bool) -> Array[String]:
+	var names: Array[String] = []
+	for entry: FlowProcess in graph.processes:
+		if entry != null and (entry is FlowTimerDefinition) == timers:
+			names.append(entry.display_name)
+	return names
+
+
+func _process_by_id(graph: FlowGraph, internal_id: String) -> FlowProcess:
+	for process: FlowProcess in graph.processes:
+		if process != null and process.get_internal_id() == internal_id:
+			return process
+	return null
+
+
+func _test_internal_id(resource: Resource) -> String:
+	if resource is FlowBlockContainer:
+		return (resource as FlowBlockContainer).get_internal_id()
+	if resource is FlowVariableDefinition:
+		return (resource as FlowVariableDefinition).get_internal_id()
+	if resource is FlowStateMachineDefinition:
+		return (resource as FlowStateMachineDefinition).get_internal_id()
+	return ""
+
+
 func _frames() -> void:
 	for index: int in 4:
 		await process_frame
@@ -498,8 +602,9 @@ func _cleanup() -> void:
 
 
 func _finish() -> void:
-	if FileAccess.file_exists(TEMP_PATH):
-		_check(DirAccess.remove_absolute(ProjectSettings.globalize_path(TEMP_PATH)) == OK, "Remove focal temporary scene.")
+	for path: String in [TEMP_PATH, NAME_SEQUENCE_PATH]:
+		if FileAccess.file_exists(path):
+			_check(DirAccess.remove_absolute(ProjectSettings.globalize_path(path)) == OK, "Remove focal temporary file: " + path)
 	if _failures.is_empty():
 		print("[Flujo] Process and Timer editor focal passed")
 	quit(0 if _failures.is_empty() else 1)

@@ -14,9 +14,8 @@ var _dock
 var _scene_inspector
 var _controller_inspector_plugin: EditorInspectorPlugin
 var _editor_selection: EditorSelection
-var _selected_node: Node
 var _dock_refresh_queued: bool = false
-var _dock_controller: PVController
+var _dock_controller_reference: WeakRef
 var _selected_schema_3_variable_id: String = ""
 var _interaction_coordinator: FlowInteractionCoordinator
 var _interaction_shortcut: Shortcut
@@ -36,6 +35,7 @@ func _enter_tree() -> void:
 	_dock = VP_FLUJO_DOCK_CLASS.new()
 	_dock.configure(get_undo_redo())
 	_dock.schema_3_variable_list_focus_requested.connect(_on_schema_3_variable_list_focus_requested)
+	_dock.schema_3_delete_selection_recovery_requested.connect(_on_schema_3_delete_selection_recovery_requested)
 	_dock.interaction_toggle_requested.connect(_on_interaction_toggle_requested)
 	add_dock(_dock)
 	var editor_settings: EditorSettings = EditorInterface.get_editor_settings()
@@ -71,8 +71,8 @@ func _exit_tree() -> void:
 
 func _connect_editor_signals() -> void:
 	scene_changed.connect(_on_scene_changed)
-	get_tree().node_added.connect(_on_scene_tree_changed)
-	get_tree().node_removed.connect(_on_scene_tree_changed)
+	get_tree().node_added.connect(_on_scene_tree_node_added)
+	get_tree().node_removed.connect(_on_scene_tree_node_removed)
 
 	_editor_selection = EditorInterface.get_selection()
 	if (
@@ -87,10 +87,10 @@ func _connect_editor_signals() -> void:
 func _disconnect_editor_signals() -> void:
 	if scene_changed.is_connected(_on_scene_changed):
 		scene_changed.disconnect(_on_scene_changed)
-	if get_tree().node_added.is_connected(_on_scene_tree_changed):
-		get_tree().node_added.disconnect(_on_scene_tree_changed)
-	if get_tree().node_removed.is_connected(_on_scene_tree_changed):
-		get_tree().node_removed.disconnect(_on_scene_tree_changed)
+	if get_tree().node_added.is_connected(_on_scene_tree_node_added):
+		get_tree().node_added.disconnect(_on_scene_tree_node_added)
+	if get_tree().node_removed.is_connected(_on_scene_tree_node_removed):
+		get_tree().node_removed.disconnect(_on_scene_tree_node_removed)
 	if (
 		_editor_selection != null
 		and _editor_selection.selection_changed.is_connected(_on_selection_changed)
@@ -98,8 +98,7 @@ func _disconnect_editor_signals() -> void:
 		_editor_selection.selection_changed.disconnect(_on_selection_changed)
 
 	_editor_selection = null
-	_selected_node = null
-	_dock_controller = null
+	_dock_controller_reference = null
 	_selected_schema_3_variable_id = ""
 	_dock_refresh_queued = false
 
@@ -121,9 +120,25 @@ func _on_scene_changed(_scene_root: Node) -> void:
 	_request_dock_refresh()
 
 
-func _on_scene_tree_changed(node: Node) -> void:
+func _on_scene_tree_node_added(node: Node) -> void:
 	if not _is_relevant_scene_tree_change(node, _scene_inspector):
 		return
+	_update_interaction_selected_controller()
+	_request_dock_refresh()
+
+
+func _on_scene_tree_node_removed(node: Node) -> void:
+	if not _is_relevant_scene_tree_change(node, _scene_inspector):
+		return
+	var removed_controller: PVController = _scene_inspector.find_controller(node)
+	var current_controller: PVController = _dock_controller_instance()
+	if is_instance_valid(_controller_inspector_plugin) and removed_controller != null:
+		_controller_inspector_plugin.invalidate_controller(removed_controller)
+	if current_controller != null and current_controller == removed_controller:
+		_set_dock_controller(null)
+		_set_interaction_selected_controller(null)
+		if is_instance_valid(_dock):
+			_dock.set_controller_present(false)
 	_update_interaction_selected_controller()
 	_request_dock_refresh()
 
@@ -155,7 +170,6 @@ func _update_dock_visibility() -> void:
 	var scene_root: Node = EditorInterface.get_edited_scene_root()
 	var controller: PVController = _controller_for_selection(selected_nodes, scene_root)
 	var should_show: bool = controller != null
-	_selected_node = selected_nodes[0] if selected_nodes.size() == 1 else null
 	_set_interaction_selected_controller(_interaction_controller_for_selection(selected_nodes))
 	_set_dock_controller(controller)
 	_dock.set_controller_present(should_show)
@@ -166,6 +180,8 @@ func _on_schema_3_variable_selection_changed(
 	collection: FlowGraphEditorCommands.Collection,
 	variable_id: String
 ) -> void:
+	if not is_instance_valid(controller):
+		return
 	if not _activate_dock_controller(controller):
 		return
 	if _selected_schema_3_variable_id == variable_id:
@@ -175,18 +191,44 @@ func _on_schema_3_variable_selection_changed(
 
 
 func _on_schema_3_variable_editor_focus_requested(controller: PVController, variable_id: String) -> void:
-	if _activate_dock_controller(controller):
+	if _activate_dock_controller(controller) and controller.flow_graph != null:
 		var collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.VARIABLES
 		for process: FlowProcess in controller.flow_graph.processes:
 			if process != null and process.get_internal_id() == variable_id:
 				collection = FlowGraphEditorCommands.Collection.PROCESSES
+		if controller.flow_graph.constructor != null and controller.flow_graph.constructor.get_internal_id() == variable_id:
+			collection = FlowGraphEditorCommands.Collection.CONSTRUCTOR
+		for method: FlowMethodDefinition in controller.flow_graph.methods:
+			if method != null and method.get_internal_id() == variable_id:
+				collection = FlowGraphEditorCommands.Collection.METHODS
 		_dock.set_variable_selection(controller, collection, variable_id)
 		_dock.focus_variable_editor(controller, variable_id)
 
 
 func _on_schema_3_variable_list_focus_requested(controller: PVController, variable_id: String) -> void:
-	if controller == _dock_controller and is_instance_valid(_controller_inspector_plugin):
+	if is_instance_valid(controller) and controller == _dock_controller_instance() \
+			and is_instance_valid(_controller_inspector_plugin):
 		_controller_inspector_plugin.focus_schema_3_variable_list(controller, variable_id)
+
+
+func _on_schema_3_delete_selection_recovery_requested(
+		controller: PVController,
+		collection: FlowGraphEditorCommands.Collection,
+		deleted_id: String,
+		replacement_id: String,
+		view_title: String,
+		restore_focus: bool
+) -> void:
+	if is_instance_valid(controller) and controller == _dock_controller_instance() \
+			and is_instance_valid(_controller_inspector_plugin):
+		_controller_inspector_plugin.apply_schema_3_delete_selection_recovery(
+			controller,
+			collection,
+			deleted_id,
+			replacement_id,
+			view_title,
+			restore_focus
+		)
 
 
 func _on_interaction_toggle_requested() -> void:
@@ -208,14 +250,23 @@ func _activate_dock_controller(controller: PVController) -> bool:
 
 ## Applies the single editor-owned controller context shared by the dock and relay.
 func _set_dock_controller(controller: PVController) -> bool:
-	var current_controller: PVController = _dock_controller if is_instance_valid(_dock_controller) else null
-	if current_controller != controller:
-		_dock_controller = controller
+	var next_controller: PVController = controller if is_instance_valid(controller) else null
+	var current_controller: PVController = _dock_controller_instance()
+	if current_controller != next_controller \
+			or (next_controller == null and _dock_controller_reference != null):
+		_dock_controller_reference = weakref(next_controller) if next_controller != null else null
 		_selected_schema_3_variable_id = ""
-		_dock.set_controller(controller)
-		_dock.set_variable_selection(controller, FlowGraphEditorCommands.Collection.VARIABLES, "")
+		_dock.set_controller(next_controller)
+		_dock.set_variable_selection(next_controller, FlowGraphEditorCommands.Collection.VARIABLES, "")
 		return true
 	return false
+
+
+func _dock_controller_instance() -> PVController:
+	if _dock_controller_reference == null:
+		return null
+	var controller: PVController = _dock_controller_reference.get_ref() as PVController
+	return controller if is_instance_valid(controller) else null
 
 
 ## Updates only the exact hierarchy selection used by the interaction coordinator.
@@ -235,15 +286,21 @@ static func _interaction_controller_for_selection(selected_nodes: Array[Node]) -
 	if selected_nodes.size() != 1:
 		return null
 	var selected_node: Node = selected_nodes[0]
-	return selected_node as PVController if selected_node is PVController else null
+	return selected_node as PVController \
+		if selected_node is PVController and selected_node.is_inside_tree() else null
 
 
 func _controller_for_selection(selected_nodes: Array[Node], scene_root: Node) -> PVController:
+	var controller: PVController = null
 	if selected_nodes.size() == 1:
-		return _scene_inspector.find_controller(selected_nodes[0])
-	if selected_nodes.size() > 1:
+		controller = _scene_inspector.find_controller(selected_nodes[0])
+	elif selected_nodes.size() > 1:
 		return null
-	return _scene_inspector.find_controller(scene_root)
+	else:
+		controller = _scene_inspector.find_controller(scene_root)
+	if controller == null or scene_root == null:
+		return null
+	return controller if controller == scene_root or scene_root.is_ancestor_of(controller) else null
 
 
 static func _is_relevant_scene_tree_change(node: Node, scene_inspector) -> bool:

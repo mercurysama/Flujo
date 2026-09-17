@@ -101,7 +101,7 @@ Every persistent element has a stable internal ID independent of its visible nam
 
 **Duplication:** preserves the concrete block type, generates a new block ID, and remaps `method_id` only after the graph-wide old-ID → new-ID map is complete. Unknown references remain unchanged.
 
-**Deferred behavior:** argument bindings, return blocks and values, recursion, cycle detection, execution, bindings, Inspector support, and shortcuts are not implemented. Their planned identity, persistence, duplication, and validation rules are defined by `ARGRET-001` through `ARGRET-012` in [`constructor_methods_contract.md`](constructor_methods_contract.md).
+**Execution boundary:** CMRUN-001–006 in the [Constructor and Methods contract](constructor_methods_contract.md) add authoring and execution only from Processes and Timers. Calls stored elsewhere remain valid persistent data but are skipped at runtime. Arguments, return values, recursion, cycle detection and bindings remain deferred under `ARGRET-001` through `ARGRET-012`.
 
 ### FlowMethodReturnDefinition
 
@@ -161,7 +161,7 @@ Every persistent element has a stable internal ID independent of its visible nam
 
 **Model:** owns the exported `flow_graph` property of type `FlowGraph`. Each new controller receives its own default graph.
 
-**Execution:** the Ready delivery runs enabled schema 3 Ready processes once per controller instance, outside editor hint and subject to `visual_program_enabled`. `FlowReadyExecutor` resolves the two built-in block handlers; `FlowRuntimeOutput` prints and emits structured messages. The graph stays read-only. Other entry points and method execution remain deferred.
+**Execution:** the controller runs enabled schema 3 Constructor blocks once immediately before its once-only Ready pass, outside editor hint and subject to `visual_program_enabled`, then starts its Timers. `FlowReadyExecutor` shares the starter-block handlers and allows one level of method calls from Ready/Timer containers. `FlowRuntimeOutput` preserves its existing signals and adds contextual entry, method and call IDs. The graph stays read-only; parameters, returns and nested method calls remain deferred.
 
 ## References and ordering
 
@@ -239,7 +239,7 @@ The schema 3 contract in [`constructor_methods_contract.md`](constructor_methods
 - `PVController` dependency bindings and class-resolution/inheritance checks.
 - `FlowRuntimeState` and execution beyond the two Ready starter blocks.
 - Method-call argument bindings, return blocks and values, argument validation, and call-cycle validation.
-- Inspector authoring and execution of Constructor or Methods.
+- Constructor dependencies, method parameters/returns, and execution beyond CMRUN-001–006.
 
 ### Planned method arguments and returns
 

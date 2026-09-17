@@ -30,8 +30,8 @@
 
 - Implementation of the remaining `ARGRET` contract: argument bindings, value-source validation, return blocks, and incomplete-return-path validation.
 - Recursion and call-cycle validation.
-- Dependency bindings, general runtime state, and execution beyond the scoped Ready and Timer starter paths.
-- Inspector and visual authoring workflow for constructor and methods.
+- Dependency bindings, general runtime state, and execution beyond the scoped Constructor, Ready, Timer and one-level method starter paths.
+- Constructor dependency authoring and method parameter/return authoring.
 - Enumerators, nullable values, persistent object references, and value-source resources; these require an approved schema 4 contract and migration.
 
 ### Not implemented by Iteration 6
@@ -40,13 +40,15 @@ This iteration has not introduced argument bindings, return blocks or runtime re
 
 ### Current delivery
 
+- Constructor/Methods vertical delivery on `feature/constructor-methods`: `CMRUN-001`–`CMRUN-006` in the [Constructor and Methods contract](constructor_methods_contract.md) reuse schema 3 unchanged. Inspector order is Constructor → Processes → Timers → State Machines → Methods → Variables; all configuration remains in Flujo. Constructor is unique/non-removable and executes once before Ready in controlled controller startup. Methods have independent names, Enabled and starter blocks; Ready/Timer Call Method blocks resolve stable target IDs and skip invalid targets without stopping later blocks. Existing output signals remain, with additional method/call context. Parameters, returns, recursion, nested calls and bindings remain deferred. Automated focal and general regression evidence is complete; visual validation remains pending.
+
 - Delivery 7 is implemented: the editor-only Flow interaction coordinator specified by `TVAR-016` now provides explicit `GODOT`, `FLOW`, and `GAME` states, an editor-configurable F4 default, and an equivalent dock button. It uses only weak focus references and the exact selected `PVController`, suspends editing during actual game execution, and does not change persistent data, schemas, runtime execution, or the existing local variable-editor workflows. Automated coverage is complete; the required manual visual review remains pending.
 - Ready starter delivery on `feature/processes-ready-runtime`: schema 3 reuses the existing Processes and block model; only Ready, configurable Print, and fixed Everything Flows are implemented. Block names are persistent visible metadata and never runtime dispatch. Output is console text plus a structured runtime signal; there is no on-screen presentation or debugger transport. Schema 2 remains migration coverage only. See `READY-001`–`READY-009` in the [model contract](model_contract.md). Automated verification is complete; manual visual acceptance remains pending. No export or performance work belongs to this delivery.
 - Process and Timer authoring delivery on `feature/processes-ready-runtime`: schema 3 keeps one polymorphic Processes collection and presents Timers as a filtered Inspector view. The Inspector orders Processes, Timers, State Machines, then Variables, and owns their Add actions and selection lists; the Flujo panel owns selected Process, Timer, and Variable configuration and structural actions. Each schema 3 collection uses its own `Flujo`, `Flujo 1`, … sequence. Ready and Timer blocks retain independent subtype/container visible-name sequences with compatible Print/Everything Flows defaults, ID-based rename actions, Enter/Escape, and F2 access with complete text selection; Print uses a subtly contrasting theme-derived multiline surface. Runtime dispatch remains based on subtype and ID. Timers remain visually neutral; process-type colors and Page Up/Page Down navigation are deferred. State Machine editing remains deferred. Enabled one-shot or repeating Timers use transient runtime `Timer` nodes and the same ordered Print/Everything Flows executor and output boundary as Ready. Schema 2 remains migration-only and schema 4 is not introduced. See `TIMER-001`–`TIMER-008` and `READY-009` in the [model contract](model_contract.md). Automated verification is complete; manual visual acceptance remains pending.
 
 ### Next delivery
 
-Complete the manual Fedora review for Process/Timer authoring, focus, one-shot/repeat execution, and cleanup, then audit any resulting correction separately before publication through GitHub Desktop. The Constructor and Methods contract continues to govern deferred argument bindings, return blocks, value sources, cycle validation, method execution, and schema 3 Constructor or Method authoring. The friendly user guide requires separate approval.
+Complete visual acceptance of the Constructor/Methods vertical delivery before publication. The Constructor and Methods contract continues to govern deferred argument bindings, return blocks, value sources, cycle validation and general method execution. The friendly user guide requires separate approval.
 
 Update this file after each approved Iteration 7 delivery so it remains a brief, factual handoff.
 

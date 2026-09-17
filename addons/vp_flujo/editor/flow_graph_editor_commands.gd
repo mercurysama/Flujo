@@ -14,6 +14,19 @@ enum Collection {
 	PROCESSES,
 	VARIABLES,
 	STATE_MACHINES,
+	METHODS,
+	CONSTRUCTOR,
+}
+
+
+## Separates visible naming collections from their persistent storage. Timers share
+## FlowGraph.processes with Ready processes, but must never consume their names.
+enum SemanticCollection {
+	PROCESSES,
+	TIMERS,
+	VARIABLES,
+	STATE_MACHINES,
+	METHODS,
 }
 
 
@@ -81,7 +94,8 @@ func add_resource(controller: PVController, collection: Collection) -> bool:
 		return false
 
 	var updated: Array = _collection_values(graph, collection)
-	updated.append(_new_resource(collection, updated, graph.schema_version == FlowGraph.SCHEMA_VERSION_3))
+	var naming_values: Array = _semantic_values(updated, _semantic_collection_for_collection(collection))
+	updated.append(_new_resource(collection, naming_values, graph.schema_version == FlowGraph.SCHEMA_VERSION_3))
 	_commit_collection("Add %s" % _collection_name(collection), controller, collection, updated)
 	return true
 
@@ -98,6 +112,8 @@ func rename_resource(controller: PVController, collection: Collection, internal_
 		return false
 
 	var previous_name: String = _display_name(resource)
+	if resource is FlowMethodDefinition and not _valid_method_name(graph, resource, display_name):
+		return false
 	if previous_name == display_name:
 		return false
 	_undo_redo.create_action("Rename %s" % _resource_action_name(collection, resource), UndoRedo.MERGE_DISABLE, controller, false, true)
@@ -183,14 +199,41 @@ func delete_resource(controller: PVController, collection: Collection, internal_
 	if resource == null:
 		return false
 	updated.remove_at(index)
+	var existing_errors: Dictionary[String, int] = _diagnostic_counts(
+		FlowGraphValidator.validate(graph).diagnostics
+	)
 	var validation: FlowValidationResult = FlowGraphValidator.validate(_candidate_with_collection(graph, collection, updated))
 	_last_diagnostics = validation.diagnostics.duplicate()
-	if validation.has_errors():
-		emit_signal(&"changed")
-		return false
+	for diagnostic: FlowDiagnostic in validation.diagnostics:
+		if diagnostic.severity == FlowDiagnostic.Severity.ERROR:
+			var diagnostic_key: String = _diagnostic_identity(diagnostic)
+			var existing_count: int = existing_errors.get(diagnostic_key, 0)
+			if existing_count > 0:
+				existing_errors[diagnostic_key] = existing_count - 1
+				continue
+			if collection == Collection.METHODS and diagnostic.code == &"missing_method_reference" and diagnostic.related_id == internal_id:
+				continue
+			emit_signal(&"changed")
+			return false
 
 	_commit_collection("Delete %s" % _resource_action_name(collection, resource), controller, collection, updated)
 	return true
+
+
+func _diagnostic_counts(diagnostics: Array[FlowDiagnostic]) -> Dictionary[String, int]:
+	var counts: Dictionary[String, int] = {}
+	for diagnostic: FlowDiagnostic in diagnostics:
+		if diagnostic.severity != FlowDiagnostic.Severity.ERROR:
+			continue
+		var key: String = _diagnostic_identity(diagnostic)
+		counts[key] = counts.get(key, 0) + 1
+	return counts
+
+
+func _diagnostic_identity(diagnostic: FlowDiagnostic) -> String:
+	# Paths may shift when an earlier collection entry is removed; stable diagnostic
+	# content and related identity distinguish an existing defect from a new one.
+	return "%s\u001f%s\u001f%s" % [diagnostic.code, diagnostic.related_id, diagnostic.message]
 
 
 func _commit_graph_replacement(
@@ -217,24 +260,34 @@ func find_ready_process(controller: PVController, process_id: String) -> FlowPro
 	return process if process != null and (process.process_type == FlowProcess.ProcessType.READY or process is FlowTimerDefinition) else null
 
 
+func find_block_container(controller: PVController, internal_id: String) -> FlowBlockContainer:
+	if not is_instance_valid(controller) or _undo_redo == null or internal_id.is_empty():
+		return null
+	var graph: FlowGraph = controller.flow_graph
+	if graph == null or graph.schema_version != FlowGraph.SCHEMA_VERSION_3 or not graph.containers.is_empty():
+		return null
+	if graph.constructor != null and graph.constructor.get_internal_id() == internal_id:
+		return graph.constructor
+	for method: FlowMethodDefinition in graph.methods:
+		if method != null and method.get_internal_id() == internal_id:
+			return method
+	return find_ready_process(controller, internal_id)
+
+
 func add_timer(controller: PVController) -> String:
 	if not is_instance_valid(controller) or controller.flow_graph == null \
 			or controller.flow_graph.schema_version != FlowGraph.SCHEMA_VERSION_3:
 		return ""
 	var values: Array = controller.flow_graph.processes.duplicate()
-	var existing_timers: Array = []
-	for process: FlowProcess in controller.flow_graph.processes:
-		if process is FlowTimerDefinition:
-			existing_timers.append(process)
 	var timer: FlowTimerDefinition = FlowTimerDefinition.new()
-	timer.display_name = _first_available_display_name(existing_timers, true)
+	timer.display_name = _first_available_display_name(_semantic_values(values, SemanticCollection.TIMERS), true)
 	values.append(timer)
 	_commit_collection("Add Timer", controller, Collection.PROCESSES, values)
 	return timer.get_internal_id()
 
 
 func set_ready_property(controller: PVController, process_id: String, block_id: String, property: StringName, value: Variant) -> bool:
-	var process: FlowProcess = find_ready_process(controller, process_id)
+	var process: FlowBlockContainer = find_block_container(controller, process_id)
 	if process == null:
 		return false
 	var target: Resource = process if block_id.is_empty() else _ready_block(process, block_id)
@@ -246,7 +299,11 @@ func set_ready_property(controller: PVController, process_id: String, block_id: 
 		or (target is FlowTimerDefinition and property == &"repeat" and value is bool) \
 		or (target is FlowTimerDefinition and property == &"interval_seconds" and value is float and is_finite(value) and value > 0.0) \
 		or (target is FlowPrintBlock and property == &"text" and value is String)
+	if target is FlowMethodCallBlock and process is FlowProcess and property == &"method_id" and value is String:
+		allowed = true
 	if not allowed or target.get(property) == value:
+		return false
+	if target is FlowMethodDefinition and property == &"display_name" and not _valid_method_name(controller.flow_graph, target, value):
 		return false
 	var action_name: String = "Rename %s Block" % _entry_point_action_name(process) \
 		if target is FlowBlock and property == &"display_name" \
@@ -256,7 +313,7 @@ func set_ready_property(controller: PVController, process_id: String, block_id: 
 
 
 func add_ready_block(controller: PVController, process_id: String, print_block: bool) -> String:
-	var process: FlowProcess = find_ready_process(controller, process_id)
+	var process: FlowBlockContainer = find_block_container(controller, process_id)
 	if process == null:
 		return ""
 	var block: FlowBlock = FlowPrintBlock.new() if print_block else FlowEverythingFlowsBlock.new()
@@ -267,8 +324,20 @@ func add_ready_block(controller: PVController, process_id: String, print_block: 
 	return block.get_internal_id()
 
 
-func move_ready_block(controller: PVController, process_id: String, block_id: String, direction: int) -> bool:
+func add_method_call(controller: PVController, process_id: String) -> String:
 	var process: FlowProcess = find_ready_process(controller, process_id)
+	if process == null:
+		return ""
+	var block: FlowMethodCallBlock = FlowMethodCallBlock.new()
+	block.display_name = _first_available_block_display_name(process.blocks, block)
+	var updated: Array[FlowBlock] = process.blocks.duplicate()
+	updated.append(block)
+	_commit_ready_property("Add %s Call Method Block" % _entry_point_action_name(process), controller, process, &"blocks", updated)
+	return block.get_internal_id()
+
+
+func move_ready_block(controller: PVController, process_id: String, block_id: String, direction: int) -> bool:
+	var process: FlowBlockContainer = find_block_container(controller, process_id)
 	if process == null or direction == 0:
 		return false
 	var block: FlowBlock = _ready_block(process, block_id)
@@ -286,7 +355,7 @@ func move_ready_block(controller: PVController, process_id: String, block_id: St
 
 
 func delete_ready_block(controller: PVController, process_id: String, block_id: String) -> bool:
-	var process: FlowProcess = find_ready_process(controller, process_id)
+	var process: FlowBlockContainer = find_block_container(controller, process_id)
 	if process == null:
 		return false
 	var block: FlowBlock = _ready_block(process, block_id)
@@ -298,7 +367,7 @@ func delete_ready_block(controller: PVController, process_id: String, block_id: 
 	return true
 
 
-func _ready_block(process: FlowProcess, block_id: String) -> FlowBlock:
+func _ready_block(process: FlowBlockContainer, block_id: String) -> FlowBlock:
 	for block: FlowBlock in process.blocks:
 		if block != null and block.get_internal_id() == block_id:
 			return block
@@ -343,6 +412,8 @@ func _assign_collection(controller: PVController, graph: FlowGraph, collection: 
 			graph.variables.assign(values)
 		Collection.STATE_MACHINES:
 			graph.state_machines.assign(values)
+		Collection.METHODS:
+			graph.methods.assign(values)
 	if controller != null:
 		controller.notify_property_list_changed()
 	_refresh_diagnostics(graph)
@@ -408,7 +479,8 @@ func _can_edit_collection(graph: FlowGraph, collection: Collection) -> bool:
 	if graph.schema_version != FlowGraph.SCHEMA_VERSION_2 \
 			and graph.schema_version != FlowGraph.SCHEMA_VERSION_3:
 		return false
-	return collection >= Collection.PROCESSES and collection <= Collection.STATE_MACHINES
+	return (collection >= Collection.PROCESSES and collection <= Collection.STATE_MACHINES) \
+		or (graph.schema_version == FlowGraph.SCHEMA_VERSION_3 and collection == Collection.METHODS)
 
 
 func _can_edit_schema_3_variable(graph: FlowGraph, collection: Collection) -> bool:
@@ -471,7 +543,47 @@ func _collection_values(graph: FlowGraph, collection: Collection) -> Array:
 			return graph.variables.duplicate()
 		Collection.STATE_MACHINES:
 			return graph.state_machines.duplicate()
+		Collection.METHODS:
+			return graph.methods.duplicate()
 	return []
+
+
+func _semantic_collection_for_collection(collection: Collection) -> int:
+	match collection:
+		Collection.PROCESSES:
+			return SemanticCollection.PROCESSES
+		Collection.VARIABLES:
+			return SemanticCollection.VARIABLES
+		Collection.STATE_MACHINES:
+			return SemanticCollection.STATE_MACHINES
+		Collection.METHODS:
+			return SemanticCollection.METHODS
+	return -1
+
+
+func _semantic_collection_for_resource(resource: Resource) -> int:
+	# FlowTimerDefinition is a FlowProcess subtype, so its membership must be
+	# resolved first instead of relying on the polymorphic storage collection.
+	if resource is FlowTimerDefinition:
+		return SemanticCollection.TIMERS
+	if resource is FlowProcess:
+		return SemanticCollection.PROCESSES
+	if resource is FlowVariableDefinition:
+		return SemanticCollection.VARIABLES
+	if resource is FlowStateMachineDefinition:
+		return SemanticCollection.STATE_MACHINES
+	if resource is FlowMethodDefinition:
+		return SemanticCollection.METHODS
+	return -1
+
+
+func _semantic_values(values: Array, semantic_collection: int) -> Array:
+	var members: Array = []
+	for value: Variant in values:
+		var resource: Resource = value as Resource
+		if resource != null and _semantic_collection_for_resource(resource) == semantic_collection:
+			members.append(resource)
+	return members
 
 
 func _new_resource(collection: Collection, existing_values: Array, schema_3: bool) -> Resource:
@@ -483,6 +595,8 @@ func _new_resource(collection: Collection, existing_values: Array, schema_3: boo
 			resource = FlowVariableDefinition.new()
 		Collection.STATE_MACHINES:
 			resource = FlowStateMachineDefinition.new()
+		Collection.METHODS:
+			resource = FlowMethodDefinition.new()
 	if resource != null:
 		_assign_display_name(resource, _first_available_display_name(existing_values, schema_3))
 	return resource
@@ -532,8 +646,21 @@ func _resource_action_name(collection: Collection, resource: Resource) -> String
 	return _collection_name(collection)
 
 
-func _entry_point_action_name(process: FlowProcess) -> String:
+func _entry_point_action_name(process: FlowBlockContainer) -> String:
+	if process is FlowConstructorDefinition:
+		return "Constructor"
+	if process is FlowMethodDefinition:
+		return "Method"
 	return "Timer" if process is FlowTimerDefinition else "Ready"
+
+
+func _valid_method_name(graph: FlowGraph, method: FlowMethodDefinition, value: String) -> bool:
+	if value.strip_edges().is_empty():
+		return false
+	for other: FlowMethodDefinition in graph.methods:
+		if other != null and other != method and other.display_name == value:
+			return false
+	return true
 
 
 func _find_resource(graph: FlowGraph, collection: Collection, internal_id: String) -> Resource:
@@ -569,6 +696,8 @@ func _candidate_with_collection(graph: FlowGraph, collection: Collection, values
 			candidate.variables.assign(values)
 		Collection.STATE_MACHINES:
 			candidate.state_machines.assign(values)
+		Collection.METHODS:
+			candidate.methods.assign(values)
 	return candidate
 
 
@@ -600,6 +729,8 @@ func _collection_name(collection: Collection) -> String:
 			return "Variable"
 		Collection.STATE_MACHINES:
 			return "State Machine"
+		Collection.METHODS:
+			return "Method"
 	return "Resource"
 
 

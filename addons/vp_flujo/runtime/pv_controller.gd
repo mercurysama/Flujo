@@ -32,6 +32,8 @@ func _ready() -> void:
 		return
 	_ready_executed = true
 	if can_execute_visual_program():
+		FlowReadyExecutor.new().execute(self, flow_graph, runtime_output, &"Constructor")
+	if can_execute_visual_program():
 		FlowReadyExecutor.new().execute(self, flow_graph, runtime_output)
 		_start_timers()
 

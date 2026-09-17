@@ -36,9 +36,14 @@ static func present(graph: FlowGraph) -> Dictionary:
 			or graph.schema_version == FlowGraph.SCHEMA_VERSION_3:
 		presentation["active_source"] = "Typed collections"
 		if graph.schema_version == FlowGraph.SCHEMA_VERSION_3:
+			sections.append({"title": "Constructor", "entries": [_present_resource(0, graph.constructor)]})
 			sections.append(_present_process_view(graph.processes, false))
 			sections.append(_present_process_view(graph.processes, true))
 			sections.append(_present_state_machines(graph.state_machines))
+			var methods: Array[Dictionary] = []
+			for index: int in graph.methods.size():
+				methods.append(_present_resource(index, graph.methods[index]))
+			sections.append({"title": "Methods", "entries": methods})
 			sections.append(_present_variables(graph.variables))
 		else:
 			sections.append(_present_processes(graph.processes))
@@ -134,6 +139,10 @@ static func _get_display_name(resource: Resource) -> String:
 
 
 static func _get_type_name(resource: Resource) -> String:
+	if resource is FlowConstructorDefinition:
+		return "FlowConstructorDefinition"
+	if resource is FlowMethodDefinition:
+		return "FlowMethodDefinition"
 	if resource is FlowProcess:
 		return "FlowProcess"
 	if resource is FlowStateDefinition:

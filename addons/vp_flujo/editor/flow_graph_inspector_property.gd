@@ -14,11 +14,21 @@ signal schema_3_variable_selection_changed(
 )
 signal schema_3_variable_editor_focus_requested(controller: PVController, variable_id: String)
 signal schema_3_variable_list_focus_requested(controller: PVController, variable_id: String)
+signal schema_3_delete_selection_recovery_requested(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	deleted_id: String,
+	replacement_id: String,
+	view_title: String,
+	restore_focus: bool
+)
 
 var _content: VBoxContainer
 var _commands: FlowGraphEditorCommands
 var _selected_collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.PROCESSES
 var _selected_id: String = ""
+var _selected_view_title: String = "Processes"
+var _selected_view_index: int = -1
 var _rename_input: LineEdit
 var _rename_target_id: String = ""
 var _rename_target_collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.PROCESSES
@@ -33,12 +43,19 @@ var _delete_confirmation: ConfirmationDialog
 var _pending_delete_id: String = ""
 var _pending_delete_collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.PROCESSES
 var _dock_mode: bool = false
-var _dock_controller: PVController
+var _dock_controller_reference: WeakRef
 var _color_preview_id: String = ""
 var _color_preview_original: Color = Color.WHITE
 var _color_preview_value: Color = Color.WHITE
 var _color_preview_button_reference: WeakRef
 var _ready_block_id: String = ""
+var _deleted_resource_id: String = ""
+var _deleted_resource_replacement_id: String = ""
+var _deleted_resource_collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.PROCESSES
+var _deleted_resource_view_title: String = ""
+var _deleted_block_id: String = ""
+var _deleted_block_replacement_id: String = ""
+var _deleted_block_container_id: String = ""
 
 
 ## Supplies the editor undo/redo manager used by all model-changing controls.
@@ -48,6 +65,20 @@ func configure(undo_redo: EditorUndoRedoManager) -> void:
 
 
 func _on_commands_changed() -> void:
+	var controller: PVController = _active_controller()
+	var restore_focus: bool = _editor_owns_focus()
+	if controller != null and controller.flow_graph != null:
+		_reconcile_deleted_resource_selection(controller.flow_graph)
+		_reconcile_deleted_block_selection(controller.flow_graph)
+		if _dock_mode and restore_focus and not _deleted_block_id.is_empty():
+			_variable_focus_control = &"ReadyBlocksList"
+		if _dock_mode and not _deleted_resource_id.is_empty():
+			_request_dock_delete_selection_recovery(
+				controller,
+				_deleted_resource_collection,
+				_deleted_resource_id,
+				restore_focus
+			)
 	_request_rebuild()
 
 
@@ -59,34 +90,64 @@ func configure_for_dock() -> void:
 ## Updates the dock-owned controller without retaining selection state from another scene object.
 func set_dock_controller(controller: PVController) -> void:
 	var next_controller: PVController = controller if is_instance_valid(controller) else null
-	var current_controller: PVController = _dock_controller if is_instance_valid(_dock_controller) else null
-	if current_controller == next_controller:
+	var current_controller: PVController = _dock_controller_instance()
+	if current_controller == next_controller \
+			and (next_controller != null or _dock_controller_reference == null):
 		return
-	if current_controller != null and current_controller.is_inside_tree() \
+	if current_controller != null \
 			and current_controller.tree_exited.is_connected(_on_dock_controller_tree_exited):
 		current_controller.tree_exited.disconnect(_on_dock_controller_tree_exited)
-	_dock_controller = next_controller
-	if _dock_controller != null and _dock_controller.is_inside_tree() \
-			and not _dock_controller.tree_exited.is_connected(_on_dock_controller_tree_exited):
-		_dock_controller.tree_exited.connect(_on_dock_controller_tree_exited)
+	_dock_controller_reference = weakref(next_controller) if next_controller != null else null
+	if next_controller != null and next_controller.is_inside_tree() \
+			and not next_controller.tree_exited.is_connected(_on_dock_controller_tree_exited):
+		next_controller.tree_exited.connect(_on_dock_controller_tree_exited, CONNECT_ONE_SHOT)
+	_reset_dock_context()
+
+
+func _reset_dock_context() -> void:
 	_selected_id = ""
+	_selected_view_title = "Processes"
+	_selected_view_index = -1
 	_rename_target_id = ""
 	_variable_advanced_open = false
 	_variable_focus_control = &""
 	_restore_selected_list_focus = false
+	_clear_deleted_selection_state()
 	_close_delete_confirmation()
 	_request_rebuild()
 
 
 func _on_dock_controller_tree_exited() -> void:
-	set_dock_controller(null)
+	_dock_controller_reference = null
+	_reset_dock_context()
+
+
+## Cancels callbacks and transient state owned by a controller leaving the edited scene.
+func invalidate_controller_context(controller: PVController) -> void:
+	if not is_instance_valid(controller) or controller != _active_controller():
+		return
+	_rebuild_generation += 1
+	_variable_focus_control = &""
+	_select_all_focus_generation = -1
+	_restore_selected_list_focus = false
+	_rename_target_id = ""
+	_color_preview_id = ""
+	_color_preview_button_reference = null
+	_close_delete_confirmation()
+	_clear_deleted_selection_state()
+	if _dock_mode:
+		set_dock_controller(null)
+	else:
+		_selected_id = ""
+		_ready_block_id = ""
+		_request_rebuild()
 
 
 ## Refreshes the current dock controller after a model replacement without changing selection ownership.
 func refresh_dock_controller() -> void:
 	if not _dock_mode:
 		return
-	if not is_instance_valid(_dock_controller):
+	if _dock_controller_instance() == null:
 		set_dock_controller(null)
 		return
 	_request_rebuild()
@@ -98,17 +159,25 @@ func set_dock_variable_selection(
 	collection: FlowGraphEditorCommands.Collection,
 	variable_id: String
 ) -> void:
-	if not _dock_mode or _dock_controller != controller:
+	var current_controller: PVController = _dock_controller_instance()
+	if not _dock_mode or not is_instance_valid(controller) \
+			or current_controller == null or current_controller != controller:
+		return
+	var graph: FlowGraph = current_controller.flow_graph
+	if graph == null:
 		return
 	var next_id: String = variable_id
 	if _selected_collection == collection and _selected_id == next_id:
 		return
 	_selected_collection = collection
 	_selected_id = next_id
+	_selected_view_title = _view_title_for_selection(graph, collection, next_id)
+	_selected_view_index = _selected_view_index_for_id(graph, collection, next_id, _selected_view_title)
 	_rename_target_id = ""
 	_variable_advanced_open = false
 	_variable_focus_control = &""
 	_restore_selected_list_focus = false
+	_clear_deleted_selection_state()
 	_close_delete_confirmation()
 	_request_rebuild()
 
@@ -131,8 +200,15 @@ func _update_property() -> void:
 
 func _active_controller() -> PVController:
 	if _dock_mode:
-		return _dock_controller if is_instance_valid(_dock_controller) else null
+		return _dock_controller_instance()
 	var controller: PVController = get_edited_object() as PVController
+	return controller if is_instance_valid(controller) else null
+
+
+func _dock_controller_instance() -> PVController:
+	if _dock_controller_reference == null:
+		return null
+	var controller: PVController = _dock_controller_reference.get_ref() as PVController
 	return controller if is_instance_valid(controller) else null
 
 
@@ -159,6 +235,9 @@ func _rebuild_interface(generation: int = -1) -> void:
 	var graph: FlowGraph = null
 	if controller != null:
 		graph = controller.flow_graph
+		_reconcile_deleted_resource_selection(graph)
+		_reconcile_deleted_block_selection(graph)
+		_reconcile_stale_resource_selection(graph)
 	_render(FlowGraphInspectorPresenter.present(graph), controller, generation)
 
 
@@ -242,7 +321,7 @@ func _render_dock_schema_3_variable_options(controller: PVController, generation
 		message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_content.add_child(message)
 		return
-	if _selected_collection == FlowGraphEditorCommands.Collection.PROCESSES:
+	if _is_block_collection():
 		_render_ready_process_editor(_content)
 		_focus_requested_variable_control(_content, _selected_id, generation)
 		return
@@ -273,6 +352,8 @@ func _render_typed_sections(sections: Array, controller: PVController, generatio
 				_add_button_to(category, "Add Process", _on_add_process_pressed)
 			"Timers":
 				_add_button_to(category, "Add Timer", _on_add_timer_pressed)
+			"Methods":
+				_add_button_to(category, "Add Method", _on_add_method_pressed)
 			"Variables":
 				_add_button_to(category, "Add Variable", _on_add_variable_pressed)
 			"State Machines":
@@ -302,13 +383,13 @@ func _render_section(section: Dictionary, parent: Container, generation: int) ->
 		if _entry_is_selected(entry):
 			list.select(item_index)
 			selected_item_index = item_index
-	list.item_selected.connect(_on_item_selected.bind(list))
+	list.item_selected.connect(_on_item_selected.bind(list, section["title"] as String))
 	if _is_schema_3_graph():
 		list.item_activated.connect(_on_schema_3_variable_item_activated.bind(list))
 	list.gui_input.connect(_on_list_gui_input.bind(list))
 	parent.add_child(list)
 	call_deferred(&"_fit_list_to_first_row", list, generation)
-	if _restore_selected_list_focus and selected_item_index >= 0 and _section_collection(section["title"]) == _selected_collection:
+	if _restore_selected_list_focus and _section_matches_selected_view(section["title"] as String):
 		_restore_selected_list_focus = false
 		call_deferred(&"_focus_selected_list", list, selected_item_index, _selected_id, generation)
 
@@ -346,15 +427,16 @@ func _render_schema_3_structural_actions(selection_actions: Container) -> void:
 
 
 func _render_ready_process_editor(parent: Container) -> void:
-	if _selected_collection != FlowGraphEditorCommands.Collection.PROCESSES or _commands == null:
+	if not _is_block_collection() or _commands == null:
 		return
 	var controller: PVController = _active_controller()
-	var process: FlowProcess = _commands.find_ready_process(controller, _selected_id)
+	var process: FlowBlockContainer = _commands.find_block_container(controller, _selected_id)
 	if process == null:
 		return
 	var editor: FlowReadyProcessEditor = FlowReadyProcessEditor.new()
 	editor.configure(_commands, controller, process, _ready_block_id)
 	editor.block_selected.connect(_on_ready_block_selected)
+	editor.block_delete_requested.connect(_on_ready_block_delete_requested)
 	editor.focus_requested.connect(_on_process_focus_requested)
 	editor.process_move_requested.connect(_move_selected)
 	editor.process_delete_requested.connect(_on_delete_pressed)
@@ -362,7 +444,23 @@ func _render_ready_process_editor(parent: Container) -> void:
 
 
 func _on_ready_block_selected(block_id: String) -> void:
+	_clear_deleted_block_selection_state()
 	_ready_block_id = block_id
+
+
+func _on_ready_block_delete_requested(block_id: String) -> void:
+	var controller: PVController = _active_controller()
+	if controller == null or controller.flow_graph == null or _commands == null:
+		return
+	var container: FlowBlockContainer = _commands.find_block_container(controller, _selected_id)
+	if container == null:
+		return
+	var restore_focus: bool = _editor_owns_focus()
+	_begin_deleted_block_selection(container, block_id)
+	if _commands.delete_ready_block(controller, _selected_id, block_id):
+		_variable_focus_control = &"ReadyBlocksList" if restore_focus else &""
+	else:
+		_clear_deleted_block_selection_state()
 
 
 func _on_process_focus_requested(control_name: StringName, select_all: bool) -> void:
@@ -819,7 +917,7 @@ func _focus_variable_control(control: Control, variable_id: String, control_name
 func focus_selected_variable_editor(controller: PVController, variable_id: String) -> void:
 	if not _dock_mode or controller != _active_controller() or variable_id != _selected_id:
 		return
-	var target_name: StringName = &"ReadyProcessName" if _selected_collection == FlowGraphEditorCommands.Collection.PROCESSES else &"VariableNameInput"
+	var target_name: StringName = &"ReadyProcessName" if _is_block_collection() else &"VariableNameInput"
 	var input: Control = _content.find_child(String(target_name), true, false) as Control
 	if input != null:
 		_variable_focus_control = target_name
@@ -838,7 +936,7 @@ func get_preferred_interaction_focus_target() -> Control:
 		requested = _content.find_child(String(_variable_focus_control), true, false) as Control
 	if _can_grab_focus(requested):
 		return requested
-	var name_input: Control = _content.find_child("ReadyProcessName" if _selected_collection == FlowGraphEditorCommands.Collection.PROCESSES else "VariableNameInput", true, false) as Control
+	var name_input: Control = _content.find_child("ReadyProcessName" if _is_block_collection() else "VariableNameInput", true, false) as Control
 	return name_input if _can_grab_focus(name_input) else null
 
 
@@ -943,6 +1041,10 @@ func _section_contains_selection(section: Dictionary) -> bool:
 
 
 func _section_collection(title: String) -> FlowGraphEditorCommands.Collection:
+	if title == "Constructor":
+		return FlowGraphEditorCommands.Collection.CONSTRUCTOR
+	if title == "Methods":
+		return FlowGraphEditorCommands.Collection.METHODS
 	if title == "Variables":
 		return FlowGraphEditorCommands.Collection.VARIABLES
 	if title == "State Machines":
@@ -1000,14 +1102,17 @@ func _add_button_to(parent: Container, label: String, callback: Callable) -> voi
 	parent.add_child(button)
 
 
-func _on_item_selected(item_index: int, list: ItemList) -> void:
+func _on_item_selected(item_index: int, list: ItemList, view_title: String) -> void:
 	var entry: Dictionary = list.get_item_metadata(item_index) as Dictionary
 	var internal_id: String = entry["internal_id"]
 	if internal_id.is_empty():
 		return
 	_selected_id = internal_id
 	_selected_collection = _collection_for_type(entry["type"])
+	_selected_view_title = view_title
+	_selected_view_index = item_index
 	_rename_target_id = ""
+	_clear_deleted_selection_state()
 	if _is_schema_3_graph():
 		_restore_selected_list_focus = false
 		_publish_schema_3_variable_selection()
@@ -1048,7 +1153,11 @@ func _on_schema_3_variable_item_activated(item_index: int, list: ItemList) -> vo
 
 func _is_schema_3_variable_list(list: ItemList) -> bool:
 	return not _dock_mode and list != null and _is_schema_3_graph() \
-		and _selected_collection in [FlowGraphEditorCommands.Collection.VARIABLES, FlowGraphEditorCommands.Collection.PROCESSES]
+		and (_selected_collection == FlowGraphEditorCommands.Collection.VARIABLES or _is_block_collection())
+
+
+func _is_block_collection() -> bool:
+	return _selected_collection in [FlowGraphEditorCommands.Collection.PROCESSES, FlowGraphEditorCommands.Collection.CONSTRUCTOR, FlowGraphEditorCommands.Collection.METHODS]
 
 
 func _is_schema_3_graph() -> bool:
@@ -1120,6 +1229,8 @@ func _on_add_timer_pressed() -> void:
 	if not timer_id.is_empty():
 		_selected_id = timer_id
 		_selected_collection = FlowGraphEditorCommands.Collection.PROCESSES
+		_selected_view_title = "Timers"
+		_selected_view_index = _selected_view_index_for_id(controller.flow_graph, _selected_collection, timer_id, _selected_view_title)
 		_restore_selected_list_focus = true
 		_publish_schema_3_variable_selection()
 
@@ -1132,12 +1243,27 @@ func _on_add_state_machine_pressed() -> void:
 	_add_resource(FlowGraphEditorCommands.Collection.STATE_MACHINES)
 
 
+func _on_add_method_pressed() -> void:
+	_add_resource(FlowGraphEditorCommands.Collection.METHODS)
+
+
 func _add_resource(collection: FlowGraphEditorCommands.Collection) -> void:
 	var controller: PVController = _active_controller()
 	if controller != null and _commands.add_resource(controller, collection):
+		if _is_schema_3_graph() and collection == FlowGraphEditorCommands.Collection.METHODS:
+			_selected_collection = collection
+			_selected_id = controller.flow_graph.methods.back().get_internal_id()
+			_selected_view_title = "Methods"
+			_selected_view_index = controller.flow_graph.methods.size() - 1
+			_ready_block_id = ""
+			_restore_selected_list_focus = true
+			_publish_schema_3_variable_selection()
+			return
 		if _is_schema_3_graph() and collection == FlowGraphEditorCommands.Collection.PROCESSES:
 			_selected_collection = collection
 			_selected_id = controller.flow_graph.processes.back().get_internal_id()
+			_selected_view_title = "Processes"
+			_selected_view_index = _selected_view_index_for_id(controller.flow_graph, collection, _selected_id, _selected_view_title)
 			_restore_selected_list_focus = true
 			_publish_schema_3_variable_selection()
 			return
@@ -1249,16 +1375,21 @@ func _on_delete_confirmed() -> void:
 	var delete_collection: FlowGraphEditorCommands.Collection = _pending_delete_collection
 	_close_delete_confirmation()
 	var controller: PVController = _active_controller()
+	if controller != null and controller.flow_graph != null:
+		_begin_deleted_resource_selection(controller.flow_graph, delete_collection, delete_id)
 	if controller != null and _commands.delete_resource(controller, delete_collection, delete_id):
 		if _is_schema_3_graph():
-			# Keep the semantic ID for Undo; no row is selected while it is absent.
-			_request_rebuild()
+			if not _dock_mode:
+				_restore_selected_list_focus = true
 			return
+		_clear_deleted_selection_state()
 		_selected_id = ""
 		_rename_target_id = ""
 		_restore_selected_list_focus = true
 		if delete_collection == FlowGraphEditorCommands.Collection.VARIABLES:
 			_clear_schema_3_variable_selection()
+	else:
+		_clear_deleted_selection_state()
 
 
 func _on_delete_cancelled() -> void:
@@ -1274,9 +1405,264 @@ func _close_delete_confirmation() -> void:
 	_delete_confirmation = null
 
 
+func _begin_deleted_resource_selection(
+		graph: FlowGraph,
+		collection: FlowGraphEditorCommands.Collection,
+		deleted_id: String
+) -> void:
+	var view_title: String = _view_title_for_selection(graph, collection, deleted_id)
+	var values: Array = _selection_values(graph, collection, view_title)
+	_deleted_resource_id = deleted_id
+	_deleted_resource_collection = collection
+	_deleted_resource_view_title = view_title
+	_deleted_resource_replacement_id = _replacement_id_after_removal(values, deleted_id)
+
+
+func _reconcile_deleted_resource_selection(graph: FlowGraph) -> void:
+	if _deleted_resource_id.is_empty():
+		return
+	if not _selected_id.is_empty() \
+			and _selected_id != _deleted_resource_id \
+			and _selected_id != _deleted_resource_replacement_id:
+		return
+	var values: Array = _selection_values(graph, _deleted_resource_collection, _deleted_resource_view_title)
+	if _contains_resource_id(values, _deleted_resource_id):
+		_set_resource_selection(_deleted_resource_collection, _deleted_resource_id, _deleted_resource_view_title)
+		return
+	if not _deleted_resource_replacement_id.is_empty() and _contains_resource_id(values, _deleted_resource_replacement_id):
+		_set_resource_selection(_deleted_resource_collection, _deleted_resource_replacement_id, _deleted_resource_view_title)
+		return
+	_set_resource_selection(_deleted_resource_collection, "", _deleted_resource_view_title)
+
+
+func _reconcile_stale_resource_selection(graph: FlowGraph) -> void:
+	if _selected_id.is_empty() or not _deleted_resource_id.is_empty():
+		return
+	var values: Array = _selection_values(graph, _selected_collection, _selected_view_title)
+	if _contains_resource_id(values, _selected_id):
+		return
+	_deleted_resource_id = _selected_id
+	_deleted_resource_collection = _selected_collection
+	_deleted_resource_view_title = _selected_view_title
+	_deleted_resource_replacement_id = _replacement_id_at_or_before(values, _selected_view_index)
+	_reconcile_deleted_resource_selection(graph)
+
+
+func _begin_deleted_block_selection(container: FlowBlockContainer, deleted_id: String) -> void:
+	_deleted_block_id = deleted_id
+	_deleted_block_container_id = container.get_internal_id()
+	_deleted_block_replacement_id = _replacement_id_after_removal(container.blocks, deleted_id)
+
+
+func _reconcile_deleted_block_selection(graph: FlowGraph) -> void:
+	if _deleted_block_id.is_empty() or _deleted_block_container_id.is_empty() or _commands == null:
+		return
+	if not _ready_block_id.is_empty() \
+			and _ready_block_id != _deleted_block_id \
+			and _ready_block_id != _deleted_block_replacement_id:
+		return
+	var controller: PVController = _active_controller()
+	var container: FlowBlockContainer = _commands.find_block_container(controller, _deleted_block_container_id)
+	if container == null:
+		_clear_deleted_block_selection_state()
+		return
+	if _contains_resource_id(container.blocks, _deleted_block_id):
+		_ready_block_id = _deleted_block_id
+		return
+	if not _deleted_block_replacement_id.is_empty() and _contains_resource_id(container.blocks, _deleted_block_replacement_id):
+		_ready_block_id = _deleted_block_replacement_id
+		return
+	_ready_block_id = ""
+
+
+func _request_dock_delete_selection_recovery(
+		controller: PVController,
+		collection: FlowGraphEditorCommands.Collection,
+		deleted_id: String,
+		restore_focus: bool
+) -> void:
+	if not _dock_mode:
+		return
+	emit_signal(
+		&"schema_3_delete_selection_recovery_requested",
+		controller,
+		collection,
+		deleted_id,
+		_selected_id,
+		_selected_view_title,
+		restore_focus
+	)
+
+
+func apply_schema_3_delete_selection_recovery(
+		controller: PVController,
+		collection: FlowGraphEditorCommands.Collection,
+		deleted_id: String,
+		replacement_id: String,
+		view_title: String,
+		restore_focus: bool
+) -> void:
+	if _dock_mode or controller != _active_controller() or not _is_schema_3_graph():
+		return
+	_deleted_resource_id = deleted_id
+	_deleted_resource_collection = collection
+	_deleted_resource_view_title = view_title
+	_deleted_resource_replacement_id = replacement_id
+	_reconcile_deleted_resource_selection(controller.flow_graph)
+	_restore_selected_list_focus = restore_focus
+	_request_rebuild()
+
+
+func _editor_owns_focus() -> bool:
+	var viewport: Viewport = get_viewport()
+	var focus_owner: Control = viewport.gui_get_focus_owner() if viewport != null else null
+	return is_instance_valid(focus_owner) and (focus_owner == self or is_ancestor_of(focus_owner))
+
+
+func _set_resource_selection(
+		collection: FlowGraphEditorCommands.Collection,
+		internal_id: String,
+		view_title: String
+) -> void:
+	_selected_collection = collection
+	_selected_id = internal_id
+	_selected_view_title = view_title
+	var controller: PVController = _active_controller()
+	_selected_view_index = _selected_view_index_for_id(
+		controller.flow_graph if controller != null else null,
+		collection,
+		internal_id,
+		view_title
+	)
+	_rename_target_id = ""
+	_ready_block_id = ""
+	if internal_id.is_empty():
+		_clear_schema_3_variable_selection()
+	else:
+		_publish_schema_3_variable_selection()
+
+
+func _selection_values(
+		graph: FlowGraph,
+		collection: FlowGraphEditorCommands.Collection,
+		view_title: String
+) -> Array:
+	if graph == null:
+		return []
+	match collection:
+		FlowGraphEditorCommands.Collection.CONSTRUCTOR:
+			return [graph.constructor]
+		FlowGraphEditorCommands.Collection.METHODS:
+			return graph.methods
+		FlowGraphEditorCommands.Collection.VARIABLES:
+			return graph.variables
+		FlowGraphEditorCommands.Collection.STATE_MACHINES:
+			return graph.state_machines
+		FlowGraphEditorCommands.Collection.PROCESSES:
+			var values: Array = []
+			var timers: bool = view_title == "Timers"
+			for process: FlowProcess in graph.processes:
+				if (process is FlowTimerDefinition) == timers:
+					values.append(process)
+			return values
+	return []
+
+
+func _view_title_for_selection(
+		graph: FlowGraph,
+		collection: FlowGraphEditorCommands.Collection,
+		internal_id: String
+) -> String:
+	if collection == FlowGraphEditorCommands.Collection.PROCESSES and graph != null:
+		for process: FlowProcess in graph.processes:
+			if process != null and process.get_internal_id() == internal_id:
+				return "Timers" if process is FlowTimerDefinition else "Processes"
+	match collection:
+		FlowGraphEditorCommands.Collection.CONSTRUCTOR:
+			return "Constructor"
+		FlowGraphEditorCommands.Collection.METHODS:
+			return "Methods"
+		FlowGraphEditorCommands.Collection.VARIABLES:
+			return "Variables"
+		FlowGraphEditorCommands.Collection.STATE_MACHINES:
+			return "State Machines"
+	return "Processes"
+
+
+func _selected_view_index_for_id(
+		graph: FlowGraph,
+		collection: FlowGraphEditorCommands.Collection,
+		internal_id: String,
+		view_title: String
+) -> int:
+	if internal_id.is_empty():
+		return -1
+	var values: Array = _selection_values(graph, collection, view_title)
+	for index: int in values.size():
+		var resource: Resource = values[index] as Resource
+		if resource != null and _resource_id(resource) == internal_id:
+			return index
+	return -1
+
+
+func _replacement_id_after_removal(values: Array, deleted_id: String) -> String:
+	var index: int = -1
+	for candidate_index: int in values.size():
+		var candidate: Resource = values[candidate_index] as Resource
+		if candidate != null and _resource_id(candidate) == deleted_id:
+			index = candidate_index
+			break
+	if index == -1:
+		return ""
+	var remaining: Array = values.duplicate()
+	remaining.remove_at(index)
+	return _replacement_id_at_or_before(remaining, index)
+
+
+func _replacement_id_at_or_before(values: Array, index: int) -> String:
+	for candidate_index: int in range(maxi(index, 0), values.size()):
+		var candidate: Resource = values[candidate_index] as Resource
+		if candidate != null:
+			return _resource_id(candidate)
+	for candidate_index: int in range(mini(index - 1, values.size() - 1), -1, -1):
+		var candidate: Resource = values[candidate_index] as Resource
+		if candidate != null:
+			return _resource_id(candidate)
+	return ""
+
+
+func _contains_resource_id(values: Array, internal_id: String) -> bool:
+	for value: Variant in values:
+		var resource: Resource = value as Resource
+		if resource != null and _resource_id(resource) == internal_id:
+			return true
+	return false
+
+
+func _section_matches_selected_view(title: String) -> bool:
+	return _section_collection(title) == _selected_collection and title == _selected_view_title
+
+
+func _clear_deleted_selection_state() -> void:
+	_deleted_resource_id = ""
+	_deleted_resource_replacement_id = ""
+	_deleted_resource_view_title = ""
+	_clear_deleted_block_selection_state()
+
+
+func _clear_deleted_block_selection_state() -> void:
+	_deleted_block_id = ""
+	_deleted_block_replacement_id = ""
+	_deleted_block_container_id = ""
+
+
 func _selected_display_name(graph: FlowGraph) -> String:
 	var values: Array = []
 	match _selected_collection:
+		FlowGraphEditorCommands.Collection.CONSTRUCTOR:
+			values = [graph.constructor]
+		FlowGraphEditorCommands.Collection.METHODS:
+			values = graph.methods
 		FlowGraphEditorCommands.Collection.PROCESSES:
 			values = graph.processes
 		FlowGraphEditorCommands.Collection.VARIABLES:
@@ -1296,6 +1682,10 @@ func _selected_display_name(graph: FlowGraph) -> String:
 
 
 func _collection_for_type(type_name: String) -> FlowGraphEditorCommands.Collection:
+	if type_name == "FlowConstructorDefinition":
+		return FlowGraphEditorCommands.Collection.CONSTRUCTOR
+	if type_name == "FlowMethodDefinition":
+		return FlowGraphEditorCommands.Collection.METHODS
 	if type_name == "FlowVariableDefinition":
 		return FlowGraphEditorCommands.Collection.VARIABLES
 	if type_name == "FlowStateMachineDefinition":
@@ -1310,4 +1700,6 @@ func _resource_id(resource: Resource) -> String:
 		return (resource as FlowVariableDefinition).get_internal_id()
 	if resource is FlowStateMachineDefinition:
 		return (resource as FlowStateMachineDefinition).get_internal_id()
+	if resource is FlowBlock:
+		return (resource as FlowBlock).get_internal_id()
 	return ""
