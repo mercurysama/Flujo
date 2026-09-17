@@ -28,6 +28,7 @@ var _rebuild_queued: bool = false
 var _rebuild_generation: int = 0
 var _variable_advanced_open: bool = false
 var _variable_focus_control: StringName = &""
+var _select_all_focus_generation: int = -1
 var _delete_confirmation: ConfirmationDialog
 var _pending_delete_id: String = ""
 var _pending_delete_collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.PROCESSES
@@ -99,7 +100,7 @@ func set_dock_variable_selection(
 ) -> void:
 	if not _dock_mode or _dock_controller != controller:
 		return
-	var next_id: String = variable_id if collection == FlowGraphEditorCommands.Collection.VARIABLES else ""
+	var next_id: String = variable_id
 	if _selected_collection == collection and _selected_id == next_id:
 		return
 	_selected_collection = collection
@@ -241,6 +242,10 @@ func _render_dock_schema_3_variable_options(controller: PVController, generation
 		message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_content.add_child(message)
 		return
+	if _selected_collection == FlowGraphEditorCommands.Collection.PROCESSES:
+		_render_ready_process_editor(_content)
+		_focus_requested_variable_control(_content, _selected_id, generation)
+		return
 	var variable: FlowVariableDefinition = _selected_variable(controller.flow_graph)
 	if variable == null:
 		var message: Label = Label.new()
@@ -249,6 +254,12 @@ func _render_dock_schema_3_variable_options(controller: PVController, generation
 		_content.add_child(message)
 		return
 	_render_schema_3_variable_editor(_content, controller.flow_graph, generation)
+	var actions: VBoxContainer = VBoxContainer.new()
+	actions.name = &"VariableActions"
+	_content.add_child(actions)
+	_add_button_to(actions, "Move Variable Up", _on_move_up_pressed)
+	_add_button_to(actions, "Move Variable Down", _on_move_down_pressed)
+	_add_button_to(actions, "Delete Variable", _on_delete_pressed)
 
 
 func _render_typed_sections(sections: Array, controller: PVController, generation: int) -> void:
@@ -260,19 +271,14 @@ func _render_typed_sections(sections: Array, controller: PVController, generatio
 		match section["title"]:
 			"Processes":
 				_add_button_to(category, "Add Process", _on_add_process_pressed)
+			"Timers":
+				_add_button_to(category, "Add Timer", _on_add_timer_pressed)
 			"Variables":
 				_add_button_to(category, "Add Variable", _on_add_variable_pressed)
 			"State Machines":
 				_add_button_to(category, "Add State Machine", _on_add_state_machine_pressed)
 		_render_section(section, category, generation)
-		if controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_3:
-			var selection_actions: VBoxContainer = VBoxContainer.new()
-			selection_actions.name = &"Schema3StructuralActions"
-			category.add_child(selection_actions)
-			_schema_3_structural_action_containers[collection] = selection_actions
-			if _section_contains_selection(section):
-				_render_schema_3_structural_actions(selection_actions)
-		elif _section_contains_selection(section) and controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_2:
+		if _section_contains_selection(section) and controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_2:
 			_render_selected_actions(category, controller.flow_graph, generation)
 
 
@@ -297,12 +303,12 @@ func _render_section(section: Dictionary, parent: Container, generation: int) ->
 			list.select(item_index)
 			selected_item_index = item_index
 	list.item_selected.connect(_on_item_selected.bind(list))
-	if _is_schema_3_graph() and _section_collection(section["title"]) == FlowGraphEditorCommands.Collection.VARIABLES:
+	if _is_schema_3_graph():
 		list.item_activated.connect(_on_schema_3_variable_item_activated.bind(list))
 	list.gui_input.connect(_on_list_gui_input.bind(list))
 	parent.add_child(list)
 	call_deferred(&"_fit_list_to_first_row", list, generation)
-	if _restore_selected_list_focus and _section_collection(section["title"]) == _selected_collection:
+	if _restore_selected_list_focus and selected_item_index >= 0 and _section_collection(section["title"]) == _selected_collection:
 		_restore_selected_list_focus = false
 		call_deferred(&"_focus_selected_list", list, selected_item_index, _selected_id, generation)
 
@@ -349,11 +355,20 @@ func _render_ready_process_editor(parent: Container) -> void:
 	var editor: FlowReadyProcessEditor = FlowReadyProcessEditor.new()
 	editor.configure(_commands, controller, process, _ready_block_id)
 	editor.block_selected.connect(_on_ready_block_selected)
+	editor.focus_requested.connect(_on_process_focus_requested)
+	editor.process_move_requested.connect(_move_selected)
+	editor.process_delete_requested.connect(_on_delete_pressed)
 	parent.add_child(editor)
 
 
 func _on_ready_block_selected(block_id: String) -> void:
 	_ready_block_id = block_id
+
+
+func _on_process_focus_requested(control_name: StringName, select_all: bool) -> void:
+	_variable_focus_control = control_name
+	_request_rebuild()
+	_select_all_focus_generation = _rebuild_generation if select_all else -1
 
 
 ## Updates only schema 3 selection actions so row selection keeps its ItemList mounted.
@@ -793,20 +808,24 @@ func _focus_variable_control(control: Control, variable_id: String, control_name
 			and variable_id == _selected_id and control_name == _variable_focus_control \
 			and _can_grab_focus(control):
 		control.grab_focus()
+		if _select_all_focus_generation == generation and control is LineEdit:
+			(control as LineEdit).select_all()
 	if generation == _rebuild_generation:
 		_variable_focus_control = &""
+		_select_all_focus_generation = -1
 
 
 ## Handles only an explicit Enter request from the selected Inspector variable row.
 func focus_selected_variable_editor(controller: PVController, variable_id: String) -> void:
 	if not _dock_mode or controller != _active_controller() or variable_id != _selected_id:
 		return
-	var input: Control = _content.find_child("VariableNameInput", true, false) as Control
+	var target_name: StringName = &"ReadyProcessName" if _selected_collection == FlowGraphEditorCommands.Collection.PROCESSES else &"VariableNameInput"
+	var input: Control = _content.find_child(String(target_name), true, false) as Control
 	if input != null:
-		_variable_focus_control = &"VariableNameInput"
-		call_deferred(&"_focus_variable_control", input, variable_id, &"VariableNameInput", _rebuild_generation)
+		_variable_focus_control = target_name
+		call_deferred(&"_focus_variable_control", input, variable_id, target_name, _rebuild_generation)
 		return
-	_variable_focus_control = &"VariableNameInput"
+	_variable_focus_control = target_name
 	_request_rebuild()
 
 
@@ -819,13 +838,16 @@ func get_preferred_interaction_focus_target() -> Control:
 		requested = _content.find_child(String(_variable_focus_control), true, false) as Control
 	if _can_grab_focus(requested):
 		return requested
-	var name_input: Control = _content.find_child("VariableNameInput", true, false) as Control
+	var name_input: Control = _content.find_child("ReadyProcessName" if _selected_collection == FlowGraphEditorCommands.Collection.PROCESSES else "VariableNameInput", true, false) as Control
 	return name_input if _can_grab_focus(name_input) else null
 
 
 ## Cancels only local transient editor state while preserving the stable-ID selection.
 func close_transient_interfaces() -> void:
 	_close_delete_confirmation()
+	var process_editor: FlowReadyProcessEditor = _content.find_child("ReadyProcessEditor", true, false) as FlowReadyProcessEditor
+	if process_editor != null:
+		process_editor.close_transient_interfaces()
 	_color_preview_id = ""
 	var color_button: ColorPickerButton = _color_preview_button_reference.get_ref() as ColorPickerButton \
 		if _color_preview_button_reference != null else null
@@ -988,11 +1010,7 @@ func _on_item_selected(item_index: int, list: ItemList) -> void:
 	_rename_target_id = ""
 	if _is_schema_3_graph():
 		_restore_selected_list_focus = false
-		if _selected_collection == FlowGraphEditorCommands.Collection.VARIABLES:
-			_publish_schema_3_variable_selection()
-		else:
-			_clear_schema_3_variable_selection()
-		_update_schema_3_structural_actions()
+		_publish_schema_3_variable_selection()
 		return
 	_restore_selected_list_focus = true
 	if _selected_collection == FlowGraphEditorCommands.Collection.VARIABLES:
@@ -1030,7 +1048,7 @@ func _on_schema_3_variable_item_activated(item_index: int, list: ItemList) -> vo
 
 func _is_schema_3_variable_list(list: ItemList) -> bool:
 	return not _dock_mode and list != null and _is_schema_3_graph() \
-		and _selected_collection == FlowGraphEditorCommands.Collection.VARIABLES
+		and _selected_collection in [FlowGraphEditorCommands.Collection.VARIABLES, FlowGraphEditorCommands.Collection.PROCESSES]
 
 
 func _is_schema_3_graph() -> bool:
@@ -1040,7 +1058,7 @@ func _is_schema_3_graph() -> bool:
 
 
 func _publish_schema_3_variable_selection() -> void:
-	if _dock_mode or _selected_collection != FlowGraphEditorCommands.Collection.VARIABLES:
+	if _dock_mode:
 		return
 	var controller: PVController = _active_controller()
 	if controller == null or controller.flow_graph == null \
@@ -1096,6 +1114,16 @@ func _on_add_process_pressed() -> void:
 	_add_resource(FlowGraphEditorCommands.Collection.PROCESSES)
 
 
+func _on_add_timer_pressed() -> void:
+	var controller: PVController = _active_controller()
+	var timer_id: String = _commands.add_timer(controller)
+	if not timer_id.is_empty():
+		_selected_id = timer_id
+		_selected_collection = FlowGraphEditorCommands.Collection.PROCESSES
+		_restore_selected_list_focus = true
+		_publish_schema_3_variable_selection()
+
+
 func _on_add_variable_pressed() -> void:
 	_add_resource(FlowGraphEditorCommands.Collection.VARIABLES)
 
@@ -1107,6 +1135,12 @@ func _on_add_state_machine_pressed() -> void:
 func _add_resource(collection: FlowGraphEditorCommands.Collection) -> void:
 	var controller: PVController = _active_controller()
 	if controller != null and _commands.add_resource(controller, collection):
+		if _is_schema_3_graph() and collection == FlowGraphEditorCommands.Collection.PROCESSES:
+			_selected_collection = collection
+			_selected_id = controller.flow_graph.processes.back().get_internal_id()
+			_restore_selected_list_focus = true
+			_publish_schema_3_variable_selection()
+			return
 		_selected_id = ""
 		_rename_target_id = ""
 		if collection == FlowGraphEditorCommands.Collection.VARIABLES:
@@ -1163,7 +1197,7 @@ func _focus_selected_list(list: ItemList, item_index: int, selected_id: String, 
 func focus_schema_3_variable_list(controller: PVController, variable_id: String) -> void:
 	if _dock_mode or controller != _active_controller() or variable_id != _selected_id:
 		return
-	if not _is_schema_3_graph() or _selected_collection != FlowGraphEditorCommands.Collection.VARIABLES:
+	if not _is_schema_3_graph():
 		return
 	_restore_selected_list_focus = true
 	_request_rebuild()
@@ -1216,6 +1250,10 @@ func _on_delete_confirmed() -> void:
 	_close_delete_confirmation()
 	var controller: PVController = _active_controller()
 	if controller != null and _commands.delete_resource(controller, delete_collection, delete_id):
+		if _is_schema_3_graph():
+			# Keep the semantic ID for Undo; no row is selected while it is absent.
+			_request_rebuild()
+			return
 		_selected_id = ""
 		_rename_target_id = ""
 		_restore_selected_list_focus = true

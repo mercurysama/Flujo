@@ -533,12 +533,21 @@ func _test_ready_authoring(controller: PVController, undo_redo: EditorUndoRedoMa
 	property.configure(undo_redo)
 	scroll.add_child(property)
 	property.set_object_and_property(controller, &"flow_graph")
+	var dock: VPFlujoDock = VPFlujoDock.new()
+	dock.configure(undo_redo)
+	get_root().add_child(dock)
+	dock.set_controller(controller)
+	property.schema_3_variable_selection_changed.connect(dock.set_variable_selection)
+	property.schema_3_variable_editor_focus_requested.connect(dock.focus_variable_editor)
+	dock.schema_3_variable_list_focus_requested.connect(property.focus_schema_3_variable_list)
+	var dock_property: FlowGraphInspectorProperty = dock.get_variable_editor()
 	await process_frame
 	await process_frame
 	var global_version: int = global_history.get_version()
 	var add: Button = _find_button(property, "Add Process")
 	_expect(add != null, "Ready reuses the public Add Process button.")
 	if add == null:
+		dock.queue_free()
 		scroll.queue_free()
 		return
 	add.pressed.emit()
@@ -546,6 +555,7 @@ func _test_ready_authoring(controller: PVController, undo_redo: EditorUndoRedoMa
 	await process_frame
 	if controller.flow_graph.processes.is_empty():
 		_expect(false, "Add creates an existing FlowProcess before authoring.")
+		dock.queue_free()
 		scroll.queue_free()
 		return
 	var process: FlowProcess = controller.flow_graph.processes.back()
@@ -554,26 +564,30 @@ func _test_ready_authoring(controller: PVController, undo_redo: EditorUndoRedoMa
 	var list: ItemList = _section_list(property, "Processes")
 	if list == null:
 		_expect(false, "Processes has a selectable public list.")
+		dock.queue_free()
 		scroll.queue_free()
 		return
 	list.select(list.item_count - 1)
 	list.item_selected.emit(list.item_count - 1)
 	await process_frame
 	await process_frame
-	var process_name: LineEdit = _find_node_by_name(property, &"ReadyProcessName") as LineEdit
+	var process_name: LineEdit = _find_node_by_name(dock_property, &"ReadyProcessName") as LineEdit
 	if process_name == null:
-		_expect(false, "Selecting Ready mounts its Name and block authoring controls.")
+		_expect(false, "Selecting Ready mounts its Name and block authoring controls in the Flujo panel.")
+		dock.queue_free()
 		scroll.queue_free()
 		return
+	_expect(_find_node_by_name(property, &"ReadyProcessName") == null, "Schema 3 Inspector keeps no duplicate Ready configuration.")
 	process_name.text = "Startup by ID"
 	process_name.text_submitted.emit(process_name.text)
 	await process_frame
 	await process_frame
 	_expect(process.display_name == "Startup by ID", "Ready Name changes the selected process by ID.")
 	for button_text: String in ["Add Print", "Add Everything Flows"]:
-		var button: Button = _find_button(property, button_text)
+		var button: Button = _find_button(dock_property, button_text)
 		if button == null:
 			_expect(false, "Ready exposes " + button_text)
+			dock.queue_free()
 			scroll.queue_free()
 			return
 		button.pressed.emit()
@@ -581,19 +595,22 @@ func _test_ready_authoring(controller: PVController, undo_redo: EditorUndoRedoMa
 		await process_frame
 	if process.blocks.size() != 3:
 		_expect(false, "Ready appends two concrete blocks around an existing null.")
+		dock.queue_free()
 		scroll.queue_free()
 		return
 	var print_block: FlowPrintBlock = process.blocks[1] as FlowPrintBlock
 	_expect(print_block != null and process.blocks[2] is FlowEverythingFlowsBlock and process.blocks[0] == null, "Public block additions preserve type, order and deliberate null.")
 	if print_block == null:
+		dock.queue_free()
 		scroll.queue_free()
 		return
-	var blocks: ItemList = _find_node_by_name(property, &"ReadyBlocksList") as ItemList
+	var blocks: ItemList = _find_node_by_name(dock_property, &"ReadyBlocksList") as ItemList
 	blocks.select(1)
 	blocks.item_selected.emit(1)
-	var text_input: TextEdit = _find_node_by_name(property, &"ReadyPrintText") as TextEdit
+	var text_input: TextEdit = _find_node_by_name(dock_property, &"ReadyPrintText") as TextEdit
 	if text_input == null:
 		_expect(false, "Print exposes a multiline text buffer.")
+		dock.queue_free()
 		scroll.queue_free()
 		return
 	var version: int = history.get_version()
@@ -609,7 +626,7 @@ func _test_ready_authoring(controller: PVController, undo_redo: EditorUndoRedoMa
 	await process_frame
 	_expect(print_block.text == "Editor Ready\nconfigured text" and history.get_version() == version + 1, "Ctrl+Enter confirms Print once in scene history.")
 	_expect(global_history.get_version() == global_version and _is_temporary_scene_unsaved(), "Ready authoring advances scene history and native dirty state only.")
-	text_input = _find_node_by_name(property, &"ReadyPrintText") as TextEdit
+	text_input = _find_node_by_name(dock_property, &"ReadyPrintText") as TextEdit
 	if text_input != null:
 		var escape: InputEventKey = InputEventKey.new()
 		escape.pressed = true
@@ -618,7 +635,7 @@ func _test_ready_authoring(controller: PVController, undo_redo: EditorUndoRedoMa
 		text_input.text = "discard me"
 		text_input.gui_input.emit(escape)
 		_expect(text_input.text == print_block.text and history.get_version() == version, "Escape discards Print draft without history.")
-	var move: Button = _find_button(property, "Move Block Down")
+	var move: Button = _find_button(dock_property, "Move Block Down")
 	if move != null:
 		move.pressed.emit()
 	await process_frame
@@ -628,7 +645,7 @@ func _test_ready_authoring(controller: PVController, undo_redo: EditorUndoRedoMa
 	await process_frame
 	await process_frame
 	_expect(process.blocks[1] == print_block, "Undo restores exact block order and resources.")
-	var block_enabled: CheckBox = _find_node_by_name(property, &"ReadyBlockEnabled") as CheckBox
+	var block_enabled: CheckBox = _find_node_by_name(dock_property, &"ReadyBlockEnabled") as CheckBox
 	if block_enabled != null:
 		block_enabled.toggled.emit(false)
 	await process_frame
@@ -638,7 +655,7 @@ func _test_ready_authoring(controller: PVController, undo_redo: EditorUndoRedoMa
 	await process_frame
 	await process_frame
 	_expect(print_block.enabled, "Undo restores block activation.")
-	var process_enabled: CheckBox = _find_node_by_name(property, &"ReadyProcessEnabled") as CheckBox
+	var process_enabled: CheckBox = _find_node_by_name(dock_property, &"ReadyProcessEnabled") as CheckBox
 	if process_enabled != null:
 		process_enabled.toggled.emit(false)
 	await process_frame
@@ -647,10 +664,10 @@ func _test_ready_authoring(controller: PVController, undo_redo: EditorUndoRedoMa
 	history.undo()
 	await process_frame
 	await process_frame
-	var delete: Button = _find_button(property, "Delete Block")
+	var delete: Button = _find_button(dock_property, "Delete Block")
 	if delete != null:
 		delete.pressed.emit()
-	var confirmation: ConfirmationDialog = _find_node_by_name(property, &"ReadyBlockDeleteConfirmation") as ConfirmationDialog
+	var confirmation: ConfirmationDialog = _find_node_by_name(dock_property, &"ReadyBlockDeleteConfirmation") as ConfirmationDialog
 	_expect(confirmation != null and process.blocks[1] == print_block, "Delete Block waits for explicit confirmation.")
 	if confirmation != null:
 		confirmation.confirmed.emit()
@@ -670,6 +687,8 @@ func _test_ready_authoring(controller: PVController, undo_redo: EditorUndoRedoMa
 	EditorInterface.save_scene()
 	await process_frame
 	_expect(not _is_temporary_scene_unsaved(), "Saving Ready edits clears native unsaved state.")
+	dock.set_controller(null)
+	dock.queue_free()
 	scroll.queue_free()
 	await process_frame
 	await process_frame
@@ -1089,10 +1108,11 @@ func _test_schema_3_variable_inspector(
 	await process_frame
 	await process_frame
 	_expect(_find_button(inspector_property, "Add Variable") != null, "Schema 3 Inspector owns the structural Add Variable action.")
-	_expect(_find_button(inspector_property, "Add Process") != null and _find_button(inspector_property, "Add State Machine") != null, "Schema 3 Inspector keeps inherited Process and State Machine structural actions.")
-	_expect(_section_rows_match_collection(inspector_property, "Processes", graph.processes) and _section_rows_match_collection(inspector_property, "State Machines", graph.state_machines), "Schema 3 Inspector presents inherited Process and State Machine collections.")
+	_expect(_find_button(inspector_property, "Add Process") != null and _find_button(inspector_property, "Add Timer") != null, "Schema 3 Inspector exposes Process and Timer structural actions.")
+	_expect(_find_button(inspector_property, "Add State Machine") != null, "Schema 3 Inspector retains the pre-existing State Machine Add action.")
+	_expect(_section_rows_match_collection(inspector_property, "Processes", graph.processes) and _section_rows_match_collection(inspector_property, "State Machines", graph.state_machines), "Schema 3 Inspector presents the Process and State Machine collection views.")
 	_expect(_find_node_by_name(inspector_property, &"Schema3VariableEditor") == null, "Schema 3 Inspector does not duplicate variable option controls.")
-	_expect(_find_button(dock_property, "Add Process") == null, "Schema 3 dock does not expose process authoring.")
+	_expect(_find_button(dock_property, "Add Process") == null, "Schema 3 dock does not duplicate structural Process creation.")
 	_expect(_find_button(dock_property, "Add State Machine") == null, "Schema 3 dock does not expose state-machine authoring.")
 	_expect(_find_button(dock_property, "Add Variable") == null and _section_list(dock_property, "Variables") == null, "Schema 3 dock contains no structural Variables controls.")
 	_expect(_section_rows_match_collection(inspector_property, "Variables", graph.variables), "Schema 3 Inspector variable rows use names without IDs.")
@@ -1110,13 +1130,7 @@ func _test_schema_3_variable_inspector(
 		process_list.emit_signal(&"item_selected", 0)
 		await process_frame
 		await process_frame
-		_expect(_has_label_containing(dock_property, "Select a Schema 3 Variable"), "Selecting a Process clears schema 3 Variable options.")
-	var state_machine_list: ItemList = _section_list(inspector_property, "State Machines")
-	if state_machine_list != null:
-		state_machine_list.emit_signal(&"item_selected", 0)
-		await process_frame
-		await process_frame
-		_expect(_has_label_containing(dock_property, "Select a Schema 3 Variable"), "Selecting a State Machine clears schema 3 Variable options.")
+		_expect(_find_node_by_name(dock_property, &"ReadyProcessEditor") != null, "Selecting a Process opens its configuration only in the Flujo panel.")
 	if variable_list == null:
 		return
 	await _test_schema_3_keyboard_accessibility(inspector_property, dock_property, graph)
@@ -1770,8 +1784,11 @@ func _test_schema_3_selection_without_list_rebuild(
 		_find_node_by_name(dock_property, &"VariableNameInput") != null,
 		"Schema 3 mouse selection publishes the stable ID to the Flujo panel without rebuilding the Inspector list."
 	)
-	var move_down: Button = _find_button(inspector_property, "Move Down")
-	_expect(move_down != null, "Schema 3 selection updates only the selected row structural actions.")
+	var move_down: Button = _find_button(dock_property, "Move Variable Down")
+	_expect(
+		move_down != null and _find_button(inspector_property, "Move Down") == null,
+		"Schema 3 selection exposes structural actions only in the Flujo panel."
+	)
 	if move_down == null:
 		return
 	move_down.emit_signal(&"pressed")

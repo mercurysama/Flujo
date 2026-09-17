@@ -81,7 +81,7 @@ func add_resource(controller: PVController, collection: Collection) -> bool:
 		return false
 
 	var updated: Array = _collection_values(graph, collection)
-	updated.append(_new_resource(collection, updated))
+	updated.append(_new_resource(collection, updated, graph.schema_version == FlowGraph.SCHEMA_VERSION_3))
 	_commit_collection("Add %s" % _collection_name(collection), controller, collection, updated)
 	return true
 
@@ -100,7 +100,7 @@ func rename_resource(controller: PVController, collection: Collection, internal_
 	var previous_name: String = _display_name(resource)
 	if previous_name == display_name:
 		return false
-	_undo_redo.create_action("Rename %s" % _collection_name(collection), UndoRedo.MERGE_DISABLE, controller, false, true)
+	_undo_redo.create_action("Rename %s" % _resource_action_name(collection, resource), UndoRedo.MERGE_DISABLE, controller, false, true)
 	_undo_redo.add_do_method(self, &"_set_display_name", resource, display_name)
 	_undo_redo.add_undo_method(self, &"_set_display_name", resource, previous_name)
 	_undo_redo.commit_action()
@@ -164,7 +164,7 @@ func move_resource(controller: PVController, collection: Collection, internal_id
 	var displaced: Variant = moved[target_index]
 	moved[target_index] = moved[source_index]
 	moved[source_index] = displaced
-	_commit_collection("Move %s" % _collection_name(collection), controller, collection, moved)
+	_commit_collection("Move %s" % _resource_action_name(collection, moved[target_index] as Resource), controller, collection, moved)
 	return true
 
 
@@ -179,6 +179,9 @@ func delete_resource(controller: PVController, collection: Collection, internal_
 	var index: int = _find_index(updated, internal_id)
 	if index == -1:
 		return false
+	var resource: Resource = updated[index] as Resource
+	if resource == null:
+		return false
 	updated.remove_at(index)
 	var validation: FlowValidationResult = FlowGraphValidator.validate(_candidate_with_collection(graph, collection, updated))
 	_last_diagnostics = validation.diagnostics.duplicate()
@@ -186,7 +189,7 @@ func delete_resource(controller: PVController, collection: Collection, internal_
 		emit_signal(&"changed")
 		return false
 
-	_commit_collection("Delete %s" % _collection_name(collection), controller, collection, updated)
+	_commit_collection("Delete %s" % _resource_action_name(collection, resource), controller, collection, updated)
 	return true
 
 
@@ -211,7 +214,23 @@ func find_ready_process(controller: PVController, process_id: String) -> FlowPro
 	if not _can_edit_collection(controller.flow_graph, Collection.PROCESSES):
 		return null
 	var process: FlowProcess = _find_resource(controller.flow_graph, Collection.PROCESSES, process_id) as FlowProcess
-	return process if process != null and process.process_type == FlowProcess.ProcessType.READY else null
+	return process if process != null and (process.process_type == FlowProcess.ProcessType.READY or process is FlowTimerDefinition) else null
+
+
+func add_timer(controller: PVController) -> String:
+	if not is_instance_valid(controller) or controller.flow_graph == null \
+			or controller.flow_graph.schema_version != FlowGraph.SCHEMA_VERSION_3:
+		return ""
+	var values: Array = controller.flow_graph.processes.duplicate()
+	var existing_timers: Array = []
+	for process: FlowProcess in controller.flow_graph.processes:
+		if process is FlowTimerDefinition:
+			existing_timers.append(process)
+	var timer: FlowTimerDefinition = FlowTimerDefinition.new()
+	timer.display_name = _first_available_display_name(existing_timers, true)
+	values.append(timer)
+	_commit_collection("Add Timer", controller, Collection.PROCESSES, values)
+	return timer.get_internal_id()
 
 
 func set_ready_property(controller: PVController, process_id: String, block_id: String, property: StringName, value: Variant) -> bool:
@@ -223,10 +242,16 @@ func set_ready_property(controller: PVController, process_id: String, block_id: 
 		return false
 	var allowed: bool = (property == &"enabled" and value is bool) \
 		or (block_id.is_empty() and property == &"display_name" and value is String) \
+		or (target is FlowBlock and property == &"display_name" and value is String) \
+		or (target is FlowTimerDefinition and property == &"repeat" and value is bool) \
+		or (target is FlowTimerDefinition and property == &"interval_seconds" and value is float and is_finite(value) and value > 0.0) \
 		or (target is FlowPrintBlock and property == &"text" and value is String)
 	if not allowed or target.get(property) == value:
 		return false
-	_commit_ready_property("Edit Ready %s" % property.capitalize(), controller, target, property, value)
+	var action_name: String = "Rename %s Block" % _entry_point_action_name(process) \
+		if target is FlowBlock and property == &"display_name" \
+		else "Edit %s %s" % [_entry_point_action_name(process), property.capitalize()]
+	_commit_ready_property(action_name, controller, target, property, value)
 	return true
 
 
@@ -235,9 +260,10 @@ func add_ready_block(controller: PVController, process_id: String, print_block: 
 	if process == null:
 		return ""
 	var block: FlowBlock = FlowPrintBlock.new() if print_block else FlowEverythingFlowsBlock.new()
+	block.display_name = _first_available_block_display_name(process.blocks, block)
 	var updated: Array[FlowBlock] = process.blocks.duplicate()
 	updated.append(block)
-	_commit_ready_property("Add %s Block" % block.display_name, controller, process, &"blocks", updated)
+	_commit_ready_property("Add %s %s Block" % [_entry_point_action_name(process), block.display_name], controller, process, &"blocks", updated)
 	return block.get_internal_id()
 
 
@@ -255,7 +281,7 @@ func move_ready_block(controller: PVController, process_id: String, block_id: St
 	var updated: Array[FlowBlock] = process.blocks.duplicate()
 	updated[index] = updated[destination]
 	updated[destination] = block
-	_commit_ready_property("Move Ready Block", controller, process, &"blocks", updated)
+	_commit_ready_property("Move %s Block" % _entry_point_action_name(process), controller, process, &"blocks", updated)
 	return true
 
 
@@ -268,7 +294,7 @@ func delete_ready_block(controller: PVController, process_id: String, block_id: 
 		return false
 	var updated: Array[FlowBlock] = process.blocks.duplicate()
 	updated.remove_at(updated.find(block))
-	_commit_ready_property("Delete Ready Block", controller, process, &"blocks", updated)
+	_commit_ready_property("Delete %s Block" % _entry_point_action_name(process), controller, process, &"blocks", updated)
 	return true
 
 
@@ -448,7 +474,7 @@ func _collection_values(graph: FlowGraph, collection: Collection) -> Array:
 	return []
 
 
-func _new_resource(collection: Collection, existing_values: Array) -> Resource:
+func _new_resource(collection: Collection, existing_values: Array, schema_3: bool) -> Resource:
 	var resource: Resource = null
 	match collection:
 		Collection.PROCESSES:
@@ -458,21 +484,56 @@ func _new_resource(collection: Collection, existing_values: Array) -> Resource:
 		Collection.STATE_MACHINES:
 			resource = FlowStateMachineDefinition.new()
 	if resource != null:
-		_assign_display_name(resource, _first_available_display_name(existing_values))
+		_assign_display_name(resource, _first_available_display_name(existing_values, schema_3))
 	return resource
 
 
-func _first_available_display_name(values: Array) -> String:
+## Schema 3 uses zero-based visible suffixes; schema 2 retains its compatibility naming.
+func _first_available_display_name(values: Array, schema_3: bool = false) -> String:
 	var existing_names: Dictionary[String, bool] = {}
 	for value: Variant in values:
 		if value is Resource:
 			existing_names[_display_name(value as Resource)] = true
 	if not existing_names.has(DEFAULT_DISPLAY_NAME):
 		return DEFAULT_DISPLAY_NAME
-	var suffix: int = 2
+	var suffix: int = 1 if schema_3 else 2
 	while existing_names.has("%s %d" % [DEFAULT_DISPLAY_NAME, suffix]):
 		suffix += 1
 	return "%s %d" % [DEFAULT_DISPLAY_NAME, suffix]
+
+
+func _first_available_block_display_name(blocks: Array[FlowBlock], template: FlowBlock) -> String:
+	var base_name: String = _default_block_display_name(template)
+	var existing_names: Dictionary[String, bool] = {}
+	for block: FlowBlock in blocks:
+		if block != null and block.get_script() == template.get_script():
+			existing_names[_block_display_name(block)] = true
+	var suffix: int = 0
+	while existing_names.has(base_name if suffix == 0 else "%s %d" % [base_name, suffix]):
+		suffix += 1
+	return base_name if suffix == 0 else "%s %d" % [base_name, suffix]
+
+
+func _default_block_display_name(block: FlowBlock) -> String:
+	if block is FlowPrintBlock:
+		return "Print"
+	if block is FlowEverythingFlowsBlock:
+		return "Everything Flows"
+	return block.display_name
+
+
+func _block_display_name(block: FlowBlock) -> String:
+	return block.display_name if not block.display_name.strip_edges().is_empty() else _default_block_display_name(block)
+
+
+func _resource_action_name(collection: Collection, resource: Resource) -> String:
+	if collection == Collection.PROCESSES and resource is FlowTimerDefinition:
+		return "Timer"
+	return _collection_name(collection)
+
+
+func _entry_point_action_name(process: FlowProcess) -> String:
+	return "Timer" if process is FlowTimerDefinition else "Ready"
 
 
 func _find_resource(graph: FlowGraph, collection: Collection, internal_id: String) -> Resource:

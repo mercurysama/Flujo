@@ -11,7 +11,7 @@ var _handlers: Dictionary[Script, Callable] = {
 }
 
 
-func execute(controller: Node, graph: FlowGraph, output: FlowRuntimeOutput) -> void:
+func execute(controller: Node, graph: FlowGraph, output: FlowRuntimeOutput, entry_point: StringName = &"Ready", process_id: String = "") -> void:
 	if Engine.is_editor_hint() or graph == null:
 		return
 	if graph.schema_version != FlowGraph.SCHEMA_VERSION_3:
@@ -33,7 +33,12 @@ func execute(controller: Node, graph: FlowGraph, output: FlowRuntimeOutput) -> v
 		if not FlowProcess.ProcessType.values().has(process.process_type):
 			push_warning("[Flujo] Invalid process type at %s; skipping." % process_path)
 			continue
-		if process.process_type != FlowProcess.ProcessType.READY:
+		if entry_point == &"Timer":
+			if not process is FlowTimerDefinition or process.get_internal_id() != process_id \
+					or not (process as FlowTimerDefinition).has_valid_interval() \
+					or process.process_type != FlowProcess.ProcessType.TIMER:
+				continue
+		elif entry_point != &"Ready" or process.process_type != FlowProcess.ProcessType.READY or process is FlowTimerDefinition:
 			continue
 		for block_index: int in process.blocks.size():
 			var block: FlowBlock = process.blocks[block_index]
@@ -47,7 +52,7 @@ func execute(controller: Node, graph: FlowGraph, output: FlowRuntimeOutput) -> v
 				push_warning("[Flujo] Unsupported block at %s (%s); skipping." % [block_path, block.get_internal_id()])
 				continue
 			var message: String = handler.call(block)
-			output.write(controller, process.get_internal_id(), block.get_internal_id(), message)
+			output.write(controller, process.get_internal_id(), block.get_internal_id(), message, entry_point)
 
 
 func _is_invalid_block(path: String, invalid_paths: Array[String]) -> bool:

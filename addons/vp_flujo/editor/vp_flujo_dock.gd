@@ -218,7 +218,7 @@ func _build_interface() -> void:
 
 	var description_label := Label.new()
 	description_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	description_label.text = "Schema 3 variable authoring for the selected PVController."
+	description_label.text = "Edit the element selected in the Godot Inspector."
 	_content.add_child(description_label)
 
 

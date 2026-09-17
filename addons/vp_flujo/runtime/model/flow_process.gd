@@ -8,6 +8,7 @@ enum ProcessType {
 	PHYSICS_PROCESS,
 	INPUT,
 	UNHANDLED_INPUT,
+	TIMER,
 }
 
 @export var process_type: ProcessType = ProcessType.READY

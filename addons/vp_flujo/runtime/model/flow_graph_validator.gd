@@ -73,9 +73,28 @@ static func validate(graph: FlowGraph) -> FlowValidationResult:
 	if graph.schema_version == FlowGraph.SCHEMA_VERSION_3:
 		_validate_schema_3(graph, result, seen_instances, seen_ids)
 	_validate_method_calls(graph, result, seen_ids)
+	_validate_timers(graph, result)
 
 
 	return result
+
+
+static func _validate_timers(graph: FlowGraph, result: FlowValidationResult) -> void:
+	for index: int in graph.processes.size():
+		var process: FlowProcess = graph.processes[index]
+		if process == null:
+			continue
+		var path: String = "processes[%d]" % index
+		if process is FlowTimerDefinition:
+			var definition: FlowTimerDefinition = process as FlowTimerDefinition
+			if graph.schema_version != FlowGraph.SCHEMA_VERSION_3:
+				_add_error(result, &"timer_incompatible_schema", "Timers require schema 3.", path, definition.get_internal_id())
+			if definition.process_type != FlowProcess.ProcessType.TIMER:
+				_add_error(result, &"invalid_timer_type", "Timer definition requires the Timer process type.", path + ".process_type", definition.get_internal_id())
+			if not definition.has_valid_interval():
+				_add_error(result, &"invalid_timer_interval", "Timer interval must be finite and greater than zero.", path + ".interval_seconds", definition.get_internal_id())
+		elif process.process_type == FlowProcess.ProcessType.TIMER:
+			_add_error(result, &"invalid_timer_definition", "Timer type requires a Timer definition.", path, process.get_internal_id())
 
 
 static func _has_schema_2_entries(graph: FlowGraph) -> bool:

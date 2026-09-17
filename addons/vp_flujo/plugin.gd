@@ -176,7 +176,11 @@ func _on_schema_3_variable_selection_changed(
 
 func _on_schema_3_variable_editor_focus_requested(controller: PVController, variable_id: String) -> void:
 	if _activate_dock_controller(controller):
-		_dock.set_variable_selection(controller, FlowGraphEditorCommands.Collection.VARIABLES, variable_id)
+		var collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.VARIABLES
+		for process: FlowProcess in controller.flow_graph.processes:
+			if process != null and process.get_internal_id() == variable_id:
+				collection = FlowGraphEditorCommands.Collection.PROCESSES
+		_dock.set_variable_selection(controller, collection, variable_id)
 		_dock.focus_variable_editor(controller, variable_id)
 
 

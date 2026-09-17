@@ -35,14 +35,28 @@ static func present(graph: FlowGraph) -> Dictionary:
 	elif graph.schema_version == FlowGraph.SCHEMA_VERSION_2 \
 			or graph.schema_version == FlowGraph.SCHEMA_VERSION_3:
 		presentation["active_source"] = "Typed collections"
-		sections.append(_present_processes(graph.processes))
-		sections.append(_present_variables(graph.variables))
-		sections.append(_present_state_machines(graph.state_machines))
+		if graph.schema_version == FlowGraph.SCHEMA_VERSION_3:
+			sections.append(_present_process_view(graph.processes, false))
+			sections.append(_present_process_view(graph.processes, true))
+			sections.append(_present_state_machines(graph.state_machines))
+			sections.append(_present_variables(graph.variables))
+		else:
+			sections.append(_present_processes(graph.processes))
+			sections.append(_present_variables(graph.variables))
+			sections.append(_present_state_machines(graph.state_machines))
 	else:
 		presentation["active_source"] = "Unsupported schema"
 
 	presentation["sections"] = sections
 	return presentation
+
+
+static func _present_process_view(processes: Array[FlowProcess], timers: bool) -> Dictionary:
+	var entries: Array[Dictionary] = []
+	for index: int in processes.size():
+		if (processes[index] is FlowTimerDefinition) == timers:
+			entries.append(_present_resource(index, processes[index]))
+	return {"title": "Timers" if timers else "Processes", "entries": entries}
 
 
 static func _present_containers(containers: Array[FlowBlockContainer]) -> Dictionary:
