@@ -202,6 +202,97 @@ func _commit_graph_replacement(
 	_undo_redo.commit_action()
 
 
+## Resolves the existing Ready process by stable identity; no parallel process collection.
+func find_ready_process(controller: PVController, process_id: String) -> FlowProcess:
+	if not is_instance_valid(controller) or _undo_redo == null:
+		return null
+	if controller.flow_graph == null or controller.flow_graph.schema_version != FlowGraph.SCHEMA_VERSION_3:
+		return null
+	if not _can_edit_collection(controller.flow_graph, Collection.PROCESSES):
+		return null
+	var process: FlowProcess = _find_resource(controller.flow_graph, Collection.PROCESSES, process_id) as FlowProcess
+	return process if process != null and process.process_type == FlowProcess.ProcessType.READY else null
+
+
+func set_ready_property(controller: PVController, process_id: String, block_id: String, property: StringName, value: Variant) -> bool:
+	var process: FlowProcess = find_ready_process(controller, process_id)
+	if process == null:
+		return false
+	var target: Resource = process if block_id.is_empty() else _ready_block(process, block_id)
+	if target == null:
+		return false
+	var allowed: bool = (property == &"enabled" and value is bool) \
+		or (block_id.is_empty() and property == &"display_name" and value is String) \
+		or (target is FlowPrintBlock and property == &"text" and value is String)
+	if not allowed or target.get(property) == value:
+		return false
+	_commit_ready_property("Edit Ready %s" % property.capitalize(), controller, target, property, value)
+	return true
+
+
+func add_ready_block(controller: PVController, process_id: String, print_block: bool) -> String:
+	var process: FlowProcess = find_ready_process(controller, process_id)
+	if process == null:
+		return ""
+	var block: FlowBlock = FlowPrintBlock.new() if print_block else FlowEverythingFlowsBlock.new()
+	var updated: Array[FlowBlock] = process.blocks.duplicate()
+	updated.append(block)
+	_commit_ready_property("Add %s Block" % block.display_name, controller, process, &"blocks", updated)
+	return block.get_internal_id()
+
+
+func move_ready_block(controller: PVController, process_id: String, block_id: String, direction: int) -> bool:
+	var process: FlowProcess = find_ready_process(controller, process_id)
+	if process == null or direction == 0:
+		return false
+	var block: FlowBlock = _ready_block(process, block_id)
+	if block == null:
+		return false
+	var index: int = process.blocks.find(block)
+	var destination: int = index + (1 if direction > 0 else -1)
+	if destination < 0 or destination >= process.blocks.size():
+		return false
+	var updated: Array[FlowBlock] = process.blocks.duplicate()
+	updated[index] = updated[destination]
+	updated[destination] = block
+	_commit_ready_property("Move Ready Block", controller, process, &"blocks", updated)
+	return true
+
+
+func delete_ready_block(controller: PVController, process_id: String, block_id: String) -> bool:
+	var process: FlowProcess = find_ready_process(controller, process_id)
+	if process == null:
+		return false
+	var block: FlowBlock = _ready_block(process, block_id)
+	if block == null:
+		return false
+	var updated: Array[FlowBlock] = process.blocks.duplicate()
+	updated.remove_at(updated.find(block))
+	_commit_ready_property("Delete Ready Block", controller, process, &"blocks", updated)
+	return true
+
+
+func _ready_block(process: FlowProcess, block_id: String) -> FlowBlock:
+	for block: FlowBlock in process.blocks:
+		if block != null and block.get_internal_id() == block_id:
+			return block
+	return null
+
+
+func _commit_ready_property(action: String, controller: PVController, resource: Resource, property: StringName, value: Variant) -> void:
+	_undo_redo.create_action(action, UndoRedo.MERGE_DISABLE, controller, false, true)
+	_undo_redo.add_do_method(self, &"_assign_ready_property", controller, resource, property, value)
+	_undo_redo.add_undo_method(self, &"_assign_ready_property", controller, resource, property, resource.get(property))
+	_undo_redo.commit_action()
+
+
+func _assign_ready_property(controller: PVController, resource: Resource, property: StringName, value: Variant) -> void:
+	resource.set(property, value)
+	controller.notify_property_list_changed()
+	_refresh_diagnostics(controller.flow_graph)
+	changed.emit()
+
+
 func _commit_collection(action_name: String, controller: PVController, collection: Collection, updated: Array) -> void:
 	var graph: FlowGraph = controller.flow_graph
 	var original: Array = _collection_values(graph, collection)

@@ -30,7 +30,7 @@
 
 - Implementation of the remaining `ARGRET` contract: argument bindings, value-source validation, return blocks, and incomplete-return-path validation.
 - Recursion and call-cycle validation.
-- Dependency bindings, runtime state, and runtime execution.
+- Dependency bindings, general runtime state, and execution beyond the scoped Ready starter blocks.
 - Inspector and visual authoring workflow for constructor and methods.
 - Enumerators, nullable values, persistent object references, and value-source resources; these require an approved schema 4 contract and migration.
 
@@ -41,10 +41,11 @@ This iteration has not introduced argument bindings, return blocks or runtime re
 ### Current delivery
 
 - Delivery 7 is implemented: the editor-only Flow interaction coordinator specified by `TVAR-016` now provides explicit `GODOT`, `FLOW`, and `GAME` states, an editor-configurable F4 default, and an equivalent dock button. It uses only weak focus references and the exact selected `PVController`, suspends editing during actual game execution, and does not change persistent data, schemas, runtime execution, or the existing local variable-editor workflows. Automated coverage is complete; the required manual visual review remains pending.
+- Ready starter delivery on `feature/processes-ready-runtime`: schema 3 reuses the existing Processes and block model; only Ready, configurable Print, and fixed Everything Flows are implemented. Output is console text plus a structured runtime signal; there is no on-screen presentation or debugger transport. Schema 2 remains migration coverage only. See `READY-001`–`READY-008` in the [model contract](model_contract.md). Automated verification is complete; manual visual acceptance remains pending. No export or performance work belongs to this delivery.
 
 ### Next delivery
 
-Iteration 7 is ready for final audit and the required manual visual review. The Constructor and Methods contract continues to govern deferred argument bindings, return blocks, value sources, cycle validation, runtime state, execution, and schema 3 Constructor or Method authoring. The friendly user guide requires separate approval.
+Complete the manual Fedora review for Ready authoring and execution, then audit any resulting correction separately before publication through GitHub Desktop. The Constructor and Methods contract continues to govern deferred argument bindings, return blocks, value sources, cycle validation, method execution, and schema 3 Constructor or Method authoring. The friendly user guide requires separate approval.
 
 Update this file after each approved Iteration 7 delivery so it remains a brief, factual handoff.
 

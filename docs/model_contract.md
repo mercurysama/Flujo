@@ -2,7 +2,7 @@
 
 ## Purpose and scope
 
-This document defines the implemented Flujo core-model contract for Godot 4.7.2. It establishes its responsibilities, identity, persistence, and dependencies. It does not define the executor or graphical-interface implementation yet.
+This document defines the Flujo core-model contract for Godot 4.7.2: responsibilities, identity, persistence, dependencies, and the scoped Ready execution delivery below.
 
 ## General principles
 
@@ -161,7 +161,7 @@ Every persistent element has a stable internal ID independent of its visible nam
 
 **Model:** owns the exported `flow_graph` property of type `FlowGraph`. Each new controller receives its own default graph.
 
-**Execution:** not implemented yet.
+**Execution:** the Ready delivery runs enabled schema 3 Ready processes once per controller instance, outside editor hint and subject to `visual_program_enabled`. `FlowReadyExecutor` resolves the two built-in block handlers; `FlowRuntimeOutput` prints and emits structured messages. The graph stays read-only. Other entry points and method execution remain deferred.
 
 ## References and ordering
 
@@ -237,7 +237,7 @@ The schema 3 contract in [`constructor_methods_contract.md`](constructor_methods
 ### Deferred schema 3 work
 
 - `PVController` dependency bindings and class-resolution/inheritance checks.
-- `FlowRuntimeState` and runtime execution.
+- `FlowRuntimeState` and execution beyond the two Ready starter blocks.
 - Method-call argument bindings, return blocks and values, argument validation, and call-cycle validation.
 - Inspector authoring and execution of Constructor or Methods.
 
@@ -276,6 +276,21 @@ The schema 3 contract in [`constructor_methods_contract.md`](constructor_methods
 ### Future portability
 
 - Model loading, validation, migration, and execution will also work in exported games through portable APIs available on platforms supported by Godot 4.7.2.
+
+## Ready execution delivery
+
+The following approved requirements govern the first executable path. Implementation and automated verification are present; manual visual review is recorded separately in the current iteration state.
+
+- **READY-001:** reuse schema 3 `FlowGraph.processes`, `FlowProcess.ProcessType.READY`, inherited IDs, names, activation and ordered nullable `blocks`. The existing polymorphic block collection already represents these definitions without reinterpreting stored fields; no schema 4 or implicit migration is needed. New authoring and execution require schema 3. Schema 2 is retained only for migration/compatibility coverage, including the unchanged explicit 2→3 chain.
+- **READY-002:** `FlowPrintBlock` adds only a configurable `text: String`; `FlowEverythingFlowsBlock` adds no configuration. Both inherit `FlowBlock` identity and activation. Existing graph duplication and atomic 2→3 migration must preserve subtype, text, ordering and null slots (new IDs for duplication, original IDs for migration).
+- **READY-003:** outside editor hint, each `PVController` performs one Ready pass per instance at `_ready()`, gated by `visual_program_enabled`. Re-entry or `request_ready()` does not run a second pass. Disabled programs, processes and blocks emit nothing; no frame/input/state/method execution is added.
+- **READY-004:** a portable executor resolves built-in block scripts through a small handler registry, separate from definitions and graph validation. Unsupported or invalid blocks produce a warning and are skipped without stopping later blocks. Graph-level schema/identity errors prevent execution; process/block diagnostics skip the affected path. All persistent resources remain read-only.
+- **READY-005:** a single runtime output boundary calls `print()` and emits controller, process ID, block ID and message. Everything Flows emits exactly `Todo es Flujo; todo fluye.`. No debugger transport or game-window presentation is created.
+- **READY-006:** the Inspector extends the existing schema 3 Processes workflow with Ready configuration and ordered block authoring: Name, Enabled, add Print/Everything Flows, move, confirmed deletion, block Enabled, and Print text. Commands resolve stable IDs and use the owning controller's scene undo/redo history. Existing schema 1/2 interfaces, variable editing, F4 and native layout remain unchanged.
+- **READY-007:** schema 3 focal regressions cover ResourceSaver/PackedScene, deep duplication, execution order, every enable gate, once-only Ready, editor hint, unknown/invalid blocks and structured output. Schema 2 fixtures cover migration only. Export, performance measurement, monitor integration and game-window presentation are outside this delivery.
+- **READY-008:** manual Fedora acceptance is to create Ready, add the two blocks, execute with F6, and verify each configured message appears once in order. Automated tests do not claim manual approval.
+
+Traceability: READY-001/002 map to the existing graph/container model plus `FlowPrintBlock` and `FlowEverythingFlowsBlock`; READY-003/004/005 map to `PVController`, `FlowReadyExecutor`, and `FlowRuntimeOutput`. Their focal evidence is `tests/runtime/flow_ready_runtime_test.tscn`. READY-006 maps to `FlowGraphEditorCommands`, `FlowGraphInspectorProperty`, `FlowReadyProcessEditor`, and the Ready authoring case in `tests/editor/flow_graph_editor_commands_test.gd`. READY-007/008 separate automated evidence from manual acceptance. The associated commit is identified by Git history rather than duplicated as a mutable SHA here.
 
 ## Tests
 

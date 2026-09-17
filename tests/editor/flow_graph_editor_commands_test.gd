@@ -504,7 +504,175 @@ func _test_scene_history_context(undo_redo: EditorUndoRedoManager) -> void:
 	_expect(scene_controller.flow_graph == schema_2_graph and scene_controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_2, "Scene-context migration Undo restores the exact schema 2 graph.")
 	scene_history.redo()
 	_expect(scene_controller.flow_graph == schema_3_migrated and scene_controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_3, "Scene-context migration Redo restores the schema 3 candidate.")
+	await _test_ready_authoring(scene_controller, undo_redo, scene_history, global_history)
 	await _remove_temporary_history_scene()
+
+
+## Public Ready controls operate on the existing real scene and its native history.
+func _test_ready_authoring(controller: PVController, undo_redo: EditorUndoRedoManager, history: UndoRedo, global_history: UndoRedo) -> void:
+	var emitted: Array[String] = []
+	var observe: Callable = func(_controller: Node, _process_id: String, _block_id: String, message: String) -> void:
+		emitted.append(message)
+	var editor_controller: PVController = PVController.new()
+	var editor_graph: FlowGraph = FlowGraph.new()
+	editor_graph.schema_version = FlowGraph.SCHEMA_VERSION_3
+	editor_graph.constructor = FlowConstructorDefinition.new()
+	var editor_process: FlowProcess = FlowProcess.new()
+	editor_process.blocks = [FlowEverythingFlowsBlock.new()]
+	editor_graph.processes = [editor_process]
+	editor_controller.flow_graph = editor_graph
+	editor_controller.runtime_output.message_emitted.connect(observe)
+	get_root().add_child(editor_controller)
+	await process_frame
+	_expect(Engine.is_editor_hint() and emitted.is_empty(), "Ready never executes inside the editor, even with enabled blocks.")
+	editor_controller.queue_free()
+	var scroll: ScrollContainer = ScrollContainer.new()
+	scroll.size = Vector2(640, 900)
+	get_root().add_child(scroll)
+	var property: FlowGraphInspectorProperty = FlowGraphInspectorProperty.new()
+	property.configure(undo_redo)
+	scroll.add_child(property)
+	property.set_object_and_property(controller, &"flow_graph")
+	await process_frame
+	await process_frame
+	var global_version: int = global_history.get_version()
+	var add: Button = _find_button(property, "Add Process")
+	_expect(add != null, "Ready reuses the public Add Process button.")
+	if add == null:
+		scroll.queue_free()
+		return
+	add.pressed.emit()
+	await process_frame
+	await process_frame
+	if controller.flow_graph.processes.is_empty():
+		_expect(false, "Add creates an existing FlowProcess before authoring.")
+		scroll.queue_free()
+		return
+	var process: FlowProcess = controller.flow_graph.processes.back()
+	_expect(process.process_type == FlowProcess.ProcessType.READY, "The existing default process is explicitly Ready.")
+	process.blocks = [null]
+	var list: ItemList = _section_list(property, "Processes")
+	if list == null:
+		_expect(false, "Processes has a selectable public list.")
+		scroll.queue_free()
+		return
+	list.select(list.item_count - 1)
+	list.item_selected.emit(list.item_count - 1)
+	await process_frame
+	await process_frame
+	var process_name: LineEdit = _find_node_by_name(property, &"ReadyProcessName") as LineEdit
+	if process_name == null:
+		_expect(false, "Selecting Ready mounts its Name and block authoring controls.")
+		scroll.queue_free()
+		return
+	process_name.text = "Startup by ID"
+	process_name.text_submitted.emit(process_name.text)
+	await process_frame
+	await process_frame
+	_expect(process.display_name == "Startup by ID", "Ready Name changes the selected process by ID.")
+	for button_text: String in ["Add Print", "Add Everything Flows"]:
+		var button: Button = _find_button(property, button_text)
+		if button == null:
+			_expect(false, "Ready exposes " + button_text)
+			scroll.queue_free()
+			return
+		button.pressed.emit()
+		await process_frame
+		await process_frame
+	if process.blocks.size() != 3:
+		_expect(false, "Ready appends two concrete blocks around an existing null.")
+		scroll.queue_free()
+		return
+	var print_block: FlowPrintBlock = process.blocks[1] as FlowPrintBlock
+	_expect(print_block != null and process.blocks[2] is FlowEverythingFlowsBlock and process.blocks[0] == null, "Public block additions preserve type, order and deliberate null.")
+	if print_block == null:
+		scroll.queue_free()
+		return
+	var blocks: ItemList = _find_node_by_name(property, &"ReadyBlocksList") as ItemList
+	blocks.select(1)
+	blocks.item_selected.emit(1)
+	var text_input: TextEdit = _find_node_by_name(property, &"ReadyPrintText") as TextEdit
+	if text_input == null:
+		_expect(false, "Print exposes a multiline text buffer.")
+		scroll.queue_free()
+		return
+	var version: int = history.get_version()
+	text_input.text = "Editor Ready\nconfigured text"
+	var enter: InputEventKey = InputEventKey.new()
+	enter.pressed = true
+	enter.keycode = KEY_ENTER
+	text_input.gui_input.emit(enter)
+	_expect(history.get_version() == version and print_block.text.is_empty(), "Plain Enter in Print does not commit a draft.")
+	enter.ctrl_pressed = true
+	text_input.gui_input.emit(enter)
+	await process_frame
+	await process_frame
+	_expect(print_block.text == "Editor Ready\nconfigured text" and history.get_version() == version + 1, "Ctrl+Enter confirms Print once in scene history.")
+	_expect(global_history.get_version() == global_version and _is_temporary_scene_unsaved(), "Ready authoring advances scene history and native dirty state only.")
+	text_input = _find_node_by_name(property, &"ReadyPrintText") as TextEdit
+	if text_input != null:
+		var escape: InputEventKey = InputEventKey.new()
+		escape.pressed = true
+		escape.keycode = KEY_ESCAPE
+		version = history.get_version()
+		text_input.text = "discard me"
+		text_input.gui_input.emit(escape)
+		_expect(text_input.text == print_block.text and history.get_version() == version, "Escape discards Print draft without history.")
+	var move: Button = _find_button(property, "Move Block Down")
+	if move != null:
+		move.pressed.emit()
+	await process_frame
+	await process_frame
+	_expect(process.blocks[2] == print_block and process.blocks[0] == null, "Move uses stable block identity and preserves null.")
+	history.undo()
+	await process_frame
+	await process_frame
+	_expect(process.blocks[1] == print_block, "Undo restores exact block order and resources.")
+	var block_enabled: CheckBox = _find_node_by_name(property, &"ReadyBlockEnabled") as CheckBox
+	if block_enabled != null:
+		block_enabled.toggled.emit(false)
+	await process_frame
+	await process_frame
+	_expect(not print_block.enabled, "Selected block activation is undoable.")
+	history.undo()
+	await process_frame
+	await process_frame
+	_expect(print_block.enabled, "Undo restores block activation.")
+	var process_enabled: CheckBox = _find_node_by_name(property, &"ReadyProcessEnabled") as CheckBox
+	if process_enabled != null:
+		process_enabled.toggled.emit(false)
+	await process_frame
+	await process_frame
+	_expect(not process.enabled, "Ready process activation is undoable.")
+	history.undo()
+	await process_frame
+	await process_frame
+	var delete: Button = _find_button(property, "Delete Block")
+	if delete != null:
+		delete.pressed.emit()
+	var confirmation: ConfirmationDialog = _find_node_by_name(property, &"ReadyBlockDeleteConfirmation") as ConfirmationDialog
+	_expect(confirmation != null and process.blocks[1] == print_block, "Delete Block waits for explicit confirmation.")
+	if confirmation != null:
+		confirmation.confirmed.emit()
+		confirmation.confirmed.emit()
+	await process_frame
+	await process_frame
+	_expect(process.blocks.size() == 2 and process.blocks[0] == null and not process.blocks.has(print_block), "Confirmation deletes exactly once without compacting preexisting nulls.")
+	history.undo()
+	await process_frame
+	await process_frame
+	_expect(process.blocks.size() == 3 and process.blocks[1] == print_block, "Delete Undo restores the same stable-ID block at its exact position.")
+	history.redo()
+	await process_frame
+	await process_frame
+	_expect(process.blocks.size() == 2, "Delete Redo repeats the removal.")
+	history.undo()
+	EditorInterface.save_scene()
+	await process_frame
+	_expect(not _is_temporary_scene_unsaved(), "Saving Ready edits clears native unsaved state.")
+	scroll.queue_free()
+	await process_frame
+	await process_frame
 
 
 func _is_temporary_scene_unsaved() -> bool:

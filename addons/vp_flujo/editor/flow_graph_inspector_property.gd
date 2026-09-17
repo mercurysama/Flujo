@@ -37,6 +37,7 @@ var _color_preview_id: String = ""
 var _color_preview_original: Color = Color.WHITE
 var _color_preview_value: Color = Color.WHITE
 var _color_preview_button_reference: WeakRef
+var _ready_block_id: String = ""
 
 
 ## Supplies the editor undo/redo manager used by all model-changing controls.
@@ -265,7 +266,7 @@ func _render_typed_sections(sections: Array, controller: PVController, generatio
 				_add_button_to(category, "Add State Machine", _on_add_state_machine_pressed)
 		_render_section(section, category, generation)
 		if controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_3:
-			var selection_actions: HBoxContainer = HBoxContainer.new()
+			var selection_actions: VBoxContainer = VBoxContainer.new()
 			selection_actions.name = &"Schema3StructuralActions"
 			category.add_child(selection_actions)
 			_schema_3_structural_action_containers[collection] = selection_actions
@@ -326,15 +327,39 @@ func _render_selected_actions(parent: Container, graph: FlowGraph, generation: i
 
 
 func _render_schema_3_structural_actions(selection_actions: Container) -> void:
-	_add_button_to(selection_actions, "Move Up", _on_move_up_pressed)
-	_add_button_to(selection_actions, "Move Down", _on_move_down_pressed)
-	_add_button_to(selection_actions, "Delete", _on_delete_pressed)
+	var row: HBoxContainer = HBoxContainer.new()
+	selection_actions.add_child(row)
+	_add_button_to(row, "Move Up", _on_move_up_pressed)
+	_add_button_to(row, "Move Down", _on_move_down_pressed)
+	_add_button_to(row, "Delete", _on_delete_pressed)
+	# Keep process configuration below the existing structural actions.
+	if _selected_collection == FlowGraphEditorCommands.Collection.PROCESSES:
+		var options: VBoxContainer = VBoxContainer.new()
+		selection_actions.add_child(options)
+		_render_ready_process_editor(options)
+
+
+func _render_ready_process_editor(parent: Container) -> void:
+	if _selected_collection != FlowGraphEditorCommands.Collection.PROCESSES or _commands == null:
+		return
+	var controller: PVController = _active_controller()
+	var process: FlowProcess = _commands.find_ready_process(controller, _selected_id)
+	if process == null:
+		return
+	var editor: FlowReadyProcessEditor = FlowReadyProcessEditor.new()
+	editor.configure(_commands, controller, process, _ready_block_id)
+	editor.block_selected.connect(_on_ready_block_selected)
+	parent.add_child(editor)
+
+
+func _on_ready_block_selected(block_id: String) -> void:
+	_ready_block_id = block_id
 
 
 ## Updates only schema 3 selection actions so row selection keeps its ItemList mounted.
 func _update_schema_3_structural_actions() -> void:
 	for collection: int in _schema_3_structural_action_containers:
-		var selection_actions: HBoxContainer = _schema_3_structural_action_containers[collection] as HBoxContainer
+		var selection_actions: VBoxContainer = _schema_3_structural_action_containers[collection] as VBoxContainer
 		if not is_instance_valid(selection_actions) or not selection_actions.is_inside_tree():
 			continue
 		for child: Node in selection_actions.get_children():
