@@ -231,7 +231,7 @@ The requirements in this section are future design decisions. They do not descri
 
 The planned contract for further schema 2 evolution is defined in [`flow_graph_v2_migration.md`](flow_graph_v2_migration.md). Its portions not covered by the implemented migration remain prior design.
 
-The schema 3 contract in [`constructor_methods_contract.md`](constructor_methods_contract.md) defines the implemented method-call foundation and the planned `PVController` bindings, arguments, returns, and call-cycle work.
+The schema 3 contract in [`constructor_methods_contract.md`](constructor_methods_contract.md) defines the implemented method-call foundation and planned arguments, returns, and call-cycle work. The approved but unimplemented schema 4 scene-binding and declarative-constructor design is defined in [`declarative_constructor_contract.md`](declarative_constructor_contract.md).
 
 ### Execution and temporary state
 ### Deferred schema 3 work

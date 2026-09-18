@@ -66,6 +66,7 @@ Visual block authoring, a runtime executor, debugging, packages, inherited-scene
 - [Typed Variables contract](docs/typed_variables_contract.md)
 - [Schema 2 migration contract](docs/flow_graph_v2_migration.md)
 - [Constructor and Methods contract](docs/constructor_methods_contract.md)
+- [Declarative Constructor contract](docs/declarative_constructor_contract.md)
 - [Iteration 1 notes](docs/iteracion_01.md)
 - [Iteration 5 postmortem](docs/iteration_05.md)
 - [Iteration 6 postmortem](docs/iteration_06.md)
