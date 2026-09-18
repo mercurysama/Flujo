@@ -115,6 +115,50 @@ static func migrate_schema_2_to_3(source: FlowGraph) -> FlowGraphMigrationResult
 	return result
 
 
+## Preserves all schema 3 data; explicit consent makes legacy constructor payload inert.
+static func migrate_schema_3_to_4(
+		source: FlowGraph,
+		confirm_legacy_payload: bool = false
+) -> FlowGraphMigrationResult:
+	var result: FlowGraphMigrationResult = FlowGraphMigrationResult.new()
+	var source_validation: FlowValidationResult = FlowGraphValidator.validate(source)
+	result.add_validation_result(source_validation)
+	if source_validation.has_errors() or source == null:
+		return result
+	if source.schema_version != FlowGraph.SCHEMA_VERSION_3:
+		_add_error(result, FlowDiagnostic.CODE_MIGRATION_SOURCE_SCHEMA, "FlowGraph migration requires schema version 3.", "graph")
+		return result
+	if not confirm_legacy_payload and (not source.constructor.blocks.is_empty() \
+			or not source.constructor.dependencies.is_empty()):
+		_add_error(result, FlowDiagnostic.CODE_MIGRATION_CONFIRMATION_REQUIRED,
+			"Confirm preservation of constructor blocks and dependencies as inert legacy data.",
+			"constructor", source.constructor.get_internal_id())
+		return result
+	# Include externally stored subresources as well as embedded ones; IDs are not renewed.
+	var candidate: FlowGraph = source.duplicate_deep(Resource.DEEP_DUPLICATE_ALL) as FlowGraph
+	candidate.schema_version = FlowGraph.SCHEMA_VERSION_4
+	candidate.constructor.requirements = []
+	var candidate_validation: FlowValidationResult = FlowGraphValidator.validate(candidate)
+	result.add_validation_result(candidate_validation)
+	if not candidate_validation.has_errors():
+		result.migrated_graph = candidate
+	return result
+
+
+## Publishes only the final candidate after both existing and new migration steps succeed.
+static func migrate_schema_2_to_4(source: FlowGraph) -> FlowGraphMigrationResult:
+	var first: FlowGraphMigrationResult = migrate_schema_2_to_3(source)
+	if not first.is_successful():
+		return first
+	var second: FlowGraphMigrationResult = migrate_schema_3_to_4(first.migrated_graph)
+	var result: FlowGraphMigrationResult = FlowGraphMigrationResult.new()
+	result.diagnostics.append_array(first.diagnostics)
+	result.diagnostics.append_array(second.diagnostics)
+	if second.is_successful():
+		result.migrated_graph = second.migrated_graph
+	return result
+
+
 static func _copy_process(source: FlowProcess) -> FlowProcess:
 	var copy: FlowProcess = source.duplicate(false) as FlowProcess
 	copy._internal_id = source.get_internal_id()

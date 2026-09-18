@@ -1506,7 +1506,7 @@ func _run_smoke_tests() -> void:
 	_check(valid_state.get_internal_id() == valid_state_id)
 
 	var unsupported_schema_graph: FlowGraph = FlowGraph.new()
-	unsupported_schema_graph.schema_version = FlowGraph.SCHEMA_VERSION_3 + 1
+	unsupported_schema_graph.schema_version = FlowGraph.SCHEMA_VERSION_4 + 1
 	var unsupported_schema_result: FlowValidationResult = FlowGraphValidator.validate(
 		unsupported_schema_graph
 	)

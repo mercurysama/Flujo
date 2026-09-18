@@ -38,6 +38,16 @@ const CODE_MISSING_INITIAL_STATE_REFERENCE: StringName = &"missing_initial_state
 const CODE_INVALID_INITIAL_STATE_REFERENCE: StringName = &"invalid_initial_state_reference"
 const CODE_MIGRATION_SOURCE_SCHEMA: StringName = &"migration_source_schema"
 const CODE_MULTIPLE_INITIAL_STATES: StringName = &"multiple_initial_states"
+const CODE_REQUIREMENTS_INCOMPATIBLE_SCHEMA: StringName = &"requirements_incompatible_schema"
+const CODE_REQUIRED_NODE_CLASS_MISSING: StringName = &"required_node_class_missing"
+const CODE_REQUIRED_NODE_CLASS_NOT_NODE: StringName = &"required_node_class_not_node"
+const CODE_REQUIRED_NODE_CLASS_NOT_INSTANTIABLE: StringName = &"required_node_class_not_instantiable"
+const CODE_REQUIRED_NODE_NAME_EMPTY: StringName = &"required_node_name_empty"
+const CODE_REQUIRED_NODE_NAME_INVALID: StringName = &"required_node_name_invalid"
+const CODE_REQUIRED_PROPERTIES_UNSUPPORTED: StringName = &"required_properties_unsupported"
+const CODE_REQUIRED_NODE_BINDING_INVALID: StringName = &"required_node_binding_invalid"
+const CODE_BINDINGS_INCOMPATIBLE_SCHEMA: StringName = &"bindings_incompatible_schema"
+const CODE_MIGRATION_CONFIRMATION_REQUIRED: StringName = &"migration_confirmation_required"
 
 var code: StringName
 var severity: Severity

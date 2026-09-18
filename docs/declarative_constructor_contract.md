@@ -2,7 +2,9 @@
 
 ## Status and scope
 
-This is an approved design contract for a future schema 4 delivery. It is not implemented. Schema 3 keeps its existing executable `FlowConstructorDefinition` behavior intact: its enabled blocks run once before Ready. No schema 3 resource is silently reinterpreted as declarative.
+The schema 4 persistent foundation is implemented: requirement definitions, structural validation, deep duplication, explicit 3→4 and chained 2→3→4 migration, and controller-owned serialized bindings. The rest of this contract remains planned. Apply Constructor, node creation, scene binding resolution, runtime verification, and the declarative editor are not implemented. Schema 3 keeps its existing executable `FlowConstructorDefinition` behavior intact: its enabled blocks run once before Ready. No schema 3 resource is silently reinterpreted as declarative.
+
+The current executor and Timer scheduler still accept only schema 3. Schema 4 is data-only in this delivery: neither legacy Constructor blocks nor Ready/Timers execute. Mandatory-requirement gating described below is future behavior, not a completed runtime feature.
 
 The schema 4 Constructor describes required scene components for the object controlled by a `PVController`. It does not execute general blocks, create scene nodes automatically, or replace Godot's native `_init`.
 
@@ -16,6 +18,8 @@ Each step validates its source, builds an independent candidate, preserves valid
 
 Schema 3 Constructor blocks and dependencies are retained intact in schema 4 as legacy payload. They are inert in schema 4 and are never executed or applied as requirements. Migration requires explicit user confirmation when that legacy payload is non-empty. It must not infer node names, bindings, or component requirements from existing display names.
 
+Implemented APIs are `FlowGraphMigrator.migrate_schema_3_to_4(source, confirm_legacy_payload = false)` and `migrate_schema_2_to_4(source)`. The latter invokes the existing 2→3 step and then 3→4, exposing only the final successful candidate. Confirmation covers non-empty `blocks` or `dependencies`, including deliberate null-only arrays. Their original fields remain the sole stored legacy payload; `constructor.requirements` starts empty. Deep migration includes externally stored subresources without renewing IDs.
+
 ## DCON-002 — Constructed object and placement
 
 The constructed object is the direct parent of the `PVController`. A required component is a direct child of that parent and therefore a sibling of the controller. The controller itself cannot satisfy a component requirement.
@@ -24,7 +28,7 @@ A controller without a valid parent has no constructed object. Applying its Cons
 
 ## DCON-003 — Persistent requirement definition
 
-`FlowRequiredNodeDefinition` is a future persistent resource with:
+`FlowRequiredNodeDefinition` is an implemented persistent resource with:
 
 - an internal ID generated through `FlowId`;
 - a visible `display_name`, `enabled` flag, and user note;
@@ -37,6 +41,10 @@ The requirement ID is its sole persistent identity. The display name, expected n
 
 Future property definitions require their own approved contract, stable IDs, deterministic validation, and typed value representation before a non-empty property collection may be authored.
 
+The implemented `constructor.requirements: Array[FlowRequiredNodeDefinition]` accepts ordered `null` positions in schema 4. Schemas 1–3 reject a non-empty requirements collection. `required_properties: Array[Resource]` is a storage-only reservation: any non-empty array, including `[null]`, is invalid; no property resource class or value semantics is implemented. Requirement display names must be non-empty but need not be unique; IDs remain their identity. Expected node names must be non-empty valid single node names. Required classes must exist in `ClassDB`, derive from `Node`, and be instantiable; validation never instantiates them.
+
+Requirements participate in the existing graph-wide identity registry and duplication map. Graph and isolated-constructor duplication preserve type, metadata, order, null slots, and deep independence while renewing requirement IDs. Schema 4 retains structural validation and duplication of its legacy blocks, dependencies, methods, and typed collections.
+
 ## DCON-004 — Controller-owned bindings
 
 Bindings belong to each `PVController`, not to the shareable `FlowGraph`. A binding maps:
@@ -46,6 +54,10 @@ Bindings belong to each `PVController`, not to the shareable `FlowGraph`. A bind
 `requirement_id` identifies the requirement; the relative `NodePath` is only a scene-local locator. A graph never stores a direct `Node`, mutable scene reference, controller reference, or locator as requirement identity.
 
 Bindings must be validated against the controller's current graph and constructed object. A stale, cross-graph, missing, or out-of-scope binding remains preserved for deterministic diagnostics; it is never silently redirected by name.
+
+The implemented storage is `PVController.requirement_bindings: Dictionary[String, NodePath]`, hidden from the Inspector. Assignment copies the dictionary so controllers and PackedScene instances do not share mutable binding maps even when they share one graph. Graph duplication neither copies nor remaps these scene bindings.
+
+`FlowGraphValidator.validate_requirement_bindings(graph, bindings)` currently validates only serialized structure: schema 4, a valid unique requirement ID in that graph, and a non-empty relative direct-child locator without subnames. It does not resolve nodes, require bindings for every requirement, check the parent or expected target, or enforce runtime gates. Those scene-dependent checks remain deferred.
 
 ## DCON-005 — Existing-node detection
 
@@ -107,6 +119,8 @@ Validation and application preserve invalid authored values and report stable co
 
 Requirement diagnostics use `constructor.requirements[i]` paths. Controller binding diagnostics use the controller binding collection and relate to the preserved requirement ID when available.
 
+Implemented requirement diagnostics run after inherited schema 3 structural validation and before method-call references, in collection order: identity, display name, class, expected node name, then reserved properties. Existing schema 1–3 diagnostic order is unchanged for their existing data. Additional implemented codes are `requirements_incompatible_schema`, `required_node_class_not_instantiable`, `required_node_name_invalid`, `required_properties_unsupported`, `bindings_incompatible_schema`, and `migration_confirmation_required`; empty display names and identity errors reuse existing codes. Binding checks sort requirement-ID keys lexicographically and use `requirement_bindings["<id>"]` paths. Scene-dependent codes in the list above remain planned.
+
 ## DCON-011 — Editor accessibility
 
 The Inspector retains the single Constructor structural row. The Flujo dock owns requirement authoring, diagnostics, status, and Apply Constructor.
@@ -139,6 +153,6 @@ The planned implementation sequence is:
 5. `test: cover declarative constructor lifecycle`
 6. `docs: record declarative constructor delivery`
 
-Traceability: DCON-001–012 → this contract → future model, editor, runtime, persistence, and lifecycle regressions → the commits listed above.
+Foundation traceability: DCON-001 → `FlowGraphMigrator`; DCON-003 → `FlowRequiredNodeDefinition`, `FlowConstructorDefinition`, `FlowGraph`; DCON-004 → `PVController.requirement_bindings`; DCON-010 → `FlowGraphValidator` and `FlowDiagnostic`. Their new automated evidence is `tests/model/flow_schema_4_foundation_test.gd`, covering validation, migration, duplication, ResourceSaver, PackedScene, and binding isolation. Apply, runtime, accessibility, and remaining DCON-012 lifecycle evidence belong to the subsequent planned commits; this foundation does not claim their completion.
 
 Everything is Flow; everything flows. 🌊

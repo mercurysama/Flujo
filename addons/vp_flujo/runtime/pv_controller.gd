@@ -8,6 +8,11 @@ extends Node
 signal visual_program_enabled_changed(is_enabled: bool)
 
 @export var flow_graph: FlowGraph = FlowGraph.new()
+## Schema 4 scene-local data only; resolution and runtime verification are deferred.
+@export_storage var requirement_bindings: Dictionary[String, NodePath] = {}:
+	set(value):
+		# PackedScene instances and controllers must not share a mutable binding map.
+		requirement_bindings = value.duplicate()
 
 var runtime_output: FlowRuntimeOutput = FlowRuntimeOutput.new()
 var _ready_executed: bool = false

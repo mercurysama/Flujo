@@ -5,6 +5,7 @@ extends Resource
 const CURRENT_SCHEMA_VERSION: int = 1
 const SCHEMA_VERSION_2: int = 2
 const SCHEMA_VERSION_3: int = 3
+const SCHEMA_VERSION_4: int = 4
 
 @export_storage var _internal_id: String = FlowId.create()
 @export_storage var schema_version: int = CURRENT_SCHEMA_VERSION
@@ -32,7 +33,7 @@ func duplicate_with_new_ids() -> FlowGraph:
 				copy.containers.append(null)
 			else:
 				copy.containers.append(_duplicate_legacy_container(container, id_map))
-	elif schema_version == SCHEMA_VERSION_2 or schema_version == SCHEMA_VERSION_3:
+	elif schema_version in [SCHEMA_VERSION_2, SCHEMA_VERSION_3, SCHEMA_VERSION_4]:
 		for process: FlowProcess in processes:
 			if process == null:
 				copy.processes.append(null)
@@ -53,7 +54,7 @@ func duplicate_with_new_ids() -> FlowGraph:
 
 		_remap_variable_references(copy.variables, id_map)
 
-		if schema_version == SCHEMA_VERSION_3:
+		if schema_version in [SCHEMA_VERSION_3, SCHEMA_VERSION_4]:
 			copy.constructor = _duplicate_constructor(constructor, id_map)
 			for method: FlowMethodDefinition in methods:
 				if method == null:
@@ -164,6 +165,14 @@ func _duplicate_constructor(
 		dependency_copy._internal_id = FlowId.create()
 		id_map[dependency.get_internal_id()] = dependency_copy.get_internal_id()
 		copy.dependencies.append(dependency_copy)
+	copy.requirements = []
+	for requirement: FlowRequiredNodeDefinition in constructor_definition.requirements:
+		if requirement == null:
+			copy.requirements.append(null)
+			continue
+		var requirement_copy: FlowRequiredNodeDefinition = requirement.duplicate_with_new_id()
+		id_map[requirement.get_internal_id()] = requirement_copy.get_internal_id()
+		copy.requirements.append(requirement_copy)
 	return copy
 
 

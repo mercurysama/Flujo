@@ -226,12 +226,20 @@ Schema 3 validation builds the complete method-ID index before checking method c
 The candidate keeps the source graph ID and deeply copies `processes`, `variables`, and `state_machines`, including nested blocks and states. All valid IDs, references, order, and deliberate `null` positions are preserved. It has schema version 3, no legacy containers, exactly one newly generated `FlowConstructorDefinition` with empty `blocks` and `dependencies`, and an empty `methods` collection. The migration creates no bindings, calls, arguments, runtime state, Inspector integration, or executor behavior.
 
 
+## Implemented schema 4 persistent foundation
+
+`SCHEMA_VERSION_4` adds ordered nullable `FlowConstructorDefinition.requirements` without changing schemas 1–3. `FlowRequiredNodeDefinition` stores a stable ID, visible name, enabled flag, note, required built-in Node class, expected node name, and Required flag. Its reserved `required_properties` array must be empty. Schema 4 retains Constructor `blocks` and `dependencies` as inert legacy data, with their original fields, types, IDs, order, and null positions. It retains all other schema 3 structural data and ID-based references.
+
+Requirement IDs use the existing global validation registry and duplication map. `migrate_schema_3_to_4(source, confirm_legacy_payload = false)` validates before and after a deep copy, preserves IDs and references, and rejects non-empty legacy blocks or dependencies without confirmation. `migrate_schema_2_to_4(source)` chains 2→3→4 and returns only a successful final candidate. Neither path modifies the source or converts dependencies into requirements.
+
+`PVController.requirement_bindings` stores an independent `Dictionary[String, NodePath]` per controller, with locators relative to the constructed object. It is not part of graph duplication. Structural binding validation checks IDs and locator shape without resolving scene nodes. ResourceSaver and PackedScene coverage is in `tests/model/flow_schema_4_foundation_test.gd`. The executor and Timer scheduler remain restricted to schema 3; schema 4 authoring, Apply Constructor, node creation, binding resolution, and runtime verification are deferred. See the [Declarative Constructor contract](declarative_constructor_contract.md).
+
 ## Planned contract — not implemented yet
 The requirements in this section are future design decisions. They do not describe features available in the current implementation.
 
 The planned contract for further schema 2 evolution is defined in [`flow_graph_v2_migration.md`](flow_graph_v2_migration.md). Its portions not covered by the implemented migration remain prior design.
 
-The schema 3 contract in [`constructor_methods_contract.md`](constructor_methods_contract.md) defines the implemented method-call foundation and planned arguments, returns, and call-cycle work. The approved but unimplemented schema 4 scene-binding and declarative-constructor design is defined in [`declarative_constructor_contract.md`](declarative_constructor_contract.md).
+The schema 3 contract in [`constructor_methods_contract.md`](constructor_methods_contract.md) defines the implemented method-call foundation and planned arguments, returns, and call-cycle work. The remaining schema 4 scene application and runtime-verification design is defined in [`declarative_constructor_contract.md`](declarative_constructor_contract.md), separately from its implemented persistent foundation above.
 
 ### Execution and temporary state
 ### Deferred schema 3 work

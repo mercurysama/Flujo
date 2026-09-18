@@ -19,7 +19,7 @@ static func validate(graph: FlowGraph) -> FlowValidationResult:
 	var variable_indices: Array[int] = []
 	_validate_resource_identity(graph, "graph", result, seen_instances, seen_ids)
 
-	if graph.schema_version == FlowGraph.SCHEMA_VERSION_3:
+	if graph.schema_version in [FlowGraph.SCHEMA_VERSION_3, FlowGraph.SCHEMA_VERSION_4]:
 		pass
 	elif graph.schema_version != FlowGraph.CURRENT_SCHEMA_VERSION \
 			and graph.schema_version != FlowGraph.SCHEMA_VERSION_2:
@@ -70,8 +70,10 @@ static func validate(graph: FlowGraph) -> FlowValidationResult:
 		seen_ids,
 		result
 	)
-	if graph.schema_version == FlowGraph.SCHEMA_VERSION_3:
+	if graph.schema_version in [FlowGraph.SCHEMA_VERSION_3, FlowGraph.SCHEMA_VERSION_4]:
 		_validate_schema_3(graph, result, seen_instances, seen_ids)
+	if graph.schema_version == FlowGraph.SCHEMA_VERSION_4 and graph.constructor != null:
+		_validate_requirements(graph.constructor.requirements, result, seen_instances, seen_ids)
 	_validate_method_calls(graph, result, seen_ids)
 	_validate_timers(graph, result)
 
@@ -87,7 +89,7 @@ static func _validate_timers(graph: FlowGraph, result: FlowValidationResult) -> 
 		var path: String = "processes[%d]" % index
 		if process is FlowTimerDefinition:
 			var definition: FlowTimerDefinition = process as FlowTimerDefinition
-			if graph.schema_version != FlowGraph.SCHEMA_VERSION_3:
+			if graph.schema_version not in [FlowGraph.SCHEMA_VERSION_3, FlowGraph.SCHEMA_VERSION_4]:
 				_add_error(result, &"timer_incompatible_schema", "Timers require schema 3.", path, definition.get_internal_id())
 			if definition.process_type != FlowProcess.ProcessType.TIMER:
 				_add_error(result, &"invalid_timer_type", "Timer definition requires the Timer process type.", path + ".process_type", definition.get_internal_id())
@@ -129,6 +131,11 @@ static func _validate_schema_sources(graph: FlowGraph, result: FlowValidationRes
 		_add_error(result, FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES, "FlowGraph schema 2 cannot contain schema 3 definitions.", "graph")
 	if graph.schema_version == FlowGraph.SCHEMA_VERSION_3 and not graph.containers.is_empty():
 		_add_error(result, FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES, "FlowGraph schema 3 cannot contain legacy containers.", "graph")
+	if graph.schema_version == FlowGraph.SCHEMA_VERSION_4 and not graph.containers.is_empty():
+		_add_error(result, FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES, "FlowGraph schema 4 cannot contain legacy containers.", "graph")
+	if graph.schema_version != FlowGraph.SCHEMA_VERSION_4 and graph.constructor != null \
+			and not graph.constructor.requirements.is_empty():
+		_add_error(result, FlowDiagnostic.CODE_REQUIREMENTS_INCOMPATIBLE_SCHEMA, "Declarative requirements require schema 4.", "constructor.requirements", graph.constructor.get_internal_id())
 
 static func _validate_legacy_containers(
 		containers: Array[FlowBlockContainer],
@@ -494,7 +501,7 @@ static func _validate_internal_id(
 
 static func _validate_schema_3(graph: FlowGraph, result: FlowValidationResult, seen_instances: Dictionary[int, String], seen_ids: Dictionary[String, String]) -> void:
 	if graph.constructor == null:
-		_add_error(result, FlowDiagnostic.CODE_MISSING_CONSTRUCTOR, "FlowGraph schema 3 requires a constructor.", "constructor")
+		_add_error(result, FlowDiagnostic.CODE_MISSING_CONSTRUCTOR, "FlowGraph schema %d requires a constructor." % graph.schema_version, "constructor")
 	else:
 		var constructor_path: String = "constructor"
 		if _validate_resource_identity(graph.constructor, constructor_path, result, seen_instances, seen_ids):
@@ -551,6 +558,69 @@ static func _validate_schema_3(graph: FlowGraph, result: FlowValidationResult, s
 					method.return_definition.get_internal_id(),
 					result
 				)
+
+
+## Schema 4 diagnostics follow all inherited structural identities, before call references.
+static func _validate_requirements(
+		requirements: Array[FlowRequiredNodeDefinition],
+		result: FlowValidationResult,
+		seen_instances: Dictionary[int, String],
+		seen_ids: Dictionary[String, String]
+) -> void:
+	for index: int in requirements.size():
+		var requirement: FlowRequiredNodeDefinition = requirements[index]
+		if requirement == null:
+			continue
+		var path: String = "constructor.requirements[%d]" % index
+		if not _validate_resource_identity(requirement, path, result, seen_instances, seen_ids):
+			continue
+		var requirement_id: String = requirement.get_internal_id()
+		if requirement.display_name.strip_edges().is_empty():
+			_add_error(result, FlowDiagnostic.CODE_EMPTY_DISPLAY_NAME, "Requirement display name must not be empty.", path + ".display_name", requirement_id)
+		var class_name_value: StringName = requirement.required_class_name
+		if not ClassDB.class_exists(class_name_value):
+			_add_error(result, FlowDiagnostic.CODE_REQUIRED_NODE_CLASS_MISSING, "Required built-in class does not exist.", path + ".required_class_name", requirement_id)
+		elif not ClassDB.is_parent_class(class_name_value, &"Node"):
+			_add_error(result, FlowDiagnostic.CODE_REQUIRED_NODE_CLASS_NOT_NODE, "Required class must derive from Node.", path + ".required_class_name", requirement_id)
+		elif not ClassDB.can_instantiate(class_name_value):
+			_add_error(result, FlowDiagnostic.CODE_REQUIRED_NODE_CLASS_NOT_INSTANTIABLE, "Required class must be instantiable.", path + ".required_class_name", requirement_id)
+		var node_name: String = String(requirement.expected_node_name)
+		if node_name.strip_edges().is_empty():
+			_add_error(result, FlowDiagnostic.CODE_REQUIRED_NODE_NAME_EMPTY, "Expected node name must not be empty.", path + ".expected_node_name", requirement_id)
+		elif node_name != node_name.validate_node_name() or node_name in [".", ".."]:
+			_add_error(result, FlowDiagnostic.CODE_REQUIRED_NODE_NAME_INVALID, "Expected node name must be one valid node name.", path + ".expected_node_name", requirement_id)
+		if not requirement.required_properties.is_empty():
+			_add_error(result, FlowDiagnostic.CODE_REQUIRED_PROPERTIES_UNSUPPORTED, "Required properties are reserved and must be empty.", path + ".required_properties", requirement_id)
+
+
+## Validates serialized binding shape and IDs only; never resolves a scene or checks existence.
+static func validate_requirement_bindings(
+		graph: FlowGraph,
+		bindings: Dictionary[String, NodePath]
+) -> FlowValidationResult:
+	var result: FlowValidationResult = FlowValidationResult.new()
+	if bindings.is_empty():
+		return result
+	if graph == null or graph.schema_version != FlowGraph.SCHEMA_VERSION_4:
+		_add_error(result, FlowDiagnostic.CODE_BINDINGS_INCOMPATIBLE_SCHEMA, "Requirement bindings require a schema 4 graph.", "requirement_bindings")
+		return result
+	var counts: Dictionary[String, int] = {}
+	if graph.constructor != null:
+		for requirement: FlowRequiredNodeDefinition in graph.constructor.requirements:
+			if requirement != null:
+				var requirement_id: String = requirement.get_internal_id()
+				counts[requirement_id] = counts.get(requirement_id, 0) + 1
+	var keys: Array[String] = bindings.keys()
+	keys.sort()
+	for key: String in keys:
+		var path: String = 'requirement_bindings["%s"]' % key.c_escape()
+		var locator: NodePath = bindings[key]
+		if not FlowId.is_valid(key) or counts.get(key, 0) != 1:
+			_add_error(result, FlowDiagnostic.CODE_REQUIRED_NODE_BINDING_INVALID, "Binding ID must identify exactly one requirement in this graph.", path, key)
+		elif locator.is_empty() or locator.is_absolute() or locator.get_name_count() != 1 \
+				or locator.get_subname_count() != 0 or String(locator.get_name(0)) in [".", ".."]:
+			_add_error(result, FlowDiagnostic.CODE_REQUIRED_NODE_BINDING_INVALID, "Binding locator must name one direct child relative to the constructed object.", path, key)
+	return result
 
 
 static func _validate_display_name(display_name: String, names: Dictionary[String, bool], result: FlowValidationResult, element_path: String, internal_id: String) -> void:
@@ -658,7 +728,7 @@ static func _validate_method_calls_in_blocks(
 
 		var method_call: FlowMethodCallBlock = block as FlowMethodCallBlock
 		var block_path: String = "%s.blocks[%d]" % [container_path, block_index]
-		if schema_version != FlowGraph.SCHEMA_VERSION_3:
+		if schema_version not in [FlowGraph.SCHEMA_VERSION_3, FlowGraph.SCHEMA_VERSION_4]:
 			_add_error(
 				result,
 				FlowDiagnostic.CODE_METHOD_CALL_INCOMPATIBLE_SCHEMA,
@@ -703,6 +773,8 @@ static func _get_internal_id(resource: Resource) -> String:
 		return (resource as FlowConstructorDefinition).get_internal_id()
 	if resource is FlowDependencyDefinition:
 		return (resource as FlowDependencyDefinition).get_internal_id()
+	if resource is FlowRequiredNodeDefinition:
+		return (resource as FlowRequiredNodeDefinition).get_internal_id()
 	if resource is FlowMethodParameterDefinition:
 		return (resource as FlowMethodParameterDefinition).get_internal_id()
 	if resource is FlowMethodReturnDefinition:
