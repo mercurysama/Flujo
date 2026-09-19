@@ -4,11 +4,14 @@ extends FlowBlockContainer
 
 @export var parameters: Array[FlowMethodParameterDefinition] = []
 @export var return_definition: FlowMethodReturnDefinition
+@export_storage var outputs: Array[FlowMethodOutputDefinition] = []
 
 func _init() -> void:
 	display_name = "Method"
 
 func duplicate_method_with_new_ids() -> FlowMethodDefinition:
+	if not outputs.is_empty() or FlowSchema5Model.has_owned_reference(self):
+		return FlowSchema5Model.duplicate_owned(self) as FlowMethodDefinition
 	var copy: FlowMethodDefinition = duplicate(false) as FlowMethodDefinition
 	var id_counts: Dictionary[String, int] = _collect_owned_id_counts()
 	var id_map: Dictionary[String, String] = {}

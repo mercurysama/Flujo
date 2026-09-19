@@ -6,6 +6,7 @@ const CURRENT_SCHEMA_VERSION: int = 1
 const SCHEMA_VERSION_2: int = 2
 const SCHEMA_VERSION_3: int = 3
 const SCHEMA_VERSION_4: int = 4
+const SCHEMA_VERSION_5: int = 5
 
 @export_storage var _internal_id: String = FlowId.create()
 @export_storage var schema_version: int = CURRENT_SCHEMA_VERSION
@@ -15,12 +16,16 @@ const SCHEMA_VERSION_4: int = 4
 @export var state_machines: Array[FlowStateMachineDefinition] = []
 @export var constructor: FlowConstructorDefinition
 @export var methods: Array[FlowMethodDefinition] = []
+@export_storage var base_class_id: String = ""
+@export_storage var class_attributes: Array[FlowAttributeDefinition] = []
 
 func get_internal_id() -> String:
 	return _internal_id
 
 ## Duplicates a graph that has already passed FlowGraphValidator validation.
 func duplicate_with_new_ids() -> FlowGraph:
+	if schema_version == SCHEMA_VERSION_5:
+		return FlowSchema5Model.duplicate_owned(self) as FlowGraph
 	var copy: FlowGraph = FlowGraph.new()
 	var id_map: Dictionary[String, String] = {}
 	copy._internal_id = FlowId.create()

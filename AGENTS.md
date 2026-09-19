@@ -57,7 +57,7 @@
 - Run `git diff --check`.
 - Run the selected Godot command with `--headless --editor --path . --quit-after 5`.
 - Run the selected Godot command with `--headless --path . tests/model/flow_model_smoke_test.tscn`.
-- The smoke test must print `[Flujo] Model smoke test passed`.
+- The mist test must print `[Flujo] Model mist test passed`. The existing `flow_model_smoke_test.tscn` scene loads `flow_model_mist_test.gd` and remains the compatible command entry point.
 - Report warnings separately from project errors.
 - Report every modified file and the final Git status.
 
@@ -77,13 +77,13 @@
   4. If none of these executors works with Godot 4.7.2, stop and report the failure. Do not invent paths or reuse Windows paths.
 - Native Godot version: `godot --version`
 - Native headless editor load: `godot --headless --editor --path . --quit-after 5`
-- Native model smoke test: `godot --headless --path . tests/model/flow_model_smoke_test.tscn`
+- Native model mist test: `godot --headless --path . tests/model/flow_model_smoke_test.tscn`
 - Host Flatpak version: `flatpak-spawn --host flatpak run org.godotengine.Godot --version`
 - Host Flatpak headless editor load: `flatpak-spawn --host flatpak run org.godotengine.Godot --headless --editor --path . --quit-after 5`
-- Host Flatpak model smoke test: `flatpak-spawn --host flatpak run org.godotengine.Godot --headless --path . tests/model/flow_model_smoke_test.tscn`
+- Host Flatpak model mist test: `flatpak-spawn --host flatpak run org.godotengine.Godot --headless --path . tests/model/flow_model_smoke_test.tscn`
 - Direct Flatpak version: `flatpak run org.godotengine.Godot --version`
 - Direct Flatpak headless editor load: `flatpak run org.godotengine.Godot --headless --editor --path . --quit-after 5`
-- Direct Flatpak model smoke test: `flatpak run org.godotengine.Godot --headless --path . tests/model/flow_model_smoke_test.tscn`
+- Direct Flatpak model mist test: `flatpak run org.godotengine.Godot --headless --path . tests/model/flow_model_smoke_test.tscn`
 - `WARNING: Scan thread aborted...` is acceptable only when the headless load exits with code 0 and the warning corresponds to the planned shutdown.
 
 # Portability and Safety

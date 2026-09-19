@@ -159,6 +159,65 @@ static func migrate_schema_2_to_4(source: FlowGraph) -> FlowGraphMigrationResult
 	return result
 
 
+## Schema 5 is persistent only. Legacy definitions and scene bindings are not executed.
+static func migrate_schema_4_to_5(source: FlowGraph) -> FlowGraphMigrationResult:
+	var result: FlowGraphMigrationResult = FlowGraphMigrationResult.new()
+	var validation: FlowValidationResult = FlowGraphValidator.validate(source)
+	result.add_validation_result(validation)
+	if source == null or validation.has_errors():
+		return result
+	if source.schema_version != FlowGraph.SCHEMA_VERSION_4:
+		_add_error(result, FlowDiagnostic.CODE_MIGRATION_SOURCE_SCHEMA, "FlowGraph migration requires schema version 4.", "graph")
+		return result
+	var candidate: FlowGraph = source.duplicate_deep(Resource.DEEP_DUPLICATE_ALL) as FlowGraph
+	candidate.schema_version = FlowGraph.SCHEMA_VERSION_5
+	candidate.base_class_id = ""
+	candidate.class_attributes = []
+	candidate.constructor.attributes = []
+	for method: FlowMethodDefinition in candidate.methods:
+		if method == null:
+			continue
+		method.outputs = []
+		if method.return_definition != null:
+			var output: FlowMethodOutputDefinition = FlowMethodOutputDefinition.new()
+			output._internal_id = method.return_definition.get_internal_id()
+			output.display_name = method.return_definition.display_name
+			output.value_type = method.return_definition.value_type
+			method.outputs.append(output)
+		method.return_definition = null
+	for record: Dictionary in FlowSchema5Model.owned_records(candidate):
+		if record.resource is FlowMethodCallBlock:
+			var call: FlowMethodCallBlock = record.resource
+			var reference: FlowMethodReferenceDefinition = FlowMethodReferenceDefinition.new()
+			reference.target_class_id = candidate.get_internal_id()
+			reference.target_id = call.method_id
+			call.method_reference = reference
+			call.method_id = ""
+	var candidate_validation: FlowValidationResult = FlowGraphValidator.validate(candidate)
+	result.add_validation_result(candidate_validation)
+	if not candidate_validation.has_errors():
+		result.migrated_graph = candidate
+	return result
+
+
+static func migrate_schema_3_to_5(source: FlowGraph, confirm_legacy_payload: bool = false) -> FlowGraphMigrationResult:
+	var first: FlowGraphMigrationResult = migrate_schema_3_to_4(source, confirm_legacy_payload)
+	if not first.is_successful():
+		return first
+	var last: FlowGraphMigrationResult = migrate_schema_4_to_5(first.migrated_graph)
+	last.diagnostics = first.diagnostics + last.diagnostics
+	return last
+
+
+static func migrate_schema_2_to_5(source: FlowGraph, confirm_legacy_payload: bool = false) -> FlowGraphMigrationResult:
+	var first: FlowGraphMigrationResult = migrate_schema_2_to_3(source)
+	if not first.is_successful():
+		return first
+	var last: FlowGraphMigrationResult = migrate_schema_3_to_5(first.migrated_graph, confirm_legacy_payload)
+	last.diagnostics = first.diagnostics + last.diagnostics
+	return last
+
+
 static func _copy_process(source: FlowProcess) -> FlowProcess:
 	var copy: FlowProcess = source.duplicate(false) as FlowProcess
 	copy._internal_id = source.get_internal_id()

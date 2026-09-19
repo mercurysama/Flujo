@@ -4,7 +4,7 @@
 
 This document defines the Flujo core-model contract for Godot 4.7.2: responsibilities, identity, persistence, dependencies, and the scoped Ready execution delivery below.
 
-The proposed class, instance, attribute, reference, encapsulation, inheritance, and future method-execution architecture is specified separately in the [Flujo Object Model contract](flow_object_model_contract.md). It requires schema 5 and is not implemented or authorized for implementation.
+The class, instance, attribute, reference, encapsulation, inheritance, and future method-execution architecture is specified separately in the [Flujo Object Model contract](flow_object_model_contract.md). Its schema 5 persistent foundation is implemented; runtime stores, method execution, editor authoring and scene application remain planned.
 
 ## General principles
 
@@ -236,6 +236,16 @@ Requirement IDs use the existing global validation registry and duplication map.
 
 `PVController.requirement_bindings` stores an independent `Dictionary[String, NodePath]` per controller, with locators relative to the constructed object. It is not part of graph duplication. Structural binding validation checks IDs and locator shape without resolving scene nodes. ResourceSaver and PackedScene coverage is in `tests/model/flow_schema_4_foundation_test.gd`. The executor and Timer scheduler remain restricted to schema 3; schema 4 authoring, Apply Constructor, node creation, binding resolution, and runtime verification are deferred. See the [Declarative Constructor contract](declarative_constructor_contract.md).
 
+## Implemented schema 5 persistent foundation
+
+`SCHEMA_VERSION_5` uses the existing `FlowGraph` internal ID as class identity and adds optional single inheritance through `base_class_id`. `FlowClassCatalog` persists class ID plus canonical UID and project-path locators, resolves without a global cache, and validates locator conflicts, missing classes, cycles and a maximum of ten parent edges deterministically.
+
+Schema 5 adds ordered nullable INSTANCE attributes under Constructor and CLASS attributes under `FlowGraph`, reusing the seven canonical `FlowVariableDefinition.ValueType` members and typed default fields. Visibility, mutability and null-default metadata are definition data only; no runtime store or value mutation is implemented. Existing Variables remain unchanged.
+
+Typed attribute, requirement and method reference resources store their own IDs plus explicit target class/member IDs. Schema 5 method calls own method references, and ordered nullable method outputs replace the schema 4 optional return definition after migration while preserving its ID, name and type. Deep graph duplication uses one completed ID map before remapping internal targets and leaves external class/member targets literal. Controller requirement bindings remain outside graph duplication.
+
+`migrate_schema_4_to_5()`, `migrate_schema_3_to_5()` and `migrate_schema_2_to_5()` construct independent candidates and preserve the existing explicit chain. Schemas 1–4 keep their validation and execution boundaries; current executors still accept only schema 3. Model, catalog, migration, duplication, ResourceSaver and PackedScene evidence is in `tests/model/flow_schema_5_foundation_test.gd`.
+
 ## Planned contract — not implemented yet
 The requirements in this section are future design decisions. They do not describe features available in the current implementation.
 
@@ -318,7 +328,7 @@ The following approved requirements are implemented and covered by automated tes
 
 ## Tests
 
-The `tests/model/flow_model_smoke_test.tscn` scene validates schemas 1 through 3, IDs, deep duplication, `null` positions, schema source exclusivity, structural persistence, and `FlowVariableDefinition.ValueType` compatibility for variables and method parameters.
+The compatibility entry scene `tests/model/flow_model_smoke_test.tscn` runs `tests/model/flow_model_mist_test.gd` (success marker `[Flujo] Model mist test passed`). It validates schemas 1 through 3, IDs, deep duplication, `null` positions, schema source exclusivity, structural persistence, and `FlowVariableDefinition.ValueType` compatibility for variables and method parameters.
 
 It can be run manually by opening that scene in Godot and pressing **F6**.
 

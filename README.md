@@ -39,13 +39,15 @@ Visual block authoring, a runtime executor, debugging, packages, inherited-scene
 6. Press F4 again to open or close the Flujo dock.
 7. Save the scene normally with Ctrl+S.
 
-## Model smoke test
+## Model mist test
 
 1. Open `tests/model/flow_model_smoke_test.tscn`.
 2. Press F6 to run the current scene.
 3. Confirm that the output contains:
 
-   `[Flujo] Model smoke test passed`
+   `[Flujo] Model mist test passed`
+
+The existing scene filename is retained as a compatibility entry point; its script is `tests/model/flow_model_mist_test.gd`.
 
 ## Project structure
 

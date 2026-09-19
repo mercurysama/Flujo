@@ -2,7 +2,7 @@
 
 ## Status and authority
 
-This document defines a proposed PO🌊 object model for Flujo. Nothing in this document is implemented or authorized for implementation yet. Schema 4 remains governed by the [Declarative Constructor contract](declarative_constructor_contract.md); schemas 1–3 retain their existing meanings and behavior.
+This document defines the PO🌊 object model for Flujo. Its schema 5 persistent foundation is implemented: class identity and inheritance metadata, the portable class catalog, instance/class attribute definitions, typed reference resources, ordered method outputs, deterministic validation, deep duplication, and atomic migration. Runtime stores, accessors, special methods, overloads, dispatch, editor authoring, and Apply Constructor remain planned. Schema 4 remains governed by the [Declarative Constructor contract](declarative_constructor_contract.md); schemas 1–3 retain their existing meanings and behavior.
 
 The proposal uses schema 5 because schema 4 already has an implemented, tested persistent meaning. Adding class inheritance, attributes, polymorphic references, multiple method outputs, or access control to schema 4 would silently change resources that can already be saved. This contract fixes the architectural decisions required for the schema 5 foundation; normal human change authorization remains required for every delivery.
 
@@ -23,7 +23,9 @@ Each `PVController` is one runtime instance of the resolved class. Multiple cont
 
 Inheritance is single and explicit through one nullable `base_class_id`. An empty value means a root class. The base is resolved through one project-owned, portable, exportable `FlowClassCatalog` stored with project content, never in the plugin directory and never through editor-only state. The catalog maps unique class IDs to loadable graph locators; a locator is not identity. It imposes no artificial count limit on classes.
 
-The catalog validates unique class IDs, a maximum inheritance depth of 10, and all inheritance cycles before exposing an effective class. Self-inheritance, a missing or ambiguous class ID, an eleventh ancestor, a cycle, or a base resource that is not a compatible schema 5 class are deterministic errors. A derived class references inherited definitions; it does not copy them into its owned collections. A graph never stores a direct mutable reference to its base `FlowGraph` as inheritance identity.
+Each catalog entry persists `class_id`, canonical `graph_uid: String` (`uid://...`) and canonical `graph_path: String` (`res://...`) together. Only saved standalone project FlowGraph resources are eligible, not embedded or unsaved graphs. Class ID is the sole identity; neither locator is identity and entries never hold direct Resource references. Resolution tries ResourceUID first and the project path as fallback, then checks the loaded type and internal class ID. Two working locators naming different resources produce `class_catalog_locator_conflict`. One working locator with the other stale resolves with a deterministic warning without repairing either field. Neither working produces `class_catalog_graph_missing`. Malformed locators, duplicate class IDs and wrong resource types are errors. Resolution has no global cache or runtime singleton.
+
+The catalog validates unique class IDs, a maximum inheritance depth of 10 (ten parent edges), and all inheritance cycles before exposing an effective class. Self-inheritance, a missing or ambiguous class ID, an eleventh ancestor, a cycle, or a base resource that is not a compatible schema 5 class are deterministic errors. A derived class references inherited definitions; it does not copy them into its owned collections. A graph never stores a direct mutable reference to its base `FlowGraph` as inheritance identity.
 
 ## FOBJ-002 — Immutable definitions and runtime stores
 
@@ -37,7 +39,7 @@ These stores are runtime-only and are never serialized into `FlowGraph`, `FlowAt
 
 ## FOBJ-003 — Attribute definitions
 
-Schema 5 adds an ordered nullable `constructor.attributes` collection of `FlowAttributeDefinition` resources. Constructor owns declarations and defaults only; executable blocks, method bodies, locals, and control flow never belong in Constructor.
+Schema 5 adds ordered nullable `constructor.attributes` for INSTANCE declarations and `FlowGraph.class_attributes` for CLASS declarations. Storage must agree with its owning collection. These are definitions and defaults, never runtime stores. Constructor retains its inert legacy payload without reinterpreting it.
 
 Each attribute contains:
 
@@ -85,7 +87,7 @@ A future explicit **Promote Variable to Attribute** operation is separate from m
 
 ## FOBJ-007 — Polymorphic reference definitions
 
-A future abstract `FlowReferenceDefinition` is a persistent `Resource` with:
+`FlowReferenceDefinition` is an implemented persistent base `Resource` with:
 
 - its own stable internal ID;
 - `target_id`, identifying the target definition;

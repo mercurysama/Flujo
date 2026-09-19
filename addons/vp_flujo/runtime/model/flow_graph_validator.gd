@@ -19,7 +19,7 @@ static func validate(graph: FlowGraph) -> FlowValidationResult:
 	var variable_indices: Array[int] = []
 	_validate_resource_identity(graph, "graph", result, seen_instances, seen_ids)
 
-	if graph.schema_version in [FlowGraph.SCHEMA_VERSION_3, FlowGraph.SCHEMA_VERSION_4]:
+	if graph.schema_version in [FlowGraph.SCHEMA_VERSION_3, FlowGraph.SCHEMA_VERSION_4, FlowGraph.SCHEMA_VERSION_5]:
 		pass
 	elif graph.schema_version != FlowGraph.CURRENT_SCHEMA_VERSION \
 			and graph.schema_version != FlowGraph.SCHEMA_VERSION_2:
@@ -70,11 +70,15 @@ static func validate(graph: FlowGraph) -> FlowValidationResult:
 		seen_ids,
 		result
 	)
-	if graph.schema_version in [FlowGraph.SCHEMA_VERSION_3, FlowGraph.SCHEMA_VERSION_4]:
+	if graph.schema_version in [FlowGraph.SCHEMA_VERSION_3, FlowGraph.SCHEMA_VERSION_4, FlowGraph.SCHEMA_VERSION_5]:
 		_validate_schema_3(graph, result, seen_instances, seen_ids)
-	if graph.schema_version == FlowGraph.SCHEMA_VERSION_4 and graph.constructor != null:
+	if graph.schema_version in [FlowGraph.SCHEMA_VERSION_4, FlowGraph.SCHEMA_VERSION_5] and graph.constructor != null:
 		_validate_requirements(graph.constructor.requirements, result, seen_instances, seen_ids)
-	_validate_method_calls(graph, result, seen_ids)
+	if graph.schema_version == FlowGraph.SCHEMA_VERSION_5:
+		FlowSchema5Validator.validate_structure(graph, result, seen_instances, seen_ids)
+	else:
+		FlowSchema5Validator.validate_older_boundary(graph, result)
+		_validate_method_calls(graph, result, seen_ids)
 	_validate_timers(graph, result)
 
 
@@ -89,7 +93,7 @@ static func _validate_timers(graph: FlowGraph, result: FlowValidationResult) -> 
 		var path: String = "processes[%d]" % index
 		if process is FlowTimerDefinition:
 			var definition: FlowTimerDefinition = process as FlowTimerDefinition
-			if graph.schema_version not in [FlowGraph.SCHEMA_VERSION_3, FlowGraph.SCHEMA_VERSION_4]:
+			if graph.schema_version not in [FlowGraph.SCHEMA_VERSION_3, FlowGraph.SCHEMA_VERSION_4, FlowGraph.SCHEMA_VERSION_5]:
 				_add_error(result, &"timer_incompatible_schema", "Timers require schema 3.", path, definition.get_internal_id())
 			if definition.process_type != FlowProcess.ProcessType.TIMER:
 				_add_error(result, &"invalid_timer_type", "Timer definition requires the Timer process type.", path + ".process_type", definition.get_internal_id())
@@ -133,7 +137,9 @@ static func _validate_schema_sources(graph: FlowGraph, result: FlowValidationRes
 		_add_error(result, FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES, "FlowGraph schema 3 cannot contain legacy containers.", "graph")
 	if graph.schema_version == FlowGraph.SCHEMA_VERSION_4 and not graph.containers.is_empty():
 		_add_error(result, FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES, "FlowGraph schema 4 cannot contain legacy containers.", "graph")
-	if graph.schema_version != FlowGraph.SCHEMA_VERSION_4 and graph.constructor != null \
+	if graph.schema_version == FlowGraph.SCHEMA_VERSION_5 and not graph.containers.is_empty():
+		_add_error(result, FlowDiagnostic.CODE_MIXED_SCHEMA_SOURCES, "FlowGraph schema 5 cannot contain legacy containers.", "graph")
+	if graph.schema_version not in [FlowGraph.SCHEMA_VERSION_4, FlowGraph.SCHEMA_VERSION_5] and graph.constructor != null \
 			and not graph.constructor.requirements.is_empty():
 		_add_error(result, FlowDiagnostic.CODE_REQUIREMENTS_INCOMPATIBLE_SCHEMA, "Declarative requirements require schema 4.", "constructor.requirements", graph.constructor.get_internal_id())
 
@@ -601,7 +607,7 @@ static func validate_requirement_bindings(
 	var result: FlowValidationResult = FlowValidationResult.new()
 	if bindings.is_empty():
 		return result
-	if graph == null or graph.schema_version != FlowGraph.SCHEMA_VERSION_4:
+	if graph == null or graph.schema_version not in [FlowGraph.SCHEMA_VERSION_4, FlowGraph.SCHEMA_VERSION_5]:
 		_add_error(result, FlowDiagnostic.CODE_BINDINGS_INCOMPATIBLE_SCHEMA, "Requirement bindings require a schema 4 graph.", "requirement_bindings")
 		return result
 	var counts: Dictionary[String, int] = {}
@@ -767,6 +773,8 @@ static func _validate_method_calls_in_blocks(
 			)
 
 static func _get_internal_id(resource: Resource) -> String:
+	if resource is FlowAttributeDefinition or resource is FlowReferenceDefinition or resource is FlowMethodOutputDefinition:
+		return String(resource.call(&"get_internal_id"))
 	if resource is FlowGraph:
 		return (resource as FlowGraph).get_internal_id()
 	if resource is FlowConstructorDefinition:

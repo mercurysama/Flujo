@@ -19,7 +19,7 @@ func _check(condition: bool, context: String = "") -> bool:
 	if stack.size() > 1:
 		var caller: Dictionary = stack[1]
 		location = "%s:%s" % [caller.get("source", "unknown"), caller.get("line", 0)]
-	var failure: String = "[Flujo] Model smoke check failed at %s%s." % [
+	var failure: String = "[Flujo] Model mist check failed at %s%s." % [
 		location,
 		" (%s)" % context if not context.is_empty() else "",
 	]
@@ -40,10 +40,10 @@ func _cleanup_smoke_temporary_resources() -> void:
 func _finish_smoke_test() -> void:
 	_cleanup_smoke_temporary_resources()
 	if _failures.is_empty():
-		print("[Flujo] Model smoke test passed")
+		print("[Flujo] Model mist test passed")
 		get_tree().quit(0)
 		return
-	push_error("[Flujo] Model smoke test failed with %d check failure(s)." % _failures.size())
+	push_error("[Flujo] Model mist test failed with %d check failure(s)." % _failures.size())
 	get_tree().quit(1)
 
 
@@ -1506,7 +1506,7 @@ func _run_smoke_tests() -> void:
 	_check(valid_state.get_internal_id() == valid_state_id)
 
 	var unsupported_schema_graph: FlowGraph = FlowGraph.new()
-	unsupported_schema_graph.schema_version = FlowGraph.SCHEMA_VERSION_4 + 1
+	unsupported_schema_graph.schema_version = FlowGraph.SCHEMA_VERSION_5 + 1
 	var unsupported_schema_result: FlowValidationResult = FlowGraphValidator.validate(
 		unsupported_schema_graph
 	)
