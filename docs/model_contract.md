@@ -4,6 +4,8 @@
 
 This document defines the Flujo core-model contract for Godot 4.7.2: responsibilities, identity, persistence, dependencies, and the scoped Ready execution delivery below.
 
+The proposed class, instance, attribute, reference, encapsulation, inheritance, and future method-execution architecture is specified separately in the [Flujo Object Model contract](flow_object_model_contract.md). It requires schema 5 and is not implemented or authorized for implementation.
+
 ## General principles
 
 - `FlowGraph` is the persistent root of each visual program and starts with `schema_version = 1`.
