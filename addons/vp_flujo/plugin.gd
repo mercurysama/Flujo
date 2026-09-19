@@ -8,6 +8,7 @@ const PV_SCENE_INSPECTOR_CLASS := preload("res://addons/vp_flujo/editor/pv_scene
 const VP_FLUJO_DOCK_CLASS := preload("res://addons/vp_flujo/editor/vp_flujo_dock.gd")
 const PV_CONTROLLER_INSPECTOR_PLUGIN_CLASS := preload("res://addons/vp_flujo/editor/pv_controller_inspector_plugin.gd")
 const FLOW_INTERACTION_COORDINATOR_CLASS := preload("res://addons/vp_flujo/editor/flow_interaction_coordinator.gd")
+const FLOW_CONTROLLER_PROVISIONER_CLASS := preload("res://addons/vp_flujo/editor/flow_controller_provisioner.gd")
 const INTERACTION_SHORTCUT_PATH: String = "flujo/toggle_interaction"
 
 var _dock
@@ -19,6 +20,7 @@ var _dock_controller_reference: WeakRef
 var _selected_schema_3_variable_id: String = ""
 var _interaction_coordinator: FlowInteractionCoordinator
 var _interaction_shortcut: Shortcut
+var _controller_provisioner: FlowControllerProvisioner
 
 
 func _enter_tree() -> void:
@@ -47,6 +49,12 @@ func _enter_tree() -> void:
 			)
 		_interaction_shortcut = editor_settings.get_shortcut(INTERACTION_SHORTCUT_PATH)
 	_interaction_coordinator = FLOW_INTERACTION_COORDINATOR_CLASS.new(_dock)
+	_controller_provisioner = FLOW_CONTROLLER_PROVISIONER_CLASS.new(
+		get_undo_redo(),
+		EditorInterface.get_selection(),
+		_scene_inspector
+	)
+	_controller_provisioner.diagnostic_reported.connect(_on_controller_provisioning_diagnostic)
 	_connect_editor_signals()
 	_request_dock_refresh()
 
@@ -56,6 +64,7 @@ func _exit_tree() -> void:
 	if _interaction_coordinator != null:
 		_interaction_coordinator.shutdown()
 	_interaction_coordinator = null
+	_controller_provisioner = null
 	_interaction_shortcut = null
 	if is_instance_valid(_controller_inspector_plugin):
 		remove_inspector_plugin(_controller_inspector_plugin)
@@ -111,6 +120,13 @@ func _on_selection_changed() -> void:
 func _shortcut_input(event: InputEvent) -> void:
 	if _interaction_coordinator == null or _interaction_shortcut == null:
 		return
+	if _is_deliberate_interaction_shortcut(event) \
+			and _interaction_coordinator.get_state() == FlowInteractionCoordinator.State.GODOT:
+		var controller: PVController = _ensure_controller_for_flow()
+		if controller == null:
+			return
+		_set_dock_controller(controller)
+		_set_interaction_selected_controller(controller)
 	if _interaction_coordinator.handle_shortcut(event, _interaction_shortcut, get_viewport()):
 		get_viewport().set_input_as_handled()
 
@@ -232,8 +248,40 @@ func _on_schema_3_delete_selection_recovery_requested(
 
 
 func _on_interaction_toggle_requested() -> void:
-	if _interaction_coordinator != null:
-		_interaction_coordinator.toggle_flow_interaction(get_viewport())
+	if _interaction_coordinator == null:
+		return
+	if _interaction_coordinator.get_state() == FlowInteractionCoordinator.State.GODOT:
+		var controller: PVController = _ensure_controller_for_flow()
+		if controller == null:
+			return
+		_set_dock_controller(controller)
+		_set_interaction_selected_controller(controller)
+	_interaction_coordinator.toggle_flow_interaction(get_viewport())
+
+
+func _is_deliberate_interaction_shortcut(event: InputEvent) -> bool:
+	if not event is InputEventKey or _interaction_shortcut == null:
+		return false
+	var key_event: InputEventKey = event as InputEventKey
+	return key_event.pressed and not key_event.echo \
+		and _interaction_shortcut.matches_event(event)
+
+
+func _ensure_controller_for_flow() -> PVController:
+	if _controller_provisioner == null:
+		return null
+	var selected_nodes: Array[Node] = []
+	if _editor_selection != null:
+		selected_nodes = _editor_selection.get_selected_nodes()
+	return _controller_provisioner.ensure_controller(
+		EditorInterface.get_edited_scene_root(),
+		selected_nodes,
+		EditorInterface.is_playing_scene()
+	)
+
+
+func _on_controller_provisioning_diagnostic(message: String) -> void:
+	push_warning("[Flujo] %s" % message)
 
 
 ## Synchronizes a valid Inspector source before applying its schema 3 selection.
