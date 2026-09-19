@@ -21,6 +21,8 @@ var _is_open: bool = false
 var _controller_reference: WeakRef
 var _variable_editor: FlowGraphInspectorProperty
 var _content: VBoxContainer
+var _editor_scroll: ScrollContainer
+var _editor_scroll_content: VBoxContainer
 var _interaction_state_label: Label
 var _interaction_button: Button
 var _last_interaction_focus_reference: WeakRef
@@ -72,8 +74,8 @@ func configure(undo_redo: EditorUndoRedoManager) -> void:
 	_variable_editor.schema_3_variable_list_focus_requested.connect(_on_variable_editor_list_focus_requested)
 	_variable_editor.schema_3_delete_selection_recovery_requested.connect(_on_delete_selection_recovery_requested)
 	_variable_editor.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_variable_editor.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_content.add_child(_variable_editor)
+	_variable_editor.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_editor_scroll_content.add_child(_variable_editor)
 	_variable_editor.set_dock_controller(_controller_instance())
 
 
@@ -272,6 +274,23 @@ func _build_interface() -> void:
 	description_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	description_label.text = "Edit the element selected in the Godot Inspector."
 	_content.add_child(description_label)
+
+	_editor_scroll = ScrollContainer.new()
+	_editor_scroll.name = &"FlowDockEditorScroll"
+	_editor_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_editor_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_editor_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_editor_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	_editor_scroll.follow_focus = true
+	_editor_scroll.focus_mode = Control.FOCUS_ALL
+	_editor_scroll.clip_contents = true
+	_content.add_child(_editor_scroll)
+
+	_editor_scroll_content = VBoxContainer.new()
+	_editor_scroll_content.name = &"FlowDockScrollableContent"
+	_editor_scroll_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_editor_scroll_content.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_editor_scroll.add_child(_editor_scroll_content)
 
 
 func _on_interaction_button_pressed() -> void:
