@@ -1401,6 +1401,7 @@ func _on_delete_cancelled() -> void:
 func _close_delete_confirmation() -> void:
 	_pending_delete_id = ""
 	if is_instance_valid(_delete_confirmation):
+		_delete_confirmation.hide()
 		_delete_confirmation.queue_free()
 	_delete_confirmation = null
 

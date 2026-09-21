@@ -73,9 +73,9 @@
         "The command remains in the owning PVController scene history."
       ],
       "coverage": "automatic",
-      "baseline_status": "failing",
+      "baseline_status": "passing",
       "test_paths": ["tests/editor/flow_delete_selection_lifecycle_test.gd"],
-      "notes": "Baseline at 70bda4d reports missing row selection/focus after Delete/Undo/Redo and ends with SIGSEGV; do not claim this behavior as passing."
+      "notes": "The focal verifies stable-ID row and dock recovery across Inspector-property replacement for Delete, Undo, and Redo, including focus ownership and teardown."
     },
     {
       "id": "FLUJO-BHV-MIGRATION-001",

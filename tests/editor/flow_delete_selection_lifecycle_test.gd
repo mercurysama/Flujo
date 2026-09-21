@@ -316,6 +316,13 @@ func _check(condition: bool, message: String) -> bool:
 
 
 func _finish() -> void:
+	var focus_owner: Control = get_root().gui_get_focus_owner()
+	if is_instance_valid(focus_owner):
+		focus_owner.release_focus()
+	var selection: EditorSelection = EditorInterface.get_selection()
+	if selection != null:
+		selection.clear()
+	await _frames(2)
 	if is_instance_valid(_external_focus):
 		_external_focus.queue_free()
 	if is_instance_valid(_controller) and EditorInterface.get_edited_scene_root() == _controller:

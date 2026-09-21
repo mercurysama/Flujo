@@ -160,7 +160,9 @@ func _on_flow_graph_property_tree_exited(property_instance_id: int) -> void:
 			and _active_flow_graph_property.get_instance_id() != property_instance_id:
 		return
 	_active_flow_graph_property = null
-	_clear_delete_selection_recovery()
+	# Inspector refreshes replace EditorProperty instances. Keep pending stable-ID
+	# recovery until the replacement property consumes it or the controller/selection
+	# explicitly invalidates it.
 
 
 func _clear_delete_selection_recovery_for_other_selection(
