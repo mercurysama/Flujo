@@ -21,6 +21,7 @@ var _timer_runtime: FlowTimerRuntime
 var instance_runtime_store: FlowInstanceRuntimeStore
 var class_runtime_store: FlowClassRuntimeStore
 var runtime_store_result: FlowStoreResult
+var _attribute_layout: FlowRuntimeAttributeLayout
 
 var visual_program_enabled: bool = true:
 	set(value):
@@ -66,12 +67,32 @@ func _exit_tree() -> void:
 	_stop_timers()
 
 
+## Supply project catalog context before entering the tree. Only the detached snapshot is kept.
+## This API creates no persistent field, catalog discovery mechanism or executable call frame.
+func prepare_attribute_stores(catalog: FlowClassCatalog) -> FlowStoreResult:
+	if Engine.is_editor_hint():
+		return FlowStoreResult.make(&"store_editor_context")
+	if is_inside_tree():
+		return FlowStoreResult.make(&"store_already_initialized")
+	var layout: FlowRuntimeAttributeLayout = FlowRuntimeAttributeLayout.resolve(flow_graph, catalog)
+	var result: FlowStoreResult = layout.operation_result()
+	# A rejected preparation must not leave an older successful snapshot eligible for startup.
+	_attribute_layout = layout
+	return result
+
+
 func _initialize_attribute_stores() -> void:
+	var layout: FlowRuntimeAttributeLayout = _attribute_layout
+	if layout == null:
+		layout = FlowRuntimeAttributeLayout.resolve(flow_graph)
+	elif layout.class_id != flow_graph.get_internal_id():
+		runtime_store_result = FlowStoreResult.make(&"store_definition_conflict", flow_graph.get_internal_id())
+		return
 	var candidate: FlowInstanceRuntimeStore = FlowInstanceRuntimeStore.new()
-	runtime_store_result = candidate.initialize(flow_graph)
+	runtime_store_result = candidate.initialize_layout(layout)
 	if not runtime_store_result.ok:
 		return
-	runtime_store_result = FlowClassRuntimeStore.acquire(get_tree(), flow_graph)
+	runtime_store_result = FlowClassRuntimeStore.acquire_layout(get_tree(), layout)
 	if not runtime_store_result.ok:
 		candidate.close()
 		return

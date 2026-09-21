@@ -120,7 +120,7 @@ static func validate_catalog_context(graph: FlowGraph, classes: Dictionary[Strin
 			var reference: FlowReferenceDefinition = record.resource
 			if reference.target_class_id != graph.get_internal_id():
 				result.diagnostics.append_array(validate_reference(reference, graph, classes, prefix + "." + record.path).diagnostics)
-	# Inherited private slots are deliberately excluded from name conflicts.
+	# A private slot on either side is independent; nonprivate overrides remain deferred.
 	var next_id: String = graph.base_class_id
 	var visited: Dictionary[String, bool] = {graph.get_internal_id(): true}
 	while classes.has(next_id) and not visited.has(next_id):
@@ -133,7 +133,9 @@ static func validate_catalog_context(graph: FlowGraph, classes: Dictionary[Strin
 			if ancestor.visibility == FlowAttributeDefinition.Visibility.PRIVATE:
 				continue
 			for own: Dictionary in FlowSchema5Model.owned_records(graph):
-				if own.resource is FlowAttributeDefinition and own.resource.display_name == ancestor.display_name:
+				if own.resource is FlowAttributeDefinition \
+						and own.resource.visibility != FlowAttributeDefinition.Visibility.PRIVATE \
+						and own.resource.display_name == ancestor.display_name:
 					FlowClassCatalog.issue(result, &"inherited_attribute_conflict", prefix + "." + own.path, own.resource.get_internal_id(), "An inherited public/protected attribute cannot be implicitly overridden.")
 		next_id = base.base_class_id
 
