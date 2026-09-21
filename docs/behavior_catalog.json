@@ -1,0 +1,211 @@
+{
+  "schema": "flujo.behavior-catalog/v1",
+  "catalog_version": 1,
+  "behaviors": [
+    {
+      "id": "FLUJO-BHV-F4-001",
+      "area": "F4 and PVController",
+      "precondition": "An editable scene has either a selected target node, a scene root, or an existing usable PVController; the game is not running.",
+      "public_action": "Invoke the registered Flow F4 action or the equivalent Enter Flow button.",
+      "expected_result": "Flujo reuses one compatible controller or creates exactly one undoable scene-owned PVController, selects it, and enters FLOW; Undo and Redo preserve the scene history.",
+      "invariants": [
+        "No duplicate controller is created by repeated requests.",
+        "GAME never consumes F4 for editor interaction.",
+        "A second F4 leaves FLOW without deleting the controller."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tests/editor/flow_f4_create_controller_test.gd"]
+    },
+    {
+      "id": "FLUJO-BHV-SCROLL-001",
+      "area": "Flow dock scrolling",
+      "precondition": "The Flow dock has less vertical space than the complete selected-item editor requires.",
+      "public_action": "Scroll the Flow dock with its native vertical ScrollContainer.",
+      "expected_result": "The vertical range exceeds the visible page and the final configuration controls can be brought fully into view.",
+      "invariants": [
+        "One vertical scroll surface contains the complete configuration area.",
+        "Horizontal resizing remains native and unconstrained.",
+        "Selection and model state are not changed by scrolling."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tests/editor/flow_dock_scroll_layout_test.gd"]
+    },
+    {
+      "id": "FLUJO-BHV-FOCUS-001",
+      "area": "Keyboard focus and stable-ID selection",
+      "precondition": "A schema 3 collection row or one of its public editor controls is active.",
+      "public_action": "Use public selection, Tab, Shift+Tab, Enter, Escape, F2, popup, Move, Undo, or Redo interactions.",
+      "expected_result": "The selected stable ID and current dock context remain aligned while focus follows only deliberate user navigation.",
+      "invariants": [
+        "Selection identity never depends on the visible name or row index.",
+        "Rebuilds do not retain callbacks to detached controls.",
+        "Automatic model changes do not steal focus from unrelated editor controls."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tests/editor/flow_graph_editor_commands_test.gd"]
+    },
+    {
+      "id": "FLUJO-BHV-FOCUS-002",
+      "area": "Unfocused selection appearance",
+      "precondition": "A Flow collection row remains semantically selected while keyboard focus belongs to another editor control.",
+      "public_action": "Move focus away from the selected ItemList without changing selection.",
+      "expected_result": "The stable-ID selection remains semantically active; a stronger cross-theme visual shade is explicitly deferred.",
+      "invariants": [
+        "No focus is stolen to manufacture a visual indication.",
+        "Operations continue to target the selected stable ID."
+      ],
+      "coverage": "missing",
+      "baseline_status": "not_covered",
+      "test_paths": []
+    },
+    {
+      "id": "FLUJO-BHV-DELETE-001",
+      "area": "Delete, Undo, Redo, selection, and focus",
+      "precondition": "A deletable Method, Variable, Process, Timer, or supported block is selected through the real Inspector/plugin/dock path.",
+      "public_action": "Confirm Delete, then invoke scene-context Undo and Redo.",
+      "expected_result": "Delete chooses the same-index successor or prior final row, Undo selects the restored item, Redo restores the replacement, and an empty collection clears the editor.",
+      "invariants": [
+        "The model and visible selected row refer to the same stable ID.",
+        "Focus is preserved only when the operation originated in that interface.",
+        "The command remains in the owning PVController scene history."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "failing",
+      "test_paths": ["tests/editor/flow_delete_selection_lifecycle_test.gd"],
+      "notes": "Baseline at 70bda4d reports missing row selection/focus after Delete/Undo/Redo and ends with SIGSEGV; do not claim this behavior as passing."
+    },
+    {
+      "id": "FLUJO-BHV-MIGRATION-001",
+      "area": "Atomic schema 2 to schema 5 migration",
+      "precondition": "A schema 2 FlowGraph satisfies its source validator and any legacy constructor payload receives the required explicit confirmation in chained steps.",
+      "public_action": "Call FlowGraphMigrator.migrate_schema_2_to_5().",
+      "expected_result": "The public 2→3→4→5 chain returns an independent validated schema 5 candidate and never mutates its source.",
+      "invariants": [
+        "Every schema boundary remains explicit.",
+        "IDs, order, null positions, Variables, and invalid literal references are preserved according to their contracts.",
+        "A rejected step publishes no partial candidate."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/model/flow_model_mist_test.gd",
+        "tests/model/flow_schema_4_foundation_test.gd",
+        "tests/model/flow_schema_5_foundation_test.gd"
+      ]
+    },
+    {
+      "id": "FLUJO-BHV-STORE-INSTANCE-001",
+      "area": "Schema 5 INSTANCE attribute store",
+      "precondition": "A runtime PVController enters a SceneTree with a valid schema 5 class definition or prepared inherited layout.",
+      "public_action": "Read, write, or reset an enabled INSTANCE attribute by stable ID and requester class ID.",
+      "expected_result": "Each controller owns an independent deeply detached value initialized from its definition default.",
+      "invariants": [
+        "Definitions are never mutated.",
+        "Exact type, nullability, visibility, READONLY, and CONST rules are deterministic.",
+        "No Node, Resource, Callable, or static process-global store is retained."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/runtime/flow_attribute_runtime_store_test.gd",
+        "tests/runtime/flow_inherited_attribute_store_test.gd"
+      ]
+    },
+    {
+      "id": "FLUJO-BHV-STORE-CLASS-001",
+      "area": "Schema 5 CLASS attribute store",
+      "precondition": "Controllers in one SceneTree resolve the same schema 5 declaring class.",
+      "public_action": "Acquire the class store and read, write, or reset a CLASS attribute by stable ID.",
+      "expected_result": "Controllers share one value only within SceneTree plus declaring class ID, retain it across scene changes, and lose it when that SceneTree ends.",
+      "invariants": [
+        "Different SceneTrees and class IDs never share state.",
+        "A derived handle routes inherited CLASS slots to the declaring-class store.",
+        "Conflicting metadata rejects without resetting existing values."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/runtime/flow_attribute_runtime_store_test.gd",
+        "tests/runtime/flow_inherited_attribute_store_test.gd"
+      ]
+    },
+    {
+      "id": "FLUJO-BHV-INHERITANCE-001",
+      "area": "Schema 5 inherited attribute layout and access",
+      "precondition": "The active schema 5 graph and its saved ancestors resolve through a valid portable FlowClassCatalog.",
+      "public_action": "Resolve FlowRuntimeAttributeLayout and access slots with requester_class_id.",
+      "expected_result": "The effective layout is base→derived, each slot retains declaring_class_id, and access follows PUBLIC, PROTECTED, and PRIVATE rules.",
+      "invariants": [
+        "A repeated stable ID anywhere in the hierarchy is an error.",
+        "A PRIVATE name on either side is an independent slot; PUBLIC/PROTECTED homonyms remain rejected.",
+        "Missing bases, cycles, excessive depth, and locator conflicts reject deterministically without mutation."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tests/runtime/flow_inherited_attribute_store_test.gd"]
+    },
+    {
+      "id": "FLUJO-BHV-RUNTIME-READY-001",
+      "area": "Schema 3 Ready runtime",
+      "precondition": "An enabled PVController with a validated schema 3 graph enters the SceneTree.",
+      "public_action": "Allow PVController startup to invoke the Ready executor.",
+      "expected_result": "Enabled Ready processes execute their supported blocks once and emit console plus structured output in authored order.",
+      "invariants": [
+        "Unsupported or invalid blocks are diagnosed and later blocks continue.",
+        "Definitions remain immutable.",
+        "Schema 5 never enters the schema 3 executor."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tests/runtime/flow_ready_runtime_test.tscn"]
+    },
+    {
+      "id": "FLUJO-BHV-RUNTIME-TIMER-001",
+      "area": "Schema 3 Timer runtime",
+      "precondition": "An enabled schema 3 Timer has a finite positive interval and its PVController is enabled in the SceneTree.",
+      "public_action": "Start controller runtime and emit the internal Timer timeout.",
+      "expected_result": "One-shot or repeating Timers execute supported blocks in order and clean up their internal Timer nodes at shutdown.",
+      "invariants": [
+        "Invalid or disabled Timers never start.",
+        "Runtime Timer nodes are not persisted into the authored scene.",
+        "Ready and Timer share the structured output boundary."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tests/runtime/flow_ready_runtime_test.gd"]
+    },
+    {
+      "id": "FLUJO-BHV-RUNTIME-CONSTRUCTOR-001",
+      "area": "Schema 3 executable Constructor runtime",
+      "precondition": "A schema 3 PVController starts with enabled legacy Constructor blocks.",
+      "public_action": "Run the guarded controller startup sequence.",
+      "expected_result": "Constructor blocks execute exactly once immediately before Ready.",
+      "invariants": [
+        "This is not Godot native _init.",
+        "Method calls inside Constructor remain unsupported and are skipped diagnostically.",
+        "Schema 4 and schema 5 declarative Constructor data is never executed through this path."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tests/runtime/flow_constructor_methods_test.gd"]
+    },
+    {
+      "id": "FLUJO-BHV-RUNTIME-METHOD-001",
+      "area": "Schema 3 reusable Methods runtime",
+      "precondition": "A Ready or Timer Call Method block references an enabled starter Method by stable ID.",
+      "public_action": "Execute the containing Ready or Timer blocks.",
+      "expected_result": "The referenced Method executes its supported blocks once and returns control to the caller's next block.",
+      "invariants": [
+        "Renaming does not alter the stable reference.",
+        "Missing, invalid, disabled, nested, or signature-bearing targets are diagnosed and skipped.",
+        "Arguments, returns, recursion, and method-to-method calls remain deferred."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tests/runtime/flow_constructor_methods_test.gd"]
+    }
+  ]
+}

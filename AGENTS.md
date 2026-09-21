@@ -52,6 +52,16 @@
 - Record only externally reviewable decisions and evidence. Do not request, infer, or store an agent's private internal reasoning.
 - Each report includes only engineering-flow metrics available automatically from task evidence. Use `unknown` or `not measured` for unavailable values; never estimate, invent, or use metrics to classify individuals. See [`docs/engineering_metrics.md`](docs/engineering_metrics.md).
 
+## Behavior-preserving change protocol
+
+- Before modifying an area, characterize its public behavior against the versioned [`docs/behavior_catalog.json`](docs/behavior_catalog.json). Add or correct a catalog entry when the area is absent or the recorded evidence is inaccurate.
+- Run the catalogued focal baseline before editing. A failing baseline is evidence, not permission to weaken a test or silently redefine behavior; record it and keep the failure separate from the proposed change.
+- Make the smallest reviewable change. After each meaningful extraction or behavior-preserving step, rerun the affected focal tests before continuing.
+- At completion, rerun the affected focal tests and the proportionate model, persistence, runtime, and editor regressions for the touched boundaries.
+- An intentional public-behavior change must update the catalog and its automated or manual evidence in a separate commit from a behavior-preserving refactor. The behavior-change commit must state the authorized contract change.
+- Catalog entries distinguish `automatic`, `manual`, and `missing` coverage. A test path proves only that an artifact exists; its recorded baseline status must not claim success when the test fails or has not been run.
+- Temporary outputs belong under ignored locations such as `.godot/flujo_tests/`. The catalog, its validator, and validator tests remain versioned outside `addons/vp_flujo/` so they are excluded from the installable plugin ZIP.
+
 # Verification
 
 - Run `git diff --check`.
