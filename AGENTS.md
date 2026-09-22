@@ -54,6 +54,7 @@
 
 ## Behavior-preserving change protocol
 
+- Explicitly invoke `$flujo-baseline` before any functional correction, implementation on existing code, or refactor. Explicitly invoke `$flujo-prove` at completion before committing. Automatic skill discovery or merely reading these names does not satisfy either gate. Their versioned sources live under `tools/agent_skills/`; local discovery links do not authorize edits or Git mutations.
 - Before modifying an area, characterize its public behavior against the versioned [`docs/behavior_catalog.json`](docs/behavior_catalog.json). Add or correct a catalog entry when the area is absent or the recorded evidence is inaccurate.
 - Run the catalogued focal baseline before editing. A failing baseline is evidence, not permission to weaken a test or silently redefine behavior; record it and keep the failure separate from the proposed change.
 - Make the smallest reviewable change. After each meaningful extraction or behavior-preserving step, rerun the affected focal tests before continuing.
@@ -65,6 +66,7 @@
 # Verification
 
 - Run `git diff --check`.
+- Run the behavior catalog validator with `godot --headless --path . --script tests/governance/behavior_catalog_validator_test.gd`.
 - Run the selected Godot command with `--headless --editor --path . --quit-after 5`.
 - Run the selected Godot command with `--headless --path . tests/model/flow_model_smoke_test.tscn`.
 - The mist test must print `[Flujo] Model mist test passed`. The existing `flow_model_smoke_test.tscn` scene loads `flow_model_mist_test.gd` and remains the compatible command entry point.

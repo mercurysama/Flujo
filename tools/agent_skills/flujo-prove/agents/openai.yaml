@@ -1,0 +1,6 @@
+interface:
+  display_name: "Flujo Prove"
+  short_description: "Verify scope and regressions before committing"
+  default_prompt: "Use $flujo-prove to verify the completed Flujo change and report PASA or NO PASA before any commit."
+policy:
+  allow_implicit_invocation: false

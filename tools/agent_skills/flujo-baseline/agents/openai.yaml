@@ -1,0 +1,6 @@
+interface:
+  display_name: "Flujo Baseline"
+  short_description: "Verify behavior coverage before changing Flujo"
+  default_prompt: "Use $flujo-baseline to verify the requested scope against Flujo's behavior catalog before changing production."
+policy:
+  allow_implicit_invocation: false
