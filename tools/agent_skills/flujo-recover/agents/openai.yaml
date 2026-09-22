@@ -1,0 +1,6 @@
+interface:
+  display_name: "Flujo Recover"
+  short_description: "Recover interrupted Gota a Gota checkpoints"
+  default_prompt: "Use $flujo-recover to reconstruct a safe checkpoint for this interrupted Gota a Gota workplan."
+policy:
+  allow_implicit_invocation: false
