@@ -1,0 +1,6 @@
+interface:
+  display_name: "Flujo Execute"
+  short_description: "Execute one approved Gota a Gota drop"
+  default_prompt: "Use $flujo-execute to execute exactly one authorized drop from this Gota a Gota workplan."
+policy:
+  allow_implicit_invocation: false
