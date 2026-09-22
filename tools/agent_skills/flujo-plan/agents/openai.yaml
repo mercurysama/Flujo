@@ -1,0 +1,6 @@
+interface:
+  display_name: "Flujo Plan"
+  short_description: "Draft bounded Gota a Gota workplans"
+  default_prompt: "Use $flujo-plan to create a DRAFT Gota a Gota workplan from this authorized request."
+policy:
+  allow_implicit_invocation: false
