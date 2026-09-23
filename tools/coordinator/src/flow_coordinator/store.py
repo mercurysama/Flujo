@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 import uuid
 from collections.abc import Iterator, Mapping, Sequence
@@ -524,7 +525,13 @@ class SQLiteCoordinatorStore:
                     raise AcceptanceEvidenceError(
                         "DONE requires inspected selective staging evidence"
                     )
-                if len(commits) != 1 or len(str(commits[0].get("sha", ""))) != 40:
+                commit_sha = (
+                    str(commits[0].get("sha", "")) if len(commits) == 1 else ""
+                )
+                valid_sha = re.fullmatch(
+                    r"[0-9a-f]{40}|[0-9a-f]{64}", commit_sha
+                )
+                if len(commits) != 1 or valid_sha is None:
                     raise AcceptanceEvidenceError(
                         "DONE requires exactly one local commit SHA evidence record"
                     )
@@ -669,6 +676,23 @@ class SQLiteCoordinatorStore:
             payload=json.loads(row["payload_json"]),
             digest=row["digest"],
             created_at=parse_datetime(row["created_at"]),
+        )
+
+    def list_checkpoints(self, run_id: str) -> tuple[Checkpoint, ...]:
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                "SELECT * FROM checkpoints WHERE run_id = ? ORDER BY rowid",
+                (run_id,),
+            ).fetchall()
+        return tuple(
+            Checkpoint(
+                checkpoint_id=row["checkpoint_id"],
+                run_id=row["run_id"],
+                payload=json.loads(row["payload_json"]),
+                digest=row["digest"],
+                created_at=parse_datetime(row["created_at"]),
+            )
+            for row in rows
         )
 
     def add_dependency(self, task_id: str, depends_on_task_id: str) -> None:

@@ -22,9 +22,13 @@ Official task states are:
 when a run actually used a resource whose policy requires cooldown. It never
 changes the state of a task run.
 
-The Git adapter in this delivery is read-only. Commit acceptance is exercised
-through `FakeCommitter`; the coordinator cannot stage or commit a real
-repository.
+The original Git inspection adapter remains read-only. Mutable acceptance is
+isolated behind `TransactionalGitAdapter`, which requires an explicit
+authorized root, stages only the task's exact allowlist, records a staging
+manifest, and creates one local commit with task/run trailers. Recovery reuses
+a matching commit rather than creating a duplicate. The integration suite uses
+only temporary fixture repositories; the Flujo repository is inspected only
+through its read-only boundary. Push and merge are intentionally unavailable.
 
 Run the isolated tests from the repository root:
 

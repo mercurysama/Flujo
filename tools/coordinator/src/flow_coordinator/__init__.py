@@ -15,6 +15,7 @@ from .domain import (
     TransitionEvent,
 )
 from .service import CoordinatorService
+from .git_transaction import GitAcceptanceWorkflow, TransactionalGitAdapter
 from .store import SQLiteCoordinatorStore
 
 __all__ = [
@@ -24,6 +25,7 @@ __all__ = [
     "CoordinatorResource",
     "CoordinatorService",
     "Evidence",
+    "GitAcceptanceWorkflow",
     "Lease",
     "ProjectBinding",
     "ResourceState",
@@ -32,4 +34,5 @@ __all__ = [
     "TaskSpec",
     "TaskState",
     "TransitionEvent",
+    "TransactionalGitAdapter",
 ]
