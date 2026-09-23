@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "flow.coordinator/task-spec/v1",
+  "title": "Coordinator TaskSpec v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "task_id",
+    "title",
+    "objective",
+    "project_id",
+    "repository_id",
+    "branch",
+    "base_sha",
+    "context_id",
+    "allowed_paths",
+    "protected_paths",
+    "required_resources",
+    "acceptance_criteria",
+    "commit_message"
+  ],
+  "properties": {
+    "task_id": {"type": "string", "minLength": 1},
+    "title": {"type": "string", "minLength": 1},
+    "objective": {"type": "string", "minLength": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "repository_id": {"type": "string", "minLength": 1},
+    "branch": {"type": "string", "minLength": 1},
+    "base_sha": {"type": "string", "minLength": 1},
+    "context_id": {"type": "string", "minLength": 1},
+    "allowed_paths": {"type": "array", "items": {"type": "string"}},
+    "protected_paths": {"type": "array", "items": {"type": "string"}},
+    "required_resources": {"type": "array", "items": {"type": "string"}},
+    "acceptance_criteria": {"type": "array", "items": {"type": "string"}},
+    "commit_message": {"type": "string", "minLength": 1}
+  }
+}

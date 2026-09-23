@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "flow.coordinator/checkpoint/v1",
+  "title": "Coordinator Checkpoint v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["checkpoint_id", "run_id", "payload", "digest", "created_at"],
+  "properties": {
+    "checkpoint_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "payload": {"type": "object"},
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "created_at": {"type": "string", "format": "date-time"}
+  }
+}
