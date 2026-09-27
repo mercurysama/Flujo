@@ -43,32 +43,73 @@ func execute(controller: Node, graph: FlowGraph, output: FlowRuntimeOutput, entr
 ## Only an entry container may call a method. Method/constructor blocks never recurse.
 func _execute_blocks(controller: Node, graph: FlowGraph, container: FlowBlockContainer, path: String,
 		output: FlowRuntimeOutput, entry_point: StringName, entry_id: String,
-		invalid_paths: Array[String], allow_calls: bool, method_id: String = "", call_id: String = "") -> void:
+		invalid_paths: Array[String], allow_calls: bool, method_id: String = "", call_id: String = "") -> FlowNavigationDecision:
+	var block_indices: Dictionary[String, int] = {}
 	for index: int in container.blocks.size():
-		var block: FlowBlock = container.blocks[index]
-		if block == null or not block.enabled:
+		var candidate: FlowBlock = container.blocks[index]
+		if candidate == null:
 			continue
+		var candidate_id: String = candidate.get_internal_id()
+		if block_indices.has(candidate_id):
+			push_warning("[Flujo] ambiguous_block_id at %s.blocks[%d]: Stable block ID is duplicated." % [path, index])
+			return FlowNavigationDecision.stop_execution()
+		block_indices[candidate_id] = index
+
+	var index: int = 0
+	var steps: int = 0
+	var step_budget: int = maxi(1, container.blocks.size()) * 1024
+	while index < container.blocks.size():
+		steps += 1
+		if steps > step_budget:
+			push_warning("[Flujo] navigation_step_budget_exceeded at %s: Runtime navigation stopped safely." % path)
+			return FlowNavigationDecision.stop_execution()
+		var block: FlowBlock = container.blocks[index]
 		var block_path: String = "%s.blocks[%d]" % [path, index]
-		if _is_invalid_block(block_path, invalid_paths):
+		if block == null or not block.enabled or _is_invalid_block(block_path, invalid_paths):
+			index += 1
 			continue
 		if block is FlowMethodCallBlock:
 			if not allow_calls:
 				push_warning("[Flujo] method_call_unsupported_context at %s; skipping." % block_path)
-				continue
-			_execute_method(controller, graph, block as FlowMethodCallBlock, output, entry_point, entry_id, invalid_paths)
-			continue
-		if not block is FlowOutputBlock:
-			push_warning("[Flujo] Unsupported block at %s (%s); skipping." % [block_path, block.get_internal_id()])
-			continue
-		output.write(
+			else:
+				_execute_method(controller, graph, block as FlowMethodCallBlock, output, entry_point, entry_id, invalid_paths)
+		else:
+			if block is FlowOutputBlock:
+				output.write(
+					controller,
+					entry_id,
+					block.get_internal_id(),
+					(block as FlowOutputBlock).get_output_message(),
+					entry_point,
+					method_id,
+					call_id
+				)
+
+		var context: FlowNavigationContext = FlowNavigationContext.new(
 			controller,
-			entry_id,
+			graph,
+			container,
 			block.get_internal_id(),
-			(block as FlowOutputBlock).get_output_message(),
-			entry_point,
-			method_id,
-			call_id
+			entry_point
 		)
+		var decision: FlowNavigationDecision = block.get_navigation_decision(context)
+		if decision == null or not decision.is_well_formed():
+			push_warning("[Flujo] invalid_navigation_decision at %s: Block returned malformed runtime navigation." % block_path)
+			return FlowNavigationDecision.stop_execution()
+		match decision.kind:
+			FlowNavigationDecision.Kind.CONTINUE:
+				index += 1
+			FlowNavigationDecision.Kind.JUMP:
+				if not block_indices.has(decision.target_block_id):
+					push_warning("[Flujo] invalid_navigation_target at %s: Target block ID is absent from this container." % block_path)
+					return FlowNavigationDecision.stop_execution()
+				index = block_indices[decision.target_block_id]
+			FlowNavigationDecision.Kind.STOP:
+				return decision
+			_:
+				push_warning("[Flujo] invalid_navigation_decision at %s: Unknown runtime navigation kind." % block_path)
+				return FlowNavigationDecision.stop_execution()
+	return FlowNavigationDecision.continue_execution()
 
 
 func _execute_method(controller: Node, graph: FlowGraph, call: FlowMethodCallBlock,

@@ -163,6 +163,21 @@
       "test_paths": ["tests/runtime/flow_ready_runtime_test.tscn"]
     },
     {
+      "id": "FLUJO-BHV-RUNTIME-NAVIGATION-001",
+      "area": "Generic schema 3 runtime navigation foundation",
+      "precondition": "A validated schema 3 container is executed with blocks using the default continuation or an ephemeral navigation decision.",
+      "public_action": "Execute the container through FlowReadyExecutor.",
+      "expected_result": "CONTINUE preserves linear order; JUMP resolves a stable target ID in the same container; STOP ends that path; invalid targets and accidental loops stop deterministically.",
+      "invariants": [
+        "Existing output and method blocks retain default CONTINUE behavior.",
+        "The executor resolves navigation generically without knowing a concrete control-block type.",
+        "Navigation decisions and context are runtime-only and do not change schema or persistence."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tests/runtime/flow_navigation_runtime_test.tscn"]
+    },
+    {
       "id": "FLUJO-BHV-BLOCKSDK-CUSTOM-001",
       "area": "First registry-backed custom output block",
       "precondition": "A valid schema 3 output-block container is authored through the normal Flujo Add controls.",

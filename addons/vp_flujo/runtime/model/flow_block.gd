@@ -14,6 +14,10 @@ func get_internal_id() -> String:
 	return _internal_id
 
 
+func get_navigation_decision(_context: FlowNavigationContext) -> FlowNavigationDecision:
+	return FlowNavigationDecision.continue_execution()
+
+
 func duplicate_with_new_id() -> FlowBlock:
 	var copy: FlowBlock = duplicate(true) as FlowBlock
 	copy._internal_id = FlowId.create()

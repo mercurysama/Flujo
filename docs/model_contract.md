@@ -326,6 +326,14 @@ The following requirements define the deliberately narrow first BLOCK-SDK proof.
 
 Traceability: BLOCKSDK-001/003 map to `FlowOutputBlock`, the three concrete output blocks, `FlowReadyExecutor`, and `FlowRuntimeOutput`. BLOCKSDK-002/005 map to `FlowBlockRegistry`, `FlowGraphEditorCommands`, and `FlowReadyProcessEditor`. BLOCKSDK-004 maps to the existing graph duplication/serialization code. Automated evidence is `tests/runtime/flow_custom_block_test.tscn` plus the public authoring path in `tests/editor/flow_graph_editor_commands_test.gd`; visible editor acceptance remains manual.
 
+## Generic runtime navigation foundation
+
+`FlowNavigationDecision` is an ephemeral runtime result with `CONTINUE`, `JUMP`, and `STOP` kinds. `JUMP` carries a stable target block ID and is resolved only within the current `FlowBlockContainer`. `FlowNavigationContext` carries the controller, graph, container, current block ID, and entry point only while a block is executing; neither class is serialized or retained by the persistent model.
+
+`FlowBlock.get_navigation_decision()` returns `CONTINUE` by default, so Print, Everything Flows, Custom Hello, and MethodCall preserve their existing behavior without concrete-type branches. `FlowReadyExecutor` owns the cursor, local stable-ID index, malformed/absent-target diagnostics, and a runtime step budget that safely stops accidental infinite navigation. The current budget counts each loop visit, including `null` or disabled entries, and therefore those entries consume one visit without receiving a navigation decision. No IF, package manifest, discovery mechanism, branch persistence, schema change, migration, or navigation between containers is implemented by this foundation.
+
+The focal evidence is `tests/runtime/flow_navigation_runtime_test.tscn`, which uses a test-only control block to prove linear continuation, stable-ID jumps, STOP, invalid targets, duplicate IDs, and the safety budget.
+
 ## Process and Timer authoring delivery
 
 The following approved requirements are implemented and covered by automated tests; manual visual review remains pending.
