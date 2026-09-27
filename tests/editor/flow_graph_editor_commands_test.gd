@@ -583,7 +583,7 @@ func _test_ready_authoring(controller: PVController, undo_redo: EditorUndoRedoMa
 	await process_frame
 	await process_frame
 	_expect(process.display_name == "Startup by ID", "Ready Name changes the selected process by ID.")
-	for button_text: String in ["Add Print", "Add Everything Flows"]:
+	for button_text: String in ["Add Print", "Add Everything Flows", "Add Custom Hello"]:
 		var button: Button = _find_button(dock_property, button_text)
 		if button == null:
 			_expect(false, "Ready exposes " + button_text)
@@ -593,13 +593,17 @@ func _test_ready_authoring(controller: PVController, undo_redo: EditorUndoRedoMa
 		button.pressed.emit()
 		await process_frame
 		await process_frame
-	if process.blocks.size() != 3:
-		_expect(false, "Ready appends two concrete blocks around an existing null.")
+	if process.blocks.size() != 4:
+		_expect(false, "Ready appends three registered concrete blocks after an existing null.")
 		dock.queue_free()
 		scroll.queue_free()
 		return
 	var print_block: FlowPrintBlock = process.blocks[1] as FlowPrintBlock
-	_expect(print_block != null and process.blocks[2] is FlowEverythingFlowsBlock and process.blocks[0] == null, "Public block additions preserve type, order and deliberate null.")
+	_expect(
+		print_block != null and process.blocks[2] is FlowEverythingFlowsBlock \
+			and process.blocks[3] is FlowCustomHelloBlock and process.blocks[0] == null,
+		"Public registry-backed additions preserve every concrete type, order, and deliberate null."
+	)
 	if print_block == null:
 		dock.queue_free()
 		scroll.queue_free()
@@ -674,15 +678,15 @@ func _test_ready_authoring(controller: PVController, undo_redo: EditorUndoRedoMa
 		confirmation.confirmed.emit()
 	await process_frame
 	await process_frame
-	_expect(process.blocks.size() == 2 and process.blocks[0] == null and not process.blocks.has(print_block), "Confirmation deletes exactly once without compacting preexisting nulls.")
+	_expect(process.blocks.size() == 3 and process.blocks[0] == null and not process.blocks.has(print_block), "Confirmation deletes exactly once without compacting preexisting nulls.")
 	history.undo()
 	await process_frame
 	await process_frame
-	_expect(process.blocks.size() == 3 and process.blocks[1] == print_block, "Delete Undo restores the same stable-ID block at its exact position.")
+	_expect(process.blocks.size() == 4 and process.blocks[1] == print_block, "Delete Undo restores the same stable-ID block at its exact position.")
 	history.redo()
 	await process_frame
 	await process_frame
-	_expect(process.blocks.size() == 2, "Delete Redo repeats the removal.")
+	_expect(process.blocks.size() == 3, "Delete Redo repeats the removal.")
 	history.undo()
 	EditorInterface.save_scene()
 	await process_frame

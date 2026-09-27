@@ -312,11 +312,13 @@ func set_ready_property(controller: PVController, process_id: String, block_id: 
 	return true
 
 
-func add_ready_block(controller: PVController, process_id: String, print_block: bool) -> String:
+func add_ready_block(controller: PVController, process_id: String, block_type_id: StringName) -> String:
 	var process: FlowBlockContainer = find_block_container(controller, process_id)
 	if process == null:
 		return ""
-	var block: FlowBlock = FlowPrintBlock.new() if print_block else FlowEverythingFlowsBlock.new()
+	var block: FlowBlock = FlowBlockRegistry.create(block_type_id)
+	if block == null:
+		return ""
 	block.display_name = _first_available_block_display_name(process.blocks, block)
 	var updated: Array[FlowBlock] = process.blocks.duplicate()
 	updated.append(block)
@@ -629,11 +631,7 @@ func _first_available_block_display_name(blocks: Array[FlowBlock], template: Flo
 
 
 func _default_block_display_name(block: FlowBlock) -> String:
-	if block is FlowPrintBlock:
-		return "Print"
-	if block is FlowEverythingFlowsBlock:
-		return "Everything Flows"
-	return block.display_name
+	return FlowBlockRegistry.default_display_name(block)
 
 
 func _block_display_name(block: FlowBlock) -> String:

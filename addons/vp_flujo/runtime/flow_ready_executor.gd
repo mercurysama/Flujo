@@ -1,14 +1,7 @@
 class_name FlowReadyExecutor
 extends RefCounted
 
-## Only built-in definitions with explicit handlers can execute. Definitions contain no code.
-const PRINT_BLOCK: Script = preload("res://addons/vp_flujo/runtime/model/flow_print_block.gd")
-const EVERYTHING_FLOWS_BLOCK: Script = preload("res://addons/vp_flujo/runtime/model/flow_everything_flows_block.gd")
-
-var _handlers: Dictionary[Script, Callable] = {
-	PRINT_BLOCK: _print_message,
-	EVERYTHING_FLOWS_BLOCK: _everything_flows_message,
-}
+## Only definitions implementing the explicit output-block contract can emit messages.
 
 
 func execute(controller: Node, graph: FlowGraph, output: FlowRuntimeOutput, entry_point: StringName = &"Ready", process_id: String = "") -> void:
@@ -64,11 +57,18 @@ func _execute_blocks(controller: Node, graph: FlowGraph, container: FlowBlockCon
 				continue
 			_execute_method(controller, graph, block as FlowMethodCallBlock, output, entry_point, entry_id, invalid_paths)
 			continue
-		var handler: Callable = _handlers.get(block.get_script(), Callable())
-		if not handler.is_valid():
+		if not block is FlowOutputBlock:
 			push_warning("[Flujo] Unsupported block at %s (%s); skipping." % [block_path, block.get_internal_id()])
 			continue
-		output.write(controller, entry_id, block.get_internal_id(), handler.call(block), entry_point, method_id, call_id)
+		output.write(
+			controller,
+			entry_id,
+			block.get_internal_id(),
+			(block as FlowOutputBlock).get_output_message(),
+			entry_point,
+			method_id,
+			call_id
+		)
 
 
 func _execute_method(controller: Node, graph: FlowGraph, call: FlowMethodCallBlock,
@@ -99,11 +99,3 @@ func _is_invalid_block(path: String, invalid_paths: Array[String]) -> bool:
 		if invalid_path == path or invalid_path.begins_with(path + "."):
 			return true
 	return false
-
-
-func _print_message(block: FlowBlock) -> String:
-	return (block as FlowPrintBlock).text
-
-
-func _everything_flows_message(_block: FlowBlock) -> String:
-	return "Todo es Flujo; todo fluye."

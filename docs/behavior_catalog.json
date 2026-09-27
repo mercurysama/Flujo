@@ -163,6 +163,24 @@
       "test_paths": ["tests/runtime/flow_ready_runtime_test.tscn"]
     },
     {
+      "id": "FLUJO-BHV-BLOCKSDK-CUSTOM-001",
+      "area": "First registry-backed custom output block",
+      "precondition": "A valid schema 3 output-block container is authored through the normal Flujo Add controls.",
+      "public_action": "Add Custom Hello, persist and reload the graph or scene, then start the owning PVController.",
+      "expected_result": "The same registered concrete block survives persistence and emits Hola desde un bloque personalizado through the normal structured runtime output.",
+      "invariants": [
+        "Print and Everything Flows continue through the same FlowOutputBlock execution contract.",
+        "The editor and executor contain no Custom-specific branch or dedicated control.",
+        "Stable block IDs, concrete script type, order, null positions, and schema 3 compatibility are preserved."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/runtime/flow_custom_block_test.tscn",
+        "tests/editor/flow_graph_editor_commands_test.gd"
+      ]
+    },
+    {
       "id": "FLUJO-BHV-RUNTIME-TIMER-001",
       "area": "Schema 3 Timer runtime",
       "precondition": "An enabled schema 3 Timer has a finite positive interval and its PVController is enabled in the SceneTree.",

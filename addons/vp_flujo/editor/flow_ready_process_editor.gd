@@ -74,8 +74,8 @@ func configure(commands: FlowGraphEditorCommands, controller: PVController, proc
 	var add_row: HBoxContainer = HBoxContainer.new()
 	add_row.name = &"AddBlockActions"
 	add_child(add_row)
-	_add_button(add_row, "Add Print", _on_add.bind(true))
-	_add_button(add_row, "Add Everything Flows", _on_add.bind(false))
+	for type_id: StringName in FlowBlockRegistry.creatable_type_ids():
+		_add_button(add_row, "Add " + FlowBlockRegistry.display_name_for_type(type_id), _on_add.bind(type_id))
 	if process is FlowProcess:
 		_add_button(add_row, "Add Call Method", _on_add_call)
 	var process_actions: VBoxContainer = VBoxContainer.new()
@@ -140,11 +140,13 @@ func _on_enabled(value: bool, block_id: String) -> void:
 		_commands.set_ready_property(_controller, _process_id, block_id, &"enabled", value)
 
 
-func _on_add(print_block: bool) -> void:
+func _on_add(type_id: StringName) -> void:
 	if _current():
-		_block_id = _commands.add_ready_block(_controller, _process_id, print_block)
+		_block_id = _commands.add_ready_block(_controller, _process_id, type_id)
+		if _block_id.is_empty():
+			return
 		block_selected.emit(_block_id)
-		focus_requested.emit(&"ReadyPrintText" if print_block else &"ReadyBlocksList", false)
+		focus_requested.emit(&"ReadyPrintText" if type_id == FlowBlockRegistry.PRINT else &"ReadyBlocksList", false)
 
 
 func _on_add_call() -> void:
@@ -292,11 +294,8 @@ func _on_method_target_selected(index: int, target: OptionButton, block_id: Stri
 func _block_display_name(block: FlowBlock) -> String:
 	if not block.display_name.strip_edges().is_empty():
 		return block.display_name
-	if block is FlowPrintBlock:
-		return "Print"
-	if block is FlowEverythingFlowsBlock:
-		return "Everything Flows"
-	return "Block"
+	var default_name: String = FlowBlockRegistry.default_display_name(block)
+	return default_name if not default_name.is_empty() else "Block"
 
 
 ## Creates a subtle contrast from the active editor theme without imposing a fixed palette.

@@ -230,7 +230,7 @@ func _test_block_name_compatibility() -> void:
 
 
 func _test_runtime_dependencies() -> void:
-	for path: String in ["res://addons/vp_flujo/runtime/pv_controller.gd", "res://addons/vp_flujo/runtime/flow_ready_executor.gd", "res://addons/vp_flujo/runtime/flow_timer_runtime.gd", "res://addons/vp_flujo/runtime/flow_runtime_output.gd", "res://addons/vp_flujo/runtime/model/flow_timer_definition.gd", "res://addons/vp_flujo/runtime/model/flow_print_block.gd", "res://addons/vp_flujo/runtime/model/flow_everything_flows_block.gd"]:
+	for path: String in ["res://addons/vp_flujo/runtime/pv_controller.gd", "res://addons/vp_flujo/runtime/flow_ready_executor.gd", "res://addons/vp_flujo/runtime/flow_timer_runtime.gd", "res://addons/vp_flujo/runtime/flow_runtime_output.gd", "res://addons/vp_flujo/runtime/model/flow_timer_definition.gd", "res://addons/vp_flujo/runtime/model/flow_output_block.gd", "res://addons/vp_flujo/runtime/model/flow_block_registry.gd", "res://addons/vp_flujo/runtime/model/flow_print_block.gd", "res://addons/vp_flujo/runtime/model/flow_everything_flows_block.gd", "res://addons/vp_flujo/runtime/model/flow_custom_hello_block.gd"]:
 		var source: String = FileAccess.get_file_as_string(path)
 		_check(not source.is_empty() and not source.contains("EditorInterface") and not source.contains("EditorPlugin") and not source.contains("addons/vp_flujo/editor/"), "Runtime dependency boundary: " + path)
 
