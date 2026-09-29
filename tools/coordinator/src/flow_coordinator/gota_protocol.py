@@ -1,4 +1,10 @@
-"""Machine-readable ``flujo.gota/v1`` protocol types and parser."""
+"""Machine-readable ``flujo.gota/v1`` protocol types and parser.
+
+The JSON Schemas enforce JSON-local structure, required fields, enums, and
+SHA formats. Python validation remains responsible for cross-field invariants
+such as ``request_id == run_id + ':' + attempt + ':' + phase`` because this
+contract does not use non-standard JSON Schema extensions.
+"""
 
 from __future__ import annotations
 
@@ -223,6 +229,10 @@ def _validate_request_id(
             GotaProtocolErrorCode.INVALID_REQUEST_ID,
             "request_id must equal run_id:attempt:phase",
         )
+
+
+def _reject_non_finite_json_constant(value: str) -> NoReturn:
+    raise ValueError(f"Non-finite JSON constant is not allowed: {value}")
 
 
 EnumValue = TypeVar("EnumValue", bound=StrEnum)
@@ -663,36 +673,46 @@ def parse_gota_output(output: str) -> GotaWorkerResult | GotaReviewResult:
 
     if not isinstance(output, str):
         _fail(GotaProtocolErrorCode.INVALID_PAYLOAD, "Output must be text")
-    begin_count = output.count(GOTA_RESULT_BEGIN)
-    end_count = output.count(GOTA_RESULT_END)
-    if begin_count == 0:
+    lines = output.splitlines()
+    begin_lines = [
+        index for index, line in enumerate(lines) if line == GOTA_RESULT_BEGIN
+    ]
+    end_lines = [index for index, line in enumerate(lines) if line == GOTA_RESULT_END]
+    if not begin_lines:
         _fail(
             GotaProtocolErrorCode.START_DELIMITER_MISSING,
             "Start delimiter was not found",
         )
-    if end_count == 0:
+    if not end_lines:
         _fail(
             GotaProtocolErrorCode.END_DELIMITER_MISSING,
             "End delimiter was not found",
         )
-    if begin_count != 1 or end_count != 1:
+    if len(begin_lines) != 1 or len(end_lines) != 1:
         _fail(
             GotaProtocolErrorCode.MULTIPLE_PAYLOADS,
             "Exactly one delimited payload is required",
         )
 
-    begin = output.index(GOTA_RESULT_BEGIN)
-    payload_start = begin + len(GOTA_RESULT_BEGIN)
-    end = output.index(GOTA_RESULT_END)
-    if end < payload_start:
+    begin = begin_lines[0]
+    end = end_lines[0]
+    if end < begin:
         _fail(
             GotaProtocolErrorCode.DELIMITER_ORDER_INVALID,
             "End delimiter must follow start delimiter",
         )
-    raw_payload = output[payload_start:end].strip()
+    raw_payload = "\n".join(lines[begin + 1 : end]).strip()
+    if not raw_payload:
+        _fail(
+            GotaProtocolErrorCode.INVALID_JSON,
+            "Delimited payload is empty",
+        )
     try:
-        decoded = json.loads(raw_payload)
-    except (json.JSONDecodeError, TypeError):
+        decoded = json.loads(
+            raw_payload,
+            parse_constant=_reject_non_finite_json_constant,
+        )
+    except (json.JSONDecodeError, TypeError, ValueError):
         _fail(
             GotaProtocolErrorCode.INVALID_JSON,
             "Delimited payload is not valid JSON",
@@ -704,14 +724,12 @@ def parse_gota_output(output: str) -> GotaWorkerResult | GotaReviewResult:
 
 # Short aliases keep the public terminology usable without duplicating types.
 Finding = GotaFinding
-Checkpoint = GotaCheckpoint
 Request = GotaRequest
 WorkerResult = GotaWorkerResult
 ReviewResult = GotaReviewResult
 
 
 __all__ = [
-    "Checkpoint",
     "Finding",
     "GotaCheckpoint",
     "GotaFinding",

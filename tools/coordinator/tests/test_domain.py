@@ -72,15 +72,41 @@ class DomainStateMachineTest(unittest.TestCase):
             for path in sorted(schema_directory.glob("*.schema.json"))
         ]
         identifiers = [schema["$id"] for schema in schemas]
+        self.assertEqual(len(schemas), 7)
         self.assertEqual(len(identifiers), len(set(identifiers)))
         self.assertTrue(all(identifier.endswith("/v1") for identifier in identifiers))
-        self.assertTrue(
+        self.assertEqual(
+            set(identifiers),
             {
+                "flow.coordinator/checkpoint/v1",
+                "flow.coordinator/context/v1",
+                "flow.coordinator/evidence/v1",
+                "flow.coordinator/task-spec/v1",
                 "flujo.gota/request/v1",
                 "flujo.gota/worker-result/v1",
                 "flujo.gota/review-result/v1",
-            }.issubset(identifiers)
+            },
         )
+
+    def test_task_spec_schema_rejects_blank_required_python_fields(self) -> None:
+        schema_directory = Path(__file__).resolve().parents[1] / "schemas"
+        schema = json.loads(
+            (schema_directory / "task_spec.schema.json").read_text(encoding="utf-8")
+        )
+        for field in (
+            "task_id",
+            "title",
+            "objective",
+            "project_id",
+            "repository_id",
+            "branch",
+            "base_sha",
+            "context_id",
+            "commit_message",
+        ):
+            with self.subTest(field=field):
+                self.assertEqual(schema["properties"][field]["minLength"], 1)
+                self.assertEqual(schema["properties"][field]["pattern"], r"\S")
 
     def test_coordinator_package_has_no_godot_or_plugin_dependency(self) -> None:
         source_directory = Path(__file__).resolve().parents[1] / "src/flow_coordinator"

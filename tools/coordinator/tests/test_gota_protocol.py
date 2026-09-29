@@ -3,8 +3,10 @@ from __future__ import annotations
 import copy
 import json
 import unittest
+from pathlib import Path
 from typing import Any
 
+import flow_coordinator.gota_protocol as gota_protocol
 from flow_coordinator.gota_protocol import (
     GOTA_PROTOCOL,
     GOTA_RESULT_BEGIN,
@@ -22,11 +24,11 @@ from flow_coordinator.gota_protocol import (
 
 class GotaProtocolTest(unittest.TestCase):
     run_id = "run-42"
-    commit_sha = "a" * 40
+    commit_sha = "0123456789abcdef0123456789abcdef01234567"
 
     def _request(self, *, phase: str = "worker") -> dict[str, Any]:
         return {
-            "protocol": GOTA_PROTOCOL,
+            "protocol": "flujo.gota/v1",
             "request_id": f"{self.run_id}:1:{phase}",
             "task_id": "task-42",
             "run_id": self.run_id,
@@ -43,7 +45,7 @@ class GotaProtocolTest(unittest.TestCase):
 
     def _worker_result(self) -> dict[str, Any]:
         return {
-            "protocol": GOTA_PROTOCOL,
+            "protocol": "flujo.gota/v1",
             "message": "worker.result",
             "request_id": f"{self.run_id}:1:worker",
             "task_id": "task-42",
@@ -66,7 +68,7 @@ class GotaProtocolTest(unittest.TestCase):
         findings: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         return {
-            "protocol": GOTA_PROTOCOL,
+            "protocol": "flujo.gota/v1",
             "message": "review.result",
             "request_id": f"{self.run_id}:1:review",
             "task_id": "task-42",
@@ -81,11 +83,15 @@ class GotaProtocolTest(unittest.TestCase):
     def _output(self, payload: dict[str, Any]) -> str:
         return (
             "operational preface\n"
-            f"{GOTA_RESULT_BEGIN}\n"
+            "FLUJO_GOTA_RESULT_V1_BEGIN\n"
             f"{json.dumps(payload, sort_keys=True)}\n"
-            f"{GOTA_RESULT_END}\n"
+            "FLUJO_GOTA_RESULT_V1_END\n"
             "operational suffix"
         )
+
+    def _schema(self, name: str) -> dict[str, Any]:
+        schema_path = Path(__file__).resolve().parents[1] / "schemas" / name
+        return json.loads(schema_path.read_text(encoding="utf-8"))
 
     def _assert_code(
         self,
@@ -178,6 +184,51 @@ class GotaProtocolTest(unittest.TestCase):
             lambda: parse_gota_output(output),
         )
 
+    def test_non_finite_nan_is_rejected(self) -> None:
+        payload = self._worker_result()
+        raw_payload = json.dumps(payload, sort_keys=True).replace(
+            ": true", ": NaN", 1
+        )
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_JSON,
+            lambda: parse_gota_output(
+                "FLUJO_GOTA_RESULT_V1_BEGIN\n"
+                + raw_payload
+                + "\nFLUJO_GOTA_RESULT_V1_END"
+            ),
+        )
+
+    def test_non_finite_infinity_is_rejected(self) -> None:
+        payload = self._worker_result()
+        raw_payload = json.dumps(payload, sort_keys=True).replace(
+            ": true", ": Infinity", 1
+        )
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_JSON,
+            lambda: parse_gota_output(
+                "FLUJO_GOTA_RESULT_V1_BEGIN\n"
+                + raw_payload
+                + "\nFLUJO_GOTA_RESULT_V1_END"
+            ),
+        )
+
+    def test_non_finite_negative_infinity_is_rejected(self) -> None:
+        payload = self._worker_result()
+        raw_payload = json.dumps(payload, sort_keys=True).replace(
+            ": true", ": -Infinity", 1
+        )
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_JSON,
+            lambda: parse_gota_output(
+                "FLUJO_GOTA_RESULT_V1_BEGIN\n"
+                + raw_payload
+                + "\nFLUJO_GOTA_RESULT_V1_END"
+            ),
+        )
+
     def test_missing_start_delimiter_is_rejected(self) -> None:
         output = f"{{}}\n{GOTA_RESULT_END}"
 
@@ -202,6 +253,32 @@ class GotaProtocolTest(unittest.TestCase):
             lambda: parse_gota_output(output),
         )
 
+    def test_empty_payload_is_rejected(self) -> None:
+        output = "FLUJO_GOTA_RESULT_V1_BEGIN\n\nFLUJO_GOTA_RESULT_V1_END"
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_JSON,
+            lambda: parse_gota_output(output),
+        )
+
+    def test_delimiters_must_be_exact_lines(self) -> None:
+        payload = json.dumps(self._worker_result(), sort_keys=True)
+        output = (
+            "prefix FLUJO_GOTA_RESULT_V1_BEGIN\n"
+            + payload
+            + "\nFLUJO_GOTA_RESULT_V1_END suffix"
+        )
+
+        self._assert_code(
+            GotaProtocolErrorCode.START_DELIMITER_MISSING,
+            lambda: parse_gota_output(output),
+        )
+
+    def test_delimiter_constants_have_the_literal_protocol_values(self) -> None:
+        self.assertEqual(GOTA_PROTOCOL, "flujo.gota/v1")
+        self.assertEqual(GOTA_RESULT_BEGIN, "FLUJO_GOTA_RESULT_V1_BEGIN")
+        self.assertEqual(GOTA_RESULT_END, "FLUJO_GOTA_RESULT_V1_END")
+
     def test_protocol_is_checked(self) -> None:
         payload = self._worker_result()
         payload["protocol"] = "unknown/v1"
@@ -222,10 +299,21 @@ class GotaProtocolTest(unittest.TestCase):
             lambda: GotaRequest.from_payload(payload),
         )
 
+    def test_request_id_must_match_attempt(self) -> None:
+        from flow_coordinator import GotaRequest
+
+        payload = self._request()
+        payload["attempt"] = 2
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_REQUEST_ID,
+            lambda: GotaRequest.from_payload(payload),
+        )
+
     def test_attempt_must_be_positive_integer(self) -> None:
         from flow_coordinator import GotaRequest
 
-        for attempt in (0, -1, True):
+        for attempt in (0, -1, True, 1.0, "1"):
             with self.subTest(attempt=attempt):
                 payload = self._request()
                 payload["attempt"] = attempt
@@ -253,6 +341,52 @@ class GotaProtocolTest(unittest.TestCase):
             GotaProtocolErrorCode.INVALID_SHA,
             lambda: parse_gota_output(self._output(payload)),
         )
+
+    def test_request_base_sha_format_is_checked(self) -> None:
+        from flow_coordinator import GotaRequest
+
+        for base_sha in (
+            "0123456789abcdef0123456789abcdef0123456",
+            "0123456789abcdef0123456789abcdef0123456g",
+            "0123456789ABCDEF0123456789ABCDEF01234567",
+        ):
+            with self.subTest(base_sha=base_sha):
+                payload = self._request()
+                payload["base_sha"] = base_sha
+                self._assert_code(
+                    GotaProtocolErrorCode.INVALID_SHA,
+                    lambda payload=payload: GotaRequest.from_payload(payload),
+                )
+
+    def test_reviewed_commit_sha_format_is_checked(self) -> None:
+        payload = self._review_result()
+        payload["reviewed_commit_sha"] = (
+            "0123456789abcdef0123456789abcdef0123456g"
+        )
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_SHA,
+            lambda: parse_gota_output(self._output(payload)),
+        )
+
+    def test_required_strings_reject_whitespace_only_values(self) -> None:
+        from flow_coordinator import GotaRequest
+
+        for field in (
+            "request_id",
+            "task_id",
+            "run_id",
+            "objective",
+            "workspace",
+            "branch",
+        ):
+            with self.subTest(field=field):
+                payload = self._request()
+                payload[field] = "   "
+                self._assert_code(
+                    GotaProtocolErrorCode.INVALID_FIELD,
+                    lambda payload=payload: GotaRequest.from_payload(payload),
+                )
 
     def test_unknown_decision_is_rejected(self) -> None:
         payload = self._review_result(decision="RETRY_LATER")
@@ -288,6 +422,108 @@ class GotaProtocolTest(unittest.TestCase):
             GotaProtocolErrorCode.MISSING_FIELD,
             lambda: parse_gota_output(self._output(payload)),
         )
+
+    def test_checkpoint_names_do_not_alias_the_persistent_checkpoint(self) -> None:
+        from flow_coordinator import Checkpoint, GotaCheckpoint
+        from flow_coordinator.domain import Checkpoint as PersistentCheckpoint
+
+        self.assertIs(Checkpoint, PersistentCheckpoint)
+        self.assertIsNot(Checkpoint, GotaCheckpoint)
+        self.assertFalse(hasattr(gota_protocol, "Checkpoint"))
+
+    def test_gota_schemas_match_the_python_field_contract(self) -> None:
+        request = self._schema("gota_request.schema.json")
+        worker = self._schema("worker_result.schema.json")
+        review = self._schema("review_result.schema.json")
+
+        self.assertEqual(
+            set(request["required"]),
+            {
+                "protocol",
+                "request_id",
+                "task_id",
+                "run_id",
+                "attempt",
+                "phase",
+                "objective",
+                "acceptance_criteria",
+                "workspace",
+                "branch",
+                "base_sha",
+                "allowed_paths",
+                "protected_paths",
+            },
+        )
+        self.assertEqual(
+            set(worker["required"]),
+            {
+                "protocol",
+                "message",
+                "request_id",
+                "task_id",
+                "run_id",
+                "attempt",
+                "result",
+                "commit_sha",
+                "changed_paths",
+                "evidence",
+                "checkpoint",
+            },
+        )
+        self.assertEqual(
+            set(review["required"]),
+            {
+                "protocol",
+                "message",
+                "request_id",
+                "task_id",
+                "run_id",
+                "attempt",
+                "reviewed_commit_sha",
+                "decision",
+                "findings",
+                "evidence",
+            },
+        )
+
+        self.assertEqual(request["properties"]["protocol"]["const"], "flujo.gota/v1")
+        self.assertEqual(request["properties"]["phase"]["enum"], ["worker", "review"])
+        self.assertEqual(worker["properties"]["message"]["const"], "worker.result")
+        self.assertEqual(worker["properties"]["result"]["const"], "READY_FOR_REVIEW")
+        self.assertEqual(review["properties"]["message"]["const"], "review.result")
+        self.assertEqual(
+            review["properties"]["decision"]["enum"],
+            ["PASSED", "CORRECTION_REQUIRED", "HUMAN_REVIEW_REQUIRED", "BLOCKED"],
+        )
+
+        for schema in (request, worker, review):
+            self.assertEqual(schema["properties"]["attempt"]["type"], "integer")
+            self.assertEqual(schema["properties"]["attempt"]["minimum"], 1)
+            self.assertIn("request_id", schema["$comment"])
+            self.assertIn("non-standard JSON Schema", schema["$comment"])
+
+        for schema, field in (
+            (request, "base_sha"),
+            (worker, "commit_sha"),
+            (review, "reviewed_commit_sha"),
+        ):
+            self.assertEqual(
+                schema["properties"][field]["pattern"],
+                "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+            )
+
+        for schema, fields in (
+            (
+                request,
+                ("request_id", "task_id", "run_id", "objective", "workspace", "branch"),
+            ),
+            (worker, ("request_id", "task_id", "run_id")),
+            (review, ("request_id", "task_id", "run_id")),
+        ):
+            for field in fields:
+                with self.subTest(schema=schema["$id"], field=field):
+                    self.assertEqual(schema["properties"][field]["minLength"], 1)
+                    self.assertEqual(schema["properties"][field]["pattern"], r"\S")
 
     def test_free_text_around_payload_does_not_change_result(self) -> None:
         payload = self._worker_result()

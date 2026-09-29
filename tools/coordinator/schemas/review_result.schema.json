@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "flujo.gota/review-result/v1",
   "title": "Flujo Gota Review Result v1",
+  "$comment": "This schema covers JSON-local structure, required fields, enums, and SHA formats. Python validation additionally enforces request_id == run_id + ':' + attempt + ':review'; no non-standard JSON Schema extension is used.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -19,9 +20,9 @@
   "properties": {
     "protocol": {"const": "flujo.gota/v1"},
     "message": {"const": "review.result"},
-    "request_id": {"type": "string", "minLength": 1},
-    "task_id": {"type": "string", "minLength": 1},
-    "run_id": {"type": "string", "minLength": 1},
+    "request_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "task_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "run_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
     "attempt": {"type": "integer", "minimum": 1},
     "reviewed_commit_sha": {
       "type": "string",
@@ -50,11 +51,11 @@
       "additionalProperties": false,
       "required": ["id", "severity", "description"],
       "properties": {
-        "id": {"type": "string", "minLength": 1},
-        "severity": {"type": "string", "minLength": 1},
-        "path": {"type": "string", "minLength": 1},
-        "description": {"type": "string", "minLength": 1},
-        "required_change": {"type": "string", "minLength": 1}
+        "id": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "severity": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "path": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "description": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "required_change": {"type": "string", "minLength": 1, "pattern": "\\S"}
       }
     }
   }
