@@ -20,18 +20,18 @@
     "commit_message"
   ],
   "properties": {
-    "task_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
-    "title": {"type": "string", "minLength": 1, "pattern": "\\S"},
-    "objective": {"type": "string", "minLength": 1, "pattern": "\\S"},
-    "project_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
-    "repository_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
-    "branch": {"type": "string", "minLength": 1, "pattern": "\\S"},
-    "base_sha": {"type": "string", "minLength": 1, "pattern": "\\S"},
-    "context_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "task_id": {"type": "string", "minLength": 1},
+    "title": {"type": "string", "minLength": 1},
+    "objective": {"type": "string", "minLength": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "repository_id": {"type": "string", "minLength": 1},
+    "branch": {"type": "string", "minLength": 1},
+    "base_sha": {"type": "string", "minLength": 1},
+    "context_id": {"type": "string", "minLength": 1},
     "allowed_paths": {"type": "array", "items": {"type": "string"}},
     "protected_paths": {"type": "array", "items": {"type": "string"}},
     "required_resources": {"type": "array", "items": {"type": "string"}},
     "acceptance_criteria": {"type": "array", "items": {"type": "string"}},
-    "commit_message": {"type": "string", "minLength": 1, "pattern": "\\S"}
+    "commit_message": {"type": "string", "minLength": 1}
   }
 }

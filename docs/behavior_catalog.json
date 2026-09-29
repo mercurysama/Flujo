@@ -335,9 +335,11 @@
       "area": "flujo.gota/v1 protocol parsing",
       "precondition": "A coordinator result contains one candidate Gota payload and may contain operational text around it.",
       "public_action": "Parse the coordinator output through parse_gota_output().",
-      "expected_result": "Exactly one complete, line-delimited Gota result is accepted as strict JSON and validated against its protocol model; malformed, ambiguous, or non-finite payloads are rejected deterministically.",
+      "expected_result": "Exactly one complete, line-delimited Gota result is accepted as strict JSON and validated against its protocol model; malformed, ambiguous, duplicate-key, non-finite, overflow, or framing-invalid payloads are rejected deterministically.",
       "invariants": [
         "Delimiter tokens are recognized only as complete lines.",
+        "The JSON text between delimiters has no blank framing line or leading/trailing framing whitespace; free text remains allowed before BEGIN and after END.",
+        "Every JSON object rejects duplicate keys instead of applying last-value-wins semantics.",
         "The historical flow_coordinator.Checkpoint remains distinct from GotaCheckpoint.",
         "Cross-field request_id semantics remain owned by Python validation because standard JSON Schema cannot express them portably."
       ],

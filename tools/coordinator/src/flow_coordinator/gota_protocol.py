@@ -9,6 +9,7 @@ contract does not use non-standard JSON Schema extensions.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Mapping, NoReturn, TypeVar
@@ -111,12 +112,26 @@ def _non_empty_string(value: Any, field: str) -> str:
 
 
 def _attempt(value: Any) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+    if isinstance(value, bool):
         _fail(
             GotaProtocolErrorCode.INVALID_ATTEMPT,
             "Field 'attempt' must be a positive integer",
         )
-    return value
+    if isinstance(value, int):
+        normalized = value
+    elif isinstance(value, float) and math.isfinite(value) and value.is_integer():
+        normalized = int(value)
+    else:
+        _fail(
+            GotaProtocolErrorCode.INVALID_ATTEMPT,
+            "Field 'attempt' must be a positive integer",
+        )
+    if normalized < 1:
+        _fail(
+            GotaProtocolErrorCode.INVALID_ATTEMPT,
+            "Field 'attempt' must be a positive integer",
+        )
+    return normalized
 
 
 def _phase(value: Any) -> GotaPhase:
@@ -232,7 +247,34 @@ def _validate_request_id(
 
 
 def _reject_non_finite_json_constant(value: str) -> NoReturn:
-    raise ValueError(f"Non-finite JSON constant is not allowed: {value}")
+    _fail(
+        GotaProtocolErrorCode.INVALID_JSON,
+        f"Non-finite JSON constant is not allowed: {value}",
+    )
+
+
+def _parse_finite_json_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        _fail(
+            GotaProtocolErrorCode.INVALID_JSON,
+            f"JSON number is not finite: {value}",
+        )
+    return parsed
+
+
+def _reject_duplicate_json_keys(
+    pairs: list[tuple[str, Any]],
+) -> dict[str, Any]:
+    object_value: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in object_value:
+            _fail(
+                GotaProtocolErrorCode.INVALID_JSON,
+                f"Duplicate JSON object key: {key}",
+            )
+        object_value[key] = value
+    return object_value
 
 
 EnumValue = TypeVar("EnumValue", bound=StrEnum)
@@ -701,17 +743,26 @@ def parse_gota_output(output: str) -> GotaWorkerResult | GotaReviewResult:
             GotaProtocolErrorCode.DELIMITER_ORDER_INVALID,
             "End delimiter must follow start delimiter",
         )
-    raw_payload = "\n".join(lines[begin + 1 : end]).strip()
+    raw_payload = "\n".join(lines[begin + 1 : end])
     if not raw_payload:
         _fail(
             GotaProtocolErrorCode.INVALID_JSON,
             "Delimited payload is empty",
         )
+    if raw_payload[0].isspace() or raw_payload[-1].isspace():
+        _fail(
+            GotaProtocolErrorCode.INVALID_JSON,
+            "Delimited payload must not have leading or trailing whitespace",
+        )
     try:
         decoded = json.loads(
             raw_payload,
             parse_constant=_reject_non_finite_json_constant,
+            parse_float=_parse_finite_json_float,
+            object_pairs_hook=_reject_duplicate_json_keys,
         )
+    except GotaProtocolError:
+        raise
     except (json.JSONDecodeError, TypeError, ValueError):
         _fail(
             GotaProtocolErrorCode.INVALID_JSON,

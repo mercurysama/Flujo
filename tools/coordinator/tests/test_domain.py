@@ -88,7 +88,7 @@ class DomainStateMachineTest(unittest.TestCase):
             },
         )
 
-    def test_task_spec_schema_rejects_blank_required_python_fields(self) -> None:
+    def test_task_spec_schema_preserves_historical_required_field_lengths(self) -> None:
         schema_directory = Path(__file__).resolve().parents[1] / "schemas"
         schema = json.loads(
             (schema_directory / "task_spec.schema.json").read_text(encoding="utf-8")
@@ -106,7 +106,7 @@ class DomainStateMachineTest(unittest.TestCase):
         ):
             with self.subTest(field=field):
                 self.assertEqual(schema["properties"][field]["minLength"], 1)
-                self.assertEqual(schema["properties"][field]["pattern"], r"\S")
+                self.assertNotIn("pattern", schema["properties"][field])
 
     def test_coordinator_package_has_no_godot_or_plugin_dependency(self) -> None:
         source_directory = Path(__file__).resolve().parents[1] / "src/flow_coordinator"

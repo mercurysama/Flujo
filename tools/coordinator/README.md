@@ -8,16 +8,20 @@ dependency on Godot or the Flujo plugin.
 
 Gota result framing recognizes `FLUJO_GOTA_RESULT_V1_BEGIN` and
 `FLUJO_GOTA_RESULT_V1_END` only when each token is the complete content of a
-line. One complete payload may have free text before and after it. The Python
-parser accepts only strict JSON and rejects non-finite constants such as
-`NaN`, `Infinity`, and `-Infinity`.
+line. One complete payload may have free text before and after it. The content
+between the delimiters is the JSON text itself: blank framing lines and
+leading or trailing whitespace around that text are invalid. The Python parser
+accepts only strict JSON, rejects duplicate keys at every object depth, and rejects
+`NaN`, `Infinity`, `-Infinity`, and numeric overflow such as `1e9999`.
 
 The versioned JSON Schemas validate JSON-local structure: required fields,
-non-blank strings, integer attempts, SHA formats, and protocol enums. The
-Python protocol models own semantic invariants that standard JSON Schema
-cannot express portably, including the relationship between `request_id`,
-`run_id`, `attempt`, and `phase`. No non-standard schema extension or new
-validation dependency is used for that boundary.
+non-blank strings, positive attempts, SHA formats, and protocol enums. Under
+JSON Schema Draft 2020-12, mathematically integral numbers such as `1.0`
+satisfy the `integer` type; Python normalizes those attempts to `int` before
+checking `request_id == run_id + ':' + attempt + ':' + phase`. The protocol
+models own that cross-field invariant because standard JSON Schema cannot
+express it portably. Schema tests use the optional `test` dependency
+`jsonschema`; it is not a runtime dependency.
 
 `flow_coordinator.Checkpoint` remains the historical persistent checkpoint.
 The Gota protocol type is available only as the explicit `GotaCheckpoint`

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "flujo.gota/request/v1",
   "title": "Flujo Gota Request v1",
-  "$comment": "This schema covers JSON-local structure, required fields, enums, and SHA formats. Python validation additionally enforces request_id == run_id + ':' + attempt + ':' + phase; no non-standard JSON Schema extension is used.",
+  "$comment": "This Draft 2020-12 schema covers JSON-local structure, required fields, enums, and SHA formats. Its integer type accepts mathematically integral numbers such as 1.0. Python validation additionally normalizes attempt to int and enforces request_id == run_id + ':' + attempt + ':' + phase; no non-standard JSON Schema extension is used.",
   "type": "object",
   "additionalProperties": false,
   "required": [
