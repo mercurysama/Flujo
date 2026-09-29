@@ -28,6 +28,8 @@
     "result": {"const": "READY_FOR_REVIEW"},
     "commit_sha": {
       "type": "string",
+      "minLength": 40,
+      "maxLength": 40,
       "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
     },
     "changed_paths": {

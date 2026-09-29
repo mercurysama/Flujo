@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import unittest
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,7 @@ from flow_coordinator.gota_protocol import (
     ReviewDecision,
     WorkerResultStatus,
     parse_gota_output,
+    parse_gota_payload,
 )
 
 
@@ -260,6 +262,43 @@ class GotaProtocolTest(unittest.TestCase):
             ),
         )
 
+    def test_payload_rejects_nested_nan_in_evidence(self) -> None:
+        payload = self._worker_result()
+        payload["evidence"] = [{"details": {"values": [float("nan")]}}]
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_PAYLOAD,
+            lambda: parse_gota_payload(payload),
+        )
+
+    def test_payload_rejects_nested_infinity_in_evidence(self) -> None:
+        payload = self._worker_result()
+        payload["evidence"] = [{"details": {"values": [float("inf")]}}]
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_PAYLOAD,
+            lambda: parse_gota_payload(payload),
+        )
+
+    def test_payload_rejects_nested_negative_infinity_in_evidence(self) -> None:
+        payload = self._worker_result()
+        payload["evidence"] = [{"details": {"values": [float("-inf")]}}]
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_PAYLOAD,
+            lambda: parse_gota_payload(payload),
+        )
+
+    def test_payload_rejects_unsupported_nested_python_value(self) -> None:
+        payload = self._worker_result()
+        payload["evidence"] = [{"details": {"unsupported": object()}}]
+
+        with self.assertRaises(GotaProtocolError) as raised:
+            parse_gota_payload(payload)
+
+        self.assertEqual(raised.exception.code, GotaProtocolErrorCode.INVALID_PAYLOAD)
+        self.assertIn("evidence[0].details.unsupported", raised.exception.detail)
+
     def test_numeric_overflow_is_rejected_as_invalid_json(self) -> None:
         raw_payload = json.dumps(self._worker_result(), sort_keys=True).replace(
             '"attempt": 1', '"attempt": 1e9999', 1
@@ -291,6 +330,66 @@ class GotaProtocolTest(unittest.TestCase):
 
         self._assert_code(
             GotaProtocolErrorCode.MULTIPLE_PAYLOADS,
+            lambda: parse_gota_output(output),
+        )
+
+    def test_lf_framing_is_valid(self) -> None:
+        result = parse_gota_output(self._output(self._worker_result()))
+
+        self.assertIsInstance(result, GotaWorkerResult)
+
+    def test_crlf_framing_is_valid(self) -> None:
+        result = parse_gota_output(
+            self._output(self._worker_result()).replace("\n", "\r\n")
+        )
+
+        self.assertIsInstance(result, GotaWorkerResult)
+
+    def test_isolated_cr_framing_is_rejected(self) -> None:
+        output = "prefix\r" + self._output(self._worker_result())
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_FRAMING,
+            lambda: parse_gota_output(output),
+        )
+
+    def test_vertical_tab_framing_is_rejected(self) -> None:
+        output = "prefix\v" + self._output(self._worker_result())
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_FRAMING,
+            lambda: parse_gota_output(output),
+        )
+
+    def test_form_feed_framing_is_rejected(self) -> None:
+        output = "prefix\f" + self._output(self._worker_result())
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_FRAMING,
+            lambda: parse_gota_output(output),
+        )
+
+    def test_file_separator_framing_is_rejected(self) -> None:
+        output = "prefix\x1c" + self._output(self._worker_result())
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_FRAMING,
+            lambda: parse_gota_output(output),
+        )
+
+    def test_line_separator_framing_is_rejected(self) -> None:
+        output = "prefix\u2028" + self._output(self._worker_result())
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_FRAMING,
+            lambda: parse_gota_output(output),
+        )
+
+    def test_paragraph_separator_framing_is_rejected(self) -> None:
+        output = "prefix\u2029" + self._output(self._worker_result())
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_FRAMING,
             lambda: parse_gota_output(output),
         )
 
@@ -378,8 +477,10 @@ class GotaProtocolTest(unittest.TestCase):
     def test_attempt_one_point_zero_is_valid_normalized_and_coherent(self) -> None:
         from flow_coordinator import GotaRequest
 
-        payload = self._request()
-        payload["attempt"] = 1.0
+        raw_payload = json.dumps(
+            {**self._request(), "attempt": 1.0}, sort_keys=True
+        )
+        payload = json.loads(raw_payload, parse_float=Decimal)
 
         request = GotaRequest.from_payload(payload)
 
@@ -387,6 +488,59 @@ class GotaProtocolTest(unittest.TestCase):
         self.assertIs(type(request.attempt), int)
         self.assertEqual(request.request_id, "run-42:1:worker")
         self.assertEqual(request.to_payload()["attempt"], 1)
+
+    def test_direct_python_float_attempt_is_rejected(self) -> None:
+        from flow_coordinator import GotaRequest
+
+        payload = self._request()
+        payload["attempt"] = 1.0
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_ATTEMPT,
+            lambda: GotaRequest.from_payload(payload),
+        )
+
+    def test_exact_json_attempt_that_rounds_to_one_is_rejected(self) -> None:
+        raw_payload = json.dumps(self._worker_result(), sort_keys=True).replace(
+            '"attempt": 1', '"attempt": 1.0000000000000001', 1
+        )
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_ATTEMPT,
+            lambda: parse_gota_output(self._framed(raw_payload)),
+        )
+
+    def test_exact_json_attempt_that_rounds_to_two_is_rejected(self) -> None:
+        raw_payload = json.dumps(self._worker_result(), sort_keys=True).replace(
+            '"attempt": 1', '"attempt": 1.9999999999999999', 1
+        )
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_ATTEMPT,
+            lambda: parse_gota_output(self._framed(raw_payload)),
+        )
+
+    def test_fractional_attempt_is_rejected(self) -> None:
+        raw_payload = json.dumps(self._worker_result(), sort_keys=True).replace(
+            '"attempt": 1', '"attempt": 1.5', 1
+        )
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_ATTEMPT,
+            lambda: parse_gota_output(self._framed(raw_payload)),
+        )
+
+    def test_request_id_is_checked_after_attempt_normalization(self) -> None:
+        from flow_coordinator import GotaRequest
+
+        payload = self._request()
+        payload["attempt"] = Decimal("1.0")
+        payload["request_id"] = "run-42:1.0:worker"
+
+        self._assert_code(
+            GotaProtocolErrorCode.INVALID_REQUEST_ID,
+            lambda: GotaRequest.from_payload(payload),
+        )
 
     def test_result_attempt_one_point_zero_is_normalized_after_json_parsing(self) -> None:
         raw_payload = json.dumps(self._worker_result(), sort_keys=True).replace(
@@ -601,6 +755,8 @@ class GotaProtocolTest(unittest.TestCase):
                 schema["properties"][field]["pattern"],
                 "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
             )
+            self.assertEqual(schema["properties"][field]["minLength"], 40)
+            self.assertEqual(schema["properties"][field]["maxLength"], 40)
 
         for schema, fields in (
             (
@@ -663,6 +819,50 @@ class GotaProtocolTest(unittest.TestCase):
             with self.subTest(schema=schema_name):
                 with self.assertRaises(ValidationError):
                     self._schema_validator(schema_name).validate(instance)
+
+    def test_gota_schemas_reject_exact_fractional_attempts(self) -> None:
+        instances = (
+            ("gota_request.schema.json", self._request()),
+            ("worker_result.schema.json", self._worker_result()),
+            ("review_result.schema.json", self._review_result()),
+        )
+
+        for schema_name, instance in instances:
+            validator = self._schema_validator(schema_name)
+            for attempt in (
+                Decimal("1.0000000000000001"),
+                Decimal("1.9999999999999999"),
+                Decimal("1.5"),
+            ):
+                with self.subTest(schema=schema_name, attempt=str(attempt)):
+                    invalid_instance = {**instance, "attempt": attempt}
+                    with self.assertRaises(ValidationError):
+                        validator.validate(invalid_instance)
+
+    def test_gota_schemas_reject_sha_boundary_variants(self) -> None:
+        instances = (
+            ("gota_request.schema.json", self._request(), "base_sha"),
+            ("worker_result.schema.json", self._worker_result(), "commit_sha"),
+            (
+                "review_result.schema.json",
+                self._review_result(),
+                "reviewed_commit_sha",
+            ),
+        )
+
+        for schema_name, instance, field in instances:
+            validator = self._schema_validator(schema_name)
+            with self.subTest(schema=schema_name, case="exactly 40"):
+                validator.validate(instance)
+            for label, value in (
+                ("trailing newline", self.commit_sha + "\n"),
+                ("short", self.commit_sha[:-1]),
+                ("long", self.commit_sha + "0"),
+            ):
+                with self.subTest(schema=schema_name, case=label):
+                    invalid_instance = {**instance, field: value}
+                    with self.assertRaises(ValidationError):
+                        validator.validate(invalid_instance)
 
     def test_free_text_around_payload_does_not_change_result(self) -> None:
         payload = self._worker_result()

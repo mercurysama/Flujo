@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from typing import Any, Mapping, NoReturn, TypeVar
 
@@ -18,6 +19,16 @@ from typing import Any, Mapping, NoReturn, TypeVar
 GOTA_PROTOCOL = "flujo.gota/v1"
 GOTA_RESULT_BEGIN = "FLUJO_GOTA_RESULT_V1_BEGIN"
 GOTA_RESULT_END = "FLUJO_GOTA_RESULT_V1_END"
+_INVALID_FRAMING_SEPARATORS = (
+    "\v",
+    "\f",
+    "\x1c",
+    "\x1d",
+    "\x1e",
+    "\x85",
+    "\u2028",
+    "\u2029",
+)
 
 
 class GotaPhase(StrEnum):
@@ -46,6 +57,7 @@ class GotaProtocolErrorCode(StrEnum):
     END_DELIMITER_MISSING = "END_DELIMITER_MISSING"
     MULTIPLE_PAYLOADS = "MULTIPLE_PAYLOADS"
     DELIMITER_ORDER_INVALID = "DELIMITER_ORDER_INVALID"
+    INVALID_FRAMING = "INVALID_FRAMING"
     INVALID_JSON = "INVALID_JSON"
     INVALID_PAYLOAD = "INVALID_PAYLOAD"
     MISSING_FIELD = "MISSING_FIELD"
@@ -119,7 +131,12 @@ def _attempt(value: Any) -> int:
         )
     if isinstance(value, int):
         normalized = value
-    elif isinstance(value, float) and math.isfinite(value) and value.is_integer():
+    elif isinstance(value, Decimal):
+        if not _decimal_is_finite(value) or value != value.to_integral_value():
+            _fail(
+                GotaProtocolErrorCode.INVALID_ATTEMPT,
+                "Field 'attempt' must be a positive integer",
+            )
         normalized = int(value)
     else:
         _fail(
@@ -170,15 +187,15 @@ def _message(value: Any, expected: GotaMessage) -> str:
 
 
 def _sha(value: Any, field: str) -> str:
-    if not isinstance(value, str) or len(value) not in (40, 64):
+    if not isinstance(value, str) or len(value) != 40:
         _fail(
             GotaProtocolErrorCode.INVALID_SHA,
-            f"Field '{field}' must contain a 40- or 64-character hexadecimal SHA",
+            f"Field '{field}' must contain a 40-character hexadecimal SHA",
         )
     if any(character not in "0123456789abcdef" for character in value):
         _fail(
             GotaProtocolErrorCode.INVALID_SHA,
-            f"Field '{field}' must contain a 40- or 64-character hexadecimal SHA",
+            f"Field '{field}' must contain a 40-character hexadecimal SHA",
         )
     return value
 
@@ -253,9 +270,24 @@ def _reject_non_finite_json_constant(value: str) -> NoReturn:
     )
 
 
-def _parse_finite_json_float(value: str) -> float:
-    parsed = float(value)
-    if not math.isfinite(parsed):
+def _decimal_is_finite(value: Decimal) -> bool:
+    if not value.is_finite():
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (OverflowError, ValueError):
+        return False
+
+
+def _parse_finite_json_float(value: str) -> Decimal:
+    try:
+        parsed = Decimal(value)
+    except InvalidOperation:
+        _fail(
+            GotaProtocolErrorCode.INVALID_JSON,
+            f"Invalid JSON number: {value}",
+        )
+    if not _decimal_is_finite(parsed):
         _fail(
             GotaProtocolErrorCode.INVALID_JSON,
             f"JSON number is not finite: {value}",
@@ -275,6 +307,80 @@ def _reject_duplicate_json_keys(
             )
         object_value[key] = value
     return object_value
+
+
+def _validate_json_domain(
+    value: Any,
+    path: str = "$",
+    active_containers: set[int] | None = None,
+) -> None:
+    """Reject non-JSON values before protocol-specific field validation."""
+
+    if value is None or isinstance(value, (str, bool, int)):
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            _fail(
+                GotaProtocolErrorCode.INVALID_PAYLOAD,
+                f"Non-finite JSON number at {path}",
+            )
+        return
+    if isinstance(value, Decimal):
+        if not _decimal_is_finite(value):
+            _fail(
+                GotaProtocolErrorCode.INVALID_PAYLOAD,
+                f"Non-finite JSON number at {path}",
+            )
+        return
+
+    if active_containers is None:
+        active_containers = set()
+    if isinstance(value, Mapping):
+        container_id = id(value)
+        if container_id in active_containers:
+            _fail(
+                GotaProtocolErrorCode.INVALID_PAYLOAD,
+                f"Cyclic JSON value at {path}",
+            )
+        active_containers.add(container_id)
+        try:
+            for key, nested_value in value.items():
+                if not isinstance(key, str):
+                    _fail(
+                        GotaProtocolErrorCode.INVALID_PAYLOAD,
+                        f"JSON object key at {path} must be a string",
+                    )
+                _validate_json_domain(
+                    nested_value,
+                    f"{path}.{key}",
+                    active_containers,
+                )
+        finally:
+            active_containers.remove(container_id)
+        return
+    if isinstance(value, (list, tuple)):
+        container_id = id(value)
+        if container_id in active_containers:
+            _fail(
+                GotaProtocolErrorCode.INVALID_PAYLOAD,
+                f"Cyclic JSON value at {path}",
+            )
+        active_containers.add(container_id)
+        try:
+            for index, nested_value in enumerate(value):
+                _validate_json_domain(
+                    nested_value,
+                    f"{path}[{index}]",
+                    active_containers,
+                )
+        finally:
+            active_containers.remove(container_id)
+        return
+
+    _fail(
+        GotaProtocolErrorCode.INVALID_PAYLOAD,
+        f"Value at {path} is not valid JSON: {type(value).__name__}",
+    )
 
 
 EnumValue = TypeVar("EnumValue", bound=StrEnum)
@@ -697,6 +803,7 @@ def parse_gota_payload(
     """Validate one decoded result payload without using surrounding prose."""
 
     payload = _object(payload)
+    _validate_json_domain(payload)
     _check_keys(payload, {"protocol", "message"}, set(payload) - {"protocol", "message"})
     _protocol(payload["protocol"])
     message = payload["message"]
@@ -710,12 +817,32 @@ def parse_gota_payload(
     )
 
 
+def _split_gota_lines(output: str) -> list[str]:
+    """Split only on LF after explicitly normalizing CRLF."""
+
+    for separator in _INVALID_FRAMING_SEPARATORS:
+        if separator in output:
+            _fail(
+                GotaProtocolErrorCode.INVALID_FRAMING,
+                "Only LF and CRLF are valid framing line endings",
+            )
+    for index, character in enumerate(output):
+        if character == "\r" and (
+            index + 1 == len(output) or output[index + 1] != "\n"
+        ):
+            _fail(
+                GotaProtocolErrorCode.INVALID_FRAMING,
+                "Only LF and CRLF are valid framing line endings",
+            )
+    return output.replace("\r\n", "\n").split("\n")
+
+
 def parse_gota_output(output: str) -> GotaWorkerResult | GotaReviewResult:
     """Extract and validate exactly one delimited result from agent output."""
 
     if not isinstance(output, str):
         _fail(GotaProtocolErrorCode.INVALID_PAYLOAD, "Output must be text")
-    lines = output.splitlines()
+    lines = _split_gota_lines(output)
     begin_lines = [
         index for index, line in enumerate(lines) if line == GOTA_RESULT_BEGIN
     ]
