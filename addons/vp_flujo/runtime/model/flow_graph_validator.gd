@@ -372,13 +372,18 @@ static func _validate_blocks(
 	for block_index: int in container.blocks.size():
 		var block: FlowBlock = container.blocks[block_index]
 		if block != null:
-			_validate_resource_identity(
+			var block_path: String = "%s.blocks[%d]" % [container_path, block_index]
+			if _validate_resource_identity(
 				block,
-				"%s.blocks[%d]" % [container_path, block_index],
+				block_path,
 				result,
 				seen_instances,
 				seen_ids
-			)
+			):
+				block.validate_structure({
+					"result": result,
+					"path": block_path,
+				})
 
 
 static func _validate_variable_references(

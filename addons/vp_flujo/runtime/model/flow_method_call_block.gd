@@ -17,4 +17,7 @@ func duplicate_with_new_id() -> FlowBlock:
 		return FlowSchema5Model.duplicate_owned(self) as FlowMethodCallBlock
 	var copy: FlowMethodCallBlock = duplicate(false) as FlowMethodCallBlock
 	copy._internal_id = FlowId.create()
+	var id_map: Dictionary[String, String] = {}
+	id_map[_internal_id] = copy.get_internal_id()
+	copy.remap_internal_references(id_map)
 	return copy

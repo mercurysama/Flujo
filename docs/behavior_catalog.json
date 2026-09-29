@@ -314,6 +314,21 @@
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": ["tests/model/flow_external_block_factory_test.tscn"]
-    }
+	    },
+	    {
+	      "id": "FLUJO-BHV-BLOCKSDK-HOOKS-001",
+	      "area": "Generic external block validation and duplication hooks",
+	      "precondition": "A FlowGraph contains a FlowBlock subclass with optional structure checks or ID-addressed internal references.",
+	      "public_action": "Validate the graph or duplicate it through the existing FlowGraph model API.",
+	      "expected_result": "FlowBlock receives a validation context during graph validation and the complete old-ID → new-ID map during duplication; the base hooks remain no-op.",
+	      "invariants": [
+		"Existing built-in blocks retain their validation, persistence, and duplication behavior.",
+		"External hooks do not add schema fields, package registration, executor knowledge, or FlowIfBlock-specific behavior.",
+		"Stable IDs, ordering, null positions, and the source graph remain protected during duplication."
+	      ],
+	      "coverage": "automatic",
+	      "baseline_status": "passing",
+	      "test_paths": ["tests/model/flow_external_block_hooks_test.tscn"]
+	    }
   ]
 }

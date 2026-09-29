@@ -57,6 +57,9 @@ func duplicate_method_with_new_ids() -> FlowMethodDefinition:
 		copy.return_definition = return_copy
 
 	_remap_method_calls(copy.blocks, id_map)
+	for block: FlowBlock in copy.blocks:
+		if block != null:
+			block.remap_internal_references(id_map)
 	return copy
 
 

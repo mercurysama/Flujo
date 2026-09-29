@@ -72,4 +72,6 @@ static func duplicate_owned(source: Resource) -> Resource:
 		elif value is FlowGraph:
 			var graph: FlowGraph = value as FlowGraph
 			graph.base_class_id = id_map.get(graph.base_class_id, graph.base_class_id)
+		if value is FlowBlock:
+			(value as FlowBlock).remap_internal_references(id_map)
 	return copy
