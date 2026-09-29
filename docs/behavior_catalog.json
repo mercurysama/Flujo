@@ -299,6 +299,21 @@
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": ["tests/model/flow_editor_block_catalog_test.tscn"]
+    },
+    {
+      "id": "FLUJO-BHV-BLOCKSDK-FACTORY-001",
+      "area": "External block programmatic creation boundary",
+      "precondition": "A catalog entry comes from a metadata- and script-validated external descriptor inside a project-owned package.",
+      "public_action": "Ask FlowExternalBlockFactory to create one block from the external catalog entry.",
+      "expected_result": "The factory resolves and revalidates the declared script, calls Script.new(), returns a FlowBlock with a fresh stable ID and the descriptor display name, and rejects stale or non-external entries deterministically.",
+      "invariants": [
+        "Each creation returns an independent instance and ID; no instance is retained, registered, executed, or serialized by the factory.",
+        "FlowBlockRegistry, FlowReadyExecutor, schema persistence, editor controls, and IF remain unaware of external creation.",
+        "A missing, invalid, unavailable, non-instantiable, or non-FlowBlock script produces diagnostics without affecting other catalog entries."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tests/model/flow_external_block_factory_test.tscn"]
     }
   ]
 }

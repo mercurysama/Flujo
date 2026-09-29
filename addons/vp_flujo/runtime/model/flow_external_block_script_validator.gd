@@ -45,6 +45,16 @@ func validate(
 	return result
 
 
+func validate_descriptor(
+		descriptor: FlowExternalBlockDescriptor,
+		package_directory: String
+) -> FlowPackageManifestScriptValidationResult:
+	var manifest: FlowPackageManifest = FlowPackageManifest.new(descriptor.package_id if descriptor != null else "")
+	if descriptor != null:
+		manifest.add_block(descriptor)
+	return validate(manifest, package_directory)
+
+
 func _derives_from_flow_block(script: Script) -> bool:
 	var candidate: Script = script
 	while candidate != null:
