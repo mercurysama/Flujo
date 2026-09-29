@@ -1,0 +1,7 @@
+{
+  "manifest_version": 1,
+  "package_id": "zeta",
+  "blocks": [
+    {"type_id": "zeta_block", "script": "missing.gd", "display_name": "Zeta Block"}
+  ]
+}

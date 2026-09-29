@@ -1,0 +1,7 @@
+{
+  "manifest_version": 1,
+  "package_id": "invalid_traversal",
+  "blocks": [
+    {"type_id": "escape", "script": "../../outside.gd", "display_name": "Escape"}
+  ]
+}

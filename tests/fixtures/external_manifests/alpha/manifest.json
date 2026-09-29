@@ -1,0 +1,8 @@
+{
+  "manifest_version": 1,
+  "package_id": "alpha",
+  "blocks": [
+    {"type_id": "second", "script": "blocks/second.gd", "display_name": "Second"},
+    {"type_id": "first", "script": "blocks/first.gd", "display_name": "First"}
+  ]
+}

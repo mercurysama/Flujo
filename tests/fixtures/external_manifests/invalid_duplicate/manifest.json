@@ -1,0 +1,8 @@
+{
+  "manifest_version": 1,
+  "package_id": "invalid_duplicate",
+  "blocks": [
+    {"type_id": "same", "script": "a.gd", "display_name": "A"},
+    {"type_id": "same", "script": "b.gd", "display_name": "B"}
+  ]
+}

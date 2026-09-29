@@ -254,6 +254,21 @@
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": ["tests/model/flow_external_manifest_descriptor_test.tscn"]
+    },
+    {
+      "id": "FLUJO-BHV-BLOCKSDK-MANIFEST-LOADER-001",
+      "area": "External block manifest read-only discovery",
+      "precondition": "A project-owned flow_packages fixture contains package directories and v1 manifest JSON files, including invalid siblings.",
+      "public_action": "Run FlowPackageManifestLoader.discover() against the project package root.",
+      "expected_result": "Packages are processed by sorted package_id, valid manifests and ordered descriptors are returned, and invalid packages produce deterministic diagnostics without preventing valid siblings.",
+      "invariants": [
+        "Only manifest metadata is parsed; script existence, inheritance, loading and instantiation are deferred.",
+        "Relative script paths cannot escape their package through parent traversal.",
+        "The loader does not modify FlowBlockRegistry, editor state, runtime execution, schemas or package files."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tests/model/flow_package_manifest_loader_test.tscn"]
     }
   ]
 }

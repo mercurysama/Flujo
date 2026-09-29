@@ -1,0 +1,7 @@
+{
+  "manifest_version": 1,
+  "package_id": "invalid_empty",
+  "blocks": [
+    {"type_id": "valid", "script": "valid.gd", "display_name": ""}
+  ]
+}
