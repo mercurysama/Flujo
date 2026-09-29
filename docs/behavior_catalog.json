@@ -269,6 +269,21 @@
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": ["tests/model/flow_package_manifest_loader_test.tscn"]
+    },
+    {
+      "id": "FLUJO-BHV-BLOCKSDK-MANIFEST-SCRIPT-001",
+      "area": "External block script validation",
+      "precondition": "A metadata-valid package manifest references scripts inside its package, including valid and invalid resources.",
+      "public_action": "Run FlowExternalBlockScriptValidator.validate() for the discovered manifest.",
+      "expected_result": "Existing, loadable scripts deriving from FlowBlock are accepted; missing, non-Script, invalid, and non-FlowBlock resources receive deterministic diagnostics while later descriptors continue.",
+      "invariants": [
+        "Validation uses script metadata and the existing get_base_script chain without retaining or registering instances.",
+        "No external type name, IF block, registry entry, editor control, runtime execution, or schema change is introduced.",
+        "Accepted descriptors remain in manifest order and diagnostics retain stable paths and package:type IDs."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tests/model/flow_external_block_script_validator_test.tscn"]
     }
   ]
 }

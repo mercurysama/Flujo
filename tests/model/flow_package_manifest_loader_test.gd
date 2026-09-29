@@ -27,11 +27,12 @@ func _discover() -> FlowPackageManifestDiscoveryResult:
 
 func _test_discovery_order_and_valid_data() -> void:
 	var result: FlowPackageManifestDiscoveryResult = _discover()
-	_check(result.manifests.size() == 2, "Valid packages survive invalid package siblings.")
-	if result.manifests.size() != 2:
+	_check(result.manifests.size() == 3, "Valid packages survive invalid package siblings.")
+	if result.manifests.size() != 3:
 		return
 	_check(result.manifests[0].package_id == "alpha", "Packages are returned in package_id order.")
-	_check(result.manifests[1].package_id == "zeta", "The later valid package remains discoverable.")
+	_check(result.manifests[1].package_id == "mixed_script", "A metadata-valid package with invalid scripts remains discoverable.")
+	_check(result.manifests[2].package_id == "zeta", "The later valid package remains discoverable.")
 	_check(result.manifests[0].blocks.size() == 2, "The valid manifest preserves its block count.")
 	if result.manifests[0].blocks.size() == 2:
 		_check(result.manifests[0].blocks[0].type_id == "second", "Manifest block order is preserved at index zero.")
