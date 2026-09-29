@@ -334,6 +334,10 @@ Traceability: BLOCKSDK-001/003 map to `FlowOutputBlock`, the three concrete outp
 
 The focal evidence is `tests/runtime/flow_navigation_runtime_test.tscn`, which uses a test-only control block to prove linear continuation, stable-ID jumps, STOP, invalid targets, duplicate IDs, and the safety budget.
 
+## External manifest descriptor foundation
+
+The approved external-package manifest v1 is JSON at `res://flow_packages/<package_id>/manifest.json`. Its top-level fields are `manifest_version`, `package_id`, and `blocks`; each block descriptor contains `type_id`, `script`, and `display_name`. The external namespace is the deterministic `package_id:type_id` key. `FlowExternalBlockDescriptor` and `FlowPackageManifest` currently provide only an in-memory, validated projection of this data: required fields, manifest version, package ownership, ordered descriptors, and duplicate global keys are rejected deterministically. They do not discover package files, parse JSON, load or instantiate scripts, register blocks, alter the editor, or enter the runtime executor. No IF block, navigation persistence, dependency metadata, permissions, signing, hot reload, or schema migration is introduced by this foundation; a future package loader and public registration boundary remain deferred.
+
 ## Process and Timer authoring delivery
 
 The following approved requirements are implemented and covered by automated tests; manual visual review remains pending.

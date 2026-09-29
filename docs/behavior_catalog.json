@@ -239,6 +239,21 @@
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": ["tests/runtime/flow_constructor_methods_test.gd"]
+    },
+    {
+      "id": "FLUJO-BHV-BLOCKSDK-MANIFEST-DATA-001",
+      "area": "External block manifest descriptor data",
+      "precondition": "A v1 package manifest and its block descriptors are represented in memory without package discovery.",
+      "public_action": "Construct and validate FlowPackageManifest and FlowExternalBlockDescriptor values.",
+      "expected_result": "Valid required fields preserve order and derive package_id:type_id; empty, mismatched, duplicate, null, and unsupported-version data is rejected deterministically.",
+      "invariants": [
+        "The descriptor layer does not parse JSON, discover packages, load scripts, instantiate blocks, or modify FlowBlockRegistry.",
+        "No IF-specific type, editor control, schema change, or runtime executor dependency is introduced.",
+        "The approved manifest fields are the only represented package contract in this foundation."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tests/model/flow_external_manifest_descriptor_test.tscn"]
     }
   ]
 }
