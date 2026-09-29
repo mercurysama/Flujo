@@ -53,9 +53,49 @@ func _run() -> void:
 
 func _test_base_hooks_are_no_ops() -> void:
 	var block: FlowBlock = FlowBlock.new()
-	block.validate_structure({})
-	block.remap_internal_references({})
-	_check(true, "The base hooks accept empty contexts and maps.")
+	block.display_name = "Base block"
+	block.enabled = false
+	block.user_note = "Base block note"
+	var block_state_before: Array[String] = _base_block_state(block)
+	var validation_result: FlowValidationResult = FlowValidationResult.new()
+	validation_result.add_diagnostic(FlowDiagnostic.new(
+		&"preexisting_diagnostic",
+		FlowDiagnostic.Severity.WARNING,
+		"Pre-existing diagnostic.",
+		"base.block",
+		block.get_internal_id()
+	))
+	var diagnostics_before: Array[String] = _diagnostics_state(validation_result)
+	block.validate_structure({"result": validation_result, "path": "base.block"})
+	_check(_base_block_state(block) == block_state_before, "The base validation hook does not modify block state.")
+	_check(_diagnostics_state(validation_result) == diagnostics_before, "The base validation hook does not modify diagnostics.")
+
+	var id_map: Dictionary[String, String] = {block.get_internal_id(): "0123456789abcdef0123456789abcdef"}
+	_check(not id_map.is_empty(), "The base remapping hook receives a non-empty ID map.")
+	block.remap_internal_references(id_map)
+	_check(_base_block_state(block) == block_state_before, "The base remapping hook does not modify block references or observable state.")
+
+
+func _base_block_state(block: FlowBlock) -> Array[String]:
+	return [
+		block.get_internal_id(),
+		block.display_name,
+		str(block.enabled),
+		block.user_note,
+	]
+
+
+func _diagnostics_state(result: FlowValidationResult) -> Array[String]:
+	var state: Array[String] = []
+	for diagnostic: FlowDiagnostic in result.diagnostics:
+		state.append("%s|%s|%s|%s|%s" % [
+			String(diagnostic.code),
+			str(diagnostic.severity),
+			diagnostic.message,
+			diagnostic.element_path,
+			diagnostic.related_id,
+		])
+	return state
 
 
 func _test_validation_hook() -> void:
