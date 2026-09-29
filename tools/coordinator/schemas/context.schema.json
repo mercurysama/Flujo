@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "flow.coordinator/context/v1",
+  "title": "Coordinator Context v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["context_id", "task_id", "project_id", "payload"],
+  "properties": {
+    "context_id": {"type": "string", "minLength": 1},
+    "task_id": {"type": "string", "minLength": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "payload": {"type": "object"}
+  }
+}

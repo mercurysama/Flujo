@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "flow.coordinator/evidence/v1",
+  "title": "Coordinator Evidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["evidence_id", "run_id", "kind", "payload", "digest", "created_at"],
+  "properties": {
+    "evidence_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "kind": {"type": "string", "minLength": 1},
+    "payload": {"type": "object"},
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "created_at": {"type": "string", "format": "date-time"}
+  }
+}
