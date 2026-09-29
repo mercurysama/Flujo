@@ -284,6 +284,21 @@
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": ["tests/model/flow_external_block_script_validator_test.tscn"]
+    },
+    {
+      "id": "FLUJO-BHV-BLOCKSDK-CATALOG-001",
+      "area": "Combined editor authoring block catalog",
+      "precondition": "Integrated Registry entries and metadata/script-validated external manifests are available as ephemeral discovery results.",
+      "public_action": "Combine FlowBlockRegistry entries with valid external descriptors for authoring queries.",
+      "expected_result": "Integrated Print, Everything Flows, and Custom Hello entries remain first; valid external entries follow by package and manifest order with package:type_id keys.",
+      "invariants": [
+        "Invalid metadata packages and invalid external scripts are excluded without preventing valid packages.",
+        "FlowBlockRegistry remains an integrated-block factory and contains no external package references.",
+        "The catalog does not modify popup/editor controls, instantiate blocks, execute runtime code, change schema, or know IF."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tests/model/flow_editor_block_catalog_test.tscn"]
     }
   ]
 }
