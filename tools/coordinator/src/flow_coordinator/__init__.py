@@ -17,6 +17,28 @@ from .domain import (
 from .service import CoordinatorService
 from .git_transaction import GitAcceptanceWorkflow, TransactionalGitAdapter
 from .store import SQLiteCoordinatorStore
+from .gota_protocol import (
+    GOTA_PROTOCOL,
+    GOTA_RESULT_BEGIN,
+    GOTA_RESULT_END,
+    GotaCheckpoint,
+    GotaFinding,
+    GotaMessage,
+    GotaPhase,
+    GotaProtocolError,
+    GotaProtocolErrorCode,
+    GotaRequest,
+    GotaReviewResult,
+    GotaWorkerResult,
+    Finding,
+    Request,
+    ReviewDecision,
+    ReviewResult,
+    WorkerResult,
+    WorkerResultStatus,
+    parse_gota_output,
+    parse_gota_payload,
+)
 
 __all__ = [
     "COORDINATOR_SCHEMA_VERSION",
@@ -35,4 +57,24 @@ __all__ = [
     "TaskState",
     "TransitionEvent",
     "TransactionalGitAdapter",
+    "GOTA_PROTOCOL",
+    "GOTA_RESULT_BEGIN",
+    "GOTA_RESULT_END",
+    "GotaCheckpoint",
+    "GotaFinding",
+    "GotaMessage",
+    "GotaPhase",
+    "GotaProtocolError",
+    "GotaProtocolErrorCode",
+    "GotaRequest",
+    "GotaReviewResult",
+    "GotaWorkerResult",
+    "Finding",
+    "Request",
+    "ReviewDecision",
+    "ReviewResult",
+    "WorkerResult",
+    "WorkerResultStatus",
+    "parse_gota_output",
+    "parse_gota_payload",
 ]

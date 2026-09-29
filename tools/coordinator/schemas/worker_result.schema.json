@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "flujo.gota/worker-result/v1",
+  "title": "Flujo Gota Worker Result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "message",
+    "request_id",
+    "task_id",
+    "run_id",
+    "attempt",
+    "result",
+    "commit_sha",
+    "changed_paths",
+    "evidence",
+    "checkpoint"
+  ],
+  "properties": {
+    "protocol": {"const": "flujo.gota/v1"},
+    "message": {"const": "worker.result"},
+    "request_id": {"type": "string", "minLength": 1},
+    "task_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "attempt": {"type": "integer", "minimum": 1},
+    "result": {"const": "READY_FOR_REVIEW"},
+    "commit_sha": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "changed_paths": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "evidence": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "checkpoint": {"$ref": "#/$defs/checkpoint"}
+  },
+  "$defs": {
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completed_steps", "remaining_phase"],
+      "properties": {
+        "completed_steps": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "remaining_phase": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

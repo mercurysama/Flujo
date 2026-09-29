@@ -71,10 +71,16 @@ class DomainStateMachineTest(unittest.TestCase):
             json.loads(path.read_text(encoding="utf-8"))
             for path in sorted(schema_directory.glob("*.schema.json"))
         ]
-        self.assertEqual(len(schemas), 4)
         identifiers = [schema["$id"] for schema in schemas]
         self.assertEqual(len(identifiers), len(set(identifiers)))
         self.assertTrue(all(identifier.endswith("/v1") for identifier in identifiers))
+        self.assertTrue(
+            {
+                "flujo.gota/request/v1",
+                "flujo.gota/worker-result/v1",
+                "flujo.gota/review-result/v1",
+            }.issubset(identifiers)
+        )
 
     def test_coordinator_package_has_no_godot_or_plugin_dependency(self) -> None:
         source_directory = Path(__file__).resolve().parents[1] / "src/flow_coordinator"
