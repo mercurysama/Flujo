@@ -371,6 +371,23 @@
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": ["tools/coordinator/tests/test_opencode_runner.py"]
+    },
+    {
+      "id": "FLUJO-BHV-GOTA-CYCLE-001",
+      "area": "Single flujo.gota/v1 Worker review cycle",
+      "precondition": "A clean Git repository is on the requested branch at the requested base SHA, and an injected OpenCodeRunner-compatible boundary is available.",
+      "public_action": "Call GotaReviewCycle.run() with a worker-phase GotaRequest.",
+      "expected_result": "One Worker execution is followed by independent read-only Git verification and, only when verification passes, one gota-reviewer execution bound to the exact verified commit; the result exposes validated payloads, decision, phase, and diagnostics.",
+      "invariants": [
+        "Worker timeout, startup or containment failure, non-zero exit, invalid payload, invalid WorkerResult, invalid commit, branch change, dirty worktree, multiple commits, or changed-path mismatch never invokes Reviewer.",
+        "Git verification requires the declared commit to be a real descendant of the captured base, exactly one commit from that base, HEAD equality, expected branch, clean worktree, and exact changed_paths after order normalization.",
+        "Reviewer receives the captured base SHA, exact verified commit SHA, consistent task/run/request identity, and a read-only instruction; only a validated ReviewResult decision is accepted.",
+        "Reviewer HEAD, branch, or worktree mutation invalidates the cycle even when the payload decision is PASSED.",
+        "The cycle does not transition TaskRun, write SQLite, mutate protocol schemas, or use the historical GitTransaction boundary."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tools/coordinator/tests/test_gota_cycle.py"]
     }
   ]
 }

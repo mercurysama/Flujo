@@ -21,14 +21,16 @@ class GitSnapshot:
 
 
 class ReadOnlyGitAdapter:
-    _ALLOWED_COMMANDS = frozenset({"rev-parse", "status"})
+    _ALLOWED_COMMANDS = frozenset(
+        {"cat-file", "diff", "merge-base", "rev-parse", "rev-list", "status"}
+    )
 
     def __init__(self, repository: str | Path) -> None:
         self.repository = Path(repository).resolve()
         if not (self.repository / ".git").exists():
             raise GitReadError(f"Not a Git repository: {self.repository}")
 
-    def _run(self, *arguments: str) -> str:
+    def _run_bytes(self, *arguments: str) -> bytes:
         if not arguments or arguments[0] not in self._ALLOWED_COMMANDS:
             raise GitReadError("The v1 Git adapter permits read-only commands only")
         result = subprocess.run(
@@ -36,11 +38,16 @@ class ReadOnlyGitAdapter:
             cwd=self.repository,
             check=False,
             capture_output=True,
-            text=True,
         )
         if result.returncode != 0:
-            raise GitReadError(result.stderr.strip() or "Git inspection failed")
-        return result.stdout.rstrip("\n")
+            message = result.stderr.decode("utf-8", errors="replace").strip()
+            raise GitReadError(message or "Git inspection failed")
+        return result.stdout
+
+    def _run(self, *arguments: str) -> str:
+        return self._run_bytes(*arguments).decode(
+            "utf-8", errors="surrogateescape"
+        ).rstrip("\n")
 
     def head(self) -> str:
         return self._run("rev-parse", "HEAD")
@@ -50,6 +57,54 @@ class ReadOnlyGitAdapter:
 
     def status_porcelain(self) -> str:
         return self._run("status", "--porcelain=v1", "--untracked-files=all")
+
+    def object_type(self, object_sha: str) -> str:
+        return self._run("cat-file", "-t", object_sha)
+
+    def commit_exists(self, commit_sha: str) -> bool:
+        try:
+            return self.object_type(commit_sha) == "commit"
+        except GitReadError:
+            return False
+
+    def is_ancestor(self, ancestor_sha: str, descendant_sha: str) -> bool:
+        result = subprocess.run(
+            ("git", "merge-base", "--is-ancestor", ancestor_sha, descendant_sha),
+            cwd=self.repository,
+            check=False,
+            capture_output=True,
+        )
+        if result.returncode == 0:
+            return True
+        if result.returncode == 1:
+            return False
+        message = result.stderr.decode("utf-8", errors="replace").strip()
+        raise GitReadError(message or "Git ancestry inspection failed")
+
+    def commit_count_between(self, ancestor_sha: str, descendant_sha: str) -> int:
+        raw_count = self._run(
+            "rev-list", "--count", f"{ancestor_sha}..{descendant_sha}"
+        )
+        try:
+            return int(raw_count)
+        except ValueError as error:
+            raise GitReadError("Git returned an invalid commit count") from error
+
+    def changed_paths(self, ancestor_sha: str, descendant_sha: str) -> tuple[str, ...]:
+        raw_paths = self._run_bytes(
+            "diff",
+            "--name-only",
+            "-z",
+            "--no-ext-diff",
+            ancestor_sha,
+            descendant_sha,
+        )
+        paths = (
+            path.decode("utf-8", errors="surrogateescape")
+            for path in raw_paths.split(b"\0")
+            if path
+        )
+        return tuple(sorted(paths))
 
     def snapshot(self) -> GitSnapshot:
         return GitSnapshot(
