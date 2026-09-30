@@ -7,7 +7,6 @@ import os
 import signal
 import subprocess
 import sys
-import time
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -28,6 +27,7 @@ _PROCESS_TERM_GRACE_SECONDS: Final[float] = 0.25
 _PROCESS_KILL_GRACE_SECONDS: Final[float] = 0.25
 _POST_TIMEOUT_COMMUNICATE_SECONDS: Final[float] = 0.25
 _PROCESS_REAP_GRACE_SECONDS: Final[float] = 0.05
+_SUPERVISOR_SCRIPT: Final[Path] = Path(__file__).with_name("opencode_supervisor.py")
 
 
 class OpenCodeRunStatus(StrEnum):
@@ -41,21 +41,6 @@ class OpenCodeRunStatus(StrEnum):
 
 
 GotaResult = GotaWorkerResult | GotaReviewResult
-
-
-@dataclass(frozen=True, slots=True)
-class _ProcessIdentity:
-    """A Linux PID plus its creation marker, safe against PID reuse."""
-
-    pid: int
-    start_time: int
-
-
-@dataclass(frozen=True, slots=True)
-class _LinuxProcess:
-    identity: _ProcessIdentity
-    parent_pid: int
-    state: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,7 +60,7 @@ class OpenCodeRunResult:
 
 
 class OpenCodeRunner:
-    """Run one non-interactive OpenCode command without coordinating state."""
+    """Run one command; Linux uses a per-run supervisor, other OSes use fallback cleanup."""
 
     def __init__(
         self,
@@ -118,109 +103,6 @@ class OpenCodeRunner:
         return float(timeout)
 
     @staticmethod
-    def _read_linux_process(pid: int) -> _LinuxProcess | None:
-        """Read the small part of ``/proc/<pid>/stat`` needed for cleanup."""
-
-        try:
-            stat_text = Path(f"/proc/{pid}/stat").read_text(encoding="ascii")
-        except (OSError, UnicodeError):
-            return None
-
-        closing_parenthesis = stat_text.rfind(")")
-        if closing_parenthesis < 0:
-            return None
-        fields = stat_text[closing_parenthesis + 2 :].split()
-        if len(fields) <= 19:
-            return None
-        try:
-            parent_pid = int(fields[1])
-            start_time = int(fields[19])
-        except ValueError:
-            return None
-        return _LinuxProcess(
-            identity=_ProcessIdentity(pid=pid, start_time=start_time),
-            parent_pid=parent_pid,
-            state=fields[0],
-        )
-
-    @classmethod
-    def _collect_linux_process_tree(cls, root_pid: int) -> tuple[_ProcessIdentity, ...]:
-        """Collect only descendants reachable through Linux parent-child links."""
-
-        root = cls._read_linux_process(root_pid)
-        if root is None:
-            return ()
-
-        identities: dict[int, _ProcessIdentity] = {root.identity.pid: root.identity}
-        pending: list[_LinuxProcess] = [root]
-        while pending:
-            parent = pending.pop()
-            try:
-                children_text = Path(
-                    f"/proc/{parent.identity.pid}/task/{parent.identity.pid}/children"
-                ).read_text(encoding="ascii")
-            except (OSError, UnicodeError):
-                continue
-            for child_text in children_text.split():
-                try:
-                    child_pid = int(child_text)
-                except ValueError:
-                    continue
-                child = cls._read_linux_process(child_pid)
-                if child is None or child.identity.pid in identities:
-                    continue
-                if child.identity.pid != child_pid:
-                    continue
-                if child.identity.pid == parent.identity.pid:
-                    continue
-                if child.parent_pid != parent.identity.pid:
-                    continue
-                if child.state in {"Z", "X"}:
-                    identities[child.identity.pid] = child.identity
-                    continue
-                identities[child.identity.pid] = child.identity
-                pending.append(child)
-        return tuple(identities.values())
-
-    @classmethod
-    def _merge_processes(
-        cls, *process_groups: tuple[_ProcessIdentity, ...]
-    ) -> tuple[_ProcessIdentity, ...]:
-        merged: dict[int, _ProcessIdentity] = {}
-        for process_group in process_groups:
-            for identity in process_group:
-                merged.setdefault(identity.pid, identity)
-        return tuple(merged.values())
-
-    @classmethod
-    def _process_is_active(cls, identity: _ProcessIdentity) -> bool:
-        current = cls._read_linux_process(identity.pid)
-        return (
-            current is not None
-            and current.identity.start_time == identity.start_time
-            and current.state not in {"Z", "X"}
-        )
-
-    @classmethod
-    def _signal_linux_processes(
-        cls, processes: tuple[_ProcessIdentity, ...], signum: signal.Signals
-    ) -> None:
-        """Signal verified descendants, never an arbitrary PID or process group."""
-
-        for identity in processes:
-            current = cls._read_linux_process(identity.pid)
-            if (
-                current is None
-                or current.identity.start_time != identity.start_time
-                or current.state in {"Z", "X"}
-            ):
-                continue
-            try:
-                os.kill(identity.pid, signum)
-            except (ProcessLookupError, PermissionError):
-                continue
-
-    @staticmethod
     def _bounded_wait(process: subprocess.Popen[str], timeout: float) -> None:
         try:
             process.wait(timeout=timeout)
@@ -228,57 +110,22 @@ class OpenCodeRunner:
             pass
 
     @classmethod
-    def _terminate_process(
-        cls,
-        process: subprocess.Popen[str],
-        known_processes: tuple[_ProcessIdentity, ...] = (),
-    ) -> None:
-        """Stop the execution tree and reap the runner process within fixed bounds."""
+    def _terminate_process(cls, process: subprocess.Popen[str]) -> None:
+        """Stop the supervisor first, then apply a bounded fallback."""
 
+        if process.poll() is not None:
+            return
         if sys.platform == "linux":
-            processes = cls._merge_processes(
-                known_processes, cls._collect_linux_process_tree(process.pid)
+            try:
+                process.terminate()
+            except ProcessLookupError:
+                pass
+            cls._bounded_wait(
+                process,
+                _PROCESS_TERM_GRACE_SECONDS
+                + _PROCESS_KILL_GRACE_SECONDS
+                + _PROCESS_REAP_GRACE_SECONDS,
             )
-            if not any(identity.pid == process.pid for identity in processes):
-                if process.poll() is None:
-                    try:
-                        process.terminate()
-                    except ProcessLookupError:
-                        pass
-
-            cls._signal_linux_processes(processes, signal.SIGTERM)
-            term_deadline = time.monotonic() + _PROCESS_TERM_GRACE_SECONDS
-            while time.monotonic() < term_deadline:
-                processes = cls._merge_processes(
-                    processes, cls._collect_linux_process_tree(process.pid)
-                )
-                cls._signal_linux_processes(processes, signal.SIGTERM)
-                if process.poll() is not None and not any(
-                    cls._process_is_active(identity) for identity in processes
-                ):
-                    break
-                time.sleep(min(0.01, max(0.0, term_deadline - time.monotonic())))
-
-            processes = cls._merge_processes(
-                processes, cls._collect_linux_process_tree(process.pid)
-            )
-            if process.poll() is None:
-                try:
-                    process.kill()
-                except ProcessLookupError:
-                    pass
-            cls._signal_linux_processes(processes, signal.SIGKILL)
-            kill_deadline = time.monotonic() + _PROCESS_KILL_GRACE_SECONDS
-            while time.monotonic() < kill_deadline:
-                processes = cls._merge_processes(
-                    processes, cls._collect_linux_process_tree(process.pid)
-                )
-                cls._signal_linux_processes(processes, signal.SIGKILL)
-                if process.poll() is not None and not any(
-                    cls._process_is_active(identity) for identity in processes
-                ):
-                    break
-                time.sleep(min(0.01, max(0.0, kill_deadline - time.monotonic())))
             if process.poll() is None:
                 try:
                     process.kill()
@@ -287,8 +134,6 @@ class OpenCodeRunner:
             cls._bounded_wait(process, _PROCESS_REAP_GRACE_SECONDS)
             return
 
-        if process.poll() is not None:
-            return
         if os.name == "posix":
             try:
                 os.killpg(process.pid, signal.SIGTERM)
@@ -323,6 +168,72 @@ class OpenCodeRunner:
                 except ProcessLookupError:
                     pass
         cls._bounded_wait(process, _PROCESS_KILL_GRACE_SECONDS)
+
+    @staticmethod
+    def _start_linux_supervisor(
+        argv: list[str],
+        *,
+        cwd: Path,
+        environment: dict[str, str],
+    ) -> tuple[subprocess.Popen[str], int]:
+        status_read_fd, status_write_fd = os.pipe()
+        supervisor_argv = [
+            sys.executable,
+            str(_SUPERVISOR_SCRIPT),
+            "--flow-opencode-supervisor",
+            str(status_write_fd),
+            "--",
+            *argv,
+        ]
+        try:
+            process = subprocess.Popen(
+                supervisor_argv,
+                cwd=cwd,
+                env=environment,
+                shell=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                start_new_session=True,
+                pass_fds=(status_write_fd,),
+            )
+        except BaseException:
+            os.close(status_read_fd)
+            os.close(status_write_fd)
+            raise
+        os.close(status_write_fd)
+        return process, status_read_fd
+
+    @staticmethod
+    def _read_startup_error(status_fd: int | None) -> str | None:
+        if status_fd is None:
+            return None
+        try:
+            os.set_blocking(status_fd, False)
+            chunks: list[bytes] = []
+            while True:
+                try:
+                    chunk = os.read(status_fd, 4096)
+                except BlockingIOError:
+                    break
+                if not chunk:
+                    break
+                chunks.append(chunk)
+        except OSError:
+            return None
+        finally:
+            try:
+                os.close(status_fd)
+            except OSError:
+                pass
+        status = b"".join(chunks)
+        if not status:
+            return None
+        if status.startswith((b"E:", b"S:")):
+            status = status[2:]
+        return status.decode("utf-8", errors="replace")
 
     @staticmethod
     def _decode_output(value: str | bytes | None) -> str:
@@ -389,19 +300,27 @@ class OpenCodeRunner:
         environment["GIT_PAGER"] = "cat"
         environment["PAGER"] = "cat"
 
+        startup_status_fd: int | None = None
         try:
-            process = subprocess.Popen(
-                argv,
-                cwd=cwd_path,
-                env=environment,
-                shell=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                start_new_session=os.name == "posix",
-            )
+            if sys.platform == "linux":
+                process, startup_status_fd = self._start_linux_supervisor(
+                    argv,
+                    cwd=cwd_path,
+                    environment=environment,
+                )
+            else:
+                process = subprocess.Popen(
+                    argv,
+                    cwd=cwd_path,
+                    env=environment,
+                    shell=False,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    start_new_session=os.name == "posix",
+                )
         except (OSError, ValueError) as error:
             return OpenCodeRunResult(
                 status=OpenCodeRunStatus.START_FAILED,
@@ -414,16 +333,12 @@ class OpenCodeRunner:
                 error=str(error),
             )
 
-        known_processes = (
-            self._collect_linux_process_tree(process.pid)
-            if sys.platform == "linux"
-            else ()
-        )
         try:
             stdout, stderr = process.communicate(timeout=timeout_seconds)
         except subprocess.TimeoutExpired as timeout_error:
-            self._terminate_process(process, known_processes)
+            self._terminate_process(process)
             stdout, stderr = self._bounded_timeout_communication(process, timeout_error)
+            self._read_startup_error(startup_status_fd)
             return OpenCodeRunResult(
                 status=OpenCodeRunStatus.TIMEOUT,
                 argv=argv_tuple,
@@ -433,6 +348,19 @@ class OpenCodeRunner:
                 exit_code=process.returncode,
                 timed_out=True,
                 error=f"process exceeded timeout of {timeout_seconds:g} seconds",
+            )
+
+        startup_error = self._read_startup_error(startup_status_fd)
+        if startup_error is not None:
+            return OpenCodeRunResult(
+                status=OpenCodeRunStatus.START_FAILED,
+                argv=argv_tuple,
+                cwd=str(cwd_path),
+                stdout=stdout,
+                stderr=stderr,
+                exit_code=None,
+                timed_out=False,
+                error=startup_error,
             )
 
         if process.returncode != 0:

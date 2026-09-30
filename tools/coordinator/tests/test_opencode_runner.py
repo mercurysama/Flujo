@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import ctypes
 import json
 import os
+import signal
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -160,6 +163,61 @@ class OpenCodeRunnerTest(unittest.TestCase):
         executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
         return executable
 
+    def _double_fork_descendant_executable(
+        self,
+        *,
+        marker: Path,
+        pid_file: Path,
+        parent_file: Path,
+        supervisor_file: Path,
+        first_pid_file: Path,
+    ) -> Path:
+        executable = self.root / "fake opencode with double fork"
+        executable.write_text(
+            "\n".join(
+                (
+                    f"#!{sys.executable}",
+                    "import os",
+                    "import time",
+                    "from pathlib import Path",
+                    f"marker = Path({str(marker)!r})",
+                    f"pid_file = Path({str(pid_file)!r})",
+                    f"parent_file = Path({str(parent_file)!r})",
+                    f"supervisor_file = Path({str(supervisor_file)!r})",
+                    f"first_pid_file = Path({str(first_pid_file)!r})",
+                    "first_pid = os.fork()",
+                    "if first_pid == 0:",
+                    "    first_child_pid = os.getpid()",
+                    "    second_pid = os.fork()",
+                    "    if second_pid == 0:",
+                    "        os.setsid()",
+                    "        pid_file.write_text(str(os.getpid()), encoding='utf-8')",
+                    "        for _ in range(200):",
+                    "            if os.getppid() != first_child_pid:",
+                    "                break",
+                    "            time.sleep(0.005)",
+                    "        parent_file.write_text(str(os.getppid()), encoding='utf-8')",
+                    "        os.write(1, b'double-fork stdout\\n')",
+                    "        os.write(2, b'double-fork stderr\\n')",
+                    "        time.sleep(0.8)",
+                    "        marker.write_text('late', encoding='utf-8')",
+                    "        time.sleep(0.1)",
+                    "        os._exit(0)",
+                    "    os._exit(0)",
+                    "first_pid_file.write_text(str(first_pid), encoding='utf-8')",
+                    "supervisor_file.write_text(str(os.getppid()), encoding='utf-8')",
+                    "for _ in range(200):",
+                    "    if parent_file.exists():",
+                    "        break",
+                    "    time.sleep(0.005)",
+                    "print('double-fork root exiting', flush=True)",
+                )
+            ),
+            encoding="utf-8",
+        )
+        executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
+        return executable
+
     @staticmethod
     def _linux_process_is_executing(pid: int) -> bool:
         try:
@@ -171,6 +229,27 @@ class OpenCodeRunnerTest(unittest.TestCase):
             return False
         fields = stat_text[closing_parenthesis + 2 :].split()
         return bool(fields) and fields[0] not in {"Z", "X"}
+
+    @staticmethod
+    def _linux_process_state(pid: int) -> str | None:
+        try:
+            stat_text = Path(f"/proc/{pid}/stat").read_text(encoding="ascii")
+        except (OSError, UnicodeError):
+            return None
+        closing_parenthesis = stat_text.rfind(")")
+        if closing_parenthesis < 0:
+            return None
+        fields = stat_text[closing_parenthesis + 2 :].split()
+        return fields[0] if fields else None
+
+    @staticmethod
+    def _linux_child_subreaper_enabled() -> bool:
+        value = ctypes.c_int()
+        libc = ctypes.CDLL(None, use_errno=True)
+        result = libc.prctl(37, ctypes.byref(value), 0, 0, 0)
+        if result != 0:
+            raise OSError(ctypes.get_errno(), os.strerror(ctypes.get_errno()))
+        return bool(value.value)
 
     def test_builds_exact_argv_and_keeps_shell_text_as_data(self) -> None:
         marker = self.root / "must-not-exist"
@@ -390,7 +469,7 @@ class OpenCodeRunnerTest(unittest.TestCase):
             agent="worker",
             prompt="terminate the complete process tree",
             cwd=self.cwd,
-            timeout=0.1,
+            timeout=0.2,
         )
         elapsed = time.monotonic() - started
 
@@ -402,6 +481,67 @@ class OpenCodeRunnerTest(unittest.TestCase):
         self.assertFalse(marker.exists())
         time.sleep(0.3)
         self.assertFalse(marker.exists())
+
+    @unittest.skipUnless(sys.platform == "linux", "requires Linux process supervision")
+    def test_timeout_terminates_double_fork_reparented_descendant(self) -> None:
+        marker = self.root / "double-fork-marker"
+        pid_file = self.root / "double-fork.pid"
+        parent_file = self.root / "double-fork.parent"
+        supervisor_file = self.root / "double-fork.supervisor"
+        first_pid_file = self.root / "double-fork.first-pid"
+        executable = self._double_fork_descendant_executable(
+            marker=marker,
+            pid_file=pid_file,
+            parent_file=parent_file,
+            supervisor_file=supervisor_file,
+            first_pid_file=first_pid_file,
+        )
+        unrelated = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(5)"])
+        coordinator_pid = os.getpid()
+        coordinator_was_subreaper = self._linux_child_subreaper_enabled()
+        child_pid: int | None = None
+        first_pid: int | None = None
+        started = time.monotonic()
+        try:
+            result = OpenCodeRunner(executable=executable).run(
+                agent="worker",
+                prompt="terminate a reparented double-fork descendant",
+                cwd=self.cwd,
+                timeout=0.2,
+            )
+            elapsed = time.monotonic() - started
+
+            self.assertEqual(result.status, OpenCodeRunStatus.TIMEOUT)
+            self.assertLess(elapsed, 1.5)
+            child_pid = int(pid_file.read_text(encoding="utf-8"))
+            first_pid = int(first_pid_file.read_text(encoding="utf-8"))
+            supervisor_pid = int(supervisor_file.read_text(encoding="utf-8"))
+            self.assertEqual(int(parent_file.read_text(encoding="utf-8")), supervisor_pid)
+            self.assertNotEqual(supervisor_pid, coordinator_pid)
+            self.assertIsNone(self._linux_process_state(first_pid))
+            self.assertIsNone(self._linux_process_state(child_pid))
+            self.assertIsNone(self._linux_process_state(supervisor_pid))
+            self.assertIsNone(unrelated.poll())
+            self.assertTrue(self._linux_process_is_executing(coordinator_pid))
+            self.assertEqual(self._linux_child_subreaper_enabled(), coordinator_was_subreaper)
+            self.assertFalse(marker.exists())
+            time.sleep(1.0)
+            self.assertFalse(marker.exists())
+            self.assertIsNone(self._linux_process_state(child_pid))
+        finally:
+            for orphan_pid in (child_pid, first_pid):
+                if (
+                    orphan_pid is None
+                    or self._linux_process_state(orphan_pid) in {None, "Z", "X"}
+                ):
+                    continue
+                try:
+                    os.kill(orphan_pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            if unrelated.poll() is None:
+                unrelated.terminate()
+            unrelated.wait(timeout=1.0)
 
     def test_start_failure_and_invalid_cwd_are_distinct_from_process_results(self) -> None:
         missing_executable = self.root / "does-not-exist"
