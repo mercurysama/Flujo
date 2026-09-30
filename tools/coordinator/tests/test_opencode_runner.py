@@ -1,0 +1,391 @@
+from __future__ import annotations
+
+import json
+import os
+import stat
+import sys
+import tempfile
+import time
+import unittest
+from pathlib import Path
+from typing import Any
+from unittest.mock import patch
+
+from flow_coordinator import (
+    GOTA_RESULT_BEGIN,
+    GOTA_RESULT_END,
+    GotaReviewResult,
+    GotaWorkerResult,
+    GotaProtocolErrorCode,
+    OpenCodeRunStatus,
+    OpenCodeRunner,
+)
+from flow_coordinator.domain import TaskSpec
+from flow_coordinator.service import CoordinatorService
+from flow_coordinator.store import SQLiteCoordinatorStore
+
+
+class OpenCodeRunnerTest(unittest.TestCase):
+    commit_sha = "0123456789abcdef0123456789abcdef01234567"
+
+    def setUp(self) -> None:
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+        self.root = Path(self.temporary_directory.name)
+        self.cwd = self.root / "workspace"
+        self.cwd.mkdir()
+
+    def _fake_executable(
+        self,
+        *,
+        stdout: str = "",
+        stderr: str = "",
+        exit_code: int = 0,
+        sleep_seconds: float = 0.0,
+        marker: Path | None = None,
+    ) -> tuple[Path, Path]:
+        executable = self.root / "fake opencode"
+        record = self.root / "invocation.json"
+        marker_literal = "None" if marker is None else repr(str(marker))
+        executable.write_text(
+            "\n".join(
+                (
+                    f"#!{sys.executable}",
+                    "import json",
+                    "import os",
+                    "from pathlib import Path",
+                    "import sys",
+                    "import time",
+                    f"record = Path({json.dumps(str(record), ensure_ascii=False)})",
+                    "record.write_text(json.dumps({",
+                    "    'argv': sys.argv[1:],",
+                    "    'cwd': os.getcwd(),",
+                    "    'git_pager': os.environ.get('GIT_PAGER'),",
+                    "    'pager': os.environ.get('PAGER'),",
+                    "}, ensure_ascii=False), encoding='utf-8')",
+                    f"sys.stdout.write({json.dumps(stdout, ensure_ascii=False)})",
+                    "sys.stdout.flush()",
+                    f"sys.stderr.write({json.dumps(stderr, ensure_ascii=False)})",
+                    "sys.stderr.flush()",
+                    f"time.sleep({sleep_seconds!r})",
+                    f"marker = {marker_literal}",
+                    "if marker is not None:",
+                    "    Path(marker).write_text('completed', encoding='utf-8')",
+                    f"raise SystemExit({exit_code})",
+                )
+            ),
+            encoding="utf-8",
+        )
+        executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
+        return executable, record
+
+    def _worker_payload(self) -> dict[str, Any]:
+        return {
+            "protocol": "flujo.gota/v1",
+            "message": "worker.result",
+            "request_id": "run-42:1:worker",
+            "task_id": "task-42",
+            "run_id": "run-42",
+            "attempt": 1,
+            "result": "READY_FOR_REVIEW",
+            "commit_sha": self.commit_sha,
+            "changed_paths": ["tools/coordinator/src/flow_coordinator"],
+            "evidence": [{"kind": "test", "passed": True}],
+            "checkpoint": {
+                "completed_steps": ["implementation"],
+                "remaining_phase": "review",
+            },
+        }
+
+    def _review_payload(self) -> dict[str, Any]:
+        return {
+            "protocol": "flujo.gota/v1",
+            "message": "review.result",
+            "request_id": "run-42:1:review",
+            "task_id": "task-42",
+            "run_id": "run-42",
+            "attempt": 1,
+            "reviewed_commit_sha": self.commit_sha,
+            "decision": "PASSED",
+            "findings": [],
+            "evidence": [{"kind": "audit", "passed": True}],
+        }
+
+    @staticmethod
+    def _frame(payload: dict[str, Any], *, prefix: str = "", suffix: str = "") -> str:
+        return (
+            f"{prefix}{GOTA_RESULT_BEGIN}\n"
+            f"{json.dumps(payload, sort_keys=True, ensure_ascii=False)}\n"
+            f"{GOTA_RESULT_END}{suffix}"
+        )
+
+    def _record(self, path: Path) -> dict[str, Any]:
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def test_builds_exact_argv_and_keeps_shell_text_as_data(self) -> None:
+        marker = self.root / "must-not-exist"
+        executable, record = self._fake_executable()
+        agent = "worker agent 🌧️"
+        prompt = f"texto con espacios y Unicode 🌧️ $(touch {marker}) ; echo hacked"
+        before_cwd = Path.cwd()
+
+        result = OpenCodeRunner(model="model/test", variant="fast", executable=executable).run(
+            agent=agent,
+            prompt=prompt,
+            cwd=self.cwd,
+            timeout=2,
+        )
+
+        self.assertEqual(
+            result.argv,
+            (
+                str(executable),
+                "run",
+                "--model",
+                "model/test",
+                "--variant",
+                "fast",
+                "--agent",
+                agent,
+                "--auto",
+                prompt,
+            ),
+        )
+        invocation = self._record(record)
+        self.assertEqual(invocation["argv"], list(result.argv[1:]))
+        self.assertEqual(invocation["cwd"], str(self.cwd))
+        self.assertEqual(Path.cwd(), before_cwd)
+        self.assertFalse(marker.exists())
+        self.assertEqual(result.status, OpenCodeRunStatus.INVALID_PAYLOAD)
+
+    def test_defaults_and_pagers_are_explicit_in_child_environment(self) -> None:
+        executable, record = self._fake_executable()
+
+        with patch.dict(os.environ, {"GIT_PAGER": "less", "PAGER": "more"}):
+            result = OpenCodeRunner(executable=executable).run(
+                agent="worker",
+                prompt="default configuration",
+                cwd=self.cwd,
+                timeout=2,
+            )
+            self.assertEqual(os.environ["GIT_PAGER"], "less")
+            self.assertEqual(os.environ["PAGER"], "more")
+
+        invocation = self._record(record)
+        self.assertEqual(
+            result.argv[1:],
+            (
+                "run",
+                "--model",
+                "openai/gpt-5.6-luna",
+                "--variant",
+                "max",
+                "--agent",
+                "worker",
+                "--auto",
+                "default configuration",
+            ),
+        )
+        self.assertEqual(invocation["argv"], list(result.argv[1:]))
+        self.assertEqual(invocation["git_pager"], "cat")
+        self.assertEqual(invocation["pager"], "cat")
+
+    def test_captures_output_and_validates_worker_payload(self) -> None:
+        stdout = self._frame(self._worker_payload())
+        executable, record = self._fake_executable(
+            stdout=stdout,
+            stderr="diagnostic 🌧️\n",
+        )
+
+        result = OpenCodeRunner(executable=executable).run(
+            agent="worker",
+            prompt="produce worker result",
+            cwd=self.cwd,
+            timeout=2,
+        )
+
+        self.assertEqual(result.status, OpenCodeRunStatus.SUCCEEDED)
+        self.assertEqual(result.stdout, stdout)
+        self.assertEqual(result.stderr, "diagnostic 🌧️\n")
+        self.assertEqual(result.exit_code, 0)
+        self.assertFalse(result.timed_out)
+        self.assertIsInstance(result.payload, GotaWorkerResult)
+        self.assertEqual(result.payload.commit_sha, self.commit_sha)
+        self.assertTrue(record.exists())
+
+    def test_validates_reviewer_payload(self) -> None:
+        stdout = self._frame(self._review_payload())
+        executable, _ = self._fake_executable(stdout=stdout)
+
+        result = OpenCodeRunner(executable=executable).run(
+            agent="reviewer",
+            prompt="review the change",
+            cwd=self.cwd,
+            timeout=2,
+        )
+
+        self.assertEqual(result.status, OpenCodeRunStatus.SUCCEEDED)
+        self.assertIsInstance(result.payload, GotaReviewResult)
+        self.assertEqual(result.payload.request_id, "run-42:1:review")
+
+    def test_invalid_framing_or_payload_is_not_accepted(self) -> None:
+        executable, _ = self._fake_executable(
+            stdout=f"{GOTA_RESULT_BEGIN}\n{{}}\n{GOTA_RESULT_END}"
+        )
+
+        result = OpenCodeRunner(executable=executable).run(
+            agent="worker",
+            prompt="invalid result",
+            cwd=self.cwd,
+            timeout=2,
+        )
+
+        self.assertEqual(result.status, OpenCodeRunStatus.INVALID_PAYLOAD)
+        self.assertEqual(result.exit_code, 0)
+        self.assertIsNone(result.payload)
+        self.assertEqual(result.protocol_error_code, GotaProtocolErrorCode.MISSING_FIELD)
+        self.assertIn("MISSING_FIELD", result.error or "")
+
+    def test_output_without_gota_result_is_not_accepted(self) -> None:
+        executable, _ = self._fake_executable(stdout="ordinary OpenCode log\n")
+
+        result = OpenCodeRunner(executable=executable).run(
+            agent="worker",
+            prompt="no result",
+            cwd=self.cwd,
+            timeout=2,
+        )
+
+        self.assertEqual(result.status, OpenCodeRunStatus.INVALID_PAYLOAD)
+        self.assertEqual(result.protocol_error_code, GotaProtocolErrorCode.START_DELIMITER_MISSING)
+        self.assertIsNone(result.payload)
+
+    def test_parser_accepts_free_text_around_a_valid_frame(self) -> None:
+        stdout = self._frame(
+            self._worker_payload(),
+            prefix="operational preface\n",
+            suffix="\noperational suffix",
+        )
+        executable, _ = self._fake_executable(stdout=stdout)
+
+        result = OpenCodeRunner(executable=executable).run(
+            agent="worker",
+            prompt="valid result with logs",
+            cwd=self.cwd,
+            timeout=2,
+        )
+
+        self.assertEqual(result.status, OpenCodeRunStatus.SUCCEEDED)
+        self.assertIsInstance(result.payload, GotaWorkerResult)
+
+    def test_non_zero_exit_is_distinct_even_when_stdout_is_captured(self) -> None:
+        stdout = self._frame(self._worker_payload())
+        executable, _ = self._fake_executable(
+            stdout=stdout,
+            stderr="OpenCode failed\n",
+            exit_code=7,
+        )
+
+        result = OpenCodeRunner(executable=executable).run(
+            agent="worker",
+            prompt="failed process",
+            cwd=self.cwd,
+            timeout=2,
+        )
+
+        self.assertEqual(result.status, OpenCodeRunStatus.NON_ZERO_EXIT)
+        self.assertEqual(result.exit_code, 7)
+        self.assertEqual(result.stdout, stdout)
+        self.assertEqual(result.stderr, "OpenCode failed\n")
+        self.assertIsNone(result.payload)
+        self.assertFalse(result.timed_out)
+
+    def test_timeout_terminates_process_and_captures_partial_output(self) -> None:
+        marker = self.root / "completed-after-timeout"
+        executable, _ = self._fake_executable(
+            stdout="before timeout\n",
+            stderr="still running\n",
+            sleep_seconds=10,
+            marker=marker,
+        )
+
+        result = OpenCodeRunner(executable=executable).run(
+            agent="worker",
+            prompt="slow process",
+            cwd=self.cwd,
+            timeout=0.2,
+        )
+
+        self.assertEqual(result.status, OpenCodeRunStatus.TIMEOUT)
+        self.assertTrue(result.timed_out)
+        self.assertIsNotNone(result.exit_code)
+        self.assertIn("before timeout", result.stdout)
+        self.assertIn("still running", result.stderr)
+        time.sleep(0.1)
+        self.assertFalse(marker.exists())
+
+    def test_start_failure_and_invalid_cwd_are_distinct_from_process_results(self) -> None:
+        missing_executable = self.root / "does-not-exist"
+        start_failure = OpenCodeRunner(executable=missing_executable).run(
+            agent="worker",
+            prompt="cannot start",
+            cwd=self.cwd,
+            timeout=2,
+        )
+        invalid_cwd = OpenCodeRunner(executable=missing_executable).run(
+            agent="worker",
+            prompt="invalid cwd",
+            cwd=self.root / "missing-directory",
+            timeout=2,
+        )
+
+        for result in (start_failure, invalid_cwd):
+            with self.subTest(result=result):
+                self.assertEqual(result.status, OpenCodeRunStatus.START_FAILED)
+                self.assertIsNone(result.exit_code)
+                self.assertFalse(result.timed_out)
+                self.assertIsNone(result.payload)
+                self.assertTrue(result.error)
+
+    def test_runner_does_not_change_sqlite_or_task_state(self) -> None:
+        database = self.root / "coordinator.sqlite3"
+        store = SQLiteCoordinatorStore(database)
+        service = CoordinatorService(store)
+        spec = TaskSpec(
+            task_id="runner-task",
+            title="Runner task",
+            objective="Verify the runner boundary",
+            project_id="project-a",
+            repository_id="repo-a",
+            branch="feature/runner-task",
+            base_sha="a" * 40,
+            context_id="context-runner-task",
+            allowed_paths=("src/change.py",),
+            protected_paths=("demo/main.tscn",),
+            required_resources=(),
+            acceptance_criteria=("Runner remains state-free",),
+            commit_message="test: runner boundary",
+        )
+        task_run = service.create_task(spec, {"workspace": str(self.cwd)})
+        before_runs = store.list_runs()
+        before_events = store.list_events(task_run.run_id)
+        before_evidence = store.list_evidence(task_run.run_id)
+        before_checkpoints = store.list_checkpoints(task_run.run_id)
+        executable, _ = self._fake_executable(stdout="not a gota result")
+
+        result = OpenCodeRunner(executable=executable).run(
+            agent="worker",
+            prompt="state-free invocation",
+            cwd=self.cwd,
+            timeout=2,
+        )
+
+        self.assertEqual(result.status, OpenCodeRunStatus.INVALID_PAYLOAD)
+        self.assertEqual(store.list_runs(), before_runs)
+        self.assertEqual(store.list_events(task_run.run_id), before_events)
+        self.assertEqual(store.list_evidence(task_run.run_id), before_evidence)
+        self.assertEqual(store.list_checkpoints(task_run.run_id), before_checkpoints)
+
+
+if __name__ == "__main__":
+    unittest.main()

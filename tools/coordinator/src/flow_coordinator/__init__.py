@@ -39,6 +39,13 @@ from .gota_protocol import (
     parse_gota_output,
     parse_gota_payload,
 )
+from .opencode_runner import (
+    DEFAULT_OPENCODE_MODEL,
+    DEFAULT_OPENCODE_VARIANT,
+    OpenCodeRunResult,
+    OpenCodeRunStatus,
+    OpenCodeRunner,
+)
 
 __all__ = [
     "COORDINATOR_SCHEMA_VERSION",
@@ -77,4 +84,9 @@ __all__ = [
     "WorkerResultStatus",
     "parse_gota_output",
     "parse_gota_payload",
+    "DEFAULT_OPENCODE_MODEL",
+    "DEFAULT_OPENCODE_VARIANT",
+    "OpenCodeRunResult",
+    "OpenCodeRunStatus",
+    "OpenCodeRunner",
 ]
