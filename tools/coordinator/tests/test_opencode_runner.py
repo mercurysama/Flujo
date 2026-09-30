@@ -122,6 +122,56 @@ class OpenCodeRunnerTest(unittest.TestCase):
     def _record(self, path: Path) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
 
+    def _escaped_descendant_executable(
+        self, *, marker: Path, pid_file: Path, session_file: Path
+    ) -> Path:
+        executable = self.root / "fake opencode with escaped child"
+        child_code = "\n".join(
+            (
+                "import os",
+                "import time",
+                "from pathlib import Path",
+                "os.setsid()",
+                f"Path({str(session_file)!r}).write_text(str(os.getsid(0)), encoding='utf-8')",
+                "time.sleep(0.6)",
+                f"Path({str(marker)!r}).write_text('escaped', encoding='utf-8')",
+                "time.sleep(0.1)",
+            )
+        )
+        executable.write_text(
+            "\n".join(
+                (
+                    f"#!{sys.executable}",
+                    "import subprocess",
+                    "import time",
+                    "from pathlib import Path",
+                    f"child = subprocess.Popen([{sys.executable!r}, '-c', {child_code!r}])",
+                    f"Path({str(pid_file)!r}).write_text(str(child.pid), encoding='utf-8')",
+                    "for _ in range(100):",
+                    f"    if Path({str(session_file)!r}).exists():",
+                    "        break",
+                    "    time.sleep(0.01)",
+                    "print('helper started', flush=True)",
+                    "time.sleep(10)",
+                )
+            ),
+            encoding="utf-8",
+        )
+        executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
+        return executable
+
+    @staticmethod
+    def _linux_process_is_executing(pid: int) -> bool:
+        try:
+            stat_text = Path(f"/proc/{pid}/stat").read_text(encoding="ascii")
+        except (OSError, UnicodeError):
+            return False
+        closing_parenthesis = stat_text.rfind(")")
+        if closing_parenthesis < 0:
+            return False
+        fields = stat_text[closing_parenthesis + 2 :].split()
+        return bool(fields) and fields[0] not in {"Z", "X"}
+
     def test_builds_exact_argv_and_keeps_shell_text_as_data(self) -> None:
         marker = self.root / "must-not-exist"
         executable, record = self._fake_executable()
@@ -322,6 +372,35 @@ class OpenCodeRunnerTest(unittest.TestCase):
         self.assertIn("before timeout", result.stdout)
         self.assertIn("still running", result.stderr)
         time.sleep(0.1)
+        self.assertFalse(marker.exists())
+
+    @unittest.skipUnless(sys.platform == "linux", "requires Linux process metadata")
+    def test_timeout_terminates_setsid_descendant_and_bounds_pipe_collection(self) -> None:
+        marker = self.root / "escaped-descendant-marker"
+        pid_file = self.root / "escaped-descendant.pid"
+        session_file = self.root / "escaped-descendant.session"
+        executable = self._escaped_descendant_executable(
+            marker=marker,
+            pid_file=pid_file,
+            session_file=session_file,
+        )
+        started = time.monotonic()
+
+        result = OpenCodeRunner(executable=executable).run(
+            agent="worker",
+            prompt="terminate the complete process tree",
+            cwd=self.cwd,
+            timeout=0.1,
+        )
+        elapsed = time.monotonic() - started
+
+        self.assertEqual(result.status, OpenCodeRunStatus.TIMEOUT)
+        self.assertLess(elapsed, 1.0)
+        child_pid = int(pid_file.read_text(encoding="utf-8"))
+        self.assertEqual(session_file.read_text(encoding="utf-8"), str(child_pid))
+        self.assertFalse(self._linux_process_is_executing(child_pid))
+        self.assertFalse(marker.exists())
+        time.sleep(0.3)
         self.assertFalse(marker.exists())
 
     def test_start_failure_and_invalid_cwd_are_distinct_from_process_results(self) -> None:
