@@ -83,6 +83,29 @@ class OpenCodeRunnerTest(unittest.TestCase):
         executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
         return executable, record
 
+    def _sigterm_ignoring_executable(self, *, marker: Path, pid_file: Path) -> Path:
+        executable = self.root / "fake opencode ignoring SIGTERM"
+        executable.write_text(
+            "\n".join(
+                (
+                    f"#!{sys.executable}",
+                    "import os",
+                    "import signal",
+                    "import time",
+                    "from pathlib import Path",
+                    f"pid_file = Path({str(pid_file)!r})",
+                    f"marker = Path({str(marker)!r})",
+                    "pid_file.write_text(str(os.getpid()), encoding='utf-8')",
+                    "signal.signal(signal.SIGTERM, signal.SIG_IGN)",
+                    "time.sleep(10)",
+                    "marker.write_text('completed', encoding='utf-8')",
+                )
+            ),
+            encoding="utf-8",
+        )
+        executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
+        return executable
+
     def _worker_payload(self) -> dict[str, Any]:
         return {
             "protocol": "flujo.gota/v1",
@@ -579,6 +602,74 @@ class OpenCodeRunnerTest(unittest.TestCase):
         self.assertIn("still running", result.stderr)
         time.sleep(0.1)
         self.assertFalse(marker.exists())
+
+    @unittest.skipUnless(sys.platform == "linux", "requires Linux systemd")
+    def test_timeout_does_not_report_cleanup_for_collected_unit(self) -> None:
+        marker = self.root / "collected-unit-completed-after-timeout"
+        executable, record = self._fake_executable(
+            sleep_seconds=10,
+            marker=marker,
+        )
+        started = time.monotonic()
+
+        result = OpenCodeRunner(executable=executable).run(
+            agent="worker",
+            prompt="timeout with asynchronous unit collection",
+            cwd=self.cwd,
+            timeout=0.2,
+        )
+        elapsed = time.monotonic() - started
+
+        self.assertEqual(result.status, OpenCodeRunStatus.TIMEOUT)
+        self.assertNotIn("was not collected within the cleanup bound", result.error or "")
+        self.assertLess(elapsed, 1.5)
+        self.assertTrue(record.exists())
+        self.assertFalse(marker.exists())
+        self._assert_no_flow_units()
+        self._assert_user_manager_healthy()
+
+    @unittest.skipUnless(sys.platform == "linux", "requires Linux system supervision")
+    def test_timeout_terminates_target_that_ignores_sigterm(self) -> None:
+        marker = self.root / "sigterm-ignored-completed-after-timeout"
+        pid_file = self.root / "sigterm-ignored.pid"
+        executable = self._sigterm_ignoring_executable(marker=marker, pid_file=pid_file)
+
+        result = OpenCodeRunner(executable=executable).run(
+            agent="worker",
+            prompt="terminate a target that ignores SIGTERM",
+            cwd=self.cwd,
+            timeout=0.2,
+        )
+
+        self.assertEqual(result.status, OpenCodeRunStatus.TIMEOUT)
+        self.assertNotIn("was not collected within the cleanup bound", result.error or "")
+        target_pid = int(pid_file.read_text(encoding="utf-8"))
+        self._wait_for_process_gone(target_pid)
+        self.assertIsNone(self._linux_process_state(target_pid))
+        self.assertFalse(marker.exists())
+        self._assert_no_flow_units()
+        self._assert_user_manager_healthy()
+
+    def test_unit_collection_keeps_diagnostic_when_load_state_stays_loaded(self) -> None:
+        with (
+            patch("flow_coordinator.opencode_runner._SYSTEMD_COLLECTION_GRACE_SECONDS", 0.03),
+            patch.object(OpenCodeRunner, "_run_systemctl") as run_systemctl,
+        ):
+            run_systemctl.return_value = subprocess.CompletedProcess(
+                ["systemctl"],
+                0,
+                stdout="loaded\n",
+                stderr="",
+            )
+            started = time.monotonic()
+            collected = OpenCodeRunner._wait_for_unit_collected(
+                "systemctl", "flow-gota-still-loaded.service"
+            )
+            elapsed = time.monotonic() - started
+
+        self.assertFalse(collected)
+        self.assertGreater(run_systemctl.call_count, 1)
+        self.assertLess(elapsed, 0.5)
 
     @unittest.skipUnless(sys.platform == "linux", "requires Linux process metadata")
     def test_timeout_terminates_setsid_descendant_and_bounds_pipe_collection(self) -> None:

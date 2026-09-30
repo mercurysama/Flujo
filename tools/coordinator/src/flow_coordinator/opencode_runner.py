@@ -32,7 +32,8 @@ _PROCESS_KILL_GRACE_SECONDS: Final[float] = 0.25
 _POST_TIMEOUT_COMMUNICATE_SECONDS: Final[float] = 0.25
 _PROCESS_REAP_GRACE_SECONDS: Final[float] = 0.05
 _SYSTEMD_COMMAND_TIMEOUT_SECONDS: Final[float] = 0.25
-_SYSTEMD_COLLECTION_GRACE_SECONDS: Final[float] = 0.25
+_SYSTEMD_COLLECTION_GRACE_SECONDS: Final[float] = 1.0
+_SYSTEMD_COLLECTION_POLL_SECONDS: Final[float] = 0.01
 _SYSTEMD_UNIT_PREFIX: Final[str] = "flow-gota-"
 _WRAPPER_SCRIPT: Final[Path] = Path(__file__).with_name("opencode_wrapper.py")
 
@@ -270,18 +271,26 @@ class OpenCodeRunner:
     @classmethod
     def _wait_for_unit_collected(cls, systemctl: str, unit: str) -> bool:
         deadline = time.monotonic() + _SYSTEMD_COLLECTION_GRACE_SECONDS
-        while time.monotonic() < deadline:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
             result = cls._run_systemctl(
                 systemctl,
-                ["show", unit, "--property=ActiveState", "--value"],
-                _SYSTEMD_COMMAND_TIMEOUT_SECONDS,
+                ["show", unit, "--property=LoadState", "--value", "--no-pager"],
+                min(_SYSTEMD_COMMAND_TIMEOUT_SECONDS, remaining),
             )
-            if result is not None and result.returncode != 0:
-                return True
-            if result is not None and not result.stdout.strip():
-                return True
-            time.sleep(min(0.01, max(0.0, deadline - time.monotonic())))
-        return False
+            if result is not None:
+                load_state = (result.stdout or "").strip().lower()
+                stderr = (result.stderr or "").strip().lower()
+                if load_state in {"not-found", "loadstate=not-found"}:
+                    return True
+                if "no such unit" in stderr or "could not be found" in stderr:
+                    return True
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            time.sleep(min(_SYSTEMD_COLLECTION_POLL_SECONDS, remaining))
 
     @classmethod
     def _stop_systemd_unit(
