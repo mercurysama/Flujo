@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ctypes
 import json
 import os
 import signal
@@ -21,6 +20,7 @@ from flow_coordinator import (
     GotaWorkerResult,
     GotaProtocolErrorCode,
     OpenCodeRunStatus,
+    OpenCodeStartFailure,
     OpenCodeRunner,
 )
 from flow_coordinator.domain import TaskSpec
@@ -65,6 +65,7 @@ class OpenCodeRunnerTest(unittest.TestCase):
                     "    'cwd': os.getcwd(),",
                     "    'git_pager': os.environ.get('GIT_PAGER'),",
                     "    'pager': os.environ.get('PAGER'),",
+                    "    'probe_env': os.environ.get('FLOW_RUNNER_PROBE'),",
                     "}, ensure_ascii=False), encoding='utf-8')",
                     f"sys.stdout.write({json.dumps(stdout, ensure_ascii=False)})",
                     "sys.stdout.flush()",
@@ -126,7 +127,12 @@ class OpenCodeRunnerTest(unittest.TestCase):
         return json.loads(path.read_text(encoding="utf-8"))
 
     def _escaped_descendant_executable(
-        self, *, marker: Path, pid_file: Path, session_file: Path
+        self,
+        *,
+        marker: Path,
+        pid_file: Path,
+        session_file: Path,
+        cgroup_file: Path,
     ) -> Path:
         executable = self.root / "fake opencode with escaped child"
         child_code = "\n".join(
@@ -136,6 +142,7 @@ class OpenCodeRunnerTest(unittest.TestCase):
                 "from pathlib import Path",
                 "os.setsid()",
                 f"Path({str(session_file)!r}).write_text(str(os.getsid(0)), encoding='utf-8')",
+                f"Path({str(cgroup_file)!r}).write_text(Path('/proc/self/cgroup').read_text(encoding='utf-8'), encoding='utf-8')",
                 "time.sleep(0.6)",
                 f"Path({str(marker)!r}).write_text('escaped', encoding='utf-8')",
                 "time.sleep(0.1)",
@@ -169,8 +176,10 @@ class OpenCodeRunnerTest(unittest.TestCase):
         marker: Path,
         pid_file: Path,
         parent_file: Path,
-        supervisor_file: Path,
+        wrapper_file: Path,
         first_pid_file: Path,
+        root_pid_file: Path,
+        cgroup_file: Path,
     ) -> Path:
         executable = self.root / "fake opencode with double fork"
         executable.write_text(
@@ -183,8 +192,11 @@ class OpenCodeRunnerTest(unittest.TestCase):
                     f"marker = Path({str(marker)!r})",
                     f"pid_file = Path({str(pid_file)!r})",
                     f"parent_file = Path({str(parent_file)!r})",
-                    f"supervisor_file = Path({str(supervisor_file)!r})",
+                    f"wrapper_file = Path({str(wrapper_file)!r})",
                     f"first_pid_file = Path({str(first_pid_file)!r})",
+                    f"root_pid_file = Path({str(root_pid_file)!r})",
+                    f"cgroup_file = Path({str(cgroup_file)!r})",
+                    "root_pid_file.write_text(str(os.getpid()), encoding='utf-8')",
                     "first_pid = os.fork()",
                     "if first_pid == 0:",
                     "    first_child_pid = os.getpid()",
@@ -197,6 +209,7 @@ class OpenCodeRunnerTest(unittest.TestCase):
                     "                break",
                     "            time.sleep(0.005)",
                     "        parent_file.write_text(str(os.getppid()), encoding='utf-8')",
+                    "        cgroup_file.write_text(Path('/proc/self/cgroup').read_text(encoding='utf-8'), encoding='utf-8')",
                     "        os.write(1, b'double-fork stdout\\n')",
                     "        os.write(2, b'double-fork stderr\\n')",
                     "        time.sleep(0.8)",
@@ -205,12 +218,13 @@ class OpenCodeRunnerTest(unittest.TestCase):
                     "        os._exit(0)",
                     "    os._exit(0)",
                     "first_pid_file.write_text(str(first_pid), encoding='utf-8')",
-                    "supervisor_file.write_text(str(os.getppid()), encoding='utf-8')",
+                    "wrapper_file.write_text(str(os.getppid()), encoding='utf-8')",
                     "for _ in range(200):",
                     "    if parent_file.exists():",
                     "        break",
                     "    time.sleep(0.005)",
                     "print('double-fork root exiting', flush=True)",
+                    "time.sleep(10)",
                 )
             ),
             encoding="utf-8",
@@ -242,20 +256,125 @@ class OpenCodeRunnerTest(unittest.TestCase):
         fields = stat_text[closing_parenthesis + 2 :].split()
         return fields[0] if fields else None
 
+    @classmethod
+    def _wait_for_process_gone(cls, pid: int, timeout: float = 1.0) -> None:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if cls._linux_process_state(pid) is None:
+                return
+            time.sleep(0.01)
+
+    def _assert_no_flow_units(self) -> None:
+        result = subprocess.run(
+            [
+                "systemctl",
+                "--user",
+                "list-units",
+                "--all",
+                "flow-gota-*.service",
+                "--no-legend",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=1.0,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "")
+
+    def _assert_user_manager_healthy(self) -> None:
+        result = subprocess.run(
+            ["systemctl", "--user", "is-system-running"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=1.0,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "running")
+
+    def _assert_cgroup_empty(self, cgroup_file: Path) -> None:
+        content = cgroup_file.read_text(encoding="utf-8")
+        self.assertIn("flow-gota-", content)
+        relative_path = content.split(":", 2)[-1].strip()
+        cgroup_directory = Path("/sys/fs/cgroup") / relative_path.lstrip("/")
+        if cgroup_directory.exists():
+            self.assertEqual(
+                (cgroup_directory / "cgroup.procs")
+                .read_text(encoding="ascii")
+                .strip(),
+                "",
+            )
+
     @staticmethod
-    def _linux_child_subreaper_enabled() -> bool:
-        value = ctypes.c_int()
-        libc = ctypes.CDLL(None, use_errno=True)
-        result = libc.prctl(37, ctypes.byref(value), 0, 0, 0)
-        if result != 0:
-            raise OSError(ctypes.get_errno(), os.strerror(ctypes.get_errno()))
-        return bool(value.value)
+    def _cleanup_process(process: subprocess.Popen[str]) -> None:
+        if process.poll() is None:
+            process.terminate()
+        try:
+            process.wait(timeout=1.0)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=1.0)
+
+    def _sigstop_parent_executable(
+        self,
+        *,
+        marker: Path,
+        helper_pid_file: Path,
+        wrapper_pid_file: Path,
+        wrapper_cmdline_file: Path,
+        descendant_pid_file: Path,
+        cgroup_file: Path,
+    ) -> Path:
+        executable = self.root / "fake opencode with stopped parent"
+        descendant_code = "import time; time.sleep(10)"
+        executable.write_text(
+            "\n".join(
+                (
+                    f"#!{sys.executable}",
+                    "import os",
+                    "import signal",
+                    "import subprocess",
+                    "import time",
+                    "from pathlib import Path",
+                    f"marker = Path({str(marker)!r})",
+                    f"helper_pid_file = Path({str(helper_pid_file)!r})",
+                    f"wrapper_pid_file = Path({str(wrapper_pid_file)!r})",
+                    f"wrapper_cmdline_file = Path({str(wrapper_cmdline_file)!r})",
+                    f"descendant_pid_file = Path({str(descendant_pid_file)!r})",
+                    f"cgroup_file = Path({str(cgroup_file)!r})",
+                    "helper_pid_file.write_text(str(os.getpid()), encoding='utf-8')",
+                    "wrapper_pid = os.getppid()",
+                    "wrapper_pid_file.write_text(str(wrapper_pid), encoding='utf-8')",
+                    "wrapper_cmdline_file.write_bytes(Path(f'/proc/{wrapper_pid}/cmdline').read_bytes())",
+                    "cgroup_file.write_text(Path('/proc/self/cgroup').read_text(encoding='utf-8'), encoding='utf-8')",
+                    f"descendant = subprocess.Popen([{sys.executable!r}, '-c', {descendant_code!r}])",
+                    "descendant_pid_file.write_text(str(descendant.pid), encoding='utf-8')",
+                    "os.kill(wrapper_pid, signal.SIGSTOP)",
+                    "time.sleep(2)",
+                    "marker.write_text('late', encoding='utf-8')",
+                    "time.sleep(0.1)",
+                )
+            ),
+            encoding="utf-8",
+        )
+        executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
+        return executable
 
     def test_builds_exact_argv_and_keeps_shell_text_as_data(self) -> None:
         marker = self.root / "must-not-exist"
         executable, record = self._fake_executable()
         agent = "worker agent 🌧️"
-        prompt = f"texto con espacios y Unicode 🌧️ $(touch {marker}) ; echo hacked"
+        prompt = (
+            f"texto con espacios y Unicode 🌧️ $(touch {marker}) $ ${{HOME}} "
+            '"comillas" ; &\nsegunda línea'
+        )
         before_cwd = Path.cwd()
 
         result = OpenCodeRunner(model="model/test", variant="fast", executable=executable).run(
@@ -290,7 +409,14 @@ class OpenCodeRunnerTest(unittest.TestCase):
     def test_defaults_and_pagers_are_explicit_in_child_environment(self) -> None:
         executable, record = self._fake_executable()
 
-        with patch.dict(os.environ, {"GIT_PAGER": "less", "PAGER": "more"}):
+        with patch.dict(
+            os.environ,
+            {
+                "GIT_PAGER": "less",
+                "PAGER": "more",
+                "FLOW_RUNNER_PROBE": "$literal ${HOME} & Unicode 🌧️",
+            },
+        ):
             result = OpenCodeRunner(executable=executable).run(
                 agent="worker",
                 prompt="default configuration",
@@ -318,6 +444,7 @@ class OpenCodeRunnerTest(unittest.TestCase):
         self.assertEqual(invocation["argv"], list(result.argv[1:]))
         self.assertEqual(invocation["git_pager"], "cat")
         self.assertEqual(invocation["pager"], "cat")
+        self.assertEqual(invocation["probe_env"], "$literal ${HOME} & Unicode 🌧️")
 
     def test_captures_output_and_validates_worker_payload(self) -> None:
         stdout = self._frame(self._worker_payload())
@@ -458,11 +585,21 @@ class OpenCodeRunnerTest(unittest.TestCase):
         marker = self.root / "escaped-descendant-marker"
         pid_file = self.root / "escaped-descendant.pid"
         session_file = self.root / "escaped-descendant.session"
+        cgroup_file = self.root / "escaped-descendant.cgroup"
         executable = self._escaped_descendant_executable(
             marker=marker,
             pid_file=pid_file,
             session_file=session_file,
+            cgroup_file=cgroup_file,
         )
+        unrelated_signal_file = self.root / "setsid-unrelated-signal"
+        unrelated_code = (
+            "import signal,time; "
+            f"signal.signal(signal.SIGTERM, lambda *_: open({str(unrelated_signal_file)!r}, 'w').write('term')); "
+            "time.sleep(5)"
+        )
+        unrelated = subprocess.Popen([sys.executable, "-c", unrelated_code])
+        self.addCleanup(self._cleanup_process, unrelated)
         started = time.monotonic()
 
         result = OpenCodeRunner(executable=executable).run(
@@ -479,28 +616,44 @@ class OpenCodeRunnerTest(unittest.TestCase):
         self.assertEqual(session_file.read_text(encoding="utf-8"), str(child_pid))
         self.assertFalse(self._linux_process_is_executing(child_pid))
         self.assertFalse(marker.exists())
+        self.assertFalse(unrelated_signal_file.exists())
+        self._assert_cgroup_empty(cgroup_file)
+        self._assert_no_flow_units()
+        self._assert_user_manager_healthy()
         time.sleep(0.3)
         self.assertFalse(marker.exists())
+        self._cleanup_process(unrelated)
 
     @unittest.skipUnless(sys.platform == "linux", "requires Linux process supervision")
     def test_timeout_terminates_double_fork_reparented_descendant(self) -> None:
         marker = self.root / "double-fork-marker"
         pid_file = self.root / "double-fork.pid"
         parent_file = self.root / "double-fork.parent"
-        supervisor_file = self.root / "double-fork.supervisor"
+        wrapper_file = self.root / "double-fork.wrapper"
         first_pid_file = self.root / "double-fork.first-pid"
+        root_pid_file = self.root / "double-fork.root-pid"
+        cgroup_file = self.root / "double-fork.cgroup"
         executable = self._double_fork_descendant_executable(
             marker=marker,
             pid_file=pid_file,
             parent_file=parent_file,
-            supervisor_file=supervisor_file,
+            wrapper_file=wrapper_file,
             first_pid_file=first_pid_file,
+            root_pid_file=root_pid_file,
+            cgroup_file=cgroup_file,
         )
-        unrelated = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(5)"])
+        unrelated_signal_file = self.root / "double-fork-unrelated-signal"
+        unrelated_code = (
+            "import signal,time; "
+            f"signal.signal(signal.SIGTERM, lambda *_: open({str(unrelated_signal_file)!r}, 'w').write('term')); "
+            "time.sleep(5)"
+        )
+        unrelated = subprocess.Popen([sys.executable, "-c", unrelated_code])
         coordinator_pid = os.getpid()
-        coordinator_was_subreaper = self._linux_child_subreaper_enabled()
         child_pid: int | None = None
         first_pid: int | None = None
+        root_pid: int | None = None
+        wrapper_pid: int | None = None
         started = time.monotonic()
         try:
             result = OpenCodeRunner(executable=executable).run(
@@ -515,21 +668,26 @@ class OpenCodeRunnerTest(unittest.TestCase):
             self.assertLess(elapsed, 1.5)
             child_pid = int(pid_file.read_text(encoding="utf-8"))
             first_pid = int(first_pid_file.read_text(encoding="utf-8"))
-            supervisor_pid = int(supervisor_file.read_text(encoding="utf-8"))
-            self.assertEqual(int(parent_file.read_text(encoding="utf-8")), supervisor_pid)
-            self.assertNotEqual(supervisor_pid, coordinator_pid)
-            self.assertIsNone(self._linux_process_state(first_pid))
-            self.assertIsNone(self._linux_process_state(child_pid))
-            self.assertIsNone(self._linux_process_state(supervisor_pid))
+            root_pid = int(root_pid_file.read_text(encoding="utf-8"))
+            wrapper_pid = int(wrapper_file.read_text(encoding="utf-8"))
+            self.assertNotEqual(int(parent_file.read_text(encoding="utf-8")), wrapper_pid)
+            self.assertNotEqual(int(parent_file.read_text(encoding="utf-8")), first_pid)
+            self.assertNotEqual(wrapper_pid, coordinator_pid)
+            for process_pid in (root_pid, first_pid, child_pid, wrapper_pid):
+                self._wait_for_process_gone(process_pid)
+                self.assertIsNone(self._linux_process_state(process_pid))
             self.assertIsNone(unrelated.poll())
+            self.assertFalse(unrelated_signal_file.exists())
             self.assertTrue(self._linux_process_is_executing(coordinator_pid))
-            self.assertEqual(self._linux_child_subreaper_enabled(), coordinator_was_subreaper)
             self.assertFalse(marker.exists())
+            self._assert_cgroup_empty(cgroup_file)
+            self._assert_no_flow_units()
+            self._assert_user_manager_healthy()
             time.sleep(1.0)
             self.assertFalse(marker.exists())
             self.assertIsNone(self._linux_process_state(child_pid))
         finally:
-            for orphan_pid in (child_pid, first_pid):
+            for orphan_pid in (child_pid, first_pid, root_pid, wrapper_pid):
                 if (
                     orphan_pid is None
                     or self._linux_process_state(orphan_pid) in {None, "Z", "X"}
@@ -540,8 +698,79 @@ class OpenCodeRunnerTest(unittest.TestCase):
                 except ProcessLookupError:
                     pass
             if unrelated.poll() is None:
-                unrelated.terminate()
-            unrelated.wait(timeout=1.0)
+                self._cleanup_process(unrelated)
+
+    @unittest.skipUnless(sys.platform == "linux", "requires Linux process supervision")
+    def test_timeout_terminates_sigstop_parent_and_complete_cgroup(self) -> None:
+        marker = self.root / "sigstop-parent-marker"
+        helper_pid_file = self.root / "sigstop-parent.helper-pid"
+        wrapper_pid_file = self.root / "sigstop-parent.wrapper-pid"
+        wrapper_cmdline_file = self.root / "sigstop-parent.wrapper-cmdline"
+        descendant_pid_file = self.root / "sigstop-parent.descendant-pid"
+        cgroup_file = self.root / "sigstop-parent.cgroup"
+        executable = self._sigstop_parent_executable(
+            marker=marker,
+            helper_pid_file=helper_pid_file,
+            wrapper_pid_file=wrapper_pid_file,
+            wrapper_cmdline_file=wrapper_cmdline_file,
+            descendant_pid_file=descendant_pid_file,
+            cgroup_file=cgroup_file,
+        )
+        unrelated_signal_file = self.root / "sigstop-unrelated-signal"
+        unrelated_code = (
+            "import signal,time; "
+            f"signal.signal(signal.SIGTERM, lambda *_: open({str(unrelated_signal_file)!r}, 'w').write('term')); "
+            "time.sleep(5)"
+        )
+        unrelated = subprocess.Popen([sys.executable, "-c", unrelated_code])
+        coordinator_pid = os.getpid()
+        helper_pid: int | None = None
+        wrapper_pid: int | None = None
+        descendant_pid: int | None = None
+        try:
+            started = time.monotonic()
+            result = OpenCodeRunner(executable=executable).run(
+                agent="worker",
+                prompt="stop the wrapper parent, then contain every descendant",
+                cwd=self.cwd,
+                timeout=0.2,
+            )
+            elapsed = time.monotonic() - started
+
+            self.assertEqual(result.status, OpenCodeRunStatus.TIMEOUT)
+            self.assertLess(elapsed, 1.5)
+            helper_pid = int(helper_pid_file.read_text(encoding="utf-8"))
+            wrapper_pid = int(wrapper_pid_file.read_text(encoding="utf-8"))
+            descendant_pid = int(descendant_pid_file.read_text(encoding="utf-8"))
+            self.assertNotEqual(wrapper_pid, coordinator_pid)
+            self.assertIn(b"opencode_wrapper.py", wrapper_cmdline_file.read_bytes())
+            self._wait_for_process_gone(wrapper_pid)
+            self.assertIsNone(self._linux_process_state(wrapper_pid))
+            for process_pid in (helper_pid, descendant_pid):
+                self._wait_for_process_gone(process_pid)
+                self.assertIsNone(self._linux_process_state(process_pid))
+            self.assertFalse(marker.exists())
+            self._assert_cgroup_empty(cgroup_file)
+            self._assert_no_flow_units()
+            self.assertIsNone(unrelated.poll())
+            self.assertFalse(unrelated_signal_file.exists())
+            self.assertTrue(self._linux_process_is_executing(coordinator_pid))
+            self._assert_user_manager_healthy()
+            time.sleep(0.3)
+            self.assertFalse(marker.exists())
+        finally:
+            for orphan_pid in (helper_pid, descendant_pid, wrapper_pid):
+                if (
+                    orphan_pid is None
+                    or self._linux_process_state(orphan_pid) in {None, "Z", "X"}
+                ):
+                    continue
+                try:
+                    os.kill(orphan_pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            if unrelated.poll() is None:
+                self._cleanup_process(unrelated)
 
     def test_start_failure_and_invalid_cwd_are_distinct_from_process_results(self) -> None:
         missing_executable = self.root / "does-not-exist"
@@ -565,6 +794,31 @@ class OpenCodeRunnerTest(unittest.TestCase):
                 self.assertFalse(result.timed_out)
                 self.assertIsNone(result.payload)
                 self.assertTrue(result.error)
+        self.assertEqual(
+            start_failure.start_failure,
+            OpenCodeStartFailure.TARGET_EXECUTABLE,
+        )
+        self.assertEqual(invalid_cwd.start_failure, OpenCodeStartFailure.INVALID_CWD)
+
+    @unittest.skipUnless(sys.platform == "linux", "requires Linux systemd")
+    def test_linux_without_systemd_fails_without_an_uncontained_fallback(self) -> None:
+        executable, _ = self._fake_executable()
+
+        with patch("flow_coordinator.opencode_runner.shutil.which", return_value=None):
+            result = OpenCodeRunner(executable=executable).run(
+                agent="worker",
+                prompt="containment is required",
+                cwd=self.cwd,
+                timeout=2,
+            )
+
+        self.assertEqual(result.status, OpenCodeRunStatus.START_FAILED)
+        self.assertEqual(
+            result.start_failure,
+            OpenCodeStartFailure.CONTAINMENT_UNAVAILABLE,
+        )
+        self.assertIn("containment unavailable", result.error or "")
+        self.assertFalse((self.root / "invocation.json").exists())
 
     def test_runner_does_not_change_sqlite_or_task_state(self) -> None:
         database = self.root / "coordinator.sqlite3"

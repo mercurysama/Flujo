@@ -44,6 +44,7 @@ from .opencode_runner import (
     DEFAULT_OPENCODE_VARIANT,
     OpenCodeRunResult,
     OpenCodeRunStatus,
+    OpenCodeStartFailure,
     OpenCodeRunner,
 )
 
@@ -88,5 +89,6 @@ __all__ = [
     "DEFAULT_OPENCODE_VARIANT",
     "OpenCodeRunResult",
     "OpenCodeRunStatus",
+    "OpenCodeStartFailure",
     "OpenCodeRunner",
 ]
