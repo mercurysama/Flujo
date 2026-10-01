@@ -18,11 +18,20 @@ class GitSnapshot:
     head: str
     branch: str
     status: str
+    refs: tuple[tuple[str, str], ...]
 
 
 class ReadOnlyGitAdapter:
     _ALLOWED_COMMANDS = frozenset(
-        {"cat-file", "diff", "merge-base", "rev-parse", "rev-list", "status"}
+        {
+            "cat-file",
+            "diff",
+            "for-each-ref",
+            "merge-base",
+            "rev-parse",
+            "rev-list",
+            "status",
+        }
     )
 
     def __init__(self, repository: str | Path) -> None:
@@ -34,10 +43,11 @@ class ReadOnlyGitAdapter:
         if not arguments or arguments[0] not in self._ALLOWED_COMMANDS:
             raise GitReadError("The v1 Git adapter permits read-only commands only")
         result = subprocess.run(
-            ("git", *arguments),
+            ["git", *arguments],
             cwd=self.repository,
             check=False,
             capture_output=True,
+            shell=False,
         )
         if result.returncode != 0:
             message = result.stderr.decode("utf-8", errors="replace").strip()
@@ -69,10 +79,11 @@ class ReadOnlyGitAdapter:
 
     def is_ancestor(self, ancestor_sha: str, descendant_sha: str) -> bool:
         result = subprocess.run(
-            ("git", "merge-base", "--is-ancestor", ancestor_sha, descendant_sha),
+            ["git", "merge-base", "--is-ancestor", ancestor_sha, descendant_sha],
             cwd=self.repository,
             check=False,
             capture_output=True,
+            shell=False,
         )
         if result.returncode == 0:
             return True
@@ -106,12 +117,33 @@ class ReadOnlyGitAdapter:
         )
         return tuple(sorted(paths))
 
+    def refs(self) -> tuple[tuple[str, str], ...]:
+        raw_refs = self._run_bytes(
+            "for-each-ref",
+            "--format=%(refname)%00%(objectname)",
+        )
+        refs: list[tuple[str, str]] = []
+        for record in raw_refs.split(b"\n"):
+            if not record:
+                continue
+            ref_name, separator, object_id = record.partition(b"\0")
+            if not separator or not ref_name or not object_id:
+                raise GitReadError("Git returned an invalid ref snapshot")
+            refs.append(
+                (
+                    ref_name.decode("utf-8", errors="surrogateescape"),
+                    object_id.decode("utf-8", errors="surrogateescape"),
+                )
+            )
+        return tuple(sorted(refs))
+
     def snapshot(self) -> GitSnapshot:
         return GitSnapshot(
             repository=str(self.repository),
             head=self.head(),
             branch=self.branch(),
             status=self.status_porcelain(),
+            refs=self.refs(),
         )
 
     def file_hash(self, relative_path: str) -> str:

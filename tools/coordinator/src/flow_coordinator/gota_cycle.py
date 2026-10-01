@@ -79,6 +79,7 @@ class GotaCycleFailure(StrEnum):
     REVIEWER_HEAD_CHANGED = "reviewer_head_changed"
     REVIEWER_BRANCH_CHANGED = "reviewer_branch_changed"
     REVIEWER_WORKTREE_DIRTY = "reviewer_worktree_dirty"
+    REVIEWER_REFS_CHANGED = "reviewer_refs_changed"
     REVIEWER_GIT_FAILURE = "reviewer_git_failure"
 
 
@@ -104,7 +105,9 @@ class GotaReviewCycleResult:
 
     @property
     def decision(self) -> ReviewDecision | None:
-        return self.review_result.decision if self.review_result is not None else None
+        if self.failure is not None or self.review_result is None:
+            return None
+        return self.review_result.decision
 
 
 class GotaReviewCycle:
@@ -327,6 +330,16 @@ class GotaReviewCycle:
         runner_failure = self._worker_runner_failure(worker_execution)
         if runner_failure is not None:
             return failure(GotaCyclePhase.WORKER_EXECUTION, *runner_failure)
+        if (
+            worker_execution.status is OpenCodeRunStatus.SUCCEEDED
+            and worker_execution.exit_code != 0
+        ):
+            return failure(
+                GotaCyclePhase.WORKER_EXECUTION,
+                GotaCycleFailure.WORKER_NON_ZERO_EXIT,
+                "Worker runner reported SUCCEEDED with exit code "
+                f"{worker_execution.exit_code!r}",
+            )
         if worker_execution.status is not OpenCodeRunStatus.SUCCEEDED:
             return failure(
                 GotaCyclePhase.WORKER_EXECUTION,
@@ -448,6 +461,14 @@ class GotaReviewCycle:
             phase=GotaPhase.REVIEW,
             previous_findings=(),
         )
+        try:
+            before_reviewer = git.snapshot()
+        except GitReadError as error:
+            return failure(
+                GotaCyclePhase.REVIEWER_INTEGRITY,
+                GotaCycleFailure.REVIEWER_GIT_FAILURE,
+                f"Pre-review Git inspection failed: {error}",
+            )
         reviewer_execution = self.runner.run(
             agent=self.REVIEWER_AGENT,
             prompt=self._reviewer_prompt(
@@ -482,10 +503,27 @@ class GotaReviewCycle:
                 GotaCycleFailure.REVIEWER_WORKTREE_DIRTY,
                 f"Reviewer left a dirty worktree: {after_reviewer.status}",
             )
+        if after_reviewer.refs != before_reviewer.refs:
+            return failure(
+                GotaCyclePhase.REVIEWER_INTEGRITY,
+                GotaCycleFailure.REVIEWER_REFS_CHANGED,
+                "Reviewer mutated Git refs: "
+                f"before={before_reviewer.refs!r}, after={after_reviewer.refs!r}",
+            )
 
         runner_failure = self._reviewer_runner_failure(reviewer_execution)
         if runner_failure is not None:
             return failure(GotaCyclePhase.REVIEWER_EXECUTION, *runner_failure)
+        if (
+            reviewer_execution.status is OpenCodeRunStatus.SUCCEEDED
+            and reviewer_execution.exit_code != 0
+        ):
+            return failure(
+                GotaCyclePhase.REVIEWER_EXECUTION,
+                GotaCycleFailure.REVIEWER_NON_ZERO_EXIT,
+                "Reviewer runner reported SUCCEEDED with exit code "
+                f"{reviewer_execution.exit_code!r}",
+            )
         if reviewer_execution.status is not OpenCodeRunStatus.SUCCEEDED:
             return failure(
                 GotaCyclePhase.REVIEWER_EXECUTION,

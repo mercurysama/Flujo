@@ -141,6 +141,7 @@ class GotaReviewCycleTest(unittest.TestCase):
         *,
         payload: GotaWorkerResult | GotaReviewResult | None = None,
         status: OpenCodeRunStatus = OpenCodeRunStatus.SUCCEEDED,
+        exit_code: int | None = None,
         error: str | None = None,
     ) -> OpenCodeRunResult:
         return OpenCodeRunResult(
@@ -149,7 +150,13 @@ class GotaReviewCycleTest(unittest.TestCase):
             cwd=str(self.repository),
             stdout="",
             stderr="",
-            exit_code=0 if status is OpenCodeRunStatus.SUCCEEDED else 1,
+            exit_code=(
+                exit_code
+                if exit_code is not None
+                else 0
+                if status is OpenCodeRunStatus.SUCCEEDED
+                else 1
+            ),
             timed_out=status is OpenCodeRunStatus.TIMEOUT,
             payload=payload,
             error=error,
@@ -241,6 +248,25 @@ class GotaReviewCycleTest(unittest.TestCase):
         self.assertFalse(result.valid)
         self.assertEqual(result.failure, GotaCycleFailure.WORKER_TIMEOUT)
         self.assertIsNone(result.reviewer_execution)
+        self.assertEqual(len(runner.calls), 1)
+
+    def test_worker_succeeded_with_nonzero_exit_never_invokes_reviewer(self) -> None:
+        runner = FakeRunner(
+            [
+                lambda _agent, _prompt: self._execution(
+                    payload=self._worker_payload(self.base_sha),
+                    exit_code=7,
+                ),
+            ]
+        )
+        result = GotaReviewCycle(self.repository, runner=runner).run(
+            self._request(), timeout=3
+        )
+
+        self.assertFalse(result.valid)
+        self.assertEqual(result.failure, GotaCycleFailure.WORKER_NON_ZERO_EXIT)
+        self.assertIsNone(result.reviewer_execution)
+        self.assertIsNone(result.decision)
         self.assertEqual(len(runner.calls), 1)
 
     def test_worker_invalid_payload_never_invokes_reviewer(self) -> None:
@@ -395,6 +421,19 @@ class GotaReviewCycleTest(unittest.TestCase):
         self.assertIsNone(result.review_result)
         self.assertIsNone(result.decision)
 
+    def test_reviewer_passed_with_wrong_commit_hides_decision(self) -> None:
+        result, _, state = self._valid_cycle(
+            reviewer_step=lambda _agent, _prompt: self._execution(
+                payload=self._review_payload(self.base_sha)
+            )
+        )
+
+        self.assertFalse(result.valid)
+        self.assertEqual(result.failure, GotaCycleFailure.REVIEWER_COMMIT_MISMATCH)
+        self.assertEqual(result.review_result.decision, ReviewDecision.PASSED)
+        self.assertEqual(result.verified_commit_sha, state["commit_sha"])
+        self.assertIsNone(result.decision)
+
     def test_reviewer_head_mutation_invalidates_even_a_passed_review(self) -> None:
         def reviewer(_agent: str, _prompt: str) -> OpenCodeRunResult:
             (self.repository / "README.md").write_text("reviewer\n", encoding="utf-8")
@@ -433,6 +472,51 @@ class GotaReviewCycleTest(unittest.TestCase):
 
         self.assertFalse(result.valid)
         self.assertEqual(result.failure, GotaCycleFailure.REVIEWER_BRANCH_CHANGED)
+
+    def test_reviewer_tag_mutation_invalidates_the_cycle(self) -> None:
+        def reviewer(_agent: str, _prompt: str) -> OpenCodeRunResult:
+            self._git("tag", "reviewer-side-effect")
+            return self._execution(
+                payload=self._review_payload(self._git("rev-parse", "HEAD"))
+            )
+
+        result, _, _ = self._valid_cycle(reviewer_step=reviewer)
+
+        self.assertFalse(result.valid)
+        self.assertEqual(result.failure, GotaCycleFailure.REVIEWER_REFS_CHANGED)
+        self.assertIsNone(result.decision)
+        self.assertEqual(self._git("tag", "--list", "reviewer-side-effect"), "reviewer-side-effect")
+
+    def test_reviewer_secondary_branch_ref_mutation_invalidates_the_cycle(self) -> None:
+        def reviewer(_agent: str, _prompt: str) -> OpenCodeRunResult:
+            self._git("branch", "reviewer-secondary")
+            self._git("update-ref", "refs/heads/reviewer-secondary", self.base_sha)
+            return self._execution(
+                payload=self._review_payload(self._git("rev-parse", "HEAD"))
+            )
+
+        result, _, _ = self._valid_cycle(reviewer_step=reviewer)
+
+        self.assertFalse(result.valid)
+        self.assertEqual(result.failure, GotaCycleFailure.REVIEWER_REFS_CHANGED)
+        self.assertIsNone(result.decision)
+        self.assertEqual(
+            self._git("show-ref", "--verify", "refs/heads/reviewer-secondary").split()[0],
+            self.base_sha,
+        )
+
+    def test_reviewer_succeeded_with_nonzero_exit_invalidates_the_cycle(self) -> None:
+        def reviewer(_agent: str, _prompt: str) -> OpenCodeRunResult:
+            return self._execution(
+                payload=self._review_payload(self._git("rev-parse", "HEAD")),
+                exit_code=7,
+            )
+
+        result, _, _ = self._valid_cycle(reviewer_step=reviewer)
+
+        self.assertFalse(result.valid)
+        self.assertEqual(result.failure, GotaCycleFailure.REVIEWER_NON_ZERO_EXIT)
+        self.assertIsNone(result.decision)
 
     def test_cycle_does_not_create_task_run_or_sqlite_state(self) -> None:
         result, _, _ = self._valid_cycle()
