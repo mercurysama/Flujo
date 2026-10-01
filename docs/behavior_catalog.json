@@ -395,10 +395,11 @@
       "area": "Separated flujo.gota/v1 WorkerPhase and ReviewPhase",
       "precondition": "A clean Git repository is on the requested branch at the requested base SHA, and an injected OpenCodeRunner-compatible boundary is available.",
       "public_action": "Call WorkerPhase.run() once and pass its verified VerifiedWorkerCommit to a separate ReviewPhase.run() call.",
-      "expected_result": "WorkerPhase executes and independently verifies one Worker commit into an immutable VerifiedWorkerCommit; the separate ReviewPhase executes only gota-reviewer against that exact commit and exposes a validated PASSED review without rerunning Worker.",
+      "expected_result": "WorkerPhase executes and independently verifies one Worker commit into an immutable VerifiedWorkerCommit; the separate ReviewPhase treats every received handoff as untrusted, validates the Worker execution, payload, identity, Git metadata, and wrapper invariants before executing only gota-reviewer against that exact commit, and exposes a validated PASSED review without rerunning Worker.",
       "invariants": [
         "VerifiedWorkerCommit preserves the task/run/attempt identity, base SHA, repository, branch, verified commit SHA, verified changed paths, Worker execution/result, and Git snapshot required by ReviewPhase.",
         "WorkerPhase failures retain the existing GotaCycleFailure semantics and cannot start ReviewPhase.",
+        "ReviewPhase rejects an incoherent VerifiedWorkerCommit or WorkerPhaseResult with WORKER_RESULT_INVALID before invoking Reviewer; the result is invalid and exposes no decision, including when a wrapper hides a prior Worker failure or omits its handoff.",
         "ReviewPhase validates Reviewer identity, review phase, exact verified SHA, exit status, and post-review Git integrity without executing Worker or writing coordinator state.",
         "The existing GotaReviewCycle remains a composition facade with the same end-to-end public result semantics."
       ],

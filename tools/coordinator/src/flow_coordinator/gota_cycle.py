@@ -17,6 +17,7 @@ from .gota_phases import (
     VerifiedWorkerCommit,
     WorkerPhase,
     WorkerPhaseResult,
+    validate_verified_worker_commit,
 )
 from .gota_protocol import GotaRequest, GotaReviewResult, GotaWorkerResult, ReviewDecision
 from .opencode_runner import OpenCodeRunResult
@@ -80,6 +81,20 @@ class GotaReviewCycle:
     @staticmethod
     def _review_result(result: ReviewPhaseResult) -> GotaReviewCycleResult:
         verified = result.verified_commit
+        if verified is None:
+            return GotaReviewCycleResult(
+                base_sha="",
+                branch="",
+                worker_execution=None,
+                worker_payload=None,
+                verified_commit_sha=None,
+                verified_changed_paths=(),
+                reviewer_execution=result.reviewer_execution,
+                review_result=result.review_result,
+                phase=result.phase,
+                failure=result.failure or GotaCycleFailure.WORKER_RESULT_INVALID,
+                diagnostic=result.diagnostic,
+            )
         return GotaReviewCycleResult(
             base_sha=verified.base_sha,
             branch=verified.branch,
@@ -132,4 +147,5 @@ __all__ = [
     "VerifiedWorkerCommit",
     "WorkerPhase",
     "WorkerPhaseResult",
+    "validate_verified_worker_commit",
 ]

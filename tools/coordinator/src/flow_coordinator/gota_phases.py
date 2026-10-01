@@ -10,7 +10,9 @@ from typing import Protocol
 
 from .git_adapter import GitReadError, GitSnapshot, ReadOnlyGitAdapter
 from .gota_protocol import (
+    GOTA_PROTOCOL,
     GotaPhase,
+    GotaMessage,
     GotaRequest,
     GotaReviewResult,
     GotaWorkerResult,
@@ -167,7 +169,7 @@ class WorkerPhaseResult:
 class ReviewPhaseResult:
     """ReviewPhase outcome for one already verified Worker commit."""
 
-    verified_commit: VerifiedWorkerCommit
+    verified_commit: VerifiedWorkerCommit | None
     reviewer_execution: OpenCodeRunResult | None
     review_result: GotaReviewResult | None
     phase: GotaCyclePhase
@@ -198,6 +200,116 @@ def _identity_matches(
         and request.run_id == run_id
         and request.attempt == attempt
     )
+
+
+def _invalid_worker_handoff(detail: str) -> tuple[GotaCycleFailure, str]:
+    return (
+        GotaCycleFailure.WORKER_RESULT_INVALID,
+        f"Invalid Worker handoff: {detail}",
+    )
+
+
+def validate_verified_worker_commit(
+    handoff: object,
+) -> tuple[GotaCycleFailure, str] | None:
+    """Validate the pure Worker evidence carried across the phase boundary."""
+
+    if not isinstance(handoff, VerifiedWorkerCommit):
+        return _invalid_worker_handoff("handoff is not a VerifiedWorkerCommit")
+
+    request = handoff.request
+    if not isinstance(request, GotaRequest):
+        return _invalid_worker_handoff("request is not a GotaRequest")
+    if request.phase is not GotaPhase.WORKER:
+        return _invalid_worker_handoff("request phase is not worker")
+    if handoff.repository != Path(request.workspace).resolve():
+        return _invalid_worker_handoff(
+            "repository does not match the request workspace"
+        )
+    if handoff.base_sha != request.base_sha:
+        return _invalid_worker_handoff("base SHA does not match the request")
+    if handoff.branch != request.branch:
+        return _invalid_worker_handoff("branch does not match the request")
+
+    execution = handoff.worker_execution
+    if not isinstance(execution, OpenCodeRunResult):
+        return _invalid_worker_handoff("Worker execution is absent or invalid")
+    if execution.status is not OpenCodeRunStatus.SUCCEEDED:
+        return _invalid_worker_handoff(
+            f"Worker execution status is {execution.status!r}, not succeeded"
+        )
+    if type(execution.exit_code) is not int or execution.exit_code != 0:
+        return _invalid_worker_handoff("Worker execution exit code is not zero")
+    if execution.timed_out:
+        return _invalid_worker_handoff("Worker execution is marked as timed out")
+    if execution.error is not None:
+        return _invalid_worker_handoff("Worker execution contains an error")
+    if execution.protocol_error_code is not None or execution.start_failure is not None:
+        return _invalid_worker_handoff("Worker execution contains a prior failure")
+    if not isinstance(execution.cwd, str):
+        return _invalid_worker_handoff("Worker execution cwd is invalid")
+    if Path(execution.cwd).resolve() != handoff.repository:
+        return _invalid_worker_handoff("Worker execution cwd does not match repository")
+
+    payload = handoff.worker_payload
+    if not isinstance(payload, GotaWorkerResult):
+        return _invalid_worker_handoff("Worker payload is not a WorkerResult")
+    if (
+        payload.protocol != GOTA_PROTOCOL
+        or payload.message != GotaMessage.WORKER_RESULT.value
+        or payload.phase is not GotaPhase.WORKER
+    ):
+        return _invalid_worker_handoff("Worker payload is not a worker result")
+    if payload.result is not WorkerResultStatus.READY_FOR_REVIEW:
+        return _invalid_worker_handoff("Worker result is not READY_FOR_REVIEW")
+    if not _identity_matches(
+        request,
+        payload.request_id,
+        payload.task_id,
+        payload.run_id,
+        payload.attempt,
+    ):
+        return _invalid_worker_handoff("WorkerResult identity does not match request")
+    if not isinstance(execution.payload, GotaWorkerResult):
+        return _invalid_worker_handoff("Worker execution payload is not a WorkerResult")
+    if execution.payload != payload:
+        return _invalid_worker_handoff(
+            "Worker execution payload differs from the handoff payload"
+        )
+    if payload.commit_sha != handoff.verified_commit_sha:
+        return _invalid_worker_handoff(
+            "WorkerResult commit SHA differs from verified commit SHA"
+        )
+    if not isinstance(handoff.verified_changed_paths, tuple):
+        return _invalid_worker_handoff("verified changed paths are not a tuple")
+    if handoff.verified_changed_paths != tuple(sorted(payload.changed_paths)):
+        return _invalid_worker_handoff(
+            "WorkerResult changed_paths differ from verified changed paths"
+        )
+
+    snapshot = handoff.worker_snapshot
+    if not isinstance(snapshot, GitSnapshot):
+        return _invalid_worker_handoff("Worker Git snapshot is absent or invalid")
+    if (
+        not isinstance(snapshot.repository, str)
+        or snapshot.repository != str(handoff.repository)
+    ):
+        return _invalid_worker_handoff("Worker Git snapshot repository is incoherent")
+    if snapshot.head != handoff.verified_commit_sha:
+        return _invalid_worker_handoff("Worker Git snapshot HEAD is incoherent")
+    if snapshot.branch != handoff.branch:
+        return _invalid_worker_handoff("Worker Git snapshot branch is incoherent")
+    if snapshot.status != "":
+        return _invalid_worker_handoff("Worker Git snapshot is not clean")
+    if not isinstance(snapshot.refs, tuple) or any(
+        not isinstance(ref, tuple)
+        or len(ref) != 3
+        or any(not isinstance(value, str) for value in ref)
+        for ref in snapshot.refs
+    ):
+        return _invalid_worker_handoff("Worker Git snapshot refs are invalid")
+
+    return None
 
 
 class WorkerPhase:
@@ -621,6 +733,18 @@ class WorkerPhase:
             worker_payload=worker_payload,
             worker_snapshot=after_worker,
         )
+        handoff_failure = validate_verified_worker_commit(verified_commit)
+        if handoff_failure is not None:
+            return self._failure(
+                base_sha=base_sha,
+                branch=branch,
+                worker_execution=worker_execution,
+                worker_payload=worker_payload,
+                verified_changed_paths=verified_changed_paths,
+                phase=GotaCyclePhase.WORKER_RESULT,
+                reason=handoff_failure[0],
+                diagnostic=handoff_failure[1],
+            )
         return WorkerPhaseResult(
             base_sha=base_sha,
             branch=branch,
@@ -744,7 +868,7 @@ class ReviewPhase:
     def _failure(
         self,
         *,
-        verified: VerifiedWorkerCommit,
+        verified: VerifiedWorkerCommit | None,
         reviewer_execution: OpenCodeRunResult | None,
         review_result: GotaReviewResult | None,
         phase: GotaCyclePhase,
@@ -766,12 +890,68 @@ class ReviewPhase:
         *,
         timeout: float,
     ) -> ReviewPhaseResult:
-        """Run only Reviewer against the immutable verified Worker handoff."""
+        """Validate an untrusted Worker handoff before running Reviewer."""
 
         if isinstance(verified, WorkerPhaseResult):
-            if verified.verified_commit is None:
-                raise ValueError("ReviewPhase requires a successful WorkerPhase result")
-            verified = verified.verified_commit
+            handoff = verified.verified_commit
+            handoff_failure: tuple[GotaCycleFailure, str] | None = None
+            if verified.failure is not None:
+                handoff_failure = _invalid_worker_handoff(
+                    f"WorkerPhase result contains failure {verified.failure!r}"
+                )
+            elif verified.phase is not GotaCyclePhase.WORKER_GIT_VERIFICATION:
+                handoff_failure = _invalid_worker_handoff(
+                    "WorkerPhase result is not a verified Git handoff"
+                )
+            elif handoff is None:
+                handoff_failure = _invalid_worker_handoff(
+                    "WorkerPhase result has no verified commit"
+                )
+            elif not isinstance(handoff, VerifiedWorkerCommit):
+                handoff_failure = _invalid_worker_handoff(
+                    "WorkerPhase result contains an invalid verified commit"
+                )
+            elif (
+                verified.worker_execution is None
+                or verified.worker_payload is None
+            ):
+                handoff_failure = _invalid_worker_handoff(
+                    "WorkerPhase result is missing Worker evidence"
+                )
+            elif (
+                verified.base_sha != handoff.base_sha
+                or verified.branch != handoff.branch
+                or verified.worker_execution != handoff.worker_execution
+                or verified.worker_payload != handoff.worker_payload
+                or verified.verified_changed_paths
+                != handoff.verified_changed_paths
+            ):
+                handoff_failure = _invalid_worker_handoff(
+                    "WorkerPhase result does not match its verified commit"
+                )
+            if handoff_failure is None and handoff is not None:
+                handoff_failure = validate_verified_worker_commit(handoff)
+        elif isinstance(verified, VerifiedWorkerCommit):
+            handoff = verified
+            handoff_failure = validate_verified_worker_commit(handoff)
+        else:
+            handoff = None
+            handoff_failure = _invalid_worker_handoff(
+                "handoff is not a VerifiedWorkerCommit or WorkerPhaseResult"
+            )
+
+        if handoff_failure is not None:
+            return self._failure(
+                verified=handoff,
+                reviewer_execution=None,
+                review_result=None,
+                phase=GotaCyclePhase.WORKER_RESULT,
+                reason=handoff_failure[0],
+                diagnostic=handoff_failure[1],
+            )
+
+        assert handoff is not None
+        verified = handoff
 
         reviewer_execution: OpenCodeRunResult | None = None
         review_result: GotaReviewResult | None = None
@@ -932,4 +1112,5 @@ __all__ = [
     "VerifiedWorkerCommit",
     "WorkerPhase",
     "WorkerPhaseResult",
+    "validate_verified_worker_commit",
 ]

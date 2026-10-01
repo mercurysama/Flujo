@@ -58,6 +58,7 @@ from .gota_cycle import (
     VerifiedWorkerCommit,
     WorkerPhase,
     WorkerPhaseResult,
+    validate_verified_worker_commit,
 )
 from .decision_policy import (
     GotaDecisionPolicy,
@@ -118,6 +119,7 @@ __all__ = [
     "VerifiedWorkerCommit",
     "WorkerPhase",
     "WorkerPhaseResult",
+    "validate_verified_worker_commit",
     "GotaDecisionPolicy",
     "GotaDecisionResult",
     "GotaNextAction",

@@ -4,13 +4,15 @@ import subprocess
 import tempfile
 import unittest
 from collections.abc import Callable
-from dataclasses import FrozenInstanceError
+from copy import copy
+from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 from typing import Any
 
 from flow_coordinator import (
     GOTA_PROTOCOL,
     GotaCycleFailure,
+    GotaCyclePhase,
     GotaCheckpoint,
     GotaRequest,
     GotaReviewCycle,
@@ -22,6 +24,7 @@ from flow_coordinator import (
     ReviewDecision,
     VerifiedWorkerCommit,
     WorkerPhase,
+    WorkerPhaseResult,
     WorkerResultStatus,
 )
 from flow_coordinator.git_adapter import GitSnapshot, ReadOnlyGitAdapter
@@ -187,6 +190,54 @@ class GotaReviewCycleTest(unittest.TestCase):
 
         return step
 
+    def _create_worker_commit(self) -> str:
+        (self.repository / "src/change.py").write_text("worker\n", encoding="utf-8")
+        self._git("add", "--", "src/change.py")
+        self._git("commit", "-m", "worker change")
+        return self._git("rev-parse", "HEAD")
+
+    def _fabricated_handoff(self) -> VerifiedWorkerCommit:
+        request = self._request()
+        commit_sha = self._create_worker_commit()
+        payload = self._worker_payload(commit_sha)
+        execution = self._execution(payload=payload)
+        return VerifiedWorkerCommit(
+            request=request,
+            repository=self.repository,
+            base_sha=self.base_sha,
+            branch=request.branch,
+            verified_commit_sha=commit_sha,
+            verified_changed_paths=("src/change.py",),
+            worker_execution=execution,
+            worker_payload=payload,
+            worker_snapshot=ReadOnlyGitAdapter(self.repository).snapshot(),
+        )
+
+    def _review_handoff(
+        self, handoff: VerifiedWorkerCommit
+    ) -> tuple[Any, FakeRunner]:
+        runner = FakeRunner(
+            [
+                lambda _agent, _prompt: self._execution(
+                    payload=self._review_payload(handoff.verified_commit_sha)
+                )
+            ]
+        )
+        result = ReviewPhase(runner=runner).run(handoff, timeout=3)
+        return result, runner
+
+    def _assert_invalid_handoff(
+        self, handoff: VerifiedWorkerCommit
+    ) -> tuple[Any, FakeRunner]:
+        result, runner = self._review_handoff(handoff)
+
+        self.assertFalse(result.valid)
+        self.assertEqual(result.failure, GotaCycleFailure.WORKER_RESULT_INVALID)
+        self.assertIsNone(result.reviewer_execution)
+        self.assertIsNone(result.decision)
+        self.assertEqual(runner.calls, [])
+        return result, runner
+
     def _valid_cycle(
         self,
         decision: ReviewDecision = ReviewDecision.PASSED,
@@ -256,6 +307,127 @@ class GotaReviewCycleTest(unittest.TestCase):
             review_result.review_result.reviewed_commit_sha,
             state["commit_sha"],
         )
+
+    def test_review_phase_rejects_fabricated_timeout_handoff_before_reviewer(
+        self,
+    ) -> None:
+        handoff = self._fabricated_handoff()
+        timeout_execution = replace(
+            handoff.worker_execution,
+            status=OpenCodeRunStatus.TIMEOUT,
+            exit_code=1,
+            timed_out=True,
+            error="timeout",
+        )
+        handoff = replace(handoff, worker_execution=timeout_execution)
+
+        self._assert_invalid_handoff(handoff)
+
+    def test_review_phase_rejects_fabricated_succeeded_nonzero_worker(self) -> None:
+        handoff = self._fabricated_handoff()
+        handoff = replace(
+            handoff,
+            worker_execution=replace(handoff.worker_execution, exit_code=7),
+        )
+
+        self._assert_invalid_handoff(handoff)
+
+    def test_review_phase_rejects_worker_result_not_ready_for_review(self) -> None:
+        handoff = self._fabricated_handoff()
+        payload = copy(handoff.worker_payload)
+        object.__setattr__(payload, "result", "NOT_READY_FOR_REVIEW")
+        execution = replace(handoff.worker_execution, payload=payload)
+        handoff = replace(
+            handoff,
+            worker_execution=execution,
+            worker_payload=payload,
+        )
+
+        self._assert_invalid_handoff(handoff)
+
+    def test_review_phase_rejects_worker_result_identity_mismatch(self) -> None:
+        handoff = self._fabricated_handoff()
+        payload = replace(handoff.worker_payload, task_id="other-task")
+        execution = replace(handoff.worker_execution, payload=payload)
+        handoff = replace(
+            handoff,
+            worker_execution=execution,
+            worker_payload=payload,
+        )
+
+        self._assert_invalid_handoff(handoff)
+
+    def test_review_phase_rejects_worker_result_commit_sha_mismatch(self) -> None:
+        handoff = self._fabricated_handoff()
+        payload = replace(handoff.worker_payload, commit_sha=self.base_sha)
+        execution = replace(handoff.worker_execution, payload=payload)
+        handoff = replace(
+            handoff,
+            worker_execution=execution,
+            worker_payload=payload,
+        )
+
+        self._assert_invalid_handoff(handoff)
+
+    def test_review_phase_rejects_worker_result_changed_paths_mismatch(self) -> None:
+        handoff = self._fabricated_handoff()
+        payload = replace(handoff.worker_payload, changed_paths=("README.md",))
+        execution = replace(handoff.worker_execution, payload=payload)
+        handoff = replace(
+            handoff,
+            worker_execution=execution,
+            worker_payload=payload,
+        )
+
+        self._assert_invalid_handoff(handoff)
+
+    def test_review_phase_rejects_failed_or_incomplete_worker_phase_result(
+        self,
+    ) -> None:
+        handoff = self._fabricated_handoff()
+        wrapper_results = (
+            WorkerPhaseResult(
+                base_sha=handoff.base_sha,
+                branch=handoff.branch,
+                worker_execution=handoff.worker_execution,
+                worker_payload=handoff.worker_payload,
+                verified_commit=handoff,
+                verified_changed_paths=handoff.verified_changed_paths,
+                phase=GotaCyclePhase.WORKER_EXECUTION,
+                failure=GotaCycleFailure.WORKER_TIMEOUT,
+                diagnostic="Worker timed out",
+            ),
+            WorkerPhaseResult(
+                base_sha="",
+                branch="",
+                worker_execution=None,
+                worker_payload=None,
+                verified_commit=None,
+                verified_changed_paths=(),
+                phase=GotaCyclePhase.WORKER_EXECUTION,
+                failure=GotaCycleFailure.WORKER_RESULT_INVALID,
+                diagnostic="Worker handoff is absent",
+            ),
+        )
+
+        for worker_result in wrapper_results:
+            with self.subTest(diagnostic=worker_result.diagnostic):
+                runner = FakeRunner(
+                    [
+                        lambda _agent, _prompt: self._execution(
+                            payload=self._review_payload(handoff.verified_commit_sha)
+                        )
+                    ]
+                )
+                result = ReviewPhase(runner=runner).run(worker_result, timeout=3)
+
+                self.assertFalse(result.valid)
+                self.assertEqual(
+                    result.failure, GotaCycleFailure.WORKER_RESULT_INVALID
+                )
+                self.assertIsNone(result.reviewer_execution)
+                self.assertIsNone(result.decision)
+                self.assertEqual(runner.calls, [])
 
     def test_reviewer_correction_required_is_a_valid_cycle_decision(self) -> None:
         result, _, _ = self._valid_cycle(ReviewDecision.CORRECTION_REQUIRED)
