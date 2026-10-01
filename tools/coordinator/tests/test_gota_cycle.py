@@ -20,6 +20,7 @@ from flow_coordinator import (
     ReviewDecision,
     WorkerResultStatus,
 )
+from flow_coordinator.git_adapter import GitSnapshot, ReadOnlyGitAdapter
 
 
 CycleStep = Callable[[str, str], OpenCodeRunResult]
@@ -504,6 +505,53 @@ class GotaReviewCycleTest(unittest.TestCase):
             self._git("show-ref", "--verify", "refs/heads/reviewer-secondary").split()[0],
             self.base_sha,
         )
+
+    def test_reviewer_symbolic_ref_target_mutation_invalidates_the_cycle(self) -> None:
+        self._git("update-ref", "refs/heads/main", self.base_sha)
+        self._git("update-ref", "refs/heads/reviewer-secondary", self.base_sha)
+        self._git(
+            "symbolic-ref", "refs/heads/reviewer-alias", "refs/heads/main"
+        )
+        snapshots: list[GitSnapshot] = []
+
+        def reviewer(_agent: str, _prompt: str) -> OpenCodeRunResult:
+            snapshots.append(ReadOnlyGitAdapter(self.repository).snapshot())
+            self._git(
+                "symbolic-ref",
+                "refs/heads/reviewer-alias",
+                "refs/heads/reviewer-secondary",
+            )
+            snapshots.append(ReadOnlyGitAdapter(self.repository).snapshot())
+            return self._execution(
+                payload=self._review_payload(self._git("rev-parse", "HEAD"))
+            )
+
+        result, _, _ = self._valid_cycle(reviewer_step=reviewer)
+
+        self.assertNotEqual(snapshots[0], snapshots[1])
+        self.assertEqual(
+            next(
+                ref
+                for ref in snapshots[0].refs
+                if ref[0] == "refs/heads/reviewer-alias"
+            ),
+            ("refs/heads/reviewer-alias", self.base_sha, "refs/heads/main"),
+        )
+        self.assertEqual(
+            next(
+                ref
+                for ref in snapshots[1].refs
+                if ref[0] == "refs/heads/reviewer-alias"
+            ),
+            (
+                "refs/heads/reviewer-alias",
+                self.base_sha,
+                "refs/heads/reviewer-secondary",
+            ),
+        )
+        self.assertFalse(result.valid)
+        self.assertEqual(result.failure, GotaCycleFailure.REVIEWER_REFS_CHANGED)
+        self.assertIsNone(result.decision)
 
     def test_reviewer_succeeded_with_nonzero_exit_invalidates_the_cycle(self) -> None:
         def reviewer(_agent: str, _prompt: str) -> OpenCodeRunResult:

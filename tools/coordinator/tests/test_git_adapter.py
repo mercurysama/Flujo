@@ -39,7 +39,7 @@ class ReadOnlyGitAdapterTest(unittest.TestCase):
             after = _git(repository, "status", "--porcelain=v1")
             self.assertEqual(snapshot.branch, "main")
             self.assertEqual(snapshot.head, _git(repository, "rev-parse", "HEAD"))
-            self.assertIn(("refs/heads/main", snapshot.head), snapshot.refs)
+            self.assertIn(("refs/heads/main", snapshot.head, ""), snapshot.refs)
             self.assertEqual(before, after)
 
     def test_adapter_exposes_no_mutating_git_command(self) -> None:

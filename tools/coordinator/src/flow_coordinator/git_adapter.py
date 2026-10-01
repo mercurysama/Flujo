@@ -18,7 +18,7 @@ class GitSnapshot:
     head: str
     branch: str
     status: str
-    refs: tuple[tuple[str, str], ...]
+    refs: tuple[tuple[str, str, str], ...]
 
 
 class ReadOnlyGitAdapter:
@@ -117,22 +117,23 @@ class ReadOnlyGitAdapter:
         )
         return tuple(sorted(paths))
 
-    def refs(self) -> tuple[tuple[str, str], ...]:
+    def refs(self) -> tuple[tuple[str, str, str], ...]:
         raw_refs = self._run_bytes(
             "for-each-ref",
-            "--format=%(refname)%00%(objectname)",
+            "--format=%(refname)%00%(objectname)%00%(symref)",
         )
-        refs: list[tuple[str, str]] = []
+        refs: list[tuple[str, str, str]] = []
         for record in raw_refs.split(b"\n"):
             if not record:
                 continue
-            ref_name, separator, object_id = record.partition(b"\0")
-            if not separator or not ref_name or not object_id:
+            fields = record.split(b"\0")
+            if len(fields) != 3 or not fields[0] or not fields[1]:
                 raise GitReadError("Git returned an invalid ref snapshot")
             refs.append(
                 (
-                    ref_name.decode("utf-8", errors="surrogateescape"),
-                    object_id.decode("utf-8", errors="surrogateescape"),
+                    fields[0].decode("utf-8", errors="surrogateescape"),
+                    fields[1].decode("utf-8", errors="surrogateescape"),
+                    fields[2].decode("utf-8", errors="surrogateescape"),
                 )
             )
         return tuple(sorted(refs))
