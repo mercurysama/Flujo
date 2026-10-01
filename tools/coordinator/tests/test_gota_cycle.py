@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import unittest
 from collections.abc import Callable
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +18,10 @@ from flow_coordinator import (
     GotaWorkerResult,
     OpenCodeRunResult,
     OpenCodeRunStatus,
+    ReviewPhase,
     ReviewDecision,
+    VerifiedWorkerCommit,
+    WorkerPhase,
     WorkerResultStatus,
 )
 from flow_coordinator.git_adapter import GitSnapshot, ReadOnlyGitAdapter
@@ -215,6 +219,43 @@ class GotaReviewCycleTest(unittest.TestCase):
         ])
         self.assertEqual(self._git("rev-parse", "HEAD"), state["commit_sha"])
         self.assertEqual(self._git("status", "--porcelain=v1"), "")
+
+    def test_worker_and_review_phases_can_run_as_separate_calls(self) -> None:
+        state: dict[str, str] = {}
+
+        def review(_agent: str, _prompt: str) -> OpenCodeRunResult:
+            return self._execution(
+                payload=self._review_payload(state["commit_sha"])
+            )
+
+        runner = FakeRunner([self._worker_commit_step(state), review])
+        worker_result = WorkerPhase(self.repository, runner=runner).run(
+            self._request(), timeout=3
+        )
+
+        self.assertTrue(worker_result.valid)
+        verified = worker_result.verified_commit
+        self.assertIsInstance(verified, VerifiedWorkerCommit)
+        assert verified is not None
+        self.assertEqual(len(runner.calls), 1)
+        self.assertEqual(runner.calls[0]["agent"], "gota-worker")
+        with self.assertRaises(FrozenInstanceError):
+            verified.verified_commit_sha = "f" * 40
+
+        review_result = ReviewPhase(runner=runner).run(verified, timeout=3)
+
+        self.assertTrue(review_result.valid)
+        self.assertEqual(review_result.decision, ReviewDecision.PASSED)
+        self.assertEqual(len(runner.calls), 2)
+        self.assertEqual(
+            [call["agent"] for call in runner.calls],
+            ["gota-worker", "gota-reviewer"],
+        )
+        self.assertIn(state["commit_sha"], runner.calls[1]["prompt"])
+        self.assertEqual(
+            review_result.review_result.reviewed_commit_sha,
+            state["commit_sha"],
+        )
 
     def test_reviewer_correction_required_is_a_valid_cycle_decision(self) -> None:
         result, _, _ = self._valid_cycle(ReviewDecision.CORRECTION_REQUIRED)
