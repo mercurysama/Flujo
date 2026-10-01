@@ -54,6 +54,11 @@ from .gota_cycle import (
     GotaReviewCycle,
     GotaReviewCycleResult,
 )
+from .decision_policy import (
+    GotaDecisionPolicy,
+    GotaDecisionResult,
+    GotaNextAction,
+)
 
 __all__ = [
     "COORDINATOR_SCHEMA_VERSION",
@@ -103,4 +108,7 @@ __all__ = [
     "GotaCycleRunner",
     "GotaReviewCycle",
     "GotaReviewCycleResult",
+    "GotaDecisionPolicy",
+    "GotaDecisionResult",
+    "GotaNextAction",
 ]

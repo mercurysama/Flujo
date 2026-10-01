@@ -389,6 +389,21 @@
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": ["tools/coordinator/tests/test_gota_cycle.py"]
+    },
+    {
+      "id": "FLUJO-BHV-GOTA-POLICY-001",
+      "area": "GotaReviewCycle decision policy",
+      "precondition": "A GotaReviewCycleResult is available from one coordinator cycle.",
+      "public_action": "Call GotaDecisionPolicy.resolve(cycle_result).",
+      "expected_result": "An accepted ReviewDecision maps to COMPLETE, CORRECT, WAIT_FOR_HUMAN, or BLOCK; an invalid cycle produces CYCLE_FAILED without inventing a business decision.",
+      "invariants": [
+        "Only a valid cycle with an accepted ReviewResult can produce a business action.",
+        "A technical cycle failure never becomes BLOCK.",
+        "Resolution is deterministic and does not execute the selected action or perform Git, Runner, SQLite, TaskRun, or retry work."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tools/coordinator/tests/test_decision_policy.py"]
     }
   ]
 }
