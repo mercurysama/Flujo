@@ -150,6 +150,7 @@ class GotaReviewCycleTest(unittest.TestCase):
         payload: GotaWorkerResult | GotaReviewResult | None = None,
         status: OpenCodeRunStatus = OpenCodeRunStatus.SUCCEEDED,
         exit_code: int | None = None,
+        timed_out: bool | None = None,
         error: str | None = None,
     ) -> OpenCodeRunResult:
         return OpenCodeRunResult(
@@ -165,7 +166,11 @@ class GotaReviewCycleTest(unittest.TestCase):
                 if status is OpenCodeRunStatus.SUCCEEDED
                 else 1
             ),
-            timed_out=status is OpenCodeRunStatus.TIMEOUT,
+            timed_out=(
+                status is OpenCodeRunStatus.TIMEOUT
+                if timed_out is None
+                else timed_out
+            ),
             payload=payload,
             error=error,
         )
@@ -214,17 +219,50 @@ class GotaReviewCycleTest(unittest.TestCase):
         )
 
     def _review_handoff(
-        self, handoff: VerifiedWorkerCommit
+        self,
+        handoff: VerifiedWorkerCommit,
+        reviewer_step: CycleStep | None = None,
     ) -> tuple[Any, FakeRunner]:
         runner = FakeRunner(
             [
-                lambda _agent, _prompt: self._execution(
-                    payload=self._review_payload(handoff.verified_commit_sha)
+                reviewer_step
+                or (
+                    lambda _agent, _prompt: self._execution(
+                        payload=self._review_payload(handoff.verified_commit_sha)
+                    )
                 )
             ]
         )
         result = ReviewPhase(runner=runner).run(handoff, timeout=3)
         return result, runner
+
+    def _fabricated_handoff_with_commit_count(
+        self, commit_count: int
+    ) -> VerifiedWorkerCommit:
+        request = self._request()
+        changed_files = ("src/change.py", "README.md")
+        for index in range(commit_count):
+            path = self.repository / changed_files[index]
+            path.write_text(f"worker {index}\n", encoding="utf-8")
+            self._git("add", "--", changed_files[index])
+            self._git("commit", "-m", f"worker change {index}")
+        commit_sha = self._git("rev-parse", "HEAD")
+        changed_paths = ReadOnlyGitAdapter(self.repository).changed_paths(
+            self.base_sha, commit_sha
+        )
+        payload = self._worker_payload(commit_sha, changed_paths)
+        execution = self._execution(payload=payload)
+        return VerifiedWorkerCommit(
+            request=request,
+            repository=self.repository,
+            base_sha=self.base_sha,
+            branch=request.branch,
+            verified_commit_sha=commit_sha,
+            verified_changed_paths=changed_paths,
+            worker_execution=execution,
+            worker_payload=payload,
+            worker_snapshot=ReadOnlyGitAdapter(self.repository).snapshot(),
+        )
 
     def _assert_invalid_handoff(
         self, handoff: VerifiedWorkerCommit
@@ -307,6 +345,133 @@ class GotaReviewCycleTest(unittest.TestCase):
             review_result.review_result.reviewed_commit_sha,
             state["commit_sha"],
         )
+
+    def test_review_phase_rejects_handoff_when_base_equals_head(self) -> None:
+        handoff = self._fabricated_handoff_with_commit_count(0)
+
+        result, runner = self._review_handoff(handoff)
+
+        self.assertFalse(result.valid)
+        self.assertEqual(result.failure, GotaCycleFailure.WORKER_NO_COMMIT)
+        self.assertIn("did not produce a commit", result.diagnostic)
+        self.assertIsNone(result.decision)
+        self.assertEqual(runner.calls, [])
+
+    def test_review_phase_accepts_handoff_with_exactly_one_commit(self) -> None:
+        handoff = self._fabricated_handoff_with_commit_count(1)
+
+        result, runner = self._review_handoff(handoff)
+
+        self.assertTrue(result.valid)
+        self.assertEqual(result.decision, ReviewDecision.PASSED)
+        self.assertEqual([call["agent"] for call in runner.calls], ["gota-reviewer"])
+
+    def test_review_phase_rejects_handoff_with_multiple_commits(self) -> None:
+        handoff = self._fabricated_handoff_with_commit_count(2)
+
+        result, runner = self._review_handoff(handoff)
+
+        self.assertFalse(result.valid)
+        self.assertEqual(result.failure, GotaCycleFailure.WORKER_MULTIPLE_COMMITS)
+        self.assertIn("2 commits", result.diagnostic)
+        self.assertIsNone(result.decision)
+        self.assertEqual(runner.calls, [])
+
+    def test_review_phase_rejects_contradictory_succeeded_timeout(self) -> None:
+        handoff = self._fabricated_handoff()
+
+        def reviewer(_agent: str, _prompt: str) -> OpenCodeRunResult:
+            return self._execution(
+                payload=self._review_payload(handoff.verified_commit_sha),
+                timed_out=True,
+                error="timeout diagnostic",
+            )
+
+        result, runner = self._review_handoff(handoff, reviewer)
+
+        self.assertFalse(result.valid)
+        self.assertEqual(result.failure, GotaCycleFailure.REVIEWER_RESULT_INVALID)
+        self.assertIsNotNone(result.reviewer_execution)
+        self.assertIsNone(result.review_result)
+        self.assertIsNone(result.decision)
+        self.assertEqual([call["agent"] for call in runner.calls], ["gota-reviewer"])
+
+    def test_review_phase_accepts_coherent_succeeded_reviewer(self) -> None:
+        handoff = self._fabricated_handoff()
+
+        result, runner = self._review_handoff(handoff)
+
+        self.assertTrue(result.valid)
+        self.assertEqual(result.decision, ReviewDecision.PASSED)
+        self.assertEqual([call["agent"] for call in runner.calls], ["gota-reviewer"])
+
+    def test_review_phase_revalidates_changed_paths_against_git(self) -> None:
+        handoff = self._fabricated_handoff()
+        payload = replace(handoff.worker_payload, changed_paths=("README.md",))
+        execution = replace(handoff.worker_execution, payload=payload)
+        handoff = replace(
+            handoff,
+            worker_execution=execution,
+            worker_payload=payload,
+            verified_changed_paths=("README.md",),
+        )
+
+        result, runner = self._review_handoff(handoff)
+
+        self.assertFalse(result.valid)
+        self.assertEqual(result.failure, GotaCycleFailure.WORKER_CHANGED_PATHS_MISMATCH)
+        self.assertIsNone(result.decision)
+        self.assertEqual(runner.calls, [])
+
+    def test_review_phase_rejects_head_change_before_reviewer(self) -> None:
+        handoff = self._fabricated_handoff()
+        (self.repository / "src/change.py").write_text(
+            "after review handoff\n", encoding="utf-8"
+        )
+        self._git("add", "--", "src/change.py")
+        self._git("commit", "-m", "unexpected post-worker commit")
+
+        result, runner = self._review_handoff(handoff)
+
+        self.assertFalse(result.valid)
+        self.assertEqual(result.failure, GotaCycleFailure.REVIEWER_HEAD_CHANGED)
+        self.assertIsNone(result.decision)
+        self.assertEqual(runner.calls, [])
+
+    def test_review_phase_rejects_branch_change_before_reviewer(self) -> None:
+        handoff = self._fabricated_handoff()
+        self._git("checkout", "-b", "changed-before-review")
+
+        result, runner = self._review_handoff(handoff)
+
+        self.assertFalse(result.valid)
+        self.assertEqual(result.failure, GotaCycleFailure.REVIEWER_BRANCH_CHANGED)
+        self.assertIsNone(result.decision)
+        self.assertEqual(runner.calls, [])
+
+    def test_review_phase_rejects_dirty_worktree_before_reviewer(self) -> None:
+        handoff = self._fabricated_handoff()
+        (self.repository / "reviewer-dirty.txt").write_text(
+            "dirty\n", encoding="utf-8"
+        )
+
+        result, runner = self._review_handoff(handoff)
+
+        self.assertFalse(result.valid)
+        self.assertEqual(result.failure, GotaCycleFailure.REVIEWER_WORKTREE_DIRTY)
+        self.assertIsNone(result.decision)
+        self.assertEqual(runner.calls, [])
+
+    def test_review_phase_rejects_ref_change_before_reviewer(self) -> None:
+        handoff = self._fabricated_handoff()
+        self._git("tag", "changed-before-review")
+
+        result, runner = self._review_handoff(handoff)
+
+        self.assertFalse(result.valid)
+        self.assertEqual(result.failure, GotaCycleFailure.REVIEWER_REFS_CHANGED)
+        self.assertIsNone(result.decision)
+        self.assertEqual(runner.calls, [])
 
     def test_review_phase_rejects_fabricated_timeout_handoff_before_reviewer(
         self,

@@ -137,6 +137,253 @@ class VerifiedWorkerCommit:
 
 
 @dataclass(frozen=True, slots=True)
+class GitHandoffVerification:
+    """Ephemeral result of one read-only Worker commit verification."""
+
+    snapshot: GitSnapshot | None
+    changed_paths: tuple[str, ...]
+    failure: GotaCycleFailure | None
+    diagnostic: str
+
+    @property
+    def valid(self) -> bool:
+        return self.failure is None and self.snapshot is not None
+
+
+def validate_successful_execution(
+    execution: object,
+    expected_payload_type: type[GotaWorkerResult] | type[GotaReviewResult],
+    *,
+    expected_cwd: Path | None = None,
+) -> str | None:
+    """Accept an execution only when every success signal is coherent."""
+
+    if not isinstance(execution, OpenCodeRunResult):
+        return "execution is not an OpenCodeRunResult"
+    if execution.status is not OpenCodeRunStatus.SUCCEEDED:
+        return f"status is {execution.status!r}, not succeeded"
+    if type(execution.exit_code) is not int or execution.exit_code != 0:
+        return "exit code is not zero"
+    if execution.timed_out is not False:
+        return "execution is marked as timed out"
+    if execution.error is not None:
+        return "execution contains an error"
+    if execution.protocol_error_code is not None:
+        return "execution contains a protocol error"
+    if execution.start_failure is not None:
+        return "execution contains a startup failure"
+    if not isinstance(execution.cwd, str):
+        return "execution cwd is invalid"
+    if expected_cwd is not None and Path(execution.cwd).resolve() != expected_cwd:
+        return "execution cwd does not match the expected repository"
+    if not isinstance(execution.payload, expected_payload_type):
+        return "execution payload has the wrong type"
+    return None
+
+
+def verify_worker_commit_git(
+    git: ReadOnlyGitAdapter,
+    *,
+    base_sha: str,
+    expected_branch: str,
+    verified_commit_sha: str,
+    worker_changed_paths: tuple[str, ...],
+    verified_changed_paths: tuple[str, ...] | None = None,
+    expected_snapshot: GitSnapshot | None = None,
+) -> GitHandoffVerification:
+    """Verify one Worker handoff against the current repository, read-only."""
+
+    try:
+        observed = git.snapshot()
+    except GitReadError as error:
+        return GitHandoffVerification(
+            snapshot=None,
+            changed_paths=(),
+            failure=GotaCycleFailure.WORKER_GIT_FAILURE,
+            diagnostic=f"Git snapshot inspection failed: {error}",
+        )
+
+    if expected_snapshot is not None:
+        if observed.head != expected_snapshot.head:
+            return GitHandoffVerification(
+                snapshot=observed,
+                changed_paths=(),
+                failure=GotaCycleFailure.REVIEWER_HEAD_CHANGED,
+                diagnostic=(
+                    "Git HEAD changed before or after Reviewer: "
+                    f"expected {expected_snapshot.head}, observed {observed.head}"
+                ),
+            )
+        if observed.branch != expected_snapshot.branch:
+            return GitHandoffVerification(
+                snapshot=observed,
+                changed_paths=(),
+                failure=GotaCycleFailure.REVIEWER_BRANCH_CHANGED,
+                diagnostic=(
+                    "Git branch changed before or after Reviewer: "
+                    f"expected {expected_snapshot.branch}, observed {observed.branch}"
+                ),
+            )
+        if observed.status:
+            return GitHandoffVerification(
+                snapshot=observed,
+                changed_paths=(),
+                failure=GotaCycleFailure.REVIEWER_WORKTREE_DIRTY,
+                diagnostic=f"Worktree changed before or after Reviewer: {observed.status}",
+            )
+        if observed.refs != expected_snapshot.refs:
+            return GitHandoffVerification(
+                snapshot=observed,
+                changed_paths=(),
+                failure=GotaCycleFailure.REVIEWER_REFS_CHANGED,
+                diagnostic=(
+                    "Git refs changed before or after Reviewer: "
+                    f"expected {expected_snapshot.refs!r}, observed {observed.refs!r}"
+                ),
+            )
+
+    if expected_snapshot is None and observed.branch != expected_branch:
+        return GitHandoffVerification(
+            snapshot=observed,
+            changed_paths=(),
+            failure=GotaCycleFailure.WORKER_BRANCH_CHANGED,
+            diagnostic=(
+                f"Worker branch is {observed.branch}, expected {expected_branch}"
+            ),
+        )
+    if expected_snapshot is None and observed.status:
+        return GitHandoffVerification(
+            snapshot=observed,
+            changed_paths=(),
+            failure=GotaCycleFailure.WORKER_WORKTREE_DIRTY,
+            diagnostic=f"Worker left a dirty worktree: {observed.status}",
+        )
+
+    try:
+        base_type = git.object_type(base_sha)
+    except GitReadError as error:
+        return GitHandoffVerification(
+            snapshot=observed,
+            changed_paths=(),
+            failure=GotaCycleFailure.WORKER_GIT_FAILURE,
+            diagnostic=f"Worker base SHA inspection failed: {error}",
+        )
+    if base_type != "commit":
+        return GitHandoffVerification(
+            snapshot=observed,
+            changed_paths=(),
+            failure=GotaCycleFailure.WORKER_GIT_FAILURE,
+            diagnostic=(
+                f"Worker base SHA is a Git object of type {base_type}, not a commit"
+            ),
+        )
+
+    try:
+        commit_type = git.object_type(verified_commit_sha)
+    except GitReadError:
+        return GitHandoffVerification(
+            snapshot=observed,
+            changed_paths=(),
+            failure=GotaCycleFailure.WORKER_COMMIT_NOT_FOUND,
+            diagnostic=f"Worker declared a SHA that does not exist: {verified_commit_sha}",
+        )
+    if commit_type != "commit":
+        return GitHandoffVerification(
+            snapshot=observed,
+            changed_paths=(),
+            failure=GotaCycleFailure.WORKER_COMMIT_INVALID,
+            diagnostic=(
+                f"Worker declared a Git object of type {commit_type}, not a commit"
+            ),
+        )
+
+    if observed.head != verified_commit_sha:
+        return GitHandoffVerification(
+            snapshot=observed,
+            changed_paths=(),
+            failure=GotaCycleFailure.WORKER_HEAD_MISMATCH,
+            diagnostic=(
+                f"Worker declared {verified_commit_sha}, observed HEAD {observed.head}"
+            ),
+        )
+
+    try:
+        if not git.is_ancestor(base_sha, verified_commit_sha):
+            return GitHandoffVerification(
+                snapshot=observed,
+                changed_paths=(),
+                failure=GotaCycleFailure.WORKER_NOT_DESCENDANT,
+                diagnostic=(
+                    f"Worker commit {verified_commit_sha} does not descend from {base_sha}"
+                ),
+            )
+        commit_count = git.commit_count_between(base_sha, verified_commit_sha)
+    except GitReadError as error:
+        return GitHandoffVerification(
+            snapshot=observed,
+            changed_paths=(),
+            failure=GotaCycleFailure.WORKER_GIT_FAILURE,
+            diagnostic=f"Worker commit ancestry inspection failed: {error}",
+        )
+    if commit_count == 0:
+        return GitHandoffVerification(
+            snapshot=observed,
+            changed_paths=(),
+            failure=GotaCycleFailure.WORKER_NO_COMMIT,
+            diagnostic="Worker did not produce a commit after the captured base",
+        )
+    if commit_count > 1:
+        return GitHandoffVerification(
+            snapshot=observed,
+            changed_paths=(),
+            failure=GotaCycleFailure.WORKER_MULTIPLE_COMMITS,
+            diagnostic=f"Worker produced {commit_count} commits; exactly one is allowed",
+        )
+
+    try:
+        changed_paths = git.changed_paths(base_sha, verified_commit_sha)
+    except GitReadError as error:
+        return GitHandoffVerification(
+            snapshot=observed,
+            changed_paths=(),
+            failure=GotaCycleFailure.WORKER_GIT_FAILURE,
+            diagnostic=f"Worker changed-path inspection failed: {error}",
+        )
+
+    declared_worker_paths = tuple(sorted(worker_changed_paths))
+    if declared_worker_paths != changed_paths:
+        return GitHandoffVerification(
+            snapshot=observed,
+            changed_paths=changed_paths,
+            failure=GotaCycleFailure.WORKER_CHANGED_PATHS_MISMATCH,
+            diagnostic=(
+                "Worker changed_paths differ from the independent Git diff: "
+                f"declared={declared_worker_paths!r}, actual={changed_paths!r}"
+            ),
+        )
+    if (
+        verified_changed_paths is not None
+        and tuple(sorted(verified_changed_paths)) != changed_paths
+    ):
+        return GitHandoffVerification(
+            snapshot=observed,
+            changed_paths=changed_paths,
+            failure=GotaCycleFailure.WORKER_CHANGED_PATHS_MISMATCH,
+            diagnostic=(
+                "Verified changed_paths differ from the independent Git diff: "
+                f"verified={tuple(sorted(verified_changed_paths))!r}, actual={changed_paths!r}"
+            ),
+        )
+
+    return GitHandoffVerification(
+        snapshot=observed,
+        changed_paths=changed_paths,
+        failure=None,
+        diagnostic="Worker commit Git state independently verified",
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class WorkerPhaseResult:
     """WorkerPhase outcome, including a verified handoff only on success."""
 
@@ -232,24 +479,16 @@ def validate_verified_worker_commit(
         return _invalid_worker_handoff("branch does not match the request")
 
     execution = handoff.worker_execution
-    if not isinstance(execution, OpenCodeRunResult):
-        return _invalid_worker_handoff("Worker execution is absent or invalid")
-    if execution.status is not OpenCodeRunStatus.SUCCEEDED:
+    execution_failure = validate_successful_execution(
+        execution,
+        GotaWorkerResult,
+        expected_cwd=handoff.repository,
+    )
+    if execution_failure is not None:
         return _invalid_worker_handoff(
-            f"Worker execution status is {execution.status!r}, not succeeded"
+            f"Worker execution is incoherent: {execution_failure}"
         )
-    if type(execution.exit_code) is not int or execution.exit_code != 0:
-        return _invalid_worker_handoff("Worker execution exit code is not zero")
-    if execution.timed_out:
-        return _invalid_worker_handoff("Worker execution is marked as timed out")
-    if execution.error is not None:
-        return _invalid_worker_handoff("Worker execution contains an error")
-    if execution.protocol_error_code is not None or execution.start_failure is not None:
-        return _invalid_worker_handoff("Worker execution contains a prior failure")
-    if not isinstance(execution.cwd, str):
-        return _invalid_worker_handoff("Worker execution cwd is invalid")
-    if Path(execution.cwd).resolve() != handoff.repository:
-        return _invalid_worker_handoff("Worker execution cwd does not match repository")
+    assert isinstance(execution, OpenCodeRunResult)
 
     payload = handoff.worker_payload
     if not isinstance(payload, GotaWorkerResult):
@@ -270,8 +509,6 @@ def validate_verified_worker_commit(
         payload.attempt,
     ):
         return _invalid_worker_handoff("WorkerResult identity does not match request")
-    if not isinstance(execution.payload, GotaWorkerResult):
-        return _invalid_worker_handoff("Worker execution payload is not a WorkerResult")
     if execution.payload != payload:
         return _invalid_worker_handoff(
             "Worker execution payload differs from the handoff payload"
@@ -538,8 +775,24 @@ class WorkerPhase:
                 reason=GotaCycleFailure.WORKER_RESULT_INVALID,
                 diagnostic="Worker runner succeeded without a WorkerResult payload",
             )
-
         worker_payload = worker_execution.payload
+        execution_failure = validate_successful_execution(
+            worker_execution,
+            GotaWorkerResult,
+            expected_cwd=self.repository,
+        )
+        if execution_failure is not None:
+            return self._failure(
+                base_sha=base_sha,
+                branch=branch,
+                worker_execution=worker_execution,
+                worker_payload=worker_payload,
+                verified_changed_paths=verified_changed_paths,
+                phase=GotaCyclePhase.WORKER_EXECUTION,
+                reason=GotaCycleFailure.WORKER_RESULT_INVALID,
+                diagnostic=f"Worker execution is incoherent: {execution_failure}",
+            )
+
         if not _identity_matches(
             request,
             worker_payload.request_id,
@@ -560,167 +813,27 @@ class WorkerPhase:
                 diagnostic="WorkerResult identity or result is not valid for this cycle",
             )
 
-        try:
-            after_worker = git.snapshot()
-        except GitReadError as error:
+        git_verification = verify_worker_commit_git(
+            git,
+            base_sha=base_sha,
+            expected_branch=branch,
+            verified_commit_sha=worker_payload.commit_sha,
+            worker_changed_paths=worker_payload.changed_paths,
+        )
+        if not git_verification.valid:
             return self._failure(
                 base_sha=base_sha,
                 branch=branch,
                 worker_execution=worker_execution,
                 worker_payload=worker_payload,
-                verified_changed_paths=verified_changed_paths,
+                verified_changed_paths=git_verification.changed_paths,
                 phase=GotaCyclePhase.WORKER_GIT_VERIFICATION,
-                reason=GotaCycleFailure.WORKER_GIT_FAILURE,
-                diagnostic=f"Worker Git inspection failed: {error}",
+                reason=git_verification.failure or GotaCycleFailure.WORKER_GIT_FAILURE,
+                diagnostic=git_verification.diagnostic,
             )
-        if after_worker.branch != branch:
-            return self._failure(
-                base_sha=base_sha,
-                branch=branch,
-                worker_execution=worker_execution,
-                worker_payload=worker_payload,
-                verified_changed_paths=verified_changed_paths,
-                phase=GotaCyclePhase.WORKER_GIT_VERIFICATION,
-                reason=GotaCycleFailure.WORKER_BRANCH_CHANGED,
-                diagnostic=f"Worker changed branch from {branch} to {after_worker.branch}",
-            )
-        if after_worker.status:
-            return self._failure(
-                base_sha=base_sha,
-                branch=branch,
-                worker_execution=worker_execution,
-                worker_payload=worker_payload,
-                verified_changed_paths=verified_changed_paths,
-                phase=GotaCyclePhase.WORKER_GIT_VERIFICATION,
-                reason=GotaCycleFailure.WORKER_WORKTREE_DIRTY,
-                diagnostic=f"Worker left a dirty worktree: {after_worker.status}",
-            )
-        try:
-            object_type = git.object_type(worker_payload.commit_sha)
-        except GitReadError:
-            return self._failure(
-                base_sha=base_sha,
-                branch=branch,
-                worker_execution=worker_execution,
-                worker_payload=worker_payload,
-                verified_changed_paths=verified_changed_paths,
-                phase=GotaCyclePhase.WORKER_GIT_VERIFICATION,
-                reason=GotaCycleFailure.WORKER_COMMIT_NOT_FOUND,
-                diagnostic=(
-                    "Worker declared a SHA that does not exist: "
-                    f"{worker_payload.commit_sha}"
-                ),
-            )
-        if object_type != "commit":
-            return self._failure(
-                base_sha=base_sha,
-                branch=branch,
-                worker_execution=worker_execution,
-                worker_payload=worker_payload,
-                verified_changed_paths=verified_changed_paths,
-                phase=GotaCyclePhase.WORKER_GIT_VERIFICATION,
-                reason=GotaCycleFailure.WORKER_COMMIT_INVALID,
-                diagnostic=(
-                    f"Worker declared a Git object of type {object_type}, not a commit"
-                ),
-            )
-        if after_worker.head != worker_payload.commit_sha:
-            return self._failure(
-                base_sha=base_sha,
-                branch=branch,
-                worker_execution=worker_execution,
-                worker_payload=worker_payload,
-                verified_changed_paths=verified_changed_paths,
-                phase=GotaCyclePhase.WORKER_GIT_VERIFICATION,
-                reason=GotaCycleFailure.WORKER_HEAD_MISMATCH,
-                diagnostic=(
-                    f"Worker declared {worker_payload.commit_sha}, observed HEAD "
-                    f"{after_worker.head}"
-                ),
-            )
-        try:
-            if not git.is_ancestor(base_sha, worker_payload.commit_sha):
-                return self._failure(
-                    base_sha=base_sha,
-                    branch=branch,
-                    worker_execution=worker_execution,
-                    worker_payload=worker_payload,
-                    verified_changed_paths=verified_changed_paths,
-                    phase=GotaCyclePhase.WORKER_GIT_VERIFICATION,
-                    reason=GotaCycleFailure.WORKER_NOT_DESCENDANT,
-                    diagnostic=(
-                        f"Worker commit {worker_payload.commit_sha} does not descend "
-                        f"from {base_sha}"
-                    ),
-                )
-            commit_count = git.commit_count_between(
-                base_sha, worker_payload.commit_sha
-            )
-        except GitReadError as error:
-            return self._failure(
-                base_sha=base_sha,
-                branch=branch,
-                worker_execution=worker_execution,
-                worker_payload=worker_payload,
-                verified_changed_paths=verified_changed_paths,
-                phase=GotaCyclePhase.WORKER_GIT_VERIFICATION,
-                reason=GotaCycleFailure.WORKER_GIT_FAILURE,
-                diagnostic=f"Worker commit ancestry inspection failed: {error}",
-            )
-        if commit_count == 0:
-            return self._failure(
-                base_sha=base_sha,
-                branch=branch,
-                worker_execution=worker_execution,
-                worker_payload=worker_payload,
-                verified_changed_paths=verified_changed_paths,
-                phase=GotaCyclePhase.WORKER_GIT_VERIFICATION,
-                reason=GotaCycleFailure.WORKER_NO_COMMIT,
-                diagnostic="Worker did not produce a commit after the captured base",
-            )
-        if commit_count > 1:
-            return self._failure(
-                base_sha=base_sha,
-                branch=branch,
-                worker_execution=worker_execution,
-                worker_payload=worker_payload,
-                verified_changed_paths=verified_changed_paths,
-                phase=GotaCyclePhase.WORKER_GIT_VERIFICATION,
-                reason=GotaCycleFailure.WORKER_MULTIPLE_COMMITS,
-                diagnostic=(
-                    f"Worker produced {commit_count} commits; exactly one is allowed"
-                ),
-            )
-        try:
-            verified_changed_paths = git.changed_paths(
-                base_sha, worker_payload.commit_sha
-            )
-        except GitReadError as error:
-            return self._failure(
-                base_sha=base_sha,
-                branch=branch,
-                worker_execution=worker_execution,
-                worker_payload=worker_payload,
-                verified_changed_paths=verified_changed_paths,
-                phase=GotaCyclePhase.WORKER_GIT_VERIFICATION,
-                reason=GotaCycleFailure.WORKER_GIT_FAILURE,
-                diagnostic=f"Worker changed-path inspection failed: {error}",
-            )
-        declared_paths = tuple(sorted(worker_payload.changed_paths))
-        if declared_paths != verified_changed_paths:
-            return self._failure(
-                base_sha=base_sha,
-                branch=branch,
-                worker_execution=worker_execution,
-                worker_payload=worker_payload,
-                verified_changed_paths=verified_changed_paths,
-                phase=GotaCyclePhase.WORKER_GIT_VERIFICATION,
-                reason=GotaCycleFailure.WORKER_CHANGED_PATHS_MISMATCH,
-                diagnostic=(
-                    "Worker changed_paths differ from the independent Git diff: "
-                    f"declared={declared_paths!r}, actual={verified_changed_paths!r}"
-                ),
-            )
+        assert git_verification.snapshot is not None
+        verified_changed_paths = git_verification.changed_paths
+        after_worker = git_verification.snapshot
 
         verified_commit = VerifiedWorkerCommit(
             request=request,
@@ -836,35 +949,6 @@ class ReviewPhase:
             )
         return None
 
-    @staticmethod
-    def _integrity_failure(
-        verified: VerifiedWorkerCommit,
-        expected: GitSnapshot,
-        observed: GitSnapshot,
-    ) -> tuple[GotaCycleFailure, str] | None:
-        if observed.head != verified.verified_commit_sha:
-            return (
-                GotaCycleFailure.REVIEWER_HEAD_CHANGED,
-                f"Reviewer changed HEAD from {verified.verified_commit_sha} to {observed.head}",
-            )
-        if observed.branch != verified.branch:
-            return (
-                GotaCycleFailure.REVIEWER_BRANCH_CHANGED,
-                f"Reviewer changed branch from {verified.branch} to {observed.branch}",
-            )
-        if observed.status:
-            return (
-                GotaCycleFailure.REVIEWER_WORKTREE_DIRTY,
-                f"Reviewer left a dirty worktree: {observed.status}",
-            )
-        if observed.refs != expected.refs:
-            return (
-                GotaCycleFailure.REVIEWER_REFS_CHANGED,
-                "Reviewer mutated Git refs: "
-                f"before={expected.refs!r}, after={observed.refs!r}",
-            )
-        return None
-
     def _failure(
         self,
         *,
@@ -959,7 +1043,6 @@ class ReviewPhase:
 
         try:
             git = ReadOnlyGitAdapter(verified.repository)
-            before_reviewer = git.snapshot()
         except GitReadError as error:
             return self._failure(
                 verified=verified,
@@ -969,21 +1052,27 @@ class ReviewPhase:
                 reason=GotaCycleFailure.REVIEWER_GIT_FAILURE,
                 diagnostic=f"Pre-review Git inspection failed: {error}",
             )
-
-        integrity_failure = self._integrity_failure(
-            verified,
-            verified.worker_snapshot,
-            before_reviewer,
+        pre_review_verification = verify_worker_commit_git(
+            git,
+            base_sha=verified.base_sha,
+            expected_branch=verified.branch,
+            verified_commit_sha=verified.verified_commit_sha,
+            worker_changed_paths=verified.worker_payload.changed_paths,
+            verified_changed_paths=verified.verified_changed_paths,
+            expected_snapshot=verified.worker_snapshot,
         )
-        if integrity_failure is not None:
+        if not pre_review_verification.valid:
             return self._failure(
                 verified=verified,
                 reviewer_execution=reviewer_execution,
                 review_result=review_result,
                 phase=GotaCyclePhase.REVIEWER_INTEGRITY,
-                reason=integrity_failure[0],
-                diagnostic=integrity_failure[1],
+                reason=pre_review_verification.failure
+                or GotaCycleFailure.REVIEWER_GIT_FAILURE,
+                diagnostic=pre_review_verification.diagnostic,
             )
+        assert pre_review_verification.snapshot is not None
+        before_reviewer = pre_review_verification.snapshot
 
         reviewer_execution = self.runner.run(
             agent=self.REVIEWER_AGENT,
@@ -991,30 +1080,34 @@ class ReviewPhase:
             cwd=verified.repository,
             timeout=timeout,
         )
-        try:
-            after_reviewer = git.snapshot()
-        except GitReadError as error:
-            return self._failure(
-                verified=verified,
-                reviewer_execution=reviewer_execution,
-                review_result=review_result,
-                phase=GotaCyclePhase.REVIEWER_INTEGRITY,
-                reason=GotaCycleFailure.REVIEWER_GIT_FAILURE,
-                diagnostic=f"Reviewer Git inspection failed: {error}",
-            )
-        integrity_failure = self._integrity_failure(
-            verified,
-            before_reviewer,
-            after_reviewer,
+        post_review_verification = verify_worker_commit_git(
+            git,
+            base_sha=verified.base_sha,
+            expected_branch=verified.branch,
+            verified_commit_sha=verified.verified_commit_sha,
+            worker_changed_paths=verified.worker_payload.changed_paths,
+            verified_changed_paths=verified.verified_changed_paths,
+            expected_snapshot=before_reviewer,
         )
-        if integrity_failure is not None:
+        if not post_review_verification.valid:
             return self._failure(
                 verified=verified,
                 reviewer_execution=reviewer_execution,
                 review_result=review_result,
                 phase=GotaCyclePhase.REVIEWER_INTEGRITY,
-                reason=integrity_failure[0],
-                diagnostic=integrity_failure[1],
+                reason=post_review_verification.failure
+                or GotaCycleFailure.REVIEWER_GIT_FAILURE,
+                diagnostic=post_review_verification.diagnostic,
+            )
+
+        if not isinstance(reviewer_execution, OpenCodeRunResult):
+            return self._failure(
+                verified=verified,
+                reviewer_execution=None,
+                review_result=review_result,
+                phase=GotaCyclePhase.REVIEWER_EXECUTION,
+                reason=GotaCycleFailure.REVIEWER_RESULT_INVALID,
+                diagnostic="Reviewer runner did not return an OpenCodeRunResult",
             )
 
         runner_failure = self._runner_failure(reviewer_execution)
@@ -1062,7 +1155,22 @@ class ReviewPhase:
                 reason=GotaCycleFailure.REVIEWER_RESULT_INVALID,
                 diagnostic="Reviewer runner succeeded without a ReviewResult payload",
             )
+        execution_failure = validate_successful_execution(
+            reviewer_execution,
+            GotaReviewResult,
+            expected_cwd=verified.repository,
+        )
+        if execution_failure is not None:
+            return self._failure(
+                verified=verified,
+                reviewer_execution=reviewer_execution,
+                review_result=review_result,
+                phase=GotaCyclePhase.REVIEWER_EXECUTION,
+                reason=GotaCycleFailure.REVIEWER_RESULT_INVALID,
+                diagnostic=f"Reviewer execution is incoherent: {execution_failure}",
+            )
 
+        assert isinstance(reviewer_execution.payload, GotaReviewResult)
         review_result = reviewer_execution.payload
         if (
             review_request.phase is not GotaPhase.REVIEW
