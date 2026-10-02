@@ -18,6 +18,7 @@ from .gota_protocol import (
     GotaWorkerResult,
     ReviewDecision,
     WorkerResultStatus,
+    parse_gota_payload,
 )
 from .opencode_runner import (
     OpenCodeRunResult,
@@ -178,6 +179,14 @@ def validate_successful_execution(
         return "execution cwd does not match the expected repository"
     if not isinstance(execution.payload, expected_payload_type):
         return "execution payload has the wrong type"
+    try:
+        reparsed_payload = parse_gota_payload(execution.payload.to_payload())
+    except Exception as error:
+        return f"execution payload is internally invalid: {error}"
+    if type(reparsed_payload) is not expected_payload_type:
+        return "execution payload has the wrong protocol message type"
+    if reparsed_payload != execution.payload:
+        return "execution payload is internally inconsistent"
     return None
 
 

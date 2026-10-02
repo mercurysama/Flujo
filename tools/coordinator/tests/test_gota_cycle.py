@@ -396,6 +396,41 @@ class GotaReviewCycleTest(unittest.TestCase):
         self.assertIsNone(result.decision)
         self.assertEqual([call["agent"] for call in runner.calls], ["gota-reviewer"])
 
+    def test_review_phase_rejects_typed_but_incoherent_reviewer_payloads(self) -> None:
+        handoff = self._fabricated_handoff()
+        invalid_fields: tuple[tuple[str, object], ...] = (
+            ("protocol", "invalid/protocol"),
+            ("message", "worker.result"),
+            ("attempt", True),
+            ("decision", "PASSED"),
+            ("findings", ("not-a-finding",)),
+            ("evidence", ("not-an-object",)),
+        )
+
+        for decision in ReviewDecision:
+            for field, value in invalid_fields:
+                with self.subTest(decision=decision, field=field):
+                    payload = copy(
+                        self._review_payload(handoff.verified_commit_sha, decision)
+                    )
+                    object.__setattr__(payload, field, value)
+                    result, runner = self._review_handoff(
+                        handoff,
+                        lambda _agent, _prompt, payload=payload: self._execution(
+                            payload=payload
+                        ),
+                    )
+
+                    self.assertFalse(result.valid)
+                    self.assertEqual(
+                        result.failure, GotaCycleFailure.REVIEWER_RESULT_INVALID
+                    )
+                    self.assertIsNone(result.review_result)
+                    self.assertIsNone(result.decision)
+                    self.assertEqual(
+                        [call["agent"] for call in runner.calls], ["gota-reviewer"]
+                    )
+
     def test_review_phase_accepts_coherent_succeeded_reviewer(self) -> None:
         handoff = self._fabricated_handoff()
 
