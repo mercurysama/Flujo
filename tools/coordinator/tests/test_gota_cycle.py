@@ -3,9 +3,12 @@ from __future__ import annotations
 import subprocess
 import tempfile
 import unittest
+from collections import UserDict
 from collections.abc import Callable
 from copy import copy
 from dataclasses import FrozenInstanceError, replace
+from decimal import Decimal
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +34,14 @@ from flow_coordinator.git_adapter import GitSnapshot, ReadOnlyGitAdapter
 
 
 CycleStep = Callable[[str, str], OpenCodeRunResult]
+
+
+class FabricatedReviewDecision(StrEnum):
+    PASSED = "PASSED"
+
+
+class FabricatedText(str):
+    pass
 
 
 class FakeRunner:
@@ -403,6 +414,8 @@ class GotaReviewCycleTest(unittest.TestCase):
             ("message", "worker.result"),
             ("attempt", True),
             ("decision", "PASSED"),
+            ("decision", FabricatedReviewDecision.PASSED),
+            ("task_id", FabricatedText("task-cycle")),
             ("findings", ("not-a-finding",)),
             ("evidence", ("not-an-object",)),
         )
@@ -430,6 +443,65 @@ class GotaReviewCycleTest(unittest.TestCase):
                     self.assertEqual(
                         [call["agent"] for call in runner.calls], ["gota-reviewer"]
                     )
+
+    def test_review_phase_rejects_noncanonical_attempt_types_for_every_decision(
+        self,
+    ) -> None:
+        handoff = self._fabricated_handoff()
+        invalid_attempts: tuple[object, ...] = (Decimal("1.0"), 1.0, True)
+
+        for decision in ReviewDecision:
+            for attempt in invalid_attempts:
+                with self.subTest(decision=decision, attempt_type=type(attempt)):
+                    payload = copy(
+                        self._review_payload(handoff.verified_commit_sha, decision)
+                    )
+                    object.__setattr__(payload, "attempt", attempt)
+                    result, runner = self._review_handoff(
+                        handoff,
+                        lambda _agent, _prompt, payload=payload: self._execution(
+                            payload=payload
+                        ),
+                    )
+
+                    self.assertFalse(result.valid)
+                    self.assertEqual(
+                        result.failure, GotaCycleFailure.REVIEWER_RESULT_INVALID
+                    )
+                    self.assertIsNone(result.review_result)
+                    self.assertIsNone(result.decision)
+                    self.assertEqual(
+                        [call["agent"] for call in runner.calls], ["gota-reviewer"]
+                    )
+
+    def test_review_phase_rejects_noncanonical_container_types(self) -> None:
+        handoff = self._fabricated_handoff()
+        invalid_fields: tuple[tuple[str, object], ...] = (
+            ("findings", []),
+            ("evidence", []),
+            ("evidence", (UserDict({"kind": "audit", "passed": True}),)),
+        )
+
+        for field, value in invalid_fields:
+            with self.subTest(field=field, value_type=type(value)):
+                payload = copy(self._review_payload(handoff.verified_commit_sha))
+                object.__setattr__(payload, field, value)
+                result, runner = self._review_handoff(
+                    handoff,
+                    lambda _agent, _prompt, payload=payload: self._execution(
+                        payload=payload
+                    ),
+                )
+
+                self.assertFalse(result.valid)
+                self.assertEqual(
+                    result.failure, GotaCycleFailure.REVIEWER_RESULT_INVALID
+                )
+                self.assertIsNone(result.review_result)
+                self.assertIsNone(result.decision)
+                self.assertEqual(
+                    [call["agent"] for call in runner.calls], ["gota-reviewer"]
+                )
 
     def test_review_phase_accepts_coherent_succeeded_reviewer(self) -> None:
         handoff = self._fabricated_handoff()
@@ -628,6 +700,36 @@ class GotaReviewCycleTest(unittest.TestCase):
                 self.assertIsNone(result.reviewer_execution)
                 self.assertIsNone(result.decision)
                 self.assertEqual(runner.calls, [])
+
+    def test_review_phase_rejects_noncanonical_worker_phase_wrapper(self) -> None:
+        handoff = self._fabricated_handoff()
+        worker_payload = copy(handoff.worker_payload)
+        object.__setattr__(worker_payload, "attempt", Decimal("1.0"))
+        worker_result = WorkerPhaseResult(
+            base_sha=handoff.base_sha,
+            branch=handoff.branch,
+            worker_execution=handoff.worker_execution,
+            worker_payload=worker_payload,
+            verified_commit=handoff,
+            verified_changed_paths=handoff.verified_changed_paths,
+            phase=GotaCyclePhase.WORKER_GIT_VERIFICATION,
+            failure=None,
+            diagnostic="fabricated wrapper",
+        )
+        runner = FakeRunner(
+            [
+                lambda _agent, _prompt: self._execution(
+                    payload=self._review_payload(handoff.verified_commit_sha)
+                )
+            ]
+        )
+
+        result = ReviewPhase(runner=runner).run(worker_result, timeout=3)
+
+        self.assertFalse(result.valid)
+        self.assertEqual(result.failure, GotaCycleFailure.WORKER_RESULT_INVALID)
+        self.assertIsNone(result.decision)
+        self.assertEqual(runner.calls, [])
 
     def test_reviewer_correction_required_is_a_valid_cycle_decision(self) -> None:
         result, _, _ = self._valid_cycle(ReviewDecision.CORRECTION_REQUIRED)

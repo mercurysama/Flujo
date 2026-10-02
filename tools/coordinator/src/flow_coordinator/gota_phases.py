@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, replace
-from enum import StrEnum
+from collections.abc import Mapping
+from dataclasses import dataclass, fields, is_dataclass, replace
+from decimal import Decimal
+from enum import Enum, StrEnum
 from pathlib import Path
 from typing import Protocol
 
@@ -151,6 +153,58 @@ class GitHandoffVerification:
         return self.failure is None and self.snapshot is not None
 
 
+def _strictly_equal(left: object, right: object) -> bool:
+    """Compare protocol values without Python's cross-type equality rules."""
+
+    if type(left) is not type(right):
+        return False
+    if is_dataclass(left):
+        if not is_dataclass(right):
+            return False
+        return all(
+            _strictly_equal(
+                getattr(left, field.name),
+                getattr(right, field.name),
+            )
+            for field in fields(left)
+        )
+    if isinstance(left, Enum):
+        return left is right
+    if isinstance(left, Mapping):
+        if type(left) is not dict or not isinstance(right, Mapping):
+            return False
+        if len(left) != len(right):
+            return False
+        unmatched = list(right.items())
+        for left_key, left_value in left.items():
+            match_index = next(
+                (
+                    index
+                    for index, (right_key, right_value) in enumerate(unmatched)
+                    if _strictly_equal(left_key, right_key)
+                ),
+                None,
+            )
+            if match_index is None:
+                return False
+            if not _strictly_equal(left_value, unmatched[match_index][1]):
+                return False
+            unmatched.pop(match_index)
+        return not unmatched
+    if isinstance(left, (list, tuple)):
+        if type(left) not in (list, tuple) or not isinstance(right, (list, tuple)):
+            return False
+        if len(left) != len(right):
+            return False
+        return all(
+            _strictly_equal(left_item, right_item)
+            for left_item, right_item in zip(left, right)
+        )
+    if isinstance(left, (str, bool, int, float, Decimal)):
+        return type(left) in (str, bool, int, float, Decimal) and left == right
+    return left == right
+
+
 def validate_successful_execution(
     execution: object,
     expected_payload_type: type[GotaWorkerResult] | type[GotaReviewResult],
@@ -185,7 +239,7 @@ def validate_successful_execution(
         return f"execution payload is internally invalid: {error}"
     if type(reparsed_payload) is not expected_payload_type:
         return "execution payload has the wrong protocol message type"
-    if reparsed_payload != execution.payload:
+    if not _strictly_equal(reparsed_payload, execution.payload):
         return "execution payload is internally inconsistent"
     return None
 
@@ -518,7 +572,7 @@ def validate_verified_worker_commit(
         payload.attempt,
     ):
         return _invalid_worker_handoff("WorkerResult identity does not match request")
-    if execution.payload != payload:
+    if not _strictly_equal(execution.payload, payload):
         return _invalid_worker_handoff(
             "Worker execution payload differs from the handoff payload"
         )
@@ -1012,12 +1066,16 @@ class ReviewPhase:
                     "WorkerPhase result is missing Worker evidence"
                 )
             elif (
-                verified.base_sha != handoff.base_sha
-                or verified.branch != handoff.branch
-                or verified.worker_execution != handoff.worker_execution
-                or verified.worker_payload != handoff.worker_payload
-                or verified.verified_changed_paths
-                != handoff.verified_changed_paths
+                not _strictly_equal(verified.base_sha, handoff.base_sha)
+                or not _strictly_equal(verified.branch, handoff.branch)
+                or not _strictly_equal(
+                    verified.worker_execution, handoff.worker_execution
+                )
+                or not _strictly_equal(verified.worker_payload, handoff.worker_payload)
+                or not _strictly_equal(
+                    verified.verified_changed_paths,
+                    handoff.verified_changed_paths,
+                )
             ):
                 handoff_failure = _invalid_worker_handoff(
                     "WorkerPhase result does not match its verified commit"
