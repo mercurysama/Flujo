@@ -53,29 +53,37 @@ class GotaDecisionPolicy:
 
     @staticmethod
     def resolve(cycle_result: GotaReviewCycleResult) -> GotaDecisionResult:
+        if type(cycle_result) is not GotaReviewCycleResult:
+            return GotaDecisionResult(
+                action=GotaNextAction.CYCLE_FAILED,
+                review_result=None,
+                review_decision=None,
+                cycle_failure=None,
+                reason="Cycle result is not canonical",
+            )
         review_result = cycle_result.review_result
         observed_decision = (
             review_result.decision
-            if isinstance(review_result, GotaReviewResult)
-            and isinstance(review_result.decision, ReviewDecision)
+            if type(review_result) is GotaReviewResult
+            and type(review_result.decision) is ReviewDecision
             else None
         )
         accepted_decision = (
             cycle_result.decision
-            if isinstance(review_result, GotaReviewResult)
+            if type(review_result) is GotaReviewResult
             else None
         )
 
         if (
             not cycle_result.valid
-            or not isinstance(review_result, GotaReviewResult)
-            or not isinstance(accepted_decision, ReviewDecision)
+            or type(review_result) is not GotaReviewResult
+            or type(accepted_decision) is not ReviewDecision
         ):
             return GotaDecisionResult(
                 action=GotaNextAction.CYCLE_FAILED,
                 review_result=(
                     review_result
-                    if isinstance(review_result, GotaReviewResult)
+                    if type(review_result) is GotaReviewResult
                     else None
                 ),
                 review_decision=observed_decision,

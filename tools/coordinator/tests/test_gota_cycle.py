@@ -9,6 +9,7 @@ from copy import copy
 from dataclasses import FrozenInstanceError, replace
 from decimal import Decimal
 from enum import StrEnum
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +42,29 @@ class FabricatedReviewDecision(StrEnum):
 
 
 class FabricatedText(str):
+    def __eq__(self, _other: object) -> bool:
+        return True
+
+    def __hash__(self) -> int:
+        return str.__hash__(self)
+
+
+class FabricatedWorkerStatus(StrEnum):
+    READY_FOR_REVIEW = "READY_FOR_REVIEW"
+
+
+class FabricatedWorkerResult(GotaWorkerResult):
     pass
+
+
+class DeceptiveTuple(tuple[object, ...]):
+    def __eq__(self, _other: object) -> bool:
+        return True
+
+
+class DeceptiveMapping(UserDict[str, Any]):
+    def __eq__(self, _other: object) -> bool:
+        return True
 
 
 class FakeRunner:
@@ -480,6 +503,10 @@ class GotaReviewCycleTest(unittest.TestCase):
             ("findings", []),
             ("evidence", []),
             ("evidence", (UserDict({"kind": "audit", "passed": True}),)),
+            (
+                "evidence",
+                (DeceptiveMapping({"kind": "audit", "passed": True}),),
+            ),
         )
 
         for field, value in invalid_fields:
@@ -730,6 +757,126 @@ class GotaReviewCycleTest(unittest.TestCase):
         self.assertEqual(result.failure, GotaCycleFailure.WORKER_RESULT_INVALID)
         self.assertIsNone(result.decision)
         self.assertEqual(runner.calls, [])
+
+    def test_worker_phase_rejects_noncanonical_request_before_runner(self) -> None:
+        request = self._request()
+        object.__setattr__(request, "task_id", FabricatedText("other-task"))
+        runner = FakeRunner([])
+
+        result = WorkerPhase(self.repository, runner=runner).run(request, timeout=3)
+
+        self.assertFalse(result.valid)
+        self.assertEqual(result.failure, GotaCycleFailure.REQUEST_INVALID)
+        self.assertEqual(runner.calls, [])
+
+    def test_review_phase_rejects_deceptive_request_identity_for_every_decision(
+        self,
+    ) -> None:
+        handoff = self._fabricated_handoff()
+        request = copy(handoff.request)
+        object.__setattr__(request, "task_id", FabricatedText("wrong-task"))
+        object.__setattr__(handoff, "request", request)
+
+        for decision in ReviewDecision:
+            with self.subTest(decision=decision):
+                result, runner = self._review_handoff(
+                    handoff,
+                    lambda _agent, _prompt, decision=decision, handoff=handoff: (
+                        self._execution(
+                            payload=self._review_payload(
+                                handoff.verified_commit_sha,
+                                decision,
+                            )
+                        )
+                    ),
+                )
+
+                self.assertFalse(result.valid)
+                self.assertEqual(
+                    result.failure, GotaCycleFailure.WORKER_RESULT_INVALID
+                )
+                self.assertIsNone(result.decision)
+                self.assertEqual(runner.calls, [])
+
+    def test_review_phase_rejects_noncanonical_handoff_authority_fields(self) -> None:
+        handoff = self._fabricated_handoff()
+        invalid_fields: tuple[tuple[str, object], ...] = (
+            ("base_sha", FabricatedText("wrong-base")),
+            ("branch", FabricatedText("wrong-branch")),
+            ("verified_commit_sha", FabricatedText("wrong-commit")),
+            ("verified_changed_paths", DeceptiveTuple(("src/change.py",))),
+        )
+
+        for field, value in invalid_fields:
+            with self.subTest(field=field):
+                candidate = replace(handoff, **{field: value})
+                if field == "verified_changed_paths":
+                    object.__setattr__(candidate, field, value)
+                self._assert_invalid_handoff(candidate)
+
+    def test_review_phase_rejects_noncanonical_worker_attempt_numbers(self) -> None:
+        handoff = self._fabricated_handoff()
+        invalid_attempts: tuple[object, ...] = (
+            True,
+            1.0,
+            Decimal("1.0"),
+            Fraction(1, 1),
+        )
+
+        for attempt in invalid_attempts:
+            with self.subTest(attempt_type=type(attempt)):
+                payload = copy(handoff.worker_payload)
+                object.__setattr__(payload, "attempt", attempt)
+                execution = replace(handoff.worker_execution, payload=payload)
+                object.__setattr__(handoff, "worker_execution", execution)
+                object.__setattr__(handoff, "worker_payload", payload)
+                self._assert_invalid_handoff(handoff)
+
+    def test_review_phase_rejects_enum_and_dataclass_substitutes(self) -> None:
+        handoff = self._fabricated_handoff()
+        payload = copy(handoff.worker_payload)
+        object.__setattr__(payload, "result", FabricatedWorkerStatus.READY_FOR_REVIEW)
+        execution = replace(handoff.worker_execution, payload=payload)
+        candidate = replace(
+            handoff,
+            worker_execution=execution,
+            worker_payload=payload,
+        )
+        self._assert_invalid_handoff(candidate)
+
+        source = self._worker_payload(
+            handoff.verified_commit_sha,
+            handoff.verified_changed_paths,
+        )
+        fabricated_payload = FabricatedWorkerResult(
+            protocol=source.protocol,
+            message=source.message,
+            request_id=source.request_id,
+            task_id=source.task_id,
+            run_id=source.run_id,
+            attempt=source.attempt,
+            result=source.result,
+            commit_sha=source.commit_sha,
+            changed_paths=source.changed_paths,
+            evidence=source.evidence,
+            checkpoint=source.checkpoint,
+        )
+        execution = replace(handoff.worker_execution, payload=fabricated_payload)
+        object.__setattr__(handoff, "worker_execution", execution)
+        object.__setattr__(handoff, "worker_payload", fabricated_payload)
+        self._assert_invalid_handoff(handoff)
+
+    def test_review_phase_rejects_noncanonical_nested_checkpoint(self) -> None:
+        handoff = self._fabricated_handoff()
+        checkpoint = copy(handoff.worker_payload.checkpoint)
+        object.__setattr__(checkpoint, "completed_steps", DeceptiveTuple(("implementation",)))
+        payload = copy(handoff.worker_payload)
+        object.__setattr__(payload, "checkpoint", checkpoint)
+        execution = replace(handoff.worker_execution, payload=payload)
+        object.__setattr__(handoff, "worker_execution", execution)
+        object.__setattr__(handoff, "worker_payload", payload)
+
+        self._assert_invalid_handoff(handoff)
 
     def test_reviewer_correction_required_is_a_valid_cycle_decision(self) -> None:
         result, _, _ = self._valid_cycle(ReviewDecision.CORRECTION_REQUIRED)

@@ -17,6 +17,10 @@ from flow_coordinator import (
 )
 
 
+class FabricatedReviewResult(GotaReviewResult):
+    pass
+
+
 class GotaDecisionPolicyTest(unittest.TestCase):
     commit_sha = "0123456789abcdef0123456789abcdef01234567"
 
@@ -174,6 +178,29 @@ class GotaDecisionPolicyTest(unittest.TestCase):
         self.assertEqual(
             result.reason, "ReviewResult did not identify the verified commit"
         )
+
+    def test_noncanonical_review_result_cannot_select_a_business_action(self) -> None:
+        source = self._review_result(ReviewDecision.PASSED)
+        fabricated = FabricatedReviewResult(
+            protocol=source.protocol,
+            message=source.message,
+            request_id=source.request_id,
+            task_id=source.task_id,
+            run_id=source.run_id,
+            attempt=source.attempt,
+            reviewed_commit_sha=source.reviewed_commit_sha,
+            decision=source.decision,
+            findings=source.findings,
+            evidence=source.evidence,
+        )
+
+        result = GotaDecisionPolicy.resolve(
+            self._cycle_result(review_result=fabricated)
+        )
+
+        self.assertEqual(result.action, GotaNextAction.CYCLE_FAILED)
+        self.assertIsNone(result.review_result)
+        self.assertIsNone(result.review_decision)
 
     def test_resolution_is_deterministic_and_has_no_runner_git_or_sqlite_side_effects(
         self,

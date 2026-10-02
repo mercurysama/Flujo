@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
-from dataclasses import dataclass, fields, is_dataclass, replace
+from dataclasses import dataclass, fields, replace
 from decimal import Decimal
 from enum import Enum, StrEnum
 from pathlib import Path
@@ -13,8 +12,11 @@ from typing import Protocol
 from .git_adapter import GitReadError, GitSnapshot, ReadOnlyGitAdapter
 from .gota_protocol import (
     GOTA_PROTOCOL,
+    GotaCheckpoint,
+    GotaFinding,
     GotaPhase,
     GotaMessage,
+    GotaProtocolErrorCode,
     GotaRequest,
     GotaReviewResult,
     GotaWorkerResult,
@@ -154,25 +156,20 @@ class GitHandoffVerification:
 
 
 def _strictly_equal(left: object, right: object) -> bool:
-    """Compare protocol values without Python's cross-type equality rules."""
+    """Compare canonical values without invoking attacker-controlled equality."""
 
     if type(left) is not type(right):
         return False
-    if is_dataclass(left):
-        if not is_dataclass(right):
-            return False
-        return all(
-            _strictly_equal(
-                getattr(left, field.name),
-                getattr(right, field.name),
-            )
-            for field in fields(left)
-        )
+    if left is None:
+        return True
+    if type(left) is _CANONICAL_PATH_TYPE:
+        return _strictly_equal(str(left), str(right))
+    if type(left) in (str, bool, int, float, Decimal):
+        return left == right
     if isinstance(left, Enum):
         return left is right
-    if isinstance(left, Mapping):
-        if type(left) is not dict or not isinstance(right, Mapping):
-            return False
+    if type(left) is dict:
+        assert type(right) is dict
         if len(left) != len(right):
             return False
         unmatched = list(right.items())
@@ -191,18 +188,236 @@ def _strictly_equal(left: object, right: object) -> bool:
                 return False
             unmatched.pop(match_index)
         return not unmatched
-    if isinstance(left, (list, tuple)):
-        if type(left) not in (list, tuple) or not isinstance(right, (list, tuple)):
-            return False
+    if type(left) in (list, tuple):
+        assert type(right) is type(left)
         if len(left) != len(right):
             return False
         return all(
-            _strictly_equal(left_item, right_item)
+            _strictly_equal(
+                left_item,
+                right_item,
+            )
             for left_item, right_item in zip(left, right)
         )
-    if isinstance(left, (str, bool, int, float, Decimal)):
-        return type(left) in (str, bool, int, float, Decimal) and left == right
-    return left == right
+    if type(left) in _canonical_dataclass_types():
+        return all(
+            _strictly_equal(left_item, right_item)
+            for field in fields(left)
+            for left_item, right_item in (
+                (getattr(left, field.name), getattr(right, field.name)),
+            )
+        )
+    return False
+
+
+_CANONICAL_PATH_TYPE = type(Path())
+
+
+def _canonical_dataclass_types() -> tuple[type[object], ...]:
+    """Return the only dataclass types allowed in authoritative comparisons."""
+
+    return (
+        GotaFinding,
+        GotaCheckpoint,
+        GotaRequest,
+        GotaWorkerResult,
+        GotaReviewResult,
+        OpenCodeRunResult,
+        GitSnapshot,
+        VerifiedWorkerCommit,
+        WorkerPhaseResult,
+        ReviewPhaseResult,
+    )
+
+
+def _canonical_text(value: object, *, allow_empty: bool = False) -> bool:
+    return type(value) is str and (allow_empty or bool(value.strip()))
+
+
+def _canonical_sha(value: object) -> bool:
+    return (
+        type(value) is str
+        and len(value) == 40
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _canonical_enum(value: object, enum_type: type[Enum]) -> bool:
+    return type(value) is enum_type and any(value is member for member in enum_type)
+
+
+def _canonical_text_tuple(value: object, *, allow_empty: bool = False) -> bool:
+    return type(value) is tuple and all(
+        _canonical_text(item, allow_empty=allow_empty) for item in value
+    )
+
+
+def _canonical_finding_shape(value: object) -> bool:
+    if type(value) is not GotaFinding:
+        return False
+    return (
+        type(value.id) is str
+        and type(value.severity) is str
+        and type(value.description) is str
+        and (
+            value.path is None
+            or type(value.path) is str
+        )
+        and (
+            value.required_change is None
+            or type(value.required_change) is str
+        )
+    )
+
+
+def _canonical_findings_shape(value: object) -> bool:
+    return type(value) is tuple and all(
+        _canonical_finding_shape(item) for item in value
+    )
+
+
+def _canonical_evidence(value: object) -> bool:
+    """Keep evidence contents opaque, while fixing its protocol container shape."""
+
+    return type(value) is tuple and all(type(item) is dict for item in value)
+
+
+def _canonical_checkpoint_shape(value: object) -> bool:
+    if type(value) is not GotaCheckpoint:
+        return False
+    return type(value.completed_steps) is tuple and all(
+        type(item) is str for item in value.completed_steps
+    ) and type(value.remaining_phase) is str
+
+
+def _canonical_request_shape(value: object) -> bool:
+    if type(value) is not GotaRequest:
+        return False
+    return (
+        type(value.protocol) is str
+        and type(value.request_id) is str
+        and type(value.task_id) is str
+        and type(value.run_id) is str
+        and type(value.attempt) is int
+        and type(value.phase) is GotaPhase
+        and type(value.objective) is str
+        and type(value.acceptance_criteria) is tuple
+        and all(type(item) is str for item in value.acceptance_criteria)
+        and type(value.workspace) is str
+        and type(value.branch) is str
+        and type(value.base_sha) is str
+        and type(value.allowed_paths) is tuple
+        and all(type(item) is str for item in value.allowed_paths)
+        and type(value.protected_paths) is tuple
+        and all(type(item) is str for item in value.protected_paths)
+        and _canonical_findings_shape(value.previous_findings)
+    )
+
+
+def _canonical_request(value: object) -> bool:
+    if not _canonical_request_shape(value):
+        return False
+    try:
+        reparsed = GotaRequest.from_payload(value.to_payload())
+    except Exception:
+        return False
+    return type(reparsed) is GotaRequest and _strictly_equal(reparsed, value)
+
+
+def _canonical_payload(
+    value: object,
+    expected_type: type[GotaWorkerResult] | type[GotaReviewResult],
+) -> bool:
+    if type(value) is not expected_type:
+        return False
+    if (
+        type(value.protocol) is not str
+        or type(value.message) is not str
+        or type(value.request_id) is not str
+        or type(value.task_id) is not str
+        or type(value.run_id) is not str
+        or type(value.attempt) is not int
+        or not _canonical_evidence(value.evidence)
+    ):
+        return False
+    if expected_type is GotaWorkerResult:
+        if (
+            type(value.result) is not WorkerResultStatus
+            or type(value.commit_sha) is not str
+            or type(value.changed_paths) is not tuple
+            or not all(type(item) is str for item in value.changed_paths)
+            or not _canonical_checkpoint_shape(value.checkpoint)
+        ):
+            return False
+    else:
+        if (
+            type(value.reviewed_commit_sha) is not str
+            or type(value.decision) is not ReviewDecision
+            or not _canonical_findings_shape(value.findings)
+        ):
+            return False
+    try:
+        reparsed = parse_gota_payload(value.to_payload())
+    except Exception:
+        return False
+    return type(reparsed) is expected_type and _strictly_equal(reparsed, value)
+
+
+def _canonical_execution(
+    value: object,
+    expected_payload_type: type[GotaWorkerResult] | type[GotaReviewResult],
+) -> bool:
+    if type(value) is not OpenCodeRunResult:
+        return False
+    return (
+        _canonical_enum(value.status, OpenCodeRunStatus)
+        and type(value.argv) is tuple
+        and all(type(argument) is str for argument in value.argv)
+        and _canonical_text(value.cwd, allow_empty=True)
+        and _canonical_text(value.stdout, allow_empty=True)
+        and _canonical_text(value.stderr, allow_empty=True)
+        and (
+            value.exit_code is None
+            or type(value.exit_code) is int
+        )
+        and type(value.timed_out) is bool
+        and (
+            value.payload is None
+            or _canonical_payload(value.payload, expected_payload_type)
+        )
+        and (
+            value.error is None
+            or _canonical_text(value.error, allow_empty=True)
+        )
+        and (
+            value.protocol_error_code is None
+            or _canonical_enum(value.protocol_error_code, GotaProtocolErrorCode)
+        )
+        and (
+            value.start_failure is None
+            or _canonical_enum(value.start_failure, OpenCodeStartFailure)
+        )
+    )
+
+
+def _canonical_snapshot(value: object) -> bool:
+    if type(value) is not GitSnapshot:
+        return False
+    return (
+        _canonical_text(value.repository)
+        and _canonical_sha(value.head)
+        and _canonical_text(value.branch)
+        and _canonical_text(value.status, allow_empty=True)
+        and type(value.refs) is tuple
+        and all(
+            type(ref) is tuple
+            and len(ref) == 3
+            and _canonical_text(ref[0])
+            and _canonical_text(ref[1])
+            and _canonical_text(ref[2], allow_empty=True)
+            for ref in value.refs
+        )
+    )
 
 
 def validate_successful_execution(
@@ -213,11 +428,11 @@ def validate_successful_execution(
 ) -> str | None:
     """Accept an execution only when every success signal is coherent."""
 
-    if not isinstance(execution, OpenCodeRunResult):
-        return "execution is not an OpenCodeRunResult"
+    if not _canonical_execution(execution, expected_payload_type):
+        return "execution is not a canonical OpenCodeRunResult"
     if execution.status is not OpenCodeRunStatus.SUCCEEDED:
         return f"status is {execution.status!r}, not succeeded"
-    if type(execution.exit_code) is not int or execution.exit_code != 0:
+    if not _strictly_equal(execution.exit_code, 0):
         return "exit code is not zero"
     if execution.timed_out is not False:
         return "execution is marked as timed out"
@@ -227,11 +442,11 @@ def validate_successful_execution(
         return "execution contains a protocol error"
     if execution.start_failure is not None:
         return "execution contains a startup failure"
-    if not isinstance(execution.cwd, str):
-        return "execution cwd is invalid"
-    if expected_cwd is not None and Path(execution.cwd).resolve() != expected_cwd:
+    if expected_cwd is not None and not _strictly_equal(
+        Path(execution.cwd).resolve(), expected_cwd.resolve()
+    ):
         return "execution cwd does not match the expected repository"
-    if not isinstance(execution.payload, expected_payload_type):
+    if not _canonical_payload(execution.payload, expected_payload_type):
         return "execution payload has the wrong type"
     try:
         reparsed_payload = parse_gota_payload(execution.payload.to_payload())
@@ -256,6 +471,32 @@ def verify_worker_commit_git(
 ) -> GitHandoffVerification:
     """Verify one Worker handoff against the current repository, read-only."""
 
+    invalid_argument_failure = (
+        GotaCycleFailure.REVIEWER_GIT_FAILURE
+        if expected_snapshot is not None
+        else GotaCycleFailure.WORKER_GIT_FAILURE
+    )
+    if (
+        not _canonical_sha(base_sha)
+        or not _canonical_text(expected_branch)
+        or not _canonical_sha(verified_commit_sha)
+        or not _canonical_text_tuple(worker_changed_paths)
+        or (
+            verified_changed_paths is not None
+            and not _canonical_text_tuple(verified_changed_paths)
+        )
+        or (
+            expected_snapshot is not None
+            and not _canonical_snapshot(expected_snapshot)
+        )
+    ):
+        return GitHandoffVerification(
+            snapshot=None,
+            changed_paths=(),
+            failure=invalid_argument_failure,
+            diagnostic="Git verification received non-canonical authority data",
+        )
+
     try:
         observed = git.snapshot()
     except GitReadError as error:
@@ -266,8 +507,16 @@ def verify_worker_commit_git(
             diagnostic=f"Git snapshot inspection failed: {error}",
         )
 
+    if not _canonical_snapshot(observed):
+        return GitHandoffVerification(
+            snapshot=None,
+            changed_paths=(),
+            failure=invalid_argument_failure,
+            diagnostic="Git snapshot is not canonical",
+        )
+
     if expected_snapshot is not None:
-        if observed.head != expected_snapshot.head:
+        if not _strictly_equal(observed.head, expected_snapshot.head):
             return GitHandoffVerification(
                 snapshot=observed,
                 changed_paths=(),
@@ -277,7 +526,7 @@ def verify_worker_commit_git(
                     f"expected {expected_snapshot.head}, observed {observed.head}"
                 ),
             )
-        if observed.branch != expected_snapshot.branch:
+        if not _strictly_equal(observed.branch, expected_snapshot.branch):
             return GitHandoffVerification(
                 snapshot=observed,
                 changed_paths=(),
@@ -294,7 +543,7 @@ def verify_worker_commit_git(
                 failure=GotaCycleFailure.REVIEWER_WORKTREE_DIRTY,
                 diagnostic=f"Worktree changed before or after Reviewer: {observed.status}",
             )
-        if observed.refs != expected_snapshot.refs:
+        if not _strictly_equal(observed.refs, expected_snapshot.refs):
             return GitHandoffVerification(
                 snapshot=observed,
                 changed_paths=(),
@@ -305,7 +554,9 @@ def verify_worker_commit_git(
                 ),
             )
 
-    if expected_snapshot is None and observed.branch != expected_branch:
+    if expected_snapshot is None and not _strictly_equal(
+        observed.branch, expected_branch
+    ):
         return GitHandoffVerification(
             snapshot=observed,
             changed_paths=(),
@@ -331,7 +582,7 @@ def verify_worker_commit_git(
             failure=GotaCycleFailure.WORKER_GIT_FAILURE,
             diagnostic=f"Worker base SHA inspection failed: {error}",
         )
-    if base_type != "commit":
+    if not _strictly_equal(base_type, "commit"):
         return GitHandoffVerification(
             snapshot=observed,
             changed_paths=(),
@@ -350,7 +601,7 @@ def verify_worker_commit_git(
             failure=GotaCycleFailure.WORKER_COMMIT_NOT_FOUND,
             diagnostic=f"Worker declared a SHA that does not exist: {verified_commit_sha}",
         )
-    if commit_type != "commit":
+    if not _strictly_equal(commit_type, "commit"):
         return GitHandoffVerification(
             snapshot=observed,
             changed_paths=(),
@@ -360,7 +611,7 @@ def verify_worker_commit_git(
             ),
         )
 
-    if observed.head != verified_commit_sha:
+    if not _strictly_equal(observed.head, verified_commit_sha):
         return GitHandoffVerification(
             snapshot=observed,
             changed_paths=(),
@@ -388,7 +639,14 @@ def verify_worker_commit_git(
             failure=GotaCycleFailure.WORKER_GIT_FAILURE,
             diagnostic=f"Worker commit ancestry inspection failed: {error}",
         )
-    if commit_count == 0:
+    if type(commit_count) is not int:
+        return GitHandoffVerification(
+            snapshot=observed,
+            changed_paths=(),
+            failure=GotaCycleFailure.WORKER_GIT_FAILURE,
+            diagnostic="Git returned a non-canonical commit count",
+        )
+    if _strictly_equal(commit_count, 0):
         return GitHandoffVerification(
             snapshot=observed,
             changed_paths=(),
@@ -413,8 +671,16 @@ def verify_worker_commit_git(
             diagnostic=f"Worker changed-path inspection failed: {error}",
         )
 
+    if not _canonical_text_tuple(changed_paths):
+        return GitHandoffVerification(
+            snapshot=observed,
+            changed_paths=(),
+            failure=GotaCycleFailure.WORKER_GIT_FAILURE,
+            diagnostic="Git returned non-canonical changed paths",
+        )
+
     declared_worker_paths = tuple(sorted(worker_changed_paths))
-    if declared_worker_paths != changed_paths:
+    if not _strictly_equal(declared_worker_paths, changed_paths):
         return GitHandoffVerification(
             snapshot=observed,
             changed_paths=changed_paths,
@@ -426,7 +692,9 @@ def verify_worker_commit_git(
         )
     if (
         verified_changed_paths is not None
-        and tuple(sorted(verified_changed_paths)) != changed_paths
+        and not _strictly_equal(
+            tuple(sorted(verified_changed_paths)), changed_paths
+        )
     ):
         return GitHandoffVerification(
             snapshot=observed,
@@ -492,9 +760,57 @@ class ReviewPhaseResult:
 
     @property
     def decision(self) -> ReviewDecision | None:
-        if self.failure is not None or self.review_result is None:
+        if (
+            self.failure is not None
+            or type(self.review_result) is not GotaReviewResult
+            or not _canonical_payload(self.review_result, GotaReviewResult)
+        ):
             return None
         return self.review_result.decision
+
+
+def _canonical_handoff(value: object) -> bool:
+    if type(value) is not VerifiedWorkerCommit:
+        return False
+    return (
+        _canonical_request(value.request)
+        and type(value.repository) is _CANONICAL_PATH_TYPE
+        and _canonical_sha(value.base_sha)
+        and _canonical_text(value.branch)
+        and _canonical_sha(value.verified_commit_sha)
+        and _canonical_text_tuple(value.verified_changed_paths)
+        and _canonical_execution(value.worker_execution, GotaWorkerResult)
+        and _canonical_payload(value.worker_payload, GotaWorkerResult)
+        and _canonical_snapshot(value.worker_snapshot)
+    )
+
+
+def _canonical_worker_phase_result(value: object) -> bool:
+    if type(value) is not WorkerPhaseResult:
+        return False
+    return (
+        _canonical_text(value.base_sha, allow_empty=True)
+        and _canonical_text(value.branch, allow_empty=True)
+        and (
+            value.worker_execution is None
+            or _canonical_execution(value.worker_execution, GotaWorkerResult)
+        )
+        and (
+            value.worker_payload is None
+            or _canonical_payload(value.worker_payload, GotaWorkerResult)
+        )
+        and (
+            value.verified_commit is None
+            or _canonical_handoff(value.verified_commit)
+        )
+        and _canonical_text_tuple(value.verified_changed_paths)
+        and _canonical_enum(value.phase, GotaCyclePhase)
+        and (
+            value.failure is None
+            or _canonical_enum(value.failure, GotaCycleFailure)
+        )
+        and _canonical_text(value.diagnostic, allow_empty=True)
+    )
 
 
 def _identity_matches(
@@ -505,10 +821,11 @@ def _identity_matches(
     attempt: int,
 ) -> bool:
     return (
-        request.request_id == request_id
-        and request.task_id == task_id
-        and request.run_id == run_id
-        and request.attempt == attempt
+        _canonical_request(request)
+        and _strictly_equal(request.request_id, request_id)
+        and _strictly_equal(request.task_id, task_id)
+        and _strictly_equal(request.run_id, run_id)
+        and _strictly_equal(request.attempt, attempt)
     )
 
 
@@ -524,21 +841,22 @@ def validate_verified_worker_commit(
 ) -> tuple[GotaCycleFailure, str] | None:
     """Validate the pure Worker evidence carried across the phase boundary."""
 
-    if not isinstance(handoff, VerifiedWorkerCommit):
+    if not _canonical_handoff(handoff):
         return _invalid_worker_handoff("handoff is not a VerifiedWorkerCommit")
 
     request = handoff.request
-    if not isinstance(request, GotaRequest):
-        return _invalid_worker_handoff("request is not a GotaRequest")
     if request.phase is not GotaPhase.WORKER:
         return _invalid_worker_handoff("request phase is not worker")
-    if handoff.repository != Path(request.workspace).resolve():
+    if not _strictly_equal(
+        handoff.repository,
+        Path(request.workspace).resolve(),
+    ):
         return _invalid_worker_handoff(
             "repository does not match the request workspace"
         )
-    if handoff.base_sha != request.base_sha:
+    if not _strictly_equal(handoff.base_sha, request.base_sha):
         return _invalid_worker_handoff("base SHA does not match the request")
-    if handoff.branch != request.branch:
+    if not _strictly_equal(handoff.branch, request.branch):
         return _invalid_worker_handoff("branch does not match the request")
 
     execution = handoff.worker_execution
@@ -551,14 +869,12 @@ def validate_verified_worker_commit(
         return _invalid_worker_handoff(
             f"Worker execution is incoherent: {execution_failure}"
         )
-    assert isinstance(execution, OpenCodeRunResult)
+    assert type(execution) is OpenCodeRunResult
 
     payload = handoff.worker_payload
-    if not isinstance(payload, GotaWorkerResult):
-        return _invalid_worker_handoff("Worker payload is not a WorkerResult")
     if (
-        payload.protocol != GOTA_PROTOCOL
-        or payload.message != GotaMessage.WORKER_RESULT.value
+        not _strictly_equal(payload.protocol, GOTA_PROTOCOL)
+        or not _strictly_equal(payload.message, GotaMessage.WORKER_RESULT.value)
         or payload.phase is not GotaPhase.WORKER
     ):
         return _invalid_worker_handoff("Worker payload is not a worker result")
@@ -576,38 +892,29 @@ def validate_verified_worker_commit(
         return _invalid_worker_handoff(
             "Worker execution payload differs from the handoff payload"
         )
-    if payload.commit_sha != handoff.verified_commit_sha:
+    if not _strictly_equal(payload.commit_sha, handoff.verified_commit_sha):
         return _invalid_worker_handoff(
             "WorkerResult commit SHA differs from verified commit SHA"
         )
-    if not isinstance(handoff.verified_changed_paths, tuple):
-        return _invalid_worker_handoff("verified changed paths are not a tuple")
-    if handoff.verified_changed_paths != tuple(sorted(payload.changed_paths)):
+    if not _strictly_equal(
+        handoff.verified_changed_paths,
+        tuple(sorted(payload.changed_paths)),
+    ):
         return _invalid_worker_handoff(
             "WorkerResult changed_paths differ from verified changed paths"
         )
 
     snapshot = handoff.worker_snapshot
-    if not isinstance(snapshot, GitSnapshot):
-        return _invalid_worker_handoff("Worker Git snapshot is absent or invalid")
     if (
-        not isinstance(snapshot.repository, str)
-        or snapshot.repository != str(handoff.repository)
+        not _strictly_equal(snapshot.repository, str(handoff.repository))
     ):
         return _invalid_worker_handoff("Worker Git snapshot repository is incoherent")
-    if snapshot.head != handoff.verified_commit_sha:
+    if not _strictly_equal(snapshot.head, handoff.verified_commit_sha):
         return _invalid_worker_handoff("Worker Git snapshot HEAD is incoherent")
-    if snapshot.branch != handoff.branch:
+    if not _strictly_equal(snapshot.branch, handoff.branch):
         return _invalid_worker_handoff("Worker Git snapshot branch is incoherent")
-    if snapshot.status != "":
+    if not _strictly_equal(snapshot.status, ""):
         return _invalid_worker_handoff("Worker Git snapshot is not clean")
-    if not isinstance(snapshot.refs, tuple) or any(
-        not isinstance(ref, tuple)
-        or len(ref) != 3
-        or any(not isinstance(value, str) for value in ref)
-        for ref in snapshot.refs
-    ):
-        return _invalid_worker_handoff("Worker Git snapshot refs are invalid")
 
     return None
 
@@ -703,7 +1010,7 @@ class WorkerPhase:
         worker_payload: GotaWorkerResult | None = None
         verified_changed_paths: tuple[str, ...] = ()
 
-        if request.phase is not GotaPhase.WORKER:
+        if not _canonical_request(request) or request.phase is not GotaPhase.WORKER:
             return self._failure(
                 base_sha=base_sha,
                 branch=branch,
@@ -730,9 +1037,23 @@ class WorkerPhase:
                 diagnostic=f"Initial Git inspection failed: {error}",
             )
 
+        if not _canonical_snapshot(initial):
+            return self._failure(
+                base_sha=base_sha,
+                branch=branch,
+                worker_execution=worker_execution,
+                worker_payload=worker_payload,
+                verified_changed_paths=verified_changed_paths,
+                phase=GotaCyclePhase.INITIAL_GIT,
+                reason=GotaCycleFailure.INITIAL_GIT_FAILURE,
+                diagnostic="Initial Git snapshot is not canonical",
+            )
+
         base_sha = initial.head
         branch = initial.branch
-        if Path(request.workspace).resolve() != self.repository:
+        if not _strictly_equal(
+            Path(request.workspace).resolve(), self.repository
+        ):
             return self._failure(
                 base_sha=base_sha,
                 branch=branch,
@@ -743,7 +1064,7 @@ class WorkerPhase:
                 reason=GotaCycleFailure.WORKSPACE_MISMATCH,
                 diagnostic="Gota request workspace does not match the cycle repository",
             )
-        if request.base_sha != base_sha:
+        if not _strictly_equal(request.base_sha, base_sha):
             return self._failure(
                 base_sha=base_sha,
                 branch=branch,
@@ -756,7 +1077,7 @@ class WorkerPhase:
                     f"Request base SHA {request.base_sha} differs from Git HEAD {base_sha}"
                 ),
             )
-        if request.branch != branch:
+        if not _strictly_equal(request.branch, branch):
             return self._failure(
                 base_sha=base_sha,
                 branch=branch,
@@ -785,6 +1106,21 @@ class WorkerPhase:
             cwd=self.repository,
             timeout=timeout,
         )
+        if not _canonical_execution(worker_execution, GotaWorkerResult):
+            return self._failure(
+                base_sha=base_sha,
+                branch=branch,
+                worker_execution=(
+                    worker_execution
+                    if type(worker_execution) is OpenCodeRunResult
+                    else None
+                ),
+                worker_payload=worker_payload,
+                verified_changed_paths=verified_changed_paths,
+                phase=GotaCyclePhase.WORKER_EXECUTION,
+                reason=GotaCycleFailure.WORKER_RESULT_INVALID,
+                diagnostic="Worker runner did not return canonical execution data",
+            )
         runner_failure = self._runner_failure(worker_execution)
         if runner_failure is not None:
             return self._failure(
@@ -799,7 +1135,7 @@ class WorkerPhase:
             )
         if (
             worker_execution.status is OpenCodeRunStatus.SUCCEEDED
-            and worker_execution.exit_code != 0
+            and not _strictly_equal(worker_execution.exit_code, 0)
         ):
             return self._failure(
                 base_sha=base_sha,
@@ -827,7 +1163,7 @@ class WorkerPhase:
                     f"Unexpected Worker runner status: {worker_execution.status.value}"
                 ),
             )
-        if not isinstance(worker_execution.payload, GotaWorkerResult):
+        if type(worker_execution.payload) is not GotaWorkerResult:
             return self._failure(
                 base_sha=base_sha,
                 branch=branch,
@@ -1039,33 +1375,41 @@ class ReviewPhase:
     ) -> ReviewPhaseResult:
         """Validate an untrusted Worker handoff before running Reviewer."""
 
-        if isinstance(verified, WorkerPhaseResult):
-            handoff = verified.verified_commit
+        if type(verified) is WorkerPhaseResult:
             handoff_failure: tuple[GotaCycleFailure, str] | None = None
-            if verified.failure is not None:
+            if not _canonical_worker_phase_result(verified):
+                handoff = None
+                handoff_failure = _invalid_worker_handoff(
+                    "WorkerPhase result is not canonical"
+                )
+            else:
+                handoff = verified.verified_commit
+            if handoff_failure is None and verified.failure is not None:
                 handoff_failure = _invalid_worker_handoff(
                     f"WorkerPhase result contains failure {verified.failure!r}"
                 )
-            elif verified.phase is not GotaCyclePhase.WORKER_GIT_VERIFICATION:
+            elif handoff_failure is None and (
+                verified.phase is not GotaCyclePhase.WORKER_GIT_VERIFICATION
+            ):
                 handoff_failure = _invalid_worker_handoff(
                     "WorkerPhase result is not a verified Git handoff"
                 )
-            elif handoff is None:
+            elif handoff_failure is None and handoff is None:
                 handoff_failure = _invalid_worker_handoff(
                     "WorkerPhase result has no verified commit"
                 )
-            elif not isinstance(handoff, VerifiedWorkerCommit):
+            elif handoff_failure is None and type(handoff) is not VerifiedWorkerCommit:
                 handoff_failure = _invalid_worker_handoff(
                     "WorkerPhase result contains an invalid verified commit"
                 )
-            elif (
+            elif handoff_failure is None and (
                 verified.worker_execution is None
                 or verified.worker_payload is None
             ):
                 handoff_failure = _invalid_worker_handoff(
                     "WorkerPhase result is missing Worker evidence"
                 )
-            elif (
+            elif handoff_failure is None and (
                 not _strictly_equal(verified.base_sha, handoff.base_sha)
                 or not _strictly_equal(verified.branch, handoff.branch)
                 or not _strictly_equal(
@@ -1082,7 +1426,7 @@ class ReviewPhase:
                 )
             if handoff_failure is None and handoff is not None:
                 handoff_failure = validate_verified_worker_commit(handoff)
-        elif isinstance(verified, VerifiedWorkerCommit):
+        elif type(verified) is VerifiedWorkerCommit:
             handoff = verified
             handoff_failure = validate_verified_worker_commit(handoff)
         else:
@@ -1167,14 +1511,18 @@ class ReviewPhase:
                 diagnostic=post_review_verification.diagnostic,
             )
 
-        if not isinstance(reviewer_execution, OpenCodeRunResult):
+        if not _canonical_execution(reviewer_execution, GotaReviewResult):
             return self._failure(
                 verified=verified,
-                reviewer_execution=None,
+                reviewer_execution=(
+                    reviewer_execution
+                    if type(reviewer_execution) is OpenCodeRunResult
+                    else None
+                ),
                 review_result=review_result,
                 phase=GotaCyclePhase.REVIEWER_EXECUTION,
                 reason=GotaCycleFailure.REVIEWER_RESULT_INVALID,
-                diagnostic="Reviewer runner did not return an OpenCodeRunResult",
+                diagnostic="Reviewer runner did not return canonical execution data",
             )
 
         runner_failure = self._runner_failure(reviewer_execution)
@@ -1189,7 +1537,7 @@ class ReviewPhase:
             )
         if (
             reviewer_execution.status is OpenCodeRunStatus.SUCCEEDED
-            and reviewer_execution.exit_code != 0
+            and not _strictly_equal(reviewer_execution.exit_code, 0)
         ):
             return self._failure(
                 verified=verified,
@@ -1213,7 +1561,7 @@ class ReviewPhase:
                     f"Unexpected Reviewer runner status: {reviewer_execution.status.value}"
                 ),
             )
-        if not isinstance(reviewer_execution.payload, GotaReviewResult):
+        if type(reviewer_execution.payload) is not GotaReviewResult:
             return self._failure(
                 verified=verified,
                 reviewer_execution=reviewer_execution,
@@ -1237,7 +1585,7 @@ class ReviewPhase:
                 diagnostic=f"Reviewer execution is incoherent: {execution_failure}",
             )
 
-        assert isinstance(reviewer_execution.payload, GotaReviewResult)
+        assert type(reviewer_execution.payload) is GotaReviewResult
         review_result = reviewer_execution.payload
         if (
             review_request.phase is not GotaPhase.REVIEW
@@ -1258,7 +1606,10 @@ class ReviewPhase:
                 reason=GotaCycleFailure.REVIEWER_RESULT_INVALID,
                 diagnostic="ReviewResult identity is not valid for this cycle",
             )
-        if review_result.reviewed_commit_sha != verified.verified_commit_sha:
+        if not _strictly_equal(
+            review_result.reviewed_commit_sha,
+            verified.verified_commit_sha,
+        ):
             return self._failure(
                 verified=verified,
                 reviewer_execution=reviewer_execution,

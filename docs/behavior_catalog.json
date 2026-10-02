@@ -401,6 +401,7 @@
         "WorkerPhase failures retain the existing GotaCycleFailure semantics and cannot start ReviewPhase.",
         "ReviewPhase rejects an incoherent VerifiedWorkerCommit or WorkerPhaseResult with WORKER_RESULT_INVALID before invoking Reviewer; the result is invalid and exposes no decision, including when a wrapper hides a prior Worker failure or omits its handoff.",
         "ReviewPhase validates Reviewer identity, review phase, exact verified SHA, exit status, and post-review Git integrity without executing Worker or writing coordinator state.",
+        "Authoritative identity, phase, attempt, SHA, wrapper status, handoff, Git snapshot, and Reviewer decision values require canonical structure, exact runtime types, and exact values; opaque evidence contents remain parser-owned.",
         "The existing GotaReviewCycle remains a composition facade with the same end-to-end public result semantics."
       ],
       "coverage": "automatic",

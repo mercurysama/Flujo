@@ -87,9 +87,7 @@ def _fail(code: GotaProtocolErrorCode, detail: str) -> NoReturn:
 
 
 def _object(value: Any) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping) or any(
-        not isinstance(key, str) for key in value
-    ):
+    if type(value) is not dict or any(type(key) is not str for key in value):
         _fail(GotaProtocolErrorCode.INVALID_PAYLOAD, "Payload must be a JSON object")
     return value
 
@@ -115,7 +113,7 @@ def _check_keys(
 
 
 def _non_empty_string(value: Any, field: str) -> str:
-    if not isinstance(value, str) or not value.strip():
+    if type(value) is not str or not value.strip():
         _fail(
             GotaProtocolErrorCode.INVALID_FIELD,
             f"Field '{field}' must be a non-empty string",
@@ -124,14 +122,9 @@ def _non_empty_string(value: Any, field: str) -> str:
 
 
 def _attempt(value: Any) -> int:
-    if isinstance(value, bool):
-        _fail(
-            GotaProtocolErrorCode.INVALID_ATTEMPT,
-            "Field 'attempt' must be a positive integer",
-        )
-    if isinstance(value, int):
+    if type(value) is int:
         normalized = value
-    elif isinstance(value, Decimal):
+    elif type(value) is Decimal:
         if not _decimal_is_finite(value) or value != value.to_integral_value():
             _fail(
                 GotaProtocolErrorCode.INVALID_ATTEMPT,
@@ -152,9 +145,9 @@ def _attempt(value: Any) -> int:
 
 
 def _phase(value: Any) -> GotaPhase:
-    if isinstance(value, GotaPhase):
+    if type(value) is GotaPhase:
         return value
-    if not isinstance(value, str):
+    if type(value) is not str:
         _fail(
             GotaProtocolErrorCode.INVALID_PHASE,
             "Field 'phase' must be 'worker' or 'review'",
@@ -169,7 +162,7 @@ def _phase(value: Any) -> GotaPhase:
 
 
 def _protocol(value: Any) -> str:
-    if value != GOTA_PROTOCOL:
+    if type(value) is not str or value != GOTA_PROTOCOL:
         _fail(
             GotaProtocolErrorCode.UNKNOWN_PROTOCOL,
             f"Unsupported protocol: {value}",
@@ -178,7 +171,7 @@ def _protocol(value: Any) -> str:
 
 
 def _message(value: Any, expected: GotaMessage) -> str:
-    if value != expected.value:
+    if type(value) is not str or value != expected.value:
         _fail(
             GotaProtocolErrorCode.UNKNOWN_MESSAGE,
             f"Expected message: {expected.value}",
@@ -187,7 +180,7 @@ def _message(value: Any, expected: GotaMessage) -> str:
 
 
 def _sha(value: Any, field: str) -> str:
-    if not isinstance(value, str) or len(value) != 40:
+    if type(value) is not str or len(value) != 40:
         _fail(
             GotaProtocolErrorCode.INVALID_SHA,
             f"Field '{field}' must contain a 40-character hexadecimal SHA",
@@ -201,7 +194,7 @@ def _sha(value: Any, field: str) -> str:
 
 
 def _strings(value: Any, field: str) -> tuple[str, ...]:
-    if not isinstance(value, (list, tuple)):
+    if type(value) not in (list, tuple):
         _fail(
             GotaProtocolErrorCode.INVALID_FIELD,
             f"Field '{field}' must be an array of strings",
@@ -219,14 +212,14 @@ def _paths(value: Any, field: str) -> tuple[str, ...]:
 
 
 def _findings(value: Any, field: str) -> tuple[GotaFinding, ...]:
-    if not isinstance(value, (list, tuple)):
+    if type(value) not in (list, tuple):
         _fail(
             GotaProtocolErrorCode.INVALID_FIELD,
             f"Field '{field}' must be an array of finding objects",
         )
     result: list[GotaFinding] = []
     for item in value:
-        if isinstance(item, GotaFinding):
+        if type(item) is GotaFinding:
             result.append(item)
         else:
             result.append(GotaFinding.from_payload(_object(item)))
@@ -234,7 +227,7 @@ def _findings(value: Any, field: str) -> tuple[GotaFinding, ...]:
 
 
 def _evidence(value: Any, field: str) -> tuple[Mapping[str, Any], ...]:
-    if not isinstance(value, (list, tuple)):
+    if type(value) not in (list, tuple):
         _fail(
             GotaProtocolErrorCode.INVALID_FIELD,
             f"Field '{field}' must be an array of objects",
@@ -247,7 +240,7 @@ def _evidence(value: Any, field: str) -> tuple[Mapping[str, Any], ...]:
 
 
 def _checkpoint(value: Any) -> GotaCheckpoint:
-    if isinstance(value, GotaCheckpoint):
+    if type(value) is GotaCheckpoint:
         return value
     return GotaCheckpoint.from_payload(_object(value))
 
@@ -256,7 +249,7 @@ def _validate_request_id(
     request_id: str, run_id: str, attempt: int, phase: GotaPhase
 ) -> None:
     expected = f"{run_id}:{attempt}:{phase.value}"
-    if request_id != expected:
+    if type(request_id) is not str or request_id != expected:
         _fail(
             GotaProtocolErrorCode.INVALID_REQUEST_ID,
             "request_id must equal run_id:attempt:phase",
@@ -392,9 +385,9 @@ def _enum_value(
     code: GotaProtocolErrorCode,
     field: str,
 ) -> EnumValue:
-    if isinstance(value, enum_type):
+    if type(value) is enum_type:
         return value
-    if not isinstance(value, str):
+    if type(value) is not str:
         _fail(code, f"Field '{field}' contains an unknown value")
     try:
         return enum_type(value)
@@ -807,9 +800,9 @@ def parse_gota_payload(
     _check_keys(payload, {"protocol", "message"}, set(payload) - {"protocol", "message"})
     _protocol(payload["protocol"])
     message = payload["message"]
-    if message == GotaMessage.WORKER_RESULT.value:
+    if type(message) is str and message == GotaMessage.WORKER_RESULT.value:
         return GotaWorkerResult.from_payload(payload)
-    if message == GotaMessage.REVIEW_RESULT.value:
+    if type(message) is str and message == GotaMessage.REVIEW_RESULT.value:
         return GotaReviewResult.from_payload(payload)
     _fail(
         GotaProtocolErrorCode.UNKNOWN_MESSAGE,
@@ -840,7 +833,7 @@ def _split_gota_lines(output: str) -> list[str]:
 def parse_gota_output(output: str) -> GotaWorkerResult | GotaReviewResult:
     """Extract and validate exactly one delimited result from agent output."""
 
-    if not isinstance(output, str):
+    if type(output) is not str:
         _fail(GotaProtocolErrorCode.INVALID_PAYLOAD, "Output must be text")
     lines = _split_gota_lines(output)
     begin_lines = [
