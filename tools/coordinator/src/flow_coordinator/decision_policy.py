@@ -5,8 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from .gota_cycle import GotaCycleFailure, GotaReviewCycleResult
-from .gota_protocol import GotaReviewResult, ReviewDecision
+from .gota_cycle import GotaCycleFailure, GotaCyclePhase, GotaReviewCycleResult
+from .gota_phases import (
+    _canonical_execution,
+    _canonical_payload,
+    _canonical_sha,
+    _canonical_text,
+    _canonical_text_tuple,
+    _strictly_equal,
+    validate_successful_execution,
+)
+from .gota_protocol import GotaReviewResult, GotaWorkerResult, ReviewDecision
 
 
 class GotaNextAction(StrEnum):
@@ -62,33 +71,57 @@ class GotaDecisionPolicy:
                 reason="Cycle result is not canonical",
             )
         review_result = cycle_result.review_result
+        canonical_review_result = _canonical_payload(
+            review_result,
+            GotaReviewResult,
+        )
         observed_decision = (
             review_result.decision
-            if type(review_result) is GotaReviewResult
-            and type(review_result.decision) is ReviewDecision
-            else None
-        )
-        accepted_decision = (
-            cycle_result.decision
-            if type(review_result) is GotaReviewResult
+            if canonical_review_result
             else None
         )
 
-        if (
-            not cycle_result.valid
-            or type(review_result) is not GotaReviewResult
-            or type(accepted_decision) is not ReviewDecision
-        ):
+        if cycle_result.failure is not None:
             return GotaDecisionResult(
                 action=GotaNextAction.CYCLE_FAILED,
                 review_result=(
                     review_result
-                    if type(review_result) is GotaReviewResult
+                    if canonical_review_result
                     else None
                 ),
                 review_decision=observed_decision,
                 cycle_failure=cycle_result.failure,
                 reason=GotaDecisionPolicy._failure_reason(cycle_result),
+            )
+
+        authority_error = GotaDecisionPolicy._authority_error(
+            cycle_result,
+            review_result,
+            canonical_review_result=canonical_review_result,
+        )
+        if authority_error is not None:
+            return GotaDecisionResult(
+                action=GotaNextAction.CYCLE_FAILED,
+                review_result=(
+                    review_result if canonical_review_result else None
+                ),
+                review_decision=observed_decision,
+                cycle_failure=None,
+                reason=GotaDecisionPolicy._authority_reason(
+                    cycle_result,
+                    authority_error,
+                ),
+            )
+
+        assert type(review_result) is GotaReviewResult
+        accepted_decision = review_result.decision
+        if type(accepted_decision) is not ReviewDecision:
+            return GotaDecisionResult(
+                action=GotaNextAction.CYCLE_FAILED,
+                review_result=review_result,
+                review_decision=None,
+                cycle_failure=None,
+                reason="Cycle contains a non-canonical ReviewDecision",
             )
 
         action = _DECISION_TO_ACTION.get(accepted_decision)
@@ -108,6 +141,94 @@ class GotaDecisionPolicy:
             cycle_failure=None,
             reason=cycle_result.diagnostic,
         )
+
+    @staticmethod
+    def _authority_error(
+        cycle_result: GotaReviewCycleResult,
+        review_result: object,
+        *,
+        canonical_review_result: bool,
+    ) -> str | None:
+        if cycle_result.phase is not GotaCyclePhase.COMPLETED:
+            return "Cycle phase is not the canonical completed phase"
+        if not _canonical_sha(cycle_result.base_sha):
+            return "Cycle base SHA is not canonical"
+        if not _canonical_text(cycle_result.branch):
+            return "Cycle branch is not canonical"
+        if not _canonical_sha(cycle_result.verified_commit_sha):
+            return "Cycle verified commit SHA is not canonical"
+        if not _canonical_text_tuple(cycle_result.verified_changed_paths):
+            return "Cycle changed paths are not canonical"
+        if type(cycle_result.diagnostic) is not str:
+            return "Cycle diagnostic is not canonical"
+        if not canonical_review_result:
+            return "ReviewResult is not canonical"
+        assert type(review_result) is GotaReviewResult
+        if not _strictly_equal(
+            review_result.reviewed_commit_sha,
+            cycle_result.verified_commit_sha,
+        ):
+            return "ReviewResult does not identify the verified commit"
+
+        worker_payload = cycle_result.worker_payload
+        if worker_payload is not None:
+            if not _canonical_payload(worker_payload, GotaWorkerResult):
+                return "WorkerResult is not canonical"
+            if not _strictly_equal(
+                worker_payload.commit_sha,
+                cycle_result.verified_commit_sha,
+            ):
+                return "WorkerResult does not identify the verified commit"
+            if not _strictly_equal(
+                tuple(sorted(worker_payload.changed_paths)),
+                cycle_result.verified_changed_paths,
+            ):
+                return "WorkerResult changed paths are not coherent"
+            for field_name in ("task_id", "run_id", "attempt"):
+                if not _strictly_equal(
+                    getattr(worker_payload, field_name),
+                    getattr(review_result, field_name),
+                ):
+                    return f"ReviewResult {field_name} is not coherent with WorkerResult"
+
+        worker_execution = cycle_result.worker_execution
+        if worker_execution is not None:
+            if not _canonical_execution(worker_execution, GotaWorkerResult):
+                return "Worker execution is not canonical"
+            if worker_payload is None:
+                return "Worker execution has no coherent WorkerResult"
+            execution_error = validate_successful_execution(
+                worker_execution,
+                GotaWorkerResult,
+            )
+            if execution_error is not None:
+                return f"Worker execution is incoherent: {execution_error}"
+            if not _strictly_equal(worker_execution.payload, worker_payload):
+                return "Worker execution payload is not coherent"
+
+        reviewer_execution = cycle_result.reviewer_execution
+        if reviewer_execution is not None:
+            if not _canonical_execution(reviewer_execution, GotaReviewResult):
+                return "Reviewer execution is not canonical"
+            execution_error = validate_successful_execution(
+                reviewer_execution,
+                GotaReviewResult,
+            )
+            if execution_error is not None:
+                return f"Reviewer execution is incoherent: {execution_error}"
+            if not _strictly_equal(reviewer_execution.payload, review_result):
+                return "Reviewer execution payload is not coherent"
+
+        return None
+
+    @staticmethod
+    def _authority_reason(
+        cycle_result: GotaReviewCycleResult,
+        authority_error: str,
+    ) -> str:
+        if type(cycle_result.diagnostic) is str and cycle_result.diagnostic:
+            return f"{cycle_result.diagnostic}: {authority_error}"
+        return authority_error
 
     @staticmethod
     def _failure_reason(cycle_result: GotaReviewCycleResult) -> str:

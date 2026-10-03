@@ -2,23 +2,35 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import replace
+from decimal import Decimal
 from unittest.mock import patch
 
 from flow_coordinator import (
     GOTA_PROTOCOL,
     GotaCycleFailure,
     GotaCyclePhase,
+    GotaCheckpoint,
     GotaDecisionPolicy,
     GotaDecisionResult,
     GotaNextAction,
     GotaReviewCycleResult,
     GotaReviewResult,
+    GotaWorkerResult,
     ReviewDecision,
+    WorkerResultStatus,
 )
 
 
 class FabricatedReviewResult(GotaReviewResult):
     pass
+
+
+class FabricatedText(str):
+    def __eq__(self, _other: object) -> bool:
+        return True
+
+    def __hash__(self) -> int:
+        return str.__hash__(self)
 
 
 class GotaDecisionPolicyTest(unittest.TestCase):
@@ -201,6 +213,126 @@ class GotaDecisionPolicyTest(unittest.TestCase):
         self.assertEqual(result.action, GotaNextAction.CYCLE_FAILED)
         self.assertIsNone(result.review_result)
         self.assertIsNone(result.review_decision)
+
+    def test_mutated_review_evidence_cannot_complete(self) -> None:
+        review_result = self._review_result()
+        cycle_result = self._cycle_result(review_result=review_result)
+        object.__setattr__(review_result, "evidence", list(review_result.evidence))
+
+        result = GotaDecisionPolicy.resolve(cycle_result)
+
+        self.assertEqual(result.action, GotaNextAction.CYCLE_FAILED)
+        self.assertIsNone(result.review_result)
+        self.assertIsNone(result.review_decision)
+        self.assertFalse(result.allows_completion)
+
+    def test_reviewed_commit_must_match_verified_commit(self) -> None:
+        review_result = self._review_result()
+        object.__setattr__(
+            review_result,
+            "reviewed_commit_sha",
+            "fedcba9876543210fedcba9876543210fedcba98",
+        )
+
+        result = GotaDecisionPolicy.resolve(
+            self._cycle_result(review_result=review_result)
+        )
+
+        self.assertEqual(result.action, GotaNextAction.CYCLE_FAILED)
+        self.assertEqual(result.review_decision, ReviewDecision.PASSED)
+
+    def test_non_terminal_cycle_cannot_select_a_business_action(self) -> None:
+        cycle_result = replace(
+            self._cycle_result(),
+            phase=GotaCyclePhase.REVIEWER_RESULT,
+        )
+
+        result = GotaDecisionPolicy.resolve(cycle_result)
+
+        self.assertEqual(result.action, GotaNextAction.CYCLE_FAILED)
+        self.assertIsNone(result.cycle_failure)
+        self.assertEqual(result.review_decision, ReviewDecision.PASSED)
+
+    def test_adversarial_review_field_mutation_cannot_complete(self) -> None:
+        review_result = self._review_result()
+        object.__setattr__(review_result, "task_id", FabricatedText("task-policy"))
+
+        result = GotaDecisionPolicy.resolve(
+            self._cycle_result(review_result=review_result)
+        )
+
+        self.assertEqual(result.action, GotaNextAction.CYCLE_FAILED)
+        self.assertIsNone(result.review_result)
+        self.assertIsNone(result.review_decision)
+
+    def test_noncanonical_reviewed_commit_type_cannot_complete(self) -> None:
+        review_result = self._review_result()
+        object.__setattr__(
+            review_result,
+            "reviewed_commit_sha",
+            FabricatedText(self.commit_sha),
+        )
+
+        result = GotaDecisionPolicy.resolve(
+            self._cycle_result(review_result=review_result)
+        )
+
+        self.assertEqual(result.action, GotaNextAction.CYCLE_FAILED)
+        self.assertIsNone(result.review_result)
+        self.assertIsNone(result.review_decision)
+
+    def test_noncanonical_attempt_type_cannot_complete(self) -> None:
+        review_result = self._review_result()
+        object.__setattr__(review_result, "attempt", Decimal("1.0"))
+
+        result = GotaDecisionPolicy.resolve(
+            self._cycle_result(review_result=review_result)
+        )
+
+        self.assertEqual(result.action, GotaNextAction.CYCLE_FAILED)
+        self.assertIsNone(result.review_result)
+        self.assertIsNone(result.review_decision)
+
+    def test_noncanonical_review_decision_cannot_complete(self) -> None:
+        review_result = self._review_result()
+        object.__setattr__(review_result, "decision", "PASSED")
+
+        result = GotaDecisionPolicy.resolve(
+            self._cycle_result(review_result=review_result)
+        )
+
+        self.assertEqual(result.action, GotaNextAction.CYCLE_FAILED)
+        self.assertIsNone(result.review_result)
+        self.assertIsNone(result.review_decision)
+
+    def test_coherent_worker_identity_is_required_when_present(self) -> None:
+        review_result = self._review_result()
+        worker_result = GotaWorkerResult(
+            protocol=GOTA_PROTOCOL,
+            message="worker.result",
+            request_id="run-policy:1:worker",
+            task_id="other-task",
+            run_id="run-policy",
+            attempt=1,
+            result=WorkerResultStatus.READY_FOR_REVIEW,
+            commit_sha=self.commit_sha,
+            changed_paths=("src/change.py",),
+            evidence=({"kind": "test", "passed": True},),
+            checkpoint=GotaCheckpoint(
+                completed_steps=("implementation",),
+                remaining_phase="review",
+            ),
+        )
+
+        result = GotaDecisionPolicy.resolve(
+            replace(
+                self._cycle_result(review_result=review_result),
+                worker_payload=worker_result,
+            )
+        )
+
+        self.assertEqual(result.action, GotaNextAction.CYCLE_FAILED)
+        self.assertEqual(result.review_decision, ReviewDecision.PASSED)
 
     def test_resolution_is_deterministic_and_has_no_runner_git_or_sqlite_side_effects(
         self,
