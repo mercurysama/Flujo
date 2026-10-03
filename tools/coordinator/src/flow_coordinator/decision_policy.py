@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import cast
 
 from .gota_cycle import GotaCycleFailure, GotaCyclePhase, GotaReviewCycleResult
 from .gota_phases import (
@@ -15,7 +17,12 @@ from .gota_phases import (
     _strictly_equal,
     validate_successful_execution,
 )
-from .gota_protocol import GotaReviewResult, GotaWorkerResult, ReviewDecision
+from .gota_protocol import (
+    GotaReviewResult,
+    GotaWorkerResult,
+    ReviewDecision,
+    parse_gota_payload,
+)
 
 
 class GotaNextAction(StrEnum):
@@ -57,6 +64,23 @@ _DECISION_TO_ACTION: dict[ReviewDecision, GotaNextAction] = {
 }
 
 
+def _canonical_review_snapshot(value: object) -> GotaReviewResult | None:
+    """Rebuild the accepted review payload before any business mapping."""
+
+    if type(value) is not GotaReviewResult:
+        return None
+    review_result = cast(GotaReviewResult, value)
+    try:
+        canonical = parse_gota_payload(deepcopy(review_result.to_payload()))
+    except Exception:
+        return None
+    if type(canonical) is not GotaReviewResult:
+        return None
+    if not _strictly_equal(canonical, review_result):
+        return None
+    return canonical
+
+
 class GotaDecisionPolicy:
     """Resolve a cycle result without performing the selected next action."""
 
@@ -71,13 +95,10 @@ class GotaDecisionPolicy:
                 reason="Cycle result is not canonical",
             )
         review_result = cycle_result.review_result
-        canonical_review_result = _canonical_payload(
-            review_result,
-            GotaReviewResult,
-        )
+        canonical_review_result = _canonical_review_snapshot(review_result)
         observed_decision = (
-            review_result.decision
-            if canonical_review_result
+            canonical_review_result.decision
+            if canonical_review_result is not None
             else None
         )
 
@@ -86,7 +107,7 @@ class GotaDecisionPolicy:
                 action=GotaNextAction.CYCLE_FAILED,
                 review_result=(
                     review_result
-                    if canonical_review_result
+                    if canonical_review_result is not None
                     else None
                 ),
                 review_decision=observed_decision,
@@ -97,13 +118,15 @@ class GotaDecisionPolicy:
         authority_error = GotaDecisionPolicy._authority_error(
             cycle_result,
             review_result,
-            canonical_review_result=canonical_review_result,
+            canonical_review_result=canonical_review_result is not None,
         )
         if authority_error is not None:
             return GotaDecisionResult(
                 action=GotaNextAction.CYCLE_FAILED,
                 review_result=(
-                    review_result if canonical_review_result else None
+                    review_result
+                    if canonical_review_result is not None
+                    else None
                 ),
                 review_decision=observed_decision,
                 cycle_failure=None,
@@ -113,12 +136,12 @@ class GotaDecisionPolicy:
                 ),
             )
 
-        assert type(review_result) is GotaReviewResult
-        accepted_decision = review_result.decision
+        assert canonical_review_result is not None
+        accepted_decision = canonical_review_result.decision
         if type(accepted_decision) is not ReviewDecision:
             return GotaDecisionResult(
                 action=GotaNextAction.CYCLE_FAILED,
-                review_result=review_result,
+                review_result=canonical_review_result,
                 review_decision=None,
                 cycle_failure=None,
                 reason="Cycle contains a non-canonical ReviewDecision",
@@ -128,7 +151,7 @@ class GotaDecisionPolicy:
         if action is None:
             return GotaDecisionResult(
                 action=GotaNextAction.CYCLE_FAILED,
-                review_result=review_result,
+                review_result=canonical_review_result,
                 review_decision=observed_decision,
                 cycle_failure=cycle_result.failure,
                 reason="Cycle contains an unsupported ReviewDecision",
@@ -136,7 +159,7 @@ class GotaDecisionPolicy:
 
         return GotaDecisionResult(
             action=action,
-            review_result=review_result,
+            review_result=canonical_review_result,
             review_decision=accepted_decision,
             cycle_failure=None,
             reason=cycle_result.diagnostic,

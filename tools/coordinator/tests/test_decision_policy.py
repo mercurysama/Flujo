@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 import unittest
 from dataclasses import replace
 from decimal import Decimal
@@ -12,6 +13,7 @@ from flow_coordinator import (
     GotaCheckpoint,
     GotaDecisionPolicy,
     GotaDecisionResult,
+    GotaFinding,
     GotaNextAction,
     GotaReviewCycleResult,
     GotaReviewResult,
@@ -82,6 +84,36 @@ class GotaDecisionPolicyTest(unittest.TestCase):
             diagnostic=diagnostic,
         )
 
+    def _resolve_with_post_validation_mutation(
+        self,
+        review_result: GotaReviewResult,
+        mutation: Callable[[GotaReviewResult], None],
+    ) -> GotaDecisionResult:
+        cycle_result = self._cycle_result(review_result=review_result)
+        original_authority_error = GotaDecisionPolicy._authority_error
+
+        def validate_then_mutate(
+            cycle: GotaReviewCycleResult,
+            review: object,
+            *,
+            canonical_review_result: bool,
+        ) -> str | None:
+            authority_error = original_authority_error(
+                cycle,
+                review,
+                canonical_review_result=canonical_review_result,
+            )
+            self.assertIsNone(authority_error)
+            mutation(review_result)
+            return authority_error
+
+        with patch.object(
+            GotaDecisionPolicy,
+            "_authority_error",
+            new=staticmethod(validate_then_mutate),
+        ):
+            return GotaDecisionPolicy.resolve(cycle_result)
+
     def test_valid_review_decisions_map_to_next_actions(self) -> None:
         expected = {
             ReviewDecision.PASSED: GotaNextAction.COMPLETE,
@@ -92,14 +124,16 @@ class GotaDecisionPolicyTest(unittest.TestCase):
 
         for decision, action in expected.items():
             with self.subTest(decision=decision):
+                review_result = self._review_result(decision)
                 result = GotaDecisionPolicy.resolve(
-                    self._cycle_result(decision=decision)
+                    self._cycle_result(review_result=review_result)
                 )
 
                 self.assertEqual(result.action, action)
                 self.assertEqual(result.review_decision, decision)
                 self.assertIsNone(result.cycle_failure)
                 self.assertEqual(result.reason, "cycle diagnostic")
+                self.assertIsNot(result.review_result, review_result)
 
         self.assertTrue(
             GotaDecisionPolicy.resolve(
@@ -173,6 +207,137 @@ class GotaDecisionPolicyTest(unittest.TestCase):
         self.assertEqual(result.review_decision, ReviewDecision.PASSED)
         self.assertEqual(result.cycle_failure, GotaCycleFailure.REVIEWER_HEAD_CHANGED)
         self.assertFalse(result.allows_completion)
+
+    def test_authority_snapshot_survives_post_validation_decision_mutation(self) -> None:
+        review_result = self._review_result(ReviewDecision.PASSED)
+        result = self._resolve_with_post_validation_mutation(
+            review_result,
+            lambda review: object.__setattr__(
+                review,
+                "decision",
+                ReviewDecision.CORRECTION_REQUIRED,
+            ),
+        )
+
+        self.assertEqual(result.action, GotaNextAction.COMPLETE)
+        self.assertEqual(result.review_decision, ReviewDecision.PASSED)
+        self.assertIsNot(result.review_result, review_result)
+
+    def test_authority_snapshot_survives_post_validation_commit_mutation(self) -> None:
+        review_result = self._review_result(ReviewDecision.PASSED)
+        result = self._resolve_with_post_validation_mutation(
+            review_result,
+            lambda review: object.__setattr__(
+                review,
+                "reviewed_commit_sha",
+                "fedcba9876543210fedcba9876543210fedcba98",
+            ),
+        )
+
+        self.assertEqual(result.action, GotaNextAction.COMPLETE)
+        self.assertEqual(result.review_result.reviewed_commit_sha, self.commit_sha)
+
+    def test_authority_snapshot_survives_post_validation_evidence_mutation(self) -> None:
+        review_result = self._review_result(ReviewDecision.PASSED)
+        object.__setattr__(
+            review_result,
+            "evidence",
+            ({"kind": "audit", "metadata": {"passed": True}},),
+        )
+        result = self._resolve_with_post_validation_mutation(
+            review_result,
+            lambda review: review.evidence[0]["metadata"].__setitem__(
+                "passed",
+                False,
+            ),
+        )
+
+        self.assertEqual(result.action, GotaNextAction.COMPLETE)
+        self.assertEqual(
+            result.review_result.evidence,
+            ({"kind": "audit", "metadata": {"passed": True}},),
+        )
+
+    def test_authority_snapshot_survives_post_validation_findings_mutation(self) -> None:
+        review_result = self._review_result(ReviewDecision.PASSED)
+        result = self._resolve_with_post_validation_mutation(
+            review_result,
+            lambda review: object.__setattr__(
+                review,
+                "findings",
+                (
+                    GotaFinding(
+                        id="finding-1",
+                        severity="high",
+                        description="mutated",
+                    ),
+                ),
+            ),
+        )
+
+        self.assertEqual(result.action, GotaNextAction.COMPLETE)
+        self.assertEqual(result.review_result.findings, ())
+
+    def test_authority_snapshot_survives_post_validation_attempt_mutation(self) -> None:
+        review_result = self._review_result(ReviewDecision.PASSED)
+        result = self._resolve_with_post_validation_mutation(
+            review_result,
+            lambda review: object.__setattr__(review, "attempt", 2),
+        )
+
+        self.assertEqual(result.action, GotaNextAction.COMPLETE)
+        self.assertEqual(result.review_result.attempt, 1)
+
+    def test_authority_snapshot_survives_post_validation_identity_mutation(self) -> None:
+        review_result = self._review_result(ReviewDecision.PASSED)
+        result = self._resolve_with_post_validation_mutation(
+            review_result,
+            lambda review: object.__setattr__(review, "task_id", "other-task"),
+        )
+
+        self.assertEqual(result.action, GotaNextAction.COMPLETE)
+        self.assertEqual(result.review_result.task_id, "task-policy")
+
+    def test_authority_snapshot_is_independent_after_multiple_original_mutations(
+        self,
+    ) -> None:
+        review_result = self._review_result(ReviewDecision.PASSED)
+
+        def mutate_original(review: GotaReviewResult) -> None:
+            object.__setattr__(review, "decision", ReviewDecision.BLOCKED)
+            object.__setattr__(
+                review,
+                "reviewed_commit_sha",
+                "fedcba9876543210fedcba9876543210fedcba98",
+            )
+            object.__setattr__(review, "evidence", ({"kind": "mutated"},))
+            object.__setattr__(
+                review,
+                "findings",
+                (
+                    GotaFinding(
+                        id="finding-2",
+                        severity="critical",
+                        description="mutated",
+                    ),
+                ),
+            )
+            object.__setattr__(review, "attempt", 9)
+            object.__setattr__(review, "task_id", "other-task")
+
+        result = self._resolve_with_post_validation_mutation(
+            review_result,
+            mutate_original,
+        )
+
+        self.assertEqual(result.action, GotaNextAction.COMPLETE)
+        self.assertEqual(result.review_decision, ReviewDecision.PASSED)
+        self.assertIsNot(result.review_result, review_result)
+        self.assertEqual(result.review_result.reviewed_commit_sha, self.commit_sha)
+        self.assertEqual(result.review_result.evidence, ({"kind": "audit", "passed": True},))
+        self.assertEqual(result.review_result.findings, ())
+        self.assertEqual(result.review_result.attempt, 1)
+        self.assertEqual(result.review_result.task_id, "task-policy")
 
     def test_invalid_review_payload_is_preserved_only_for_diagnostics(self) -> None:
         review_result = self._review_result(ReviewDecision.PASSED)
