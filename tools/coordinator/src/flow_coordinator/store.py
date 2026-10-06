@@ -31,6 +31,12 @@ from .domain import (
     parse_datetime,
     utc_now,
 )
+from .gota_protocol import (
+    GotaReviewResult,
+    GotaWorkerResult,
+    ReviewDecision,
+    WorkerResultStatus,
+)
 from .state_machine import validate_transition
 
 
@@ -557,6 +563,240 @@ class SQLiteCoordinatorStore:
             )
         return self.get_run(run_id)
 
+    def transition_gota_to_done(
+        self,
+        run_id: str,
+        lease: Lease,
+        *,
+        actor: str | None = None,
+        now: datetime | None = None,
+    ) -> TaskRun:
+        """Atomically accept one persisted Gota review from REVIEW to DONE.
+
+        The Gota result records are read from the immutable evidence ledger. No
+        caller-supplied payload, digest, decision, or commit SHA participates in
+        the acceptance decision.
+        """
+
+        current_time = now or utc_now()
+        if lease.run_id != run_id:
+            raise FencingTokenError(
+                f"Lease run {lease.run_id} does not match Gota run {run_id}"
+            )
+
+        def load_one_evidence(
+            connection: sqlite3.Connection,
+            kind: str,
+        ) -> sqlite3.Row:
+            rows = connection.execute(
+                """
+                SELECT * FROM evidence
+                WHERE run_id = ? AND kind = ?
+                ORDER BY rowid
+                """,
+                (run_id, kind),
+            ).fetchall()
+            if len(rows) != 1:
+                raise AcceptanceEvidenceError(
+                    f"Gota DONE requires exactly one {kind} evidence record"
+                )
+            row = rows[0]
+            if int(row["fencing_token"]) != lease.fencing_token:
+                raise AcceptanceEvidenceError(
+                    f"Gota evidence {kind} was not recorded by the current fencing token"
+                )
+            try:
+                payload = json.loads(row["payload_json"])
+            except (TypeError, json.JSONDecodeError) as error:
+                raise AcceptanceEvidenceError(
+                    f"Gota evidence {kind} contains invalid JSON"
+                ) from error
+            if type(payload) is not dict or _digest(payload) != row["digest"]:
+                raise AcceptanceEvidenceError(
+                    f"Gota evidence {kind} failed its persisted digest check"
+                )
+            return row
+
+        def load_worker_result(
+            connection: sqlite3.Connection,
+        ) -> tuple[sqlite3.Row, GotaWorkerResult]:
+            row = load_one_evidence(connection, "gota_worker_result_received")
+            try:
+                payload = json.loads(row["payload_json"])
+                result = GotaWorkerResult.from_payload(payload)
+            except (TypeError, ValueError, KeyError) as error:
+                raise AcceptanceEvidenceError(
+                    "Persisted Gota Worker result is invalid"
+                ) from error
+            if _canonical_json(result.to_payload()) != _canonical_json(payload):
+                raise AcceptanceEvidenceError(
+                    "Persisted Gota Worker result is not canonical"
+                )
+            return row, result
+
+        def load_review_result(
+            connection: sqlite3.Connection,
+        ) -> tuple[sqlite3.Row, GotaReviewResult]:
+            row = load_one_evidence(connection, "gota_review_result")
+            try:
+                payload = json.loads(row["payload_json"])
+                result = GotaReviewResult.from_payload(payload)
+            except (TypeError, ValueError, KeyError) as error:
+                raise AcceptanceEvidenceError(
+                    "Persisted Gota Review result is invalid"
+                ) from error
+            if _canonical_json(result.to_payload()) != _canonical_json(payload):
+                raise AcceptanceEvidenceError(
+                    "Persisted Gota Review result is not canonical"
+                )
+            return row, result
+
+        def load_verified_commit(
+            connection: sqlite3.Connection,
+        ) -> tuple[sqlite3.Row, dict[str, Any]]:
+            row = load_one_evidence(connection, "gota_worker_commit_verified")
+            try:
+                payload = json.loads(row["payload_json"])
+            except (TypeError, json.JSONDecodeError) as error:
+                raise AcceptanceEvidenceError(
+                    "Persisted Gota Worker commit verification is invalid JSON"
+                ) from error
+            required = {
+                "request_id",
+                "task_id",
+                "run_id",
+                "attempt",
+                "commit_sha",
+            }
+            if type(payload) is not dict or set(payload) != required:
+                raise AcceptanceEvidenceError(
+                    "Persisted Gota Worker commit verification has invalid fields"
+                )
+            if (
+                type(payload["request_id"]) is not str
+                or type(payload["task_id"]) is not str
+                or type(payload["run_id"]) is not str
+                or type(payload["attempt"]) is not int
+                or payload["attempt"] < 1
+                or type(payload["commit_sha"]) is not str
+                or re.fullmatch(r"[0-9a-f]{40}", payload["commit_sha"]) is None
+            ):
+                raise AcceptanceEvidenceError(
+                    "Persisted Gota Worker commit verification has non-canonical values"
+                )
+            if _digest(payload) != row["digest"]:
+                raise AcceptanceEvidenceError(
+                    "Persisted Gota Worker commit verification failed its digest check"
+                )
+            return row, payload
+
+        with self.fenced_transaction(lease, now=current_time) as connection:
+            run_row = connection.execute(
+                "SELECT task_id, state FROM task_runs WHERE run_id = ?", (run_id,)
+            ).fetchone()
+            if run_row is None:
+                raise KeyError(run_id)
+            if TaskState(run_row["state"]) is not TaskState.REVIEW:
+                raise ValueError("Gota acceptance requires a REVIEW task")
+
+            existing_acceptance = connection.execute(
+                "SELECT COUNT(*) FROM evidence WHERE run_id = ? AND kind = ?",
+                (run_id, "gota_acceptance_verified"),
+            ).fetchone()
+            if existing_acceptance is None or int(existing_acceptance[0]) != 0:
+                raise AcceptanceEvidenceError(
+                    "Gota acceptance evidence already exists or is incoherent"
+                )
+
+            worker_row, worker_result = load_worker_result(connection)
+            verified_row, verified_commit = load_verified_commit(connection)
+            review_row, review_result = load_review_result(connection)
+            task_id = run_row["task_id"]
+
+            if (
+                worker_result.run_id != run_id
+                or worker_result.task_id != task_id
+                or worker_result.result is not WorkerResultStatus.READY_FOR_REVIEW
+            ):
+                raise AcceptanceEvidenceError(
+                    "Persisted Gota Worker identity or result is incoherent"
+                )
+            if (
+                verified_commit["request_id"] != worker_result.request_id
+                or verified_commit["task_id"] != worker_result.task_id
+                or verified_commit["run_id"] != worker_result.run_id
+                or verified_commit["attempt"] != worker_result.attempt
+                or verified_commit["commit_sha"] != worker_result.commit_sha
+            ):
+                raise AcceptanceEvidenceError(
+                    "Persisted Gota Worker commit SHA or identity is incoherent"
+                )
+            if (
+                review_result.run_id != run_id
+                or review_result.task_id != task_id
+                or review_result.attempt != worker_result.attempt
+                or review_result.decision is not ReviewDecision.PASSED
+                or review_result.reviewed_commit_sha != worker_result.commit_sha
+            ):
+                raise AcceptanceEvidenceError(
+                    "Persisted Gota Review result is incoherent or not PASSED"
+                )
+
+            acceptance_payload = {
+                "run_id": run_id,
+                "task_id": task_id,
+                "attempt": worker_result.attempt,
+                "worker_request_id": worker_result.request_id,
+                "review_request_id": review_result.request_id,
+                "worker_commit_sha": worker_result.commit_sha,
+                "reviewed_commit_sha": review_result.reviewed_commit_sha,
+                "decision": review_result.decision.value,
+                "fencing_token": lease.fencing_token,
+                "worker_result_evidence_id": worker_row["evidence_id"],
+                "worker_commit_evidence_id": verified_row["evidence_id"],
+                "review_result_evidence_id": review_row["evidence_id"],
+            }
+            self._insert_evidence(
+                connection,
+                run_id,
+                "gota_acceptance_verified",
+                acceptance_payload,
+                lease,
+                current_time,
+            )
+            updated = connection.execute(
+                """
+                UPDATE task_runs
+                SET state = ?, updated_at = ?
+                WHERE run_id = ? AND state = ?
+                """,
+                (
+                    TaskState.DONE.value,
+                    isoformat(current_time),
+                    run_id,
+                    TaskState.REVIEW.value,
+                ),
+            )
+            if updated.rowcount != 1:
+                raise ValueError("Gota acceptance requires a REVIEW task")
+            connection.execute(
+                """
+                INSERT INTO transition_events(
+                    run_id, from_state, to_state, actor, reason, fencing_token, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run_id,
+                    TaskState.REVIEW.value,
+                    TaskState.DONE.value,
+                    actor if actor is not None else lease.owner_id,
+                    "gota_acceptance_verified",
+                    lease.fencing_token,
+                    isoformat(current_time),
+                ),
+            )
+        return self.get_run(run_id)
+
     def list_events(self, run_id: str | None = None) -> tuple[TransitionEvent, ...]:
         query = "SELECT * FROM transition_events"
         parameters: tuple[str, ...] = ()
@@ -579,6 +819,36 @@ class SQLiteCoordinatorStore:
             for row in rows
         )
 
+    def _insert_evidence(
+        self,
+        connection: sqlite3.Connection,
+        run_id: str,
+        kind: str,
+        payload: Mapping[str, Any],
+        lease: Lease,
+        current_time: datetime,
+    ) -> Evidence:
+        evidence_id = str(uuid.uuid4())
+        payload_dict = dict(payload)
+        digest = _digest(payload_dict)
+        connection.execute(
+            """
+            INSERT INTO evidence(
+                evidence_id, run_id, kind, payload_json, digest, fencing_token, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                evidence_id,
+                run_id,
+                kind,
+                _canonical_json(payload_dict),
+                digest,
+                lease.fencing_token,
+                isoformat(current_time),
+            ),
+        )
+        return Evidence(evidence_id, run_id, kind, payload_dict, digest, current_time)
+
     def append_evidence(
         self,
         run_id: str,
@@ -588,28 +858,17 @@ class SQLiteCoordinatorStore:
         *,
         now: datetime | None = None,
     ) -> Evidence:
-        evidence_id = str(uuid.uuid4())
         current_time = now or utc_now()
         payload_dict = dict(payload)
-        digest = _digest(payload_dict)
         with self.fenced_transaction(lease, now=current_time) as connection:
-            connection.execute(
-                """
-                INSERT INTO evidence(
-                    evidence_id, run_id, kind, payload_json, digest, fencing_token, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    evidence_id,
-                    run_id,
-                    kind,
-                    _canonical_json(payload_dict),
-                    digest,
-                    lease.fencing_token,
-                    isoformat(current_time),
-                ),
+            return self._insert_evidence(
+                connection,
+                run_id,
+                kind,
+                payload_dict,
+                lease,
+                current_time,
             )
-        return Evidence(evidence_id, run_id, kind, payload_dict, digest, current_time)
 
     def list_evidence(self, run_id: str) -> tuple[Evidence, ...]:
         with closing(self._connect()) as connection:

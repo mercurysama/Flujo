@@ -422,6 +422,23 @@
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": ["tools/coordinator/tests/test_decision_policy.py"]
+    },
+    {
+      "id": "FLUJO-BHV-GOTA-STORE-001",
+      "area": "Atomic SQLite Gota acceptance boundary",
+      "precondition": "A persisted TaskRun is in REVIEW with the active lease and fencing token, and the immutable evidence ledger contains one canonical Worker result, Worker commit verification, and Review result for the same Gota identity.",
+      "public_action": "Call SQLiteCoordinatorStore.transition_gota_to_done() with the run ID and active lease.",
+      "expected_result": "The store accepts only REVIEW -> DONE after validating the persisted Gota evidence, exact Worker and reviewed commit SHA, and PASSED decision; it appends one store-generated gota_acceptance_verified evidence record in the same transaction.",
+      "invariants": [
+        "Expired or stale leases, mismatched fencing tokens, non-REVIEW states, missing or incoherent evidence, and non-PASSED decisions reject without acceptance evidence.",
+        "The acceptance evidence digest, timestamp, identity references, and fencing token are generated and persisted by the store rather than supplied by the caller.",
+        "A failure after validation rolls back both gota_acceptance_verified and the REVIEW -> DONE state change.",
+        "A second call from DONE creates no evidence, transition event, or repeated state change.",
+        "The boundary performs no Git mutation and does not call the legacy acceptance path."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tools/coordinator/tests/test_store.py"]
     }
   ]
 }
