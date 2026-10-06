@@ -117,7 +117,7 @@ class GotaDecisionPolicy:
 
         authority_error = GotaDecisionPolicy._authority_error(
             cycle_result,
-            review_result,
+            canonical_review_result,
             canonical_review_result=canonical_review_result is not None,
         )
         if authority_error is not None:

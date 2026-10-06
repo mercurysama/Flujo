@@ -18,9 +18,12 @@ from flow_coordinator import (
     GotaReviewCycleResult,
     GotaReviewResult,
     GotaWorkerResult,
+    OpenCodeRunResult,
+    OpenCodeRunStatus,
     ReviewDecision,
     WorkerResultStatus,
 )
+import flow_coordinator.decision_policy as decision_policy
 
 
 class FabricatedReviewResult(GotaReviewResult):
@@ -60,6 +63,7 @@ class GotaDecisionPolicyTest(unittest.TestCase):
         decision: ReviewDecision = ReviewDecision.PASSED,
         failure: GotaCycleFailure | None = None,
         review_result: GotaReviewResult | None = None,
+        reviewer_execution: OpenCodeRunResult | None = None,
         diagnostic: str = "cycle diagnostic",
     ) -> GotaReviewCycleResult:
         return GotaReviewCycleResult(
@@ -69,7 +73,7 @@ class GotaDecisionPolicyTest(unittest.TestCase):
             worker_payload=None,
             verified_commit_sha=self.commit_sha,
             verified_changed_paths=("src/change.py",),
-            reviewer_execution=None,
+            reviewer_execution=reviewer_execution,
             review_result=(
                 self._review_result(decision)
                 if review_result is None and failure is None
@@ -111,6 +115,46 @@ class GotaDecisionPolicyTest(unittest.TestCase):
             GotaDecisionPolicy,
             "_authority_error",
             new=staticmethod(validate_then_mutate),
+        ):
+            return GotaDecisionPolicy.resolve(cycle_result)
+
+    def _reviewer_execution(
+        self,
+        review_result: GotaReviewResult,
+    ) -> OpenCodeRunResult:
+        return OpenCodeRunResult(
+            status=OpenCodeRunStatus.SUCCEEDED,
+            argv=(),
+            cwd="",
+            stdout="",
+            stderr="",
+            exit_code=0,
+            timed_out=False,
+            payload=review_result,
+        )
+
+    def _resolve_with_post_snapshot_mutation(
+        self,
+        review_result: GotaReviewResult,
+        mutation: Callable[[GotaReviewResult], None],
+        *,
+        reviewer_execution: OpenCodeRunResult | None = None,
+    ) -> GotaDecisionResult:
+        cycle_result = self._cycle_result(
+            review_result=review_result,
+            reviewer_execution=reviewer_execution,
+        )
+        original_snapshot = decision_policy._canonical_review_snapshot
+
+        def snapshot_then_mutate(value: object) -> GotaReviewResult | None:
+            snapshot = original_snapshot(value)
+            mutation(review_result)
+            return snapshot
+
+        with patch.object(
+            decision_policy,
+            "_canonical_review_snapshot",
+            new=snapshot_then_mutate,
         ):
             return GotaDecisionPolicy.resolve(cycle_result)
 
@@ -297,6 +341,88 @@ class GotaDecisionPolicyTest(unittest.TestCase):
 
         self.assertEqual(result.action, GotaNextAction.COMPLETE)
         self.assertEqual(result.review_result.task_id, "task-policy")
+
+    def test_reviewer_payload_incoherence_cannot_be_hidden_by_original_mutation(
+        self,
+    ) -> None:
+        review_result = self._review_result(ReviewDecision.PASSED)
+        reviewer_payload = self._review_result(ReviewDecision.CORRECTION_REQUIRED)
+        result = self._resolve_with_post_snapshot_mutation(
+            review_result,
+            lambda review: object.__setattr__(
+                review,
+                "decision",
+                ReviewDecision.CORRECTION_REQUIRED,
+            ),
+            reviewer_execution=self._reviewer_execution(reviewer_payload),
+        )
+
+        self.assertEqual(result.action, GotaNextAction.CYCLE_FAILED)
+        self.assertEqual(result.review_decision, ReviewDecision.PASSED)
+        self.assertFalse(result.allows_completion)
+
+    def test_post_snapshot_original_mutations_do_not_change_canonical_authority(
+        self,
+    ) -> None:
+        alternate_commit_sha = "fedcba9876543210fedcba9876543210fedcba98"
+        mutations: tuple[tuple[str, Callable[[GotaReviewResult], None]], ...] = (
+            (
+                "decision",
+                lambda review: object.__setattr__(
+                    review,
+                    "decision",
+                    ReviewDecision.CORRECTION_REQUIRED,
+                ),
+            ),
+            (
+                "reviewed_commit_sha",
+                lambda review: object.__setattr__(
+                    review,
+                    "reviewed_commit_sha",
+                    alternate_commit_sha,
+                ),
+            ),
+            (
+                "evidence",
+                lambda review: object.__setattr__(
+                    review,
+                    "evidence",
+                    ({"kind": "mutated"},),
+                ),
+            ),
+            (
+                "findings",
+                lambda review: object.__setattr__(
+                    review,
+                    "findings",
+                    (
+                        GotaFinding(
+                            id="finding-mutated",
+                            severity="high",
+                            description="mutated",
+                        ),
+                    ),
+                ),
+            ),
+            (
+                "attempt",
+                lambda review: object.__setattr__(review, "attempt", 2),
+            ),
+        )
+
+        for field_name, mutation in mutations:
+            with self.subTest(field=field_name):
+                review_result = self._review_result(ReviewDecision.PASSED)
+                reviewer_payload = self._review_result(ReviewDecision.PASSED)
+                result = self._resolve_with_post_snapshot_mutation(
+                    review_result,
+                    mutation,
+                    reviewer_execution=self._reviewer_execution(reviewer_payload),
+                )
+
+                self.assertEqual(result.action, GotaNextAction.COMPLETE)
+                self.assertEqual(result.review_decision, ReviewDecision.PASSED)
+                self.assertTrue(result.allows_completion)
 
     def test_authority_snapshot_is_independent_after_multiple_original_mutations(
         self,
