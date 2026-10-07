@@ -119,8 +119,18 @@ class SQLiteStoreTest(CoordinatorTestCase):
             },
             "gota_review_result": review.to_payload(),
         }
+        persistence_store = (
+            FixedClockStore(self.database, now) if now is not None else self.store
+        )
         for kind in evidence_kinds:
-            self.store.append_evidence(run.run_id, kind, evidence[kind], lease, now=now)
+            if kind == "gota_worker_result_received":
+                persistence_store.persist_gota_worker_result(
+                    run.run_id, worker, lease
+                )
+            else:
+                self.store.append_evidence(
+                    run.run_id, kind, evidence[kind], lease, now=now
+                )
         return run, lease, worker, review
 
     def test_schema_contains_every_required_operational_table(self) -> None:
@@ -188,12 +198,19 @@ class SQLiteStoreTest(CoordinatorTestCase):
             "gota_worker_commit_verified",
             "gota_review_result",
         ):
-            self.store.append_evidence(
-                run.run_id,
-                kind,
-                {"source": "fixture"},
-                lease,
-            )
+            if kind == "gota_worker_result_received":
+                self.store.persist_gota_worker_result(
+                    run.run_id,
+                    self._worker_result(run.run_id, run.task_id),
+                    lease,
+                )
+            else:
+                self.store.append_evidence(
+                    run.run_id,
+                    kind,
+                    {"source": "fixture"},
+                    lease,
+                )
 
         with self.assertRaisesRegex(AcceptanceEvidenceError, "microaudit"):
             self.store.transition_run(

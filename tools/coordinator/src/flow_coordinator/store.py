@@ -36,6 +36,7 @@ from .gota_protocol import (
     GotaWorkerResult,
     ReviewDecision,
     WorkerResultStatus,
+    parse_gota_payload,
 )
 from .state_machine import validate_transition
 
@@ -64,7 +65,13 @@ class AcceptanceEvidenceError(CoordinatorStoreError):
     pass
 
 
-_RESERVED_EVIDENCE_KINDS = frozenset({"gota_acceptance_verified"})
+class GotaWorkerResultError(CoordinatorStoreError):
+    """Fail-closed error for the durable WorkerResult authority boundary."""
+
+
+_RESERVED_EVIDENCE_KINDS = frozenset(
+    {"gota_acceptance_verified", "gota_worker_result_received"}
+)
 
 
 def _canonical_json(value: Any) -> str:
@@ -803,6 +810,236 @@ class SQLiteCoordinatorStore:
             )
         return self.get_run(run_id)
 
+    @staticmethod
+    def _canonical_worker_result(
+        result: GotaWorkerResult,
+    ) -> tuple[GotaWorkerResult, dict[str, Any]]:
+        """Revalidate one in-memory result through the protocol parser."""
+
+        if type(result) is not GotaWorkerResult:
+            raise GotaWorkerResultError(
+                "Gota Worker result must be the canonical GotaWorkerResult type"
+            )
+        try:
+            payload = result.to_payload()
+            parsed = parse_gota_payload(payload)
+        except (TypeError, ValueError, KeyError) as error:
+            raise GotaWorkerResultError(
+                "Gota Worker result does not satisfy the canonical protocol"
+            ) from error
+        if type(parsed) is not GotaWorkerResult:
+            raise GotaWorkerResultError(
+                "Gota Worker result payload has the wrong protocol message type"
+            )
+        canonical_payload = parsed.to_payload()
+        try:
+            if _canonical_json(canonical_payload) != _canonical_json(payload):
+                raise GotaWorkerResultError(
+                    "Gota Worker result payload is not canonical"
+                )
+        except (TypeError, ValueError) as error:
+            raise GotaWorkerResultError(
+                "Gota Worker result payload is not JSON-serializable"
+            ) from error
+        return parsed, canonical_payload
+
+    @staticmethod
+    def _stored_worker_result(
+        row: sqlite3.Row,
+        *,
+        expected_run_id: str,
+        expected_task_id: str,
+    ) -> tuple[GotaWorkerResult, dict[str, Any]]:
+        """Verify ledger integrity and parse one stored WorkerResult."""
+
+        try:
+            parse_datetime(row["created_at"])
+            payload = json.loads(row["payload_json"])
+            if type(payload) is not dict:
+                raise GotaWorkerResultError(
+                    "Stored Gota Worker result payload is not an object"
+                )
+            if _digest(payload) != row["digest"]:
+                raise GotaWorkerResultError(
+                    "Stored Gota Worker result failed its digest check"
+                )
+            parsed = parse_gota_payload(payload)
+        except GotaWorkerResultError:
+            raise
+        except (TypeError, ValueError, KeyError) as error:
+            raise GotaWorkerResultError(
+                "Stored Gota Worker result is invalid"
+            ) from error
+        if type(parsed) is not GotaWorkerResult:
+            raise GotaWorkerResultError(
+                "Stored Gota evidence is not a WorkerResult"
+            )
+        canonical_payload = parsed.to_payload()
+        try:
+            if _canonical_json(canonical_payload) != row["payload_json"]:
+                raise GotaWorkerResultError(
+                    "Stored Gota Worker result is not canonical"
+                )
+        except (TypeError, ValueError) as error:
+            raise GotaWorkerResultError(
+                "Stored Gota Worker result is not JSON-serializable"
+            ) from error
+        if parsed.run_id != expected_run_id:
+            raise GotaWorkerResultError(
+                "Stored Gota Worker result run identity is incoherent"
+            )
+        if parsed.task_id != expected_task_id:
+            raise GotaWorkerResultError(
+                "Stored Gota Worker result task identity is incoherent"
+            )
+        return parsed, canonical_payload
+
+    @staticmethod
+    def _evidence_from_row(
+        row: sqlite3.Row, payload: Mapping[str, Any]
+    ) -> Evidence:
+        return Evidence(
+            evidence_id=row["evidence_id"],
+            run_id=row["run_id"],
+            kind=row["kind"],
+            payload=dict(payload),
+            digest=row["digest"],
+            created_at=parse_datetime(row["created_at"]),
+        )
+
+    def persist_gota_worker_result(
+        self,
+        run_id: str,
+        result: GotaWorkerResult,
+        lease: Lease,
+    ) -> Evidence:
+        """Persist one complete canonical WorkerResult as immutable authority.
+
+        The result payload is stored in the existing evidence ledger. The
+        ledger-generated evidence ID, digest, fencing token, and trusted
+        timestamp are never accepted from the caller.
+        """
+
+        if type(run_id) is not str or not run_id.strip():
+            raise GotaWorkerResultError("Gota run identity must be a non-empty string")
+        if lease.run_id != run_id:
+            raise FencingTokenError(
+                f"Lease run {lease.run_id} does not match Gota run {run_id}"
+            )
+        canonical_result, payload = self._canonical_worker_result(result)
+        if canonical_result.run_id != run_id:
+            raise GotaWorkerResultError(
+                "Gota Worker result run identity does not match the requested run"
+            )
+
+        trusted_now = self._trusted_now()
+        with self.fenced_transaction(lease, now=trusted_now) as connection:
+            run_row = connection.execute(
+                "SELECT task_id, state FROM task_runs WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+            if run_row is None:
+                raise KeyError(run_id)
+            try:
+                state = TaskState(run_row["state"])
+            except ValueError as error:
+                raise GotaWorkerResultError(
+                    "Gota run has an unknown task state"
+                ) from error
+            if state not in {TaskState.RUNNING, TaskState.REVIEW}:
+                raise GotaWorkerResultError(
+                    "Gota Worker result requires a RUNNING or REVIEW task"
+                )
+            task_id = run_row["task_id"]
+            if canonical_result.task_id != task_id:
+                raise GotaWorkerResultError(
+                    "Gota Worker result task identity does not match the run"
+                )
+
+            rows = connection.execute(
+                """
+                SELECT * FROM evidence
+                WHERE run_id = ? AND kind = ?
+                ORDER BY rowid
+                """,
+                (run_id, "gota_worker_result_received"),
+            ).fetchall()
+            if len(rows) > 1:
+                raise GotaWorkerResultError(
+                    "Multiple durable Gota Worker results make the run ambiguous"
+                )
+            if rows:
+                existing, existing_payload = self._stored_worker_result(
+                    rows[0],
+                    expected_run_id=run_id,
+                    expected_task_id=task_id,
+                )
+                if _canonical_json(existing_payload) == _canonical_json(payload):
+                    return self._evidence_from_row(rows[0], existing_payload)
+                raise GotaWorkerResultError(
+                    "A different Gota Worker result already exists for the run"
+                )
+
+            return self._insert_evidence(
+                connection,
+                run_id,
+                "gota_worker_result_received",
+                payload,
+                lease,
+                trusted_now,
+            )
+
+    def load_gota_worker_result(
+        self,
+        run_id: str,
+        attempt: int,
+        request_id: str,
+    ) -> GotaWorkerResult | None:
+        """Load exactly one durable WorkerResult for a requested identity.
+
+        No Git inspection occurs here. Missing evidence is represented by
+        ``None``; malformed, tampered, duplicated, or incoherent evidence is
+        rejected closed.
+        """
+
+        if type(run_id) is not str or not run_id.strip():
+            raise GotaWorkerResultError("Gota run identity must be a non-empty string")
+        if type(attempt) is not int or attempt < 1:
+            raise GotaWorkerResultError("Gota attempt must be a positive integer")
+        if type(request_id) is not str or request_id != f"{run_id}:{attempt}:worker":
+            raise GotaWorkerResultError(
+                "Gota Worker request identity is not canonical"
+            )
+
+        with closing(self._connect()) as connection:
+            run_row = connection.execute(
+                "SELECT task_id FROM task_runs WHERE run_id = ?", (run_id,)
+            ).fetchone()
+            if run_row is None:
+                raise KeyError(run_id)
+            rows = connection.execute(
+                """
+                SELECT * FROM evidence
+                WHERE run_id = ? AND kind = ?
+                ORDER BY rowid
+                """,
+                (run_id, "gota_worker_result_received"),
+            ).fetchall()
+            if not rows:
+                return None
+            if len(rows) > 1:
+                raise GotaWorkerResultError(
+                    "Multiple durable Gota Worker results make the run ambiguous"
+                )
+            result, _payload = self._stored_worker_result(
+                rows[0],
+                expected_run_id=run_id,
+                expected_task_id=run_row["task_id"],
+            )
+            if result.attempt != attempt or result.request_id != request_id:
+                return None
+            return result
+
     def list_events(self, run_id: str | None = None) -> tuple[TransitionEvent, ...]:
         query = "SELECT * FROM transition_events"
         parameters: tuple[str, ...] = ()
@@ -866,7 +1103,7 @@ class SQLiteCoordinatorStore:
     ) -> Evidence:
         if kind in _RESERVED_EVIDENCE_KINDS:
             raise AcceptanceEvidenceError(
-                f"Evidence kind {kind!r} is reserved for internal Gota acceptance"
+                f"Evidence kind {kind!r} is reserved for an internal Gota authority boundary"
             )
         current_time = now or utc_now()
         payload_dict = dict(payload)

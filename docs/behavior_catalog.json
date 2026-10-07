@@ -439,6 +439,22 @@
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": ["tools/coordinator/tests/test_store.py"]
+    },
+    {
+      "id": "FLUJO-BHV-GOTA-PERSISTENCE-001",
+      "area": "Durable flujo.gota/v1 WorkerResult authority",
+      "precondition": "A canonical WorkerResult is available for a RUNNING or REVIEW TaskRun with its active lease and fencing token.",
+      "public_action": "Call SQLiteCoordinatorStore.persist_gota_worker_result() and later load_gota_worker_result() for the exact run, attempt, and request identity.",
+      "expected_result": "The complete canonical WorkerResult survives SQLite restart as one immutable gota_worker_result_received authority, or absence remains explicit when no result was persisted.",
+      "invariants": [
+        "The persisted payload is the flujo.gota/v1 canonical WorkerResult, including identity, result, commit_sha, changed_paths, evidence, and checkpoint.",
+        "The store generates the evidence ID, digest, fencing token, and trusted timestamp; generic callers cannot append gota_worker_result_received.",
+        "An identical retry is idempotent, a conflicting or duplicated authority fails closed, and tampering or incoherent identity is rejected.",
+        "Git state never fabricates or substitutes a missing WorkerResult, and stale or expired fencing is rejected."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tools/coordinator/tests/test_gota_persistence.py"]
     }
   ]
 }

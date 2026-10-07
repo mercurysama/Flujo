@@ -16,7 +16,8 @@ from .domain import (
 )
 from .service import CoordinatorService
 from .git_transaction import GitAcceptanceWorkflow, TransactionalGitAdapter
-from .store import SQLiteCoordinatorStore
+from .store import GotaWorkerResultError, SQLiteCoordinatorStore
+from .gota_persistence import GotaWorkerPersistenceBoundary
 from .gota_protocol import (
     GOTA_PROTOCOL,
     GOTA_RESULT_BEGIN,
@@ -78,6 +79,8 @@ __all__ = [
     "ProjectBinding",
     "ResourceState",
     "SQLiteCoordinatorStore",
+    "GotaWorkerResultError",
+    "GotaWorkerPersistenceBoundary",
     "TaskRun",
     "TaskSpec",
     "TaskState",
