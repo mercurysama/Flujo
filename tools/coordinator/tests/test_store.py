@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from flow_coordinator.domain import ProjectBinding, TaskState
 from flow_coordinator.executor import FakeExecutor
@@ -23,6 +24,15 @@ from flow_coordinator.store import (
 )
 
 from support import CoordinatorTestCase
+
+
+class FixedClockStore(SQLiteCoordinatorStore):
+    def __init__(self, path: str | Path, trusted_now: datetime) -> None:
+        self._fixed_trusted_now = trusted_now
+        super().__init__(path)
+
+    def _trusted_now(self) -> datetime:
+        return self._fixed_trusted_now
 
 
 class SQLiteStoreTest(CoordinatorTestCase):
@@ -219,6 +229,55 @@ class SQLiteStoreTest(CoordinatorTestCase):
         self.assertEqual(acceptance["decision"], ReviewDecision.PASSED.value)
         self.assertEqual(acceptance["fencing_token"], lease.fencing_token)
 
+    def test_append_evidence_rejects_reserved_acceptance_before_transition(self) -> None:
+        run, lease, _, _ = self._gota_review_fixture(
+            "gota-reserved-before", evidence_kinds=()
+        )
+
+        with self.assertRaisesRegex(AcceptanceEvidenceError, "reserved"):
+            self.store.append_evidence(
+                run.run_id,
+                "gota_acceptance_verified",
+                {"arbitrary": "caller-payload"},
+                lease,
+            )
+
+        self.assertEqual(self.store.get_run(run.run_id).state, TaskState.REVIEW)
+        self.assertEqual(self.store.list_evidence(run.run_id), ())
+
+    def test_transition_gota_to_done_uses_store_clock_for_timestamps(self) -> None:
+        start = datetime(2026, 1, 1, tzinfo=UTC)
+        trusted_now = start + timedelta(seconds=10)
+        run, lease, _, _ = self._gota_review_fixture("gota-store-clock", now=start)
+        trusted_store = FixedClockStore(self.database, trusted_now)
+
+        accepted = trusted_store.transition_gota_to_done(run.run_id, lease)
+
+        acceptance = trusted_store.list_evidence(run.run_id)[-1]
+        transition = trusted_store.list_events(run.run_id)[-1]
+        self.assertEqual(accepted.state, TaskState.DONE)
+        self.assertEqual(acceptance.kind, "gota_acceptance_verified")
+        self.assertEqual(acceptance.created_at, trusted_now)
+        self.assertEqual(accepted.updated_at, trusted_now)
+        self.assertEqual(transition.created_at, trusted_now)
+
+    def test_append_evidence_rejects_reserved_acceptance_after_transition(self) -> None:
+        run, lease, _, _ = self._gota_review_fixture("gota-reserved-after")
+        self.store.transition_gota_to_done(run.run_id, lease)
+
+        with self.assertRaisesRegex(AcceptanceEvidenceError, "reserved"):
+            self.store.append_evidence(
+                run.run_id,
+                "gota_acceptance_verified",
+                {"arbitrary": "caller-payload"},
+                lease,
+            )
+
+        evidence = self.store.list_evidence(run.run_id)
+        self.assertEqual(
+            sum(item.kind == "gota_acceptance_verified" for item in evidence), 1
+        )
+
     def test_transition_gota_to_done_rejects_non_review_state(self) -> None:
         _, run = self.create_task("gota-running")
         lease = self.service.start(run.run_id, owner_id="worker")
@@ -231,13 +290,14 @@ class SQLiteStoreTest(CoordinatorTestCase):
     def test_transition_gota_to_done_rejects_expired_lease(self) -> None:
         start = datetime(2026, 1, 1, tzinfo=UTC)
         run, lease, _, _ = self._gota_review_fixture("gota-expired", now=start)
+        trusted_store = FixedClockStore(
+            self.database, start + timedelta(seconds=61)
+        )
 
+        with self.assertRaises(TypeError):
+            trusted_store.transition_gota_to_done(run.run_id, lease, now=start)
         with self.assertRaises(LeaseExpiredError):
-            self.store.transition_gota_to_done(
-                run.run_id,
-                lease,
-                now=start + timedelta(seconds=61),
-            )
+            trusted_store.transition_gota_to_done(run.run_id, lease)
         self.assertEqual(self.store.get_run(run.run_id).state, TaskState.REVIEW)
         self.assertNotIn(
             "gota_acceptance_verified",

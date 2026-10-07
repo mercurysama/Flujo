@@ -64,6 +64,9 @@ class AcceptanceEvidenceError(CoordinatorStoreError):
     pass
 
 
+_RESERVED_EVIDENCE_KINDS = frozenset({"gota_acceptance_verified"})
+
+
 def _canonical_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
@@ -86,6 +89,10 @@ class SQLiteCoordinatorStore:
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute("PRAGMA busy_timeout = 10000")
         return connection
+
+    def _trusted_now(self) -> datetime:
+        """Return the store-owned clock used by authoritative transitions."""
+        return utc_now()
 
     @contextmanager
     def transaction(self, *, immediate: bool = False) -> Iterator[sqlite3.Connection]:
@@ -569,7 +576,6 @@ class SQLiteCoordinatorStore:
         lease: Lease,
         *,
         actor: str | None = None,
-        now: datetime | None = None,
     ) -> TaskRun:
         """Atomically accept one persisted Gota review from REVIEW to DONE.
 
@@ -578,7 +584,7 @@ class SQLiteCoordinatorStore:
         the acceptance decision.
         """
 
-        current_time = now or utc_now()
+        trusted_now = self._trusted_now()
         if lease.run_id != run_id:
             raise FencingTokenError(
                 f"Lease run {lease.run_id} does not match Gota run {run_id}"
@@ -690,7 +696,7 @@ class SQLiteCoordinatorStore:
                 )
             return row, payload
 
-        with self.fenced_transaction(lease, now=current_time) as connection:
+        with self.fenced_transaction(lease, now=trusted_now) as connection:
             run_row = connection.execute(
                 "SELECT task_id, state FROM task_runs WHERE run_id = ?", (run_id,)
             ).fetchone()
@@ -762,7 +768,7 @@ class SQLiteCoordinatorStore:
                 "gota_acceptance_verified",
                 acceptance_payload,
                 lease,
-                current_time,
+                trusted_now,
             )
             updated = connection.execute(
                 """
@@ -772,7 +778,7 @@ class SQLiteCoordinatorStore:
                 """,
                 (
                     TaskState.DONE.value,
-                    isoformat(current_time),
+                    isoformat(trusted_now),
                     run_id,
                     TaskState.REVIEW.value,
                 ),
@@ -792,7 +798,7 @@ class SQLiteCoordinatorStore:
                     actor if actor is not None else lease.owner_id,
                     "gota_acceptance_verified",
                     lease.fencing_token,
-                    isoformat(current_time),
+                    isoformat(trusted_now),
                 ),
             )
         return self.get_run(run_id)
@@ -858,6 +864,10 @@ class SQLiteCoordinatorStore:
         *,
         now: datetime | None = None,
     ) -> Evidence:
+        if kind in _RESERVED_EVIDENCE_KINDS:
+            raise AcceptanceEvidenceError(
+                f"Evidence kind {kind!r} is reserved for internal Gota acceptance"
+            )
         current_time = now or utc_now()
         payload_dict = dict(payload)
         with self.fenced_transaction(lease, now=current_time) as connection:
