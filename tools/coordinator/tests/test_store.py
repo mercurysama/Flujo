@@ -128,7 +128,7 @@ class SQLiteStoreTest(CoordinatorTestCase):
                     run.run_id, worker, lease
                 )
             else:
-                self.store.append_evidence(
+                persistence_store.append_evidence(
                     run.run_id, kind, evidence[kind], lease, now=now
                 )
         return run, lease, worker, review

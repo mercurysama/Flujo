@@ -52,6 +52,24 @@ class FixedClockStore(SQLiteCoordinatorStore):
         return self._fixed_trusted_now
 
 
+class SneakyKind(str):
+    def __hash__(self) -> int:
+        return hash("not-reserved")
+
+
+class AdversarialKind(str):
+    def __hash__(self) -> int:
+        return hash("not-reserved")
+
+    def __eq__(self, other: object) -> bool:
+        return True
+
+
+class StringLikeKind:
+    def __str__(self) -> str:
+        return "gota_worker_result_received"
+
+
 class PersistenceRunner:
     def __init__(self, step: Callable[[str, str], OpenCodeRunResult]) -> None:
         self.step = step
@@ -158,6 +176,102 @@ class GotaPersistenceStoreTest(CoordinatorTestCase):
                 result.to_payload(),
                 lease,
             )
+
+    def test_append_evidence_rejects_exact_reserved_worker_kind(self) -> None:
+        run, lease, result = self._started_run("reserved-worker")
+
+        with self.assertRaises(AcceptanceEvidenceError):
+            self.store.append_evidence(
+                run.run_id,
+                "gota_worker_result_received",
+                result.to_payload(),
+                lease,
+            )
+
+        self.assertEqual(self.store.list_evidence(run.run_id), ())
+        self.assertIsNone(
+            self.store.load_gota_worker_result(
+                run.run_id, result.attempt, result.request_id
+            )
+        )
+
+    def test_append_evidence_rejects_adversarial_and_noncanonical_kinds(self) -> None:
+        run, lease, result = self._started_run("noncanonical-kinds")
+
+        for kind in (
+            SneakyKind("gota_worker_result_received"),
+            AdversarialKind("gota_acceptance_verified"),
+            StringLikeKind(),
+        ):
+            with self.subTest(kind=type(kind).__name__):
+                with self.assertRaises(AcceptanceEvidenceError):
+                    self.store.append_evidence(
+                        run.run_id,
+                        kind,  # type: ignore[arg-type]
+                        result.to_payload(),
+                        lease,
+                    )
+
+        self.assertEqual(self.store.list_evidence(run.run_id), ())
+        self.assertIsNone(
+            self.store.load_gota_worker_result(
+                run.run_id, result.attempt, result.request_id
+            )
+        )
+
+    def test_append_evidence_accepts_canonical_non_reserved_kind(self) -> None:
+        run, lease, _result = self._started_run("normal-evidence")
+
+        evidence = self.store.append_evidence(
+            run.run_id,
+            "legacy_note",
+            {"source": "caller"},
+            lease,
+        )
+
+        self.assertEqual(evidence.kind, "legacy_note")
+        self.assertEqual(self.store.list_evidence(run.run_id), (evidence,))
+
+    def test_append_evidence_rejects_expired_lease_with_backdated_now(self) -> None:
+        start = datetime(2026, 1, 1, tzinfo=UTC)
+        _, run = self.create_task("expired-append-clock")
+        lease = self.service.start(
+            run.run_id, owner_id="worker", lease_seconds=60, now=start
+        )
+        trusted_store = FixedClockStore(
+            self.database, start + timedelta(seconds=61)
+        )
+
+        with self.assertRaises(LeaseExpiredError):
+            trusted_store.append_evidence(
+                run.run_id,
+                "legacy_note",
+                {"source": "caller"},
+                lease,
+                now=start,
+            )
+
+        self.assertEqual(self.store.list_evidence(run.run_id), ())
+
+    def test_append_evidence_uses_trusted_clock_for_live_lease_and_timestamp(self) -> None:
+        start = datetime(2026, 1, 1, tzinfo=UTC)
+        _, run = self.create_task("live-append-clock")
+        lease = self.service.start(
+            run.run_id, owner_id="worker", lease_seconds=60, now=start
+        )
+        trusted_now = start + timedelta(seconds=10)
+        trusted_store = FixedClockStore(self.database, trusted_now)
+
+        evidence = trusted_store.append_evidence(
+            run.run_id,
+            "legacy_note",
+            {"source": "caller"},
+            lease,
+            now=start,
+        )
+
+        self.assertEqual(evidence.created_at, trusted_now)
+        self.assertEqual(trusted_store.list_evidence(run.run_id), (evidence,))
 
     def test_idempotent_duplicate_does_not_create_second_authority(self) -> None:
         run, lease, result = self._started_run("idempotent")

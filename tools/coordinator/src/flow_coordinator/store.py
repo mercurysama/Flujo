@@ -1101,11 +1101,18 @@ class SQLiteCoordinatorStore:
         *,
         now: datetime | None = None,
     ) -> Evidence:
+        if type(kind) is not str:
+            raise AcceptanceEvidenceError(
+                "Evidence kind must be a canonical str"
+            )
         if kind in _RESERVED_EVIDENCE_KINDS:
             raise AcceptanceEvidenceError(
                 f"Evidence kind {kind!r} is reserved for an internal Gota authority boundary"
             )
-        current_time = now or utc_now()
+        # Keep the legacy keyword for existing internal callers, but never let
+        # caller-provided time authorize or timestamp evidence.
+        del now
+        current_time = self._trusted_now()
         payload_dict = dict(payload)
         with self.fenced_transaction(lease, now=current_time) as connection:
             return self._insert_evidence(

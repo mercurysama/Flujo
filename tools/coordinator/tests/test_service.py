@@ -156,6 +156,7 @@ class CoordinatorServiceTest(CoordinatorTestCase):
 
     def test_cooldown_activates_only_for_actually_used_configured_resource(self) -> None:
         start = datetime(2026, 1, 1, tzinfo=UTC)
+        self.store._trusted_now = lambda: start  # type: ignore[method-assign]
         self.store.register_resource("gpu", cooldown_required=True, minimum_seconds=30)
         _, unused = self.create_task("unused-gpu", required_resources=("gpu",))
         unused_lease = self.service.start(unused.run_id, owner_id="worker-a", now=start)
