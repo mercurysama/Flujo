@@ -7,7 +7,7 @@ import json
 import re
 import sqlite3
 import uuid
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -76,12 +76,17 @@ class GotaWorkerReservationError(GotaWorkerResultError):
     """Fail-closed error for the durable pre-Worker reservation boundary."""
 
 
+class GotaWorkerReviewBoundaryError(GotaWorkerReservationError):
+    """Fail-closed error for the durable Worker-to-Review boundary."""
+
+
 _RESERVED_EVIDENCE_KINDS = frozenset(
     {
         "gota_acceptance_verified",
         "gota_worker_result_received",
         "gota_worker_request_registered",
         "gota_worker_invocation_started",
+        "gota_worker_commit_verified",
     }
 )
 
@@ -101,6 +106,15 @@ class GotaWorkerInvocationReservation:
     request: GotaRequest
     request_evidence: Evidence
     invocation_evidence: Evidence
+    created: bool
+
+
+@dataclass(frozen=True, slots=True)
+class GotaWorkerReviewPersistence:
+    """Result of the private atomic Worker-to-Review store operation."""
+
+    run: TaskRun
+    commit_evidence: Evidence
     created: bool
 
 
@@ -917,6 +931,215 @@ class SQLiteCoordinatorStore:
         return parsed, canonical_payload
 
     @staticmethod
+    def _stored_worker_commit_verified(
+        row: sqlite3.Row,
+        *,
+        expected_run_id: str,
+        expected_task_id: str,
+    ) -> tuple[Evidence, dict[str, Any]]:
+        """Verify one persisted Worker commit-verification authority."""
+
+        required = {
+            "request_id",
+            "task_id",
+            "run_id",
+            "attempt",
+            "base_sha",
+            "commit_sha",
+            "changed_paths",
+            "branch",
+            "head",
+            "status",
+            "refs",
+            "request_evidence_id",
+            "invocation_evidence_id",
+            "result_evidence_id",
+        }
+        try:
+            parse_datetime(row["created_at"])
+            payload = json.loads(row["payload_json"])
+            if type(payload) is not dict or set(payload) != required:
+                raise GotaWorkerReviewBoundaryError(
+                    "Stored Gota Worker commit verification has invalid fields"
+                )
+            if _digest(payload) != row["digest"]:
+                raise GotaWorkerReviewBoundaryError(
+                    "Stored Gota Worker commit verification failed its digest check"
+                )
+            if _canonical_json(payload) != row["payload_json"]:
+                raise GotaWorkerReviewBoundaryError(
+                    "Stored Gota Worker commit verification is not canonical"
+                )
+            if (
+                type(payload["request_id"]) is not str
+                or payload["request_id"]
+                != f"{payload['run_id']}:{payload['attempt']}:worker"
+                or type(payload["task_id"]) is not str
+                or type(payload["run_id"]) is not str
+                or type(payload["attempt"]) is not int
+                or payload["attempt"] < 1
+                or type(payload["base_sha"]) is not str
+                or re.fullmatch(r"[0-9a-f]{40}", payload["base_sha"]) is None
+                or type(payload["commit_sha"]) is not str
+                or re.fullmatch(r"[0-9a-f]{40}", payload["commit_sha"]) is None
+                or type(payload["head"]) is not str
+                or re.fullmatch(r"[0-9a-f]{40}", payload["head"]) is None
+                or payload["head"] != payload["commit_sha"]
+                or type(payload["branch"]) is not str
+                or not payload["branch"]
+                or type(payload["status"]) is not str
+                or payload["status"] != ""
+                or type(payload["changed_paths"]) is not list
+                or not payload["changed_paths"]
+                or any(
+                    type(path) is not str or not path
+                    for path in payload["changed_paths"]
+                )
+                or payload["changed_paths"] != sorted(payload["changed_paths"])
+                or type(payload["refs"]) is not list
+                or any(
+                    type(ref) is not list
+                    or len(ref) != 3
+                    or type(ref[0]) is not str
+                    or not ref[0]
+                    or type(ref[1]) is not str
+                    or not ref[1]
+                    or type(ref[2]) is not str
+                    for ref in payload["refs"]
+                )
+                or payload["refs"]
+                != sorted(payload["refs"], key=lambda ref: tuple(ref))
+                or any(
+                    type(payload[evidence_id]) is not str
+                    or not payload[evidence_id]
+                    for evidence_id in (
+                        "request_evidence_id",
+                        "invocation_evidence_id",
+                        "result_evidence_id",
+                    )
+                )
+            ):
+                raise GotaWorkerReviewBoundaryError(
+                    "Stored Gota Worker commit verification has non-canonical values"
+                )
+        except GotaWorkerReviewBoundaryError:
+            raise
+        except (TypeError, ValueError, json.JSONDecodeError) as error:
+            raise GotaWorkerReviewBoundaryError(
+                "Stored Gota Worker commit verification is invalid"
+            ) from error
+
+        if (
+            payload["run_id"] != expected_run_id
+            or payload["task_id"] != expected_task_id
+        ):
+            raise GotaWorkerReviewBoundaryError(
+                "Stored Gota Worker commit verification identity is incoherent"
+            )
+        return (
+            SQLiteCoordinatorStore._evidence_from_row(row, payload),
+            payload,
+        )
+
+    @staticmethod
+    def _worker_commit_identity_payload(
+        request: GotaRequest,
+        result: GotaWorkerResult,
+        *,
+        request_evidence_id: str,
+        invocation_evidence_id: str,
+        result_evidence_id: str,
+    ) -> dict[str, Any]:
+        """Build the durable, independently observed Worker frontier identity."""
+
+        return {
+            "request_id": request.request_id,
+            "task_id": request.task_id,
+            "run_id": request.run_id,
+            "attempt": request.attempt,
+            "base_sha": request.base_sha,
+            "commit_sha": result.commit_sha,
+            "changed_paths": list(sorted(result.changed_paths)),
+            "branch": request.branch,
+            "head": result.commit_sha,
+            "status": "",
+            "request_evidence_id": request_evidence_id,
+            "invocation_evidence_id": invocation_evidence_id,
+            "result_evidence_id": result_evidence_id,
+        }
+
+    @staticmethod
+    def _worker_commit_payload(
+        identity_payload: Mapping[str, Any],
+        observation: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Add the Git ref fingerprint to a validated Worker frontier identity."""
+
+        payload = dict(identity_payload)
+        payload["head"] = observation["head"]
+        payload["status"] = observation["status"]
+        payload["changed_paths"] = list(observation["changed_paths"])
+        payload["refs"] = [list(ref) for ref in observation["refs"]]
+        return payload
+
+    @staticmethod
+    def _validate_worker_review_verification(
+        observation: Mapping[str, Any],
+        *,
+        request: GotaRequest,
+        result: GotaWorkerResult,
+    ) -> None:
+        """Validate the private verifier handoff against durable authority."""
+
+        required = {
+            "base_sha",
+            "commit_sha",
+            "changed_paths",
+            "branch",
+            "head",
+            "status",
+            "refs",
+        }
+        if type(observation) is not dict or set(observation) != required:
+            raise GotaWorkerReviewBoundaryError(
+                "Git verifier returned a non-canonical observation"
+            )
+        changed_paths = observation["changed_paths"]
+        if (
+            type(observation["base_sha"]) is not str
+            or type(observation["commit_sha"]) is not str
+            or type(observation["head"]) is not str
+            or type(observation["branch"]) is not str
+            or type(observation["status"]) is not str
+            or type(changed_paths) is not tuple
+            or any(type(path) is not str for path in changed_paths)
+            or observation["base_sha"] != request.base_sha
+            or observation["commit_sha"] != result.commit_sha
+            or observation["head"] != result.commit_sha
+            or observation["branch"] != request.branch
+            or observation["status"] != ""
+            or tuple(changed_paths) != tuple(sorted(changed_paths))
+            or tuple(sorted(changed_paths)) != tuple(sorted(result.changed_paths))
+        ):
+            raise GotaWorkerReviewBoundaryError(
+                "Git verifier observation conflicts with durable Worker authority"
+            )
+        refs = observation["refs"]
+        if type(refs) is not tuple or any(
+            type(ref) is not tuple
+            or len(ref) != 3
+            or any(type(value) is not str for value in ref)
+            for ref in refs
+        ):
+            raise GotaWorkerReviewBoundaryError(
+                "Git verifier returned a non-canonical ref snapshot"
+            )
+        if tuple(refs) != tuple(sorted(refs)):
+            raise GotaWorkerReviewBoundaryError(
+                "Git verifier returned an unsorted ref snapshot"
+            )
+
+    @staticmethod
     def _canonical_worker_request(
         request: GotaRequest,
     ) -> tuple[GotaRequest, dict[str, Any]]:
@@ -1488,6 +1711,312 @@ class SQLiteCoordinatorStore:
             if result.attempt != attempt or result.request_id != request_id:
                 return None
             return result
+
+    def load_gota_worker_commit_verified(
+        self,
+        run_id: str,
+        attempt: int,
+        request_id: str,
+    ) -> Evidence | None:
+        """Load one intact durable Worker commit-verification authority."""
+
+        self._request_identity(run_id, attempt, request_id)
+        with closing(self._connect()) as connection:
+            run_row = connection.execute(
+                "SELECT task_id FROM task_runs WHERE run_id = ?", (run_id,)
+            ).fetchone()
+            if run_row is None:
+                raise KeyError(run_id)
+            rows = connection.execute(
+                """
+                SELECT * FROM evidence
+                WHERE run_id = ? AND kind = ?
+                ORDER BY rowid
+                """,
+                (run_id, "gota_worker_commit_verified"),
+            ).fetchall()
+            if not rows:
+                return None
+            if len(rows) != 1:
+                raise GotaWorkerReviewBoundaryError(
+                    "Multiple Gota Worker commit verifications make the run ambiguous"
+                )
+            evidence, payload = self._stored_worker_commit_verified(
+                rows[0],
+                expected_run_id=run_id,
+                expected_task_id=run_row["task_id"],
+            )
+            if payload["attempt"] != attempt or payload["request_id"] != request_id:
+                raise GotaWorkerReviewBoundaryError(
+                    "Stored Gota Worker commit verification does not match the request"
+                )
+            return evidence
+
+    def _persist_gota_worker_commit_verified_and_review(
+        self,
+        run_id: str,
+        attempt: int,
+        request_id: str,
+        lease: Lease,
+        *,
+        verify: Callable[[GotaRequest, GotaWorkerResult], Mapping[str, Any]],
+    ) -> GotaWorkerReviewPersistence:
+        """Consume only the internal read-only verifier result atomically.
+
+        The method is intentionally private.  The public Gota entry boundary
+        loads the durable authorities and supplies the verifier closure; no
+        public store primitive accepts a caller-controlled ``verified`` flag or
+        evidence payload.
+        """
+
+        self._request_identity(run_id, attempt, request_id)
+        if lease.run_id != run_id:
+            raise FencingTokenError(
+                f"Lease run {lease.run_id} does not match Gota run {run_id}"
+            )
+
+        trusted_now = self._trusted_now()
+        persisted_evidence: Evidence | None = None
+        created = False
+
+        with self.fenced_transaction(lease, now=trusted_now) as connection:
+            run_row = connection.execute(
+                "SELECT * FROM task_runs WHERE run_id = ?", (run_id,)
+            ).fetchone()
+            if run_row is None:
+                raise KeyError(run_id)
+            try:
+                state = TaskState(run_row["state"])
+            except ValueError as error:
+                raise GotaWorkerReviewBoundaryError(
+                    "Gota run has an unknown task state"
+                ) from error
+            if state not in {TaskState.RUNNING, TaskState.REVIEW}:
+                raise GotaWorkerReviewBoundaryError(
+                    "Gota Worker review entry requires a RUNNING or REVIEW task"
+                )
+
+            task_id = run_row["task_id"]
+            reservation = self._load_gota_worker_reservation(
+                connection,
+                run_id=run_id,
+                task_id=task_id,
+                attempt=attempt,
+                request_id=request_id,
+            )
+            if reservation is None:
+                raise GotaWorkerReviewBoundaryError(
+                    "Durable Worker request and invocation reservation are required"
+                )
+            request = reservation.request
+            if (
+                request.run_id != run_id
+                or request.task_id != task_id
+                or request.attempt != attempt
+                or request.request_id != request_id
+            ):
+                raise GotaWorkerReviewBoundaryError(
+                    "Durable Worker request identity is incoherent"
+                )
+
+            result_rows = connection.execute(
+                """
+                SELECT * FROM evidence
+                WHERE run_id = ? AND kind = ?
+                ORDER BY rowid
+                """,
+                (run_id, "gota_worker_result_received"),
+            ).fetchall()
+            if len(result_rows) != 1:
+                raise GotaWorkerReviewBoundaryError(
+                    "Exactly one durable WorkerResult is required"
+                )
+            result_row = result_rows[0]
+            worker_result, _result_payload = self._stored_worker_result(
+                result_row,
+                expected_run_id=run_id,
+                expected_task_id=task_id,
+            )
+            if (
+                worker_result.request_id != request_id
+                or worker_result.attempt != attempt
+                or worker_result.result is not WorkerResultStatus.READY_FOR_REVIEW
+            ):
+                raise GotaWorkerReviewBoundaryError(
+                    "Durable WorkerResult identity or status is incoherent"
+                )
+
+            authority_ids = (
+                reservation.request_evidence.evidence_id,
+                reservation.invocation_evidence.evidence_id,
+                result_row["evidence_id"],
+            )
+            authority_rows = connection.execute(
+                """
+                SELECT evidence_id, fencing_token
+                FROM evidence
+                WHERE evidence_id IN (?, ?, ?)
+                """,
+                authority_ids,
+            ).fetchall()
+            if len(authority_rows) != len(authority_ids) or any(
+                int(row["fencing_token"]) != lease.fencing_token
+                for row in authority_rows
+            ):
+                raise GotaWorkerReviewBoundaryError(
+                    "Durable Worker authorities do not match the active fencing token"
+                )
+
+            commit_rows = connection.execute(
+                """
+                SELECT * FROM evidence
+                WHERE run_id = ? AND kind = ?
+                ORDER BY rowid
+                """,
+                (run_id, "gota_worker_commit_verified"),
+            ).fetchall()
+
+            expected_commit_identity = self._worker_commit_identity_payload(
+                request,
+                worker_result,
+                request_evidence_id=authority_ids[0],
+                invocation_evidence_id=authority_ids[1],
+                result_evidence_id=authority_ids[2],
+            )
+
+            if state is TaskState.REVIEW:
+                if len(commit_rows) != 1:
+                    raise GotaWorkerReviewBoundaryError(
+                        "REVIEW requires exactly one Worker commit verification"
+                    )
+                persisted_evidence, persisted_payload = (
+                    self._stored_worker_commit_verified(
+                        commit_rows[0],
+                        expected_run_id=run_id,
+                        expected_task_id=task_id,
+                    )
+                )
+                if any(
+                    persisted_payload[field] != value
+                    for field, value in expected_commit_identity.items()
+                ):
+                    raise GotaWorkerReviewBoundaryError(
+                        "Persisted Worker commit verification is incoherent"
+                    )
+                event_rows = connection.execute(
+                    """
+                    SELECT * FROM transition_events
+                    WHERE run_id = ? AND from_state = ? AND to_state = ?
+                      AND reason = ?
+                    ORDER BY event_id
+                    """,
+                    (
+                        run_id,
+                        TaskState.RUNNING.value,
+                        TaskState.REVIEW.value,
+                        "gota_worker_commit_verified",
+                    ),
+                ).fetchall()
+                if len(event_rows) != 1 or int(event_rows[0]["fencing_token"]) != lease.fencing_token:
+                    raise GotaWorkerReviewBoundaryError(
+                        "REVIEW frontier does not have exactly one matching transition event"
+                    )
+                created = False
+            else:
+                if commit_rows:
+                    if len(commit_rows) != 1:
+                        raise GotaWorkerReviewBoundaryError(
+                            "Multiple Worker commit verifications make RUNNING ambiguous"
+                        )
+                    self._stored_worker_commit_verified(
+                        commit_rows[0],
+                        expected_run_id=run_id,
+                        expected_task_id=task_id,
+                    )
+                    raise GotaWorkerReviewBoundaryError(
+                        "RUNNING already contains a Worker commit verification"
+                    )
+
+                observations: list[Mapping[str, Any]] = []
+                for _ in range(3):
+                    observation = verify(request, worker_result)
+                    self._validate_worker_review_verification(
+                        observation,
+                        request=request,
+                        result=worker_result,
+                    )
+                    if observations and observation != observations[0]:
+                        raise GotaWorkerReviewBoundaryError(
+                            "Git verification fingerprint changed before SQLite commit"
+                        )
+                    observations.append(observation)
+
+                persisted_evidence = self._insert_evidence(
+                    connection,
+                    run_id,
+                    "gota_worker_commit_verified",
+                    self._worker_commit_payload(
+                        expected_commit_identity, observations[0]
+                    ),
+                    lease,
+                    trusted_now,
+                )
+
+                updated = connection.execute(
+                    """
+                    UPDATE task_runs
+                    SET state = ?, updated_at = ?
+                    WHERE run_id = ? AND state = ?
+                    """,
+                    (
+                        TaskState.REVIEW.value,
+                        isoformat(trusted_now),
+                        run_id,
+                        TaskState.RUNNING.value,
+                    ),
+                )
+                if updated.rowcount != 1:
+                    raise GotaWorkerReviewBoundaryError(
+                        "Gota Worker review entry requires a RUNNING task"
+                    )
+                connection.execute(
+                    """
+                    INSERT INTO transition_events(
+                        run_id, from_state, to_state, actor, reason, fencing_token, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        run_id,
+                        TaskState.RUNNING.value,
+                        TaskState.REVIEW.value,
+                        lease.owner_id,
+                        "gota_worker_commit_verified",
+                        lease.fencing_token,
+                        isoformat(trusted_now),
+                    ),
+                )
+                final_observation = verify(request, worker_result)
+                self._validate_worker_review_verification(
+                    final_observation,
+                    request=request,
+                    result=worker_result,
+                )
+                if final_observation != observations[0]:
+                    raise GotaWorkerReviewBoundaryError(
+                        "Git verification fingerprint changed before SQLite commit"
+                    )
+                created = True
+
+            if persisted_evidence is None:
+                raise GotaWorkerReviewBoundaryError(
+                    "Gota Worker review entry did not produce an evidence authority"
+                )
+
+        return GotaWorkerReviewPersistence(
+            run=self.get_run(run_id),
+            commit_evidence=persisted_evidence,
+            created=created,
+        )
 
     def list_events(self, run_id: str | None = None) -> tuple[TransitionEvent, ...]:
         query = "SELECT * FROM transition_events"

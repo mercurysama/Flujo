@@ -127,6 +127,16 @@ class SQLiteStoreTest(CoordinatorTestCase):
                 persistence_store.persist_gota_worker_result(
                     run.run_id, worker, lease
                 )
+            elif kind == "gota_worker_commit_verified":
+                with persistence_store.transaction(immediate=True) as connection:
+                    persistence_store._insert_evidence(
+                        connection,
+                        run.run_id,
+                        kind,
+                        evidence[kind],
+                        lease,
+                        persistence_store._trusted_now(),
+                    )
             else:
                 persistence_store.append_evidence(
                     run.run_id, kind, evidence[kind], lease, now=now
@@ -204,6 +214,16 @@ class SQLiteStoreTest(CoordinatorTestCase):
                     self._worker_result(run.run_id, run.task_id),
                     lease,
                 )
+            elif kind == "gota_worker_commit_verified":
+                with self.store.transaction(immediate=True) as connection:
+                    self.store._insert_evidence(
+                        connection,
+                        run.run_id,
+                        kind,
+                        {"source": "fixture"},
+                        lease,
+                        self.store._trusted_now(),
+                    )
             else:
                 self.store.append_evidence(
                     run.run_id,

@@ -472,6 +472,23 @@
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": ["tools/coordinator/tests/test_gota_persistence.py"]
+    },
+    {
+      "id": "FLUJO-BHV-GOTA-REVIEW-ENTRY-001",
+      "area": "Durable flujo.gota/v1 Worker-to-Review entry boundary",
+      "precondition": "A RUNNING TaskRun has one intact durable Worker request, invocation reservation, and READY_FOR_REVIEW WorkerResult for the same attempt and request identity.",
+      "public_action": "Call GotaWorkerReviewBoundary.run() with the run identity and active lease.",
+      "expected_result": "The boundary independently revalidates the durable Worker commit through the existing read-only Git verifier, atomically records one reserved gota_worker_commit_verified authority, and transitions RUNNING to REVIEW without executing Worker or Reviewer.",
+      "invariants": [
+        "The durable request, reservation, WorkerResult, active lease, and fencing token are revalidated inside the final SQLite transaction.",
+        "The WorkerResult commit SHA remains the primary authority; Git only verifies it, including ancestry, exactly-one-commit, clean worktree, branch, refs fingerprint, and exact changed paths.",
+        "A Git verification failure, missing or incoherent durable authority, expired lease, stale fence, or SQLite failure leaves RUNNING without new commit-verification evidence or a REVIEW event.",
+        "REVIEW requires exactly one coherent commit-verification evidence record and its matching transition event; a repeated call is idempotent and does not execute Worker or duplicate evidence.",
+        "The boundary invokes only the read-only Git adapter and never invokes Reviewer, ReviewResult persistence, DecisionPolicy, or transition_gota_to_done."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tools/coordinator/tests/test_gota_review_entry.py"]
     }
   ]
 }
