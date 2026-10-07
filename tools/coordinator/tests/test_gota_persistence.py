@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 import subprocess
 import tempfile
 import unittest
@@ -13,10 +14,13 @@ from typing import Callable
 from flow_coordinator import (
     GOTA_PROTOCOL,
     GotaCheckpoint,
+    GotaFinding,
     GotaMessage,
     GotaPhase,
     GotaRequest,
     GotaWorkerPersistenceBoundary,
+    GotaWorkerRecoveryRequiredError,
+    GotaWorkerReservationError,
     GotaWorkerResult,
     OpenCodeRunResult,
     OpenCodeRunStatus,
@@ -507,6 +511,23 @@ class GotaWorkerBoundaryTest(unittest.TestCase):
             protected_paths=spec.protected_paths,
         )
 
+    def _rewrite_evidence(
+        self,
+        evidence_id: str,
+        payload: dict[str, object],
+        digest: str,
+    ) -> None:
+        with self.store.transaction(immediate=True) as connection:
+            connection.execute("DROP TRIGGER immutable_evidence_update")
+            connection.execute(
+                """
+                UPDATE evidence
+                SET payload_json = ?, digest = ?
+                WHERE evidence_id = ?
+                """,
+                (_canonical_json(payload), digest, evidence_id),
+            )
+
     def _git(self, *arguments: str) -> str:
         result = subprocess.run(
             ("git", *arguments),
@@ -620,6 +641,291 @@ class GotaWorkerBoundaryTest(unittest.TestCase):
             self.store.load_gota_worker_result(
                 self.run.run_id, self.request.attempt, self.request.request_id
             )
+        )
+
+    def test_reservation_round_trips_complete_request_and_both_authorities(self) -> None:
+        request = replace(
+            self.request,
+            objective="A non-trivial durable reservation objective",
+            acceptance_criteria=("Preserve every request field", "Require review"),
+            previous_findings=(
+                GotaFinding(
+                    id="finding-1",
+                    severity="high",
+                    description="Previous durable finding",
+                    path="src/change.py",
+                    required_change="Keep the full request",
+                ),
+            ),
+        )
+
+        reservation = self.store.reserve_gota_worker_invocation(
+            self.run.run_id, request, self.lease
+        )
+
+        self.assertTrue(reservation.created)
+        self.assertEqual(
+            [item.kind for item in self.store.list_evidence(self.run.run_id)],
+            [
+                "gota_worker_request_registered",
+                "gota_worker_invocation_started",
+            ],
+        )
+        reopened = SQLiteCoordinatorStore(self.database)
+        loaded = reopened.load_gota_worker_request(
+            self.run.run_id, request.attempt, request.request_id
+        )
+        self.assertEqual(loaded, request)
+        self.assertEqual(loaded.to_payload(), request.to_payload())
+        loaded_reservation = reopened.load_gota_worker_invocation(
+            self.run.run_id, request.attempt, request.request_id
+        )
+        self.assertIsNotNone(loaded_reservation)
+        self.assertFalse(loaded_reservation.created)
+        self.assertEqual(
+            loaded_reservation.invocation_evidence.payload["request_digest"],
+            reservation.request_evidence.digest,
+        )
+
+    def test_reservation_rolls_back_request_when_marker_insert_fails(self) -> None:
+        with self.store.transaction(immediate=True) as connection:
+            connection.execute(
+                """
+                CREATE TRIGGER reject_worker_invocation_marker
+                BEFORE INSERT ON evidence
+                WHEN NEW.kind = 'gota_worker_invocation_started'
+                BEGIN
+                    SELECT RAISE(ABORT, 'controlled reservation rollback');
+                END
+                """
+            )
+        try:
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "controlled reservation rollback"):
+                self.store.reserve_gota_worker_invocation(
+                    self.run.run_id, self.request, self.lease
+                )
+        finally:
+            with self.store.transaction(immediate=True) as connection:
+                connection.execute("DROP TRIGGER reject_worker_invocation_marker")
+
+        self.assertEqual(self.store.list_evidence(self.run.run_id), ())
+        self.assertIsNone(
+            self.store.load_gota_worker_request(
+                self.run.run_id, self.request.attempt, self.request.request_id
+            )
+        )
+
+    def test_reservation_is_idempotent_and_conflicts_fail_closed(self) -> None:
+        first = self.store.reserve_gota_worker_invocation(
+            self.run.run_id, self.request, self.lease
+        )
+        second = self.store.reserve_gota_worker_invocation(
+            self.run.run_id, self.request, self.lease
+        )
+
+        self.assertTrue(first.created)
+        self.assertFalse(second.created)
+        self.assertEqual(first.request, second.request)
+        self.assertEqual(first.request_evidence, second.request_evidence)
+        self.assertEqual(first.invocation_evidence, second.invocation_evidence)
+        self.assertEqual(len(self.store.list_evidence(self.run.run_id)), 2)
+
+        conflicting = replace(self.request, base_sha="b" * 40)
+        with self.assertRaises(GotaWorkerReservationError):
+            self.store.reserve_gota_worker_invocation(
+                self.run.run_id, conflicting, self.lease
+            )
+        self.assertEqual(len(self.store.list_evidence(self.run.run_id)), 2)
+        self.assertEqual(
+            self.store.load_gota_worker_request(
+                self.run.run_id, self.request.attempt, self.request.request_id
+            ),
+            self.request,
+        )
+
+    def test_reservation_integrity_rejects_tampering_and_duplicates(self) -> None:
+        reservation = self.store.reserve_gota_worker_invocation(
+            self.run.run_id, self.request, self.lease
+        )
+        tampered = replace(self.request, base_sha="b" * 40).to_payload()
+        self._rewrite_evidence(
+            reservation.request_evidence.evidence_id,
+            tampered,
+            _digest(tampered),
+        )
+        with self.assertRaises(GotaWorkerReservationError):
+            self.store.load_gota_worker_request(
+                self.run.run_id, self.request.attempt, self.request.request_id
+            )
+
+        # A second malformed authority is also a closed failure, not a choice.
+        with self.store.transaction(immediate=True) as connection:
+            self.store._insert_evidence(
+                connection,
+                self.run.run_id,
+                "gota_worker_request_registered",
+                self.request.to_payload(),
+                self.lease,
+                utc_now(),
+            )
+        with self.assertRaises(GotaWorkerReservationError):
+            self.store.load_gota_worker_request(
+                self.run.run_id, self.request.attempt, self.request.request_id
+            )
+
+    def test_reserved_request_and_marker_kinds_reject_generic_append(self) -> None:
+        for kind in (
+            "gota_worker_request_registered",
+            "gota_worker_invocation_started",
+            SneakyKind("gota_worker_request_registered"),
+            SneakyKind("gota_worker_invocation_started"),
+            AdversarialKind("gota_worker_request_registered"),
+            AdversarialKind("gota_worker_invocation_started"),
+        ):
+            with self.subTest(kind=type(kind).__name__):
+                with self.assertRaisesRegex(AcceptanceEvidenceError, "reserved|canonical"):
+                    self.store.append_evidence(
+                        self.run.run_id,
+                        kind,  # type: ignore[arg-type]
+                        {"source": "caller"},
+                        self.lease,
+                    )
+        self.assertEqual(self.store.list_evidence(self.run.run_id), ())
+
+    def test_reservation_rejects_expired_lease_and_stale_fencing(self) -> None:
+        stale = replace(self.lease, fencing_token=self.lease.fencing_token - 1)
+        with self.assertRaises(FencingTokenError):
+            self.store.reserve_gota_worker_invocation(
+                self.run.run_id, self.request, stale
+            )
+        with self.store.transaction(immediate=True) as connection:
+            connection.execute(
+                "UPDATE global_lock SET lease_expires_at = ? WHERE lock_name = 'global'",
+                ((datetime.now(UTC) - timedelta(seconds=1)).isoformat(),),
+            )
+        with self.assertRaises(LeaseExpiredError):
+            self.store.reserve_gota_worker_invocation(
+                self.run.run_id, self.request, self.lease
+            )
+        self.assertEqual(self.store.list_evidence(self.run.run_id), ())
+
+    def test_reservation_uses_store_trusted_clock(self) -> None:
+        trusted_now = self.lease.acquired_at + timedelta(seconds=1)
+        trusted_store = FixedClockStore(self.database, trusted_now)
+
+        reservation = trusted_store.reserve_gota_worker_invocation(
+            self.run.run_id, self.request, self.lease
+        )
+
+        self.assertEqual(reservation.request_evidence.created_at, trusted_now)
+        self.assertEqual(reservation.invocation_evidence.created_at, trusted_now)
+
+    def test_boundary_reserves_before_worker_and_reuses_durable_result(self) -> None:
+        observed_kinds: list[tuple[str, ...]] = []
+
+        def valid_step(agent: str, prompt: str) -> OpenCodeRunResult:
+            observed_kinds.append(
+                tuple(item.kind for item in self.store.list_evidence(self.run.run_id))
+            )
+            return self._valid_worker_step(agent, prompt)
+
+        runner = PersistenceRunner(valid_step)
+        boundary = GotaWorkerPersistenceBoundary(
+            self.repository,
+            runner=runner,
+            store=self.store,
+        )
+        first = boundary.run(self.request, self.lease, timeout=3)
+        self.assertTrue(first.valid)
+        self.assertEqual(
+            observed_kinds,
+            [
+                (
+                    "gota_worker_request_registered",
+                    "gota_worker_invocation_started",
+                )
+            ],
+        )
+
+        reopened = SQLiteCoordinatorStore(self.database)
+        second_runner = PersistenceRunner(
+            lambda _agent, _prompt: (_ for _ in ()).throw(
+                AssertionError("Worker must not be called again")
+            )
+        )
+        second_boundary = GotaWorkerPersistenceBoundary(
+            self.repository,
+            runner=second_runner,
+            store=reopened,
+        )
+        reused = second_boundary.run(self.request, self.lease, timeout=3)
+        self.assertIsInstance(reused, GotaWorkerResult)
+        self.assertEqual(
+            reused,
+            reopened.load_gota_worker_result(
+                self.run.run_id, self.request.attempt, self.request.request_id
+            ),
+        )
+        self.assertEqual(len(runner.calls), 1)
+        self.assertEqual(len(second_runner.calls), 0)
+
+    def test_boundary_fails_closed_when_reservation_has_no_result(self) -> None:
+        self.store.reserve_gota_worker_invocation(
+            self.run.run_id, self.request, self.lease
+        )
+        runner = PersistenceRunner(
+            lambda _agent, _prompt: (_ for _ in ()).throw(
+                AssertionError("reserved attempts cannot retry Worker")
+            )
+        )
+        boundary = GotaWorkerPersistenceBoundary(
+            self.repository,
+            runner=runner,
+            store=self.store,
+        )
+
+        with self.assertRaises(GotaWorkerRecoveryRequiredError):
+            boundary.run(self.request, self.lease, timeout=3)
+        self.assertEqual(len(runner.calls), 0)
+
+    def _assert_worker_failure_cannot_retry(
+        self,
+        status: OpenCodeRunStatus,
+        timed_out: bool,
+    ) -> None:
+        runner = PersistenceRunner(
+            lambda _agent, _prompt: OpenCodeRunResult(
+                status=status,
+                argv=("fake-opencode",),
+                cwd=str(self.repository),
+                stdout="partial",
+                stderr="failure",
+                exit_code=1,
+                timed_out=timed_out,
+                error="worker failed",
+            )
+        )
+        boundary = GotaWorkerPersistenceBoundary(
+            self.repository,
+            runner=runner,
+            store=self.store,
+        )
+        first = boundary.run(self.request, self.lease, timeout=3)
+        self.assertFalse(first.valid)
+        with self.assertRaises(GotaWorkerRecoveryRequiredError):
+            boundary.run(self.request, self.lease, timeout=3)
+        self.assertEqual(len(runner.calls), 1)
+
+    def test_worker_failure_cannot_retry_reserved_attempt(self) -> None:
+        self._assert_worker_failure_cannot_retry(
+            OpenCodeRunStatus.INVALID_PAYLOAD,
+            False,
+        )
+
+    def test_worker_timeout_cannot_retry_reserved_attempt(self) -> None:
+        self._assert_worker_failure_cannot_retry(
+            OpenCodeRunStatus.TIMEOUT,
+            True,
         )
 
 

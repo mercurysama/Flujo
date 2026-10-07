@@ -455,6 +455,23 @@
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": ["tools/coordinator/tests/test_gota_persistence.py"]
+    },
+    {
+      "id": "FLUJO-BHV-GOTA-RESERVATION-001",
+      "area": "Durable pre-Worker Gota invocation reservation",
+      "precondition": "A worker-phase GotaRequest is canonical, its TaskRun is RUNNING with an active lease, and the store has no reservation for that run, attempt, and request identity.",
+      "public_action": "Call SQLiteCoordinatorStore.reserve_gota_worker_invocation() before invoking WorkerPhase.",
+      "expected_result": "One atomic store transaction persists the complete canonical Worker request and one invocation-start authority; later calls reuse a durable WorkerResult or fail closed without invoking Worker again.",
+      "invariants": [
+        "Request and invocation marker are committed together or neither is durable.",
+        "The request retains every flujo.gota/v1 WorkerRequest field and reloads through the canonical request parser.",
+        "A same-identity request is idempotent, a conflicting request is rejected without overwrite, and tampering or duplicate authorities fail closed.",
+        "Generic append_evidence cannot create either reserved authority, including with str subclasses.",
+        "Lease expiry, stale fencing, and a reservation without a WorkerResult never authorize an automatic retry."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tools/coordinator/tests/test_gota_persistence.py"]
     }
   ]
 }

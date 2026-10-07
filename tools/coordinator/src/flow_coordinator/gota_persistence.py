@@ -14,7 +14,15 @@ from pathlib import Path
 from .domain import Lease
 from .gota_phases import GotaCycleRunner, WorkerPhase, WorkerPhaseResult
 from .gota_protocol import GotaRequest, GotaWorkerResult
-from .store import GotaWorkerResultError, SQLiteCoordinatorStore
+from .store import (
+    GotaWorkerResultError,
+    GotaWorkerReservationError,
+    SQLiteCoordinatorStore,
+)
+
+
+class GotaWorkerRecoveryRequiredError(GotaWorkerReservationError):
+    """A reserved attempt has no durable result and cannot be retried."""
 
 
 class GotaWorkerPersistenceBoundary:
@@ -36,8 +44,26 @@ class GotaWorkerPersistenceBoundary:
         lease: Lease,
         *,
         timeout: float,
-    ) -> WorkerPhaseResult:
-        """Return only after a valid WorkerResult is durably recorded."""
+    ) -> WorkerPhaseResult | GotaWorkerResult:
+        """Reserve once, then run Worker or reuse its durable result."""
+
+        reservation = self.store.reserve_gota_worker_invocation(
+            request.run_id,
+            request,
+            lease,
+        )
+        if not reservation.created:
+            worker_result = self.store.load_gota_worker_result(
+                request.run_id,
+                request.attempt,
+                request.request_id,
+            )
+            if worker_result is None:
+                raise GotaWorkerRecoveryRequiredError(
+                    "Worker invocation is durably reserved but has no WorkerResult; "
+                    "automatic retry is forbidden and human recovery is required"
+                )
+            return worker_result
 
         phase_result = self.worker_phase.run(request, timeout=timeout)
         if not phase_result.valid:
@@ -55,4 +81,7 @@ class GotaWorkerPersistenceBoundary:
         return phase_result
 
 
-__all__ = ["GotaWorkerPersistenceBoundary"]
+__all__ = [
+    "GotaWorkerPersistenceBoundary",
+    "GotaWorkerRecoveryRequiredError",
+]

@@ -9,6 +9,7 @@ import sqlite3
 import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,8 @@ from .domain import (
     utc_now,
 )
 from .gota_protocol import (
+    GotaPhase,
+    GotaRequest,
     GotaReviewResult,
     GotaWorkerResult,
     ReviewDecision,
@@ -69,8 +72,17 @@ class GotaWorkerResultError(CoordinatorStoreError):
     """Fail-closed error for the durable WorkerResult authority boundary."""
 
 
+class GotaWorkerReservationError(GotaWorkerResultError):
+    """Fail-closed error for the durable pre-Worker reservation boundary."""
+
+
 _RESERVED_EVIDENCE_KINDS = frozenset(
-    {"gota_acceptance_verified", "gota_worker_result_received"}
+    {
+        "gota_acceptance_verified",
+        "gota_worker_result_received",
+        "gota_worker_request_registered",
+        "gota_worker_invocation_started",
+    }
 )
 
 
@@ -80,6 +92,16 @@ def _canonical_json(value: Any) -> str:
 
 def _digest(value: Any) -> str:
     return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class GotaWorkerInvocationReservation:
+    """The two immutable authorities created by one Worker reservation."""
+
+    request: GotaRequest
+    request_evidence: Evidence
+    invocation_evidence: Evidence
+    created: bool
 
 
 class SQLiteCoordinatorStore:
@@ -893,6 +915,433 @@ class SQLiteCoordinatorStore:
                 "Stored Gota Worker result task identity is incoherent"
             )
         return parsed, canonical_payload
+
+    @staticmethod
+    def _canonical_worker_request(
+        request: GotaRequest,
+    ) -> tuple[GotaRequest, dict[str, Any]]:
+        """Revalidate one in-memory Worker request through its protocol type."""
+
+        if type(request) is not GotaRequest:
+            raise GotaWorkerReservationError(
+                "Gota Worker request must be the canonical GotaRequest type"
+            )
+        try:
+            payload = request.to_payload()
+            parsed = GotaRequest.from_payload(payload)
+            canonical_payload = parsed.to_payload()
+            if _canonical_json(canonical_payload) != _canonical_json(payload):
+                raise GotaWorkerReservationError(
+                    "Gota Worker request payload is not canonical"
+                )
+        except GotaWorkerReservationError:
+            raise
+        except Exception as error:
+            raise GotaWorkerReservationError(
+                "Gota Worker request does not satisfy the canonical protocol"
+            ) from error
+        if parsed.phase is not GotaPhase.WORKER:
+            raise GotaWorkerReservationError(
+                "Gota Worker reservation requires a worker-phase request"
+            )
+        return parsed, canonical_payload
+
+    @staticmethod
+    def _request_identity(
+        run_id: str,
+        attempt: int,
+        request_id: str,
+    ) -> tuple[str, int, str]:
+        if type(run_id) is not str or not run_id.strip():
+            raise GotaWorkerReservationError(
+                "Gota run identity must be a non-empty string"
+            )
+        if type(attempt) is not int or attempt < 1:
+            raise GotaWorkerReservationError(
+                "Gota attempt must be a positive integer"
+            )
+        if type(request_id) is not str or request_id != f"{run_id}:{attempt}:worker":
+            raise GotaWorkerReservationError(
+                "Gota Worker request identity is not canonical"
+            )
+        return run_id, attempt, request_id
+
+    @staticmethod
+    def _stored_worker_request(
+        row: sqlite3.Row,
+        *,
+        expected_run_id: str,
+        expected_task_id: str,
+    ) -> tuple[GotaRequest, dict[str, Any]]:
+        """Verify one persisted canonical Worker request authority."""
+
+        try:
+            parse_datetime(row["created_at"])
+            payload = json.loads(row["payload_json"])
+            if type(payload) is not dict:
+                raise GotaWorkerReservationError(
+                    "Stored Gota Worker request payload is not an object"
+                )
+            if _digest(payload) != row["digest"]:
+                raise GotaWorkerReservationError(
+                    "Stored Gota Worker request failed its digest check"
+                )
+            parsed = GotaRequest.from_payload(payload)
+            if parsed.phase is not GotaPhase.WORKER:
+                raise GotaWorkerReservationError(
+                    "Stored Gota Worker request is not a worker-phase request"
+                )
+            canonical_payload = parsed.to_payload()
+            if _canonical_json(canonical_payload) != row["payload_json"]:
+                raise GotaWorkerReservationError(
+                    "Stored Gota Worker request is not canonical"
+                )
+        except GotaWorkerReservationError:
+            raise
+        except Exception as error:
+            raise GotaWorkerReservationError(
+                "Stored Gota Worker request is invalid"
+            ) from error
+        if parsed.run_id != expected_run_id:
+            raise GotaWorkerReservationError(
+                "Stored Gota Worker request run identity is incoherent"
+            )
+        if parsed.task_id != expected_task_id:
+            raise GotaWorkerReservationError(
+                "Stored Gota Worker request task identity is incoherent"
+            )
+        return parsed, canonical_payload
+
+    @staticmethod
+    def _stored_worker_invocation_marker(
+        row: sqlite3.Row,
+        *,
+        expected_run_id: str,
+        expected_task_id: str,
+    ) -> dict[str, Any]:
+        """Verify one persisted invocation-start authority."""
+
+        required = {
+            "request_evidence_id",
+            "request_digest",
+            "request_id",
+            "task_id",
+            "run_id",
+            "attempt",
+        }
+        try:
+            parse_datetime(row["created_at"])
+            payload = json.loads(row["payload_json"])
+            if type(payload) is not dict or set(payload) != required:
+                raise GotaWorkerReservationError(
+                    "Stored Gota Worker invocation marker has invalid fields"
+                )
+            if _digest(payload) != row["digest"]:
+                raise GotaWorkerReservationError(
+                    "Stored Gota Worker invocation marker failed its digest check"
+                )
+            if (
+                type(payload["request_evidence_id"]) is not str
+                or not payload["request_evidence_id"].strip()
+                or type(payload["request_digest"]) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", payload["request_digest"])
+                is None
+                or type(payload["request_id"]) is not str
+                or type(payload["task_id"]) is not str
+                or type(payload["run_id"]) is not str
+                or type(payload["attempt"]) is not int
+                or payload["attempt"] < 1
+            ):
+                raise GotaWorkerReservationError(
+                    "Stored Gota Worker invocation marker has non-canonical values"
+                )
+            if _canonical_json(payload) != row["payload_json"]:
+                raise GotaWorkerReservationError(
+                    "Stored Gota Worker invocation marker is not canonical"
+                )
+        except GotaWorkerReservationError:
+            raise
+        except Exception as error:
+            raise GotaWorkerReservationError(
+                "Stored Gota Worker invocation marker is invalid"
+            ) from error
+        if (
+            payload["run_id"] != expected_run_id
+            or payload["task_id"] != expected_task_id
+        ):
+            raise GotaWorkerReservationError(
+                "Stored Gota Worker invocation marker identity is incoherent"
+            )
+        return payload
+
+    def _load_gota_worker_reservation(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        run_id: str,
+        task_id: str,
+        attempt: int,
+        request_id: str,
+    ) -> GotaWorkerInvocationReservation | None:
+        """Load and cross-check every reservation authority for one run."""
+
+        request_rows = connection.execute(
+            """
+            SELECT * FROM evidence
+            WHERE run_id = ? AND kind = ?
+            ORDER BY rowid
+            """,
+            (run_id, "gota_worker_request_registered"),
+        ).fetchall()
+        request_authorities: dict[
+            tuple[int, str], tuple[sqlite3.Row, GotaRequest, dict[str, Any]]
+        ] = {}
+        for row in request_rows:
+            parsed, payload = self._stored_worker_request(
+                row,
+                expected_run_id=run_id,
+                expected_task_id=task_id,
+            )
+            key = (parsed.attempt, parsed.request_id)
+            if key in request_authorities:
+                raise GotaWorkerReservationError(
+                    "Multiple durable Gota Worker requests make the run ambiguous"
+                )
+            request_authorities[key] = (row, parsed, payload)
+
+        marker_rows = connection.execute(
+            """
+            SELECT * FROM evidence
+            WHERE run_id = ? AND kind = ?
+            ORDER BY rowid
+            """,
+            (run_id, "gota_worker_invocation_started"),
+        ).fetchall()
+        marker_authorities: dict[tuple[int, str], tuple[sqlite3.Row, dict[str, Any]]] = {}
+        for row in marker_rows:
+            payload = self._stored_worker_invocation_marker(
+                row,
+                expected_run_id=run_id,
+                expected_task_id=task_id,
+            )
+            key = (payload["attempt"], payload["request_id"])
+            if key in marker_authorities:
+                raise GotaWorkerReservationError(
+                    "Multiple durable Gota Worker invocation markers make the run ambiguous"
+                )
+            marker_authorities[key] = (row, payload)
+
+        if set(request_authorities) != set(marker_authorities):
+            raise GotaWorkerReservationError(
+                "Gota Worker request and invocation authorities are not paired"
+            )
+        for key, (marker_row, marker_payload) in marker_authorities.items():
+            request_row, _request, request_payload = request_authorities[key]
+            try:
+                matching_fence = int(marker_row["fencing_token"]) == int(
+                    request_row["fencing_token"]
+                )
+            except (TypeError, ValueError) as error:
+                raise GotaWorkerReservationError(
+                    "Gota Worker authority fencing token is invalid"
+                ) from error
+            if (
+                marker_payload["request_evidence_id"] != request_row["evidence_id"]
+                or marker_payload["request_digest"] != request_row["digest"]
+                or not matching_fence
+            ):
+                raise GotaWorkerReservationError(
+                    "Gota Worker invocation marker is not linked to its request authority"
+                )
+            if marker_payload["request_digest"] != _digest(request_payload):
+                raise GotaWorkerReservationError(
+                    "Gota Worker request authority digest is incoherent"
+                )
+
+        requested_key = (attempt, request_id)
+        authority = request_authorities.get(requested_key)
+        if authority is None:
+            return None
+        request_row, request, _request_payload = authority
+        marker_row, marker_payload = marker_authorities[requested_key]
+        return GotaWorkerInvocationReservation(
+            request=request,
+            request_evidence=self._evidence_from_row(
+                request_row, request.to_payload()
+            ),
+            invocation_evidence=self._evidence_from_row(marker_row, marker_payload),
+            created=False,
+        )
+
+    def reserve_gota_worker_invocation(
+        self,
+        run_id: str,
+        request: GotaRequest,
+        lease: Lease,
+    ) -> GotaWorkerInvocationReservation:
+        """Atomically register a complete Worker request and its start marker."""
+
+        canonical_request, request_payload = self._canonical_worker_request(request)
+        self._request_identity(
+            run_id, canonical_request.attempt, canonical_request.request_id
+        )
+        if canonical_request.run_id != run_id:
+            raise GotaWorkerReservationError(
+                "Gota Worker request run identity does not match the requested run"
+            )
+        if lease.run_id != run_id:
+            raise FencingTokenError(
+                f"Lease run {lease.run_id} does not match Gota run {run_id}"
+            )
+
+        trusted_now = self._trusted_now()
+        with self.fenced_transaction(lease, now=trusted_now) as connection:
+            run_row = connection.execute(
+                "SELECT task_id, state FROM task_runs WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+            if run_row is None:
+                raise KeyError(run_id)
+            task_id = run_row["task_id"]
+            if canonical_request.task_id != task_id:
+                raise GotaWorkerReservationError(
+                    "Gota Worker request task identity does not match the run"
+                )
+            try:
+                state = TaskState(run_row["state"])
+            except ValueError as error:
+                raise GotaWorkerReservationError(
+                    "Gota run has an unknown task state"
+                ) from error
+            if state not in {TaskState.RUNNING, TaskState.REVIEW}:
+                raise GotaWorkerReservationError(
+                    "Gota Worker reservation requires a RUNNING or REVIEW task"
+                )
+
+            existing = self._load_gota_worker_reservation(
+                connection,
+                run_id=run_id,
+                task_id=task_id,
+                attempt=canonical_request.attempt,
+                request_id=canonical_request.request_id,
+            )
+            if existing is not None:
+                if _canonical_json(existing.request.to_payload()) != _canonical_json(
+                    request_payload
+                ):
+                    raise GotaWorkerReservationError(
+                        "A different Gota Worker request already exists for this attempt"
+                    )
+                return existing
+
+            if state is not TaskState.RUNNING:
+                raise GotaWorkerReservationError(
+                    "A new Gota Worker reservation requires a RUNNING task"
+                )
+
+            result_rows = connection.execute(
+                """
+                SELECT * FROM evidence
+                WHERE run_id = ? AND kind = ?
+                ORDER BY rowid
+                """,
+                (run_id, "gota_worker_result_received"),
+            ).fetchall()
+            if result_rows:
+                if len(result_rows) != 1:
+                    raise GotaWorkerReservationError(
+                        "Multiple durable Worker results prevent a new Gota reservation"
+                    )
+                existing_result, _result_payload = self._stored_worker_result(
+                    result_rows[0],
+                    expected_run_id=run_id,
+                    expected_task_id=task_id,
+                )
+                if (
+                    existing_result.attempt == canonical_request.attempt
+                    and existing_result.request_id == canonical_request.request_id
+                ):
+                    raise GotaWorkerReservationError(
+                        "A durable WorkerResult exists without its reservation"
+                    )
+                raise GotaWorkerReservationError(
+                    "A durable WorkerResult already exists for this run"
+                )
+
+            request_evidence = self._insert_evidence(
+                connection,
+                run_id,
+                "gota_worker_request_registered",
+                request_payload,
+                lease,
+                trusted_now,
+            )
+            marker_payload = {
+                "request_evidence_id": request_evidence.evidence_id,
+                "request_digest": request_evidence.digest,
+                "request_id": canonical_request.request_id,
+                "task_id": canonical_request.task_id,
+                "run_id": canonical_request.run_id,
+                "attempt": canonical_request.attempt,
+            }
+            invocation_evidence = self._insert_evidence(
+                connection,
+                run_id,
+                "gota_worker_invocation_started",
+                marker_payload,
+                lease,
+                trusted_now,
+            )
+            return GotaWorkerInvocationReservation(
+                request=canonical_request,
+                request_evidence=request_evidence,
+                invocation_evidence=invocation_evidence,
+                created=True,
+            )
+
+    def load_gota_worker_invocation(
+        self,
+        run_id: str,
+        attempt: int,
+        request_id: str,
+    ) -> GotaWorkerInvocationReservation | None:
+        """Load one complete reservation, or return ``None`` when absent."""
+
+        self._request_identity(run_id, attempt, request_id)
+        with closing(self._connect()) as connection:
+            run_row = connection.execute(
+                "SELECT task_id FROM task_runs WHERE run_id = ?", (run_id,)
+            ).fetchone()
+            if run_row is None:
+                raise KeyError(run_id)
+            return self._load_gota_worker_reservation(
+                connection,
+                run_id=run_id,
+                task_id=run_row["task_id"],
+                attempt=attempt,
+                request_id=request_id,
+            )
+
+    def load_gota_worker_request(
+        self,
+        run_id: str,
+        attempt: int,
+        request_id: str,
+    ) -> GotaRequest | None:
+        """Load the complete canonical request behind one reservation."""
+
+        reservation = self.load_gota_worker_invocation(run_id, attempt, request_id)
+        return reservation.request if reservation is not None else None
+
+    def has_gota_worker_invocation(
+        self,
+        run_id: str,
+        attempt: int,
+        request_id: str,
+    ) -> bool:
+        """Return whether one intact Worker invocation reservation exists."""
+
+        return self.load_gota_worker_invocation(run_id, attempt, request_id) is not None
 
     @staticmethod
     def _evidence_from_row(
