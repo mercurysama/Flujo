@@ -507,6 +507,22 @@
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": ["tools/coordinator/tests/test_gota_review_persistence.py"]
+    },
+    {
+      "id": "FLUJO-BHV-GOTA-DECISION-APPLICATION-001",
+      "area": "Durable flujo.gota/v1 decision application boundary",
+      "precondition": "A TaskRun has one intact durable Worker-to-Review frontier and one canonical ReviewResult for the same Gota attempt.",
+      "public_action": "Call GotaDecisionApplicationBoundary.run() with the active lease and the durable Gota identity.",
+      "expected_result": "GotaDecisionPolicy resolves the durable ReviewResult and the boundary applies COMPLETE through the store acceptance primitive, or atomically applies CORRECT, WAIT_FOR_HUMAN, or BLOCK without rerunning Worker or Reviewer.",
+      "invariants": [
+        "Only durable Worker and Review authorities supply the Policy input; the boundary does not map ReviewDecision values independently.",
+        "PASSED creates exactly one store-generated gota_acceptance_verified authority and a REVIEW -> DONE event; a repeated call recognizes the complete frontier read-only.",
+        "Non-PASSED actions preserve atomic state, decision evidence, human hold, lease, fencing, trusted-clock, rollback, and restart-idempotence guarantees.",
+        "Incomplete, duplicate, tampered, stale, expired, or legacy authorities fail closed, and CYCLE_FAILED is not materialized from an intact durable ReviewResult."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "failing",
+      "test_paths": ["tools/coordinator/tests/test_gota_decision_application.py"]
     }
   ]
 }

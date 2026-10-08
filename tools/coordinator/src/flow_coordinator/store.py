@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from .dependency_graph import validate_dependency_graph
+from .decision_policy import GotaDecisionResult, GotaNextAction
 from .domain import (
     COORDINATOR_SCHEMA_VERSION,
     Checkpoint,
@@ -84,9 +85,14 @@ class GotaWorkerReviewBoundaryError(GotaWorkerReservationError):
     """Fail-closed error for the durable Worker-to-Review boundary."""
 
 
+class GotaDecisionApplicationError(CoordinatorStoreError):
+    """Fail-closed error for the durable Gota decision application boundary."""
+
+
 _RESERVED_EVIDENCE_KINDS = frozenset(
     {
         "gota_acceptance_verified",
+        "gota_decision_applied",
         "gota_worker_result_received",
         "gota_worker_request_registered",
         "gota_worker_invocation_started",
@@ -94,6 +100,12 @@ _RESERVED_EVIDENCE_KINDS = frozenset(
         "gota_review_result",
     }
 )
+
+_GOTA_NON_PASSED_ACTIONS: dict[GotaNextAction, tuple[TaskState, bool]] = {
+    GotaNextAction.CORRECT: (TaskState.NOT_COMPLETED, False),
+    GotaNextAction.WAIT_FOR_HUMAN: (TaskState.NOT_COMPLETED, True),
+    GotaNextAction.BLOCK: (TaskState.BLOCKED, False),
+}
 
 
 def _canonical_json(value: Any) -> str:
@@ -147,6 +159,54 @@ class GotaReviewResultAnchor:
     review_evidence_digest: str
     worker_commit_evidence_id: str
     created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class GotaDecisionAuthorities:
+    """One coherent durable Worker-to-Review and ReviewResult frontier."""
+
+    run: TaskRun
+    request: GotaRequest
+    worker_result: GotaWorkerResult
+    worker_result_evidence: Evidence
+    worker_commit_evidence: Evidence
+    worker_review_anchor: GotaWorkerReviewBoundaryAnchor
+    review_result: GotaReviewResult
+    review_evidence: Evidence
+    review_anchor: GotaReviewResultAnchor
+    fencing_token: int
+
+
+@dataclass(frozen=True, slots=True)
+class GotaHumanReviewHold:
+    """Immutable durable hold created by HUMAN_REVIEW_REQUIRED."""
+
+    run_id: str
+    attempt: int
+    request_id: str
+    review_evidence_id: str
+    review_evidence_digest: str
+    decision_evidence_id: str
+    decision_evidence_digest: str
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class GotaDecisionApplicationPersistence:
+    """Store result for one non-PASSED Gota decision application."""
+
+    run: TaskRun
+    decision_evidence: Evidence
+    hold: GotaHumanReviewHold | None
+    created: bool
+
+    @property
+    def state(self) -> TaskState:
+        return self.run.state
+
+    @property
+    def already_applied(self) -> bool:
+        return not self.created
 
 
 class SQLiteCoordinatorStore:
@@ -268,6 +328,18 @@ class SQLiteCoordinatorStore:
                     PRIMARY KEY (run_id, attempt, request_id)
                 );
 
+                CREATE TABLE IF NOT EXISTS gota_human_review_holds (
+                    run_id TEXT NOT NULL REFERENCES task_runs(run_id),
+                    attempt INTEGER NOT NULL CHECK (attempt > 0),
+                    request_id TEXT NOT NULL,
+                    review_evidence_id TEXT NOT NULL UNIQUE REFERENCES evidence(evidence_id),
+                    review_evidence_digest TEXT NOT NULL,
+                    decision_evidence_id TEXT NOT NULL UNIQUE REFERENCES evidence(evidence_id),
+                    decision_evidence_digest TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (run_id, attempt, request_id)
+                );
+
                 CREATE TABLE IF NOT EXISTS evidence (
                     evidence_id TEXT PRIMARY KEY,
                     run_id TEXT NOT NULL REFERENCES task_runs(run_id),
@@ -334,6 +406,7 @@ class SQLiteCoordinatorStore:
                 "checkpoints",
                 "gota_worker_review_boundaries",
                 "gota_review_results",
+                "gota_human_review_holds",
             ):
                 connection.execute(
                     f"""
@@ -713,111 +786,40 @@ class SQLiteCoordinatorStore:
                 f"Lease run {lease.run_id} does not match Gota run {run_id}"
             )
 
-        def load_one_evidence(
+        def load_worker_identity(
             connection: sqlite3.Connection,
-            kind: str,
-        ) -> sqlite3.Row:
+            task_id: str,
+        ) -> tuple[int, str]:
             rows = connection.execute(
                 """
                 SELECT * FROM evidence
                 WHERE run_id = ? AND kind = ?
                 ORDER BY rowid
                 """,
-                (run_id, kind),
+                (run_id, "gota_worker_result_received"),
             ).fetchall()
             if len(rows) != 1:
                 raise AcceptanceEvidenceError(
-                    f"Gota DONE requires exactly one {kind} evidence record"
-                )
-            row = rows[0]
-            if int(row["fencing_token"]) != lease.fencing_token:
-                raise AcceptanceEvidenceError(
-                    f"Gota evidence {kind} was not recorded by the current fencing token"
+                    "Gota DONE requires exactly one gota_worker_result_received evidence record"
                 )
             try:
-                payload = json.loads(row["payload_json"])
-            except (TypeError, json.JSONDecodeError) as error:
-                raise AcceptanceEvidenceError(
-                    f"Gota evidence {kind} contains invalid JSON"
-                ) from error
-            if type(payload) is not dict or _digest(payload) != row["digest"]:
-                raise AcceptanceEvidenceError(
-                    f"Gota evidence {kind} failed its persisted digest check"
+                result, _payload = self._stored_worker_result(
+                    rows[0],
+                    expected_run_id=run_id,
+                    expected_task_id=task_id,
                 )
-            return row
-
-        def load_worker_result(
-            connection: sqlite3.Connection,
-        ) -> tuple[sqlite3.Row, GotaWorkerResult]:
-            row = load_one_evidence(connection, "gota_worker_result_received")
-            try:
-                payload = json.loads(row["payload_json"])
-                result = GotaWorkerResult.from_payload(payload)
-            except (TypeError, ValueError, KeyError) as error:
+            except GotaWorkerResultError as error:
+                raise AcceptanceEvidenceError(str(error)) from error
+            if result.result is not WorkerResultStatus.READY_FOR_REVIEW:
                 raise AcceptanceEvidenceError(
-                    "Persisted Gota Worker result is invalid"
-                ) from error
-            if _canonical_json(result.to_payload()) != _canonical_json(payload):
-                raise AcceptanceEvidenceError(
-                    "Persisted Gota Worker result is not canonical"
+                    "Persisted Gota Worker result is not READY_FOR_REVIEW"
                 )
-            return row, result
-
-        def load_review_result(
-            connection: sqlite3.Connection,
-        ) -> tuple[sqlite3.Row, GotaReviewResult]:
-            row = load_one_evidence(connection, "gota_review_result")
-            try:
-                payload = json.loads(row["payload_json"])
-                result = GotaReviewResult.from_payload(payload)
-            except (TypeError, ValueError, KeyError) as error:
+            expected_request_id = f"{run_id}:{result.attempt}:worker"
+            if result.request_id != expected_request_id:
                 raise AcceptanceEvidenceError(
-                    "Persisted Gota Review result is invalid"
-                ) from error
-            if _canonical_json(result.to_payload()) != _canonical_json(payload):
-                raise AcceptanceEvidenceError(
-                    "Persisted Gota Review result is not canonical"
+                    "Persisted Gota Worker request identity is not canonical"
                 )
-            return row, result
-
-        def load_verified_commit(
-            connection: sqlite3.Connection,
-        ) -> tuple[sqlite3.Row, dict[str, Any]]:
-            row = load_one_evidence(connection, "gota_worker_commit_verified")
-            try:
-                payload = json.loads(row["payload_json"])
-            except (TypeError, json.JSONDecodeError) as error:
-                raise AcceptanceEvidenceError(
-                    "Persisted Gota Worker commit verification is invalid JSON"
-                ) from error
-            required = {
-                "request_id",
-                "task_id",
-                "run_id",
-                "attempt",
-                "commit_sha",
-            }
-            if type(payload) is not dict or set(payload) != required:
-                raise AcceptanceEvidenceError(
-                    "Persisted Gota Worker commit verification has invalid fields"
-                )
-            if (
-                type(payload["request_id"]) is not str
-                or type(payload["task_id"]) is not str
-                or type(payload["run_id"]) is not str
-                or type(payload["attempt"]) is not int
-                or payload["attempt"] < 1
-                or type(payload["commit_sha"]) is not str
-                or re.fullmatch(r"[0-9a-f]{40}", payload["commit_sha"]) is None
-            ):
-                raise AcceptanceEvidenceError(
-                    "Persisted Gota Worker commit verification has non-canonical values"
-                )
-            if _digest(payload) != row["digest"]:
-                raise AcceptanceEvidenceError(
-                    "Persisted Gota Worker commit verification failed its digest check"
-                )
-            return row, payload
+            return result.attempt, result.request_id
 
         with self.fenced_transaction(lease, now=trusted_now) as connection:
             run_row = connection.execute(
@@ -837,36 +839,49 @@ class SQLiteCoordinatorStore:
                     "Gota acceptance evidence already exists or is incoherent"
                 )
 
-            worker_row, worker_result = load_worker_result(connection)
-            verified_row, verified_commit = load_verified_commit(connection)
-            review_row, review_result = load_review_result(connection)
             task_id = run_row["task_id"]
-
-            if (
-                worker_result.run_id != run_id
-                or worker_result.task_id != task_id
-                or worker_result.result is not WorkerResultStatus.READY_FOR_REVIEW
-            ):
-                raise AcceptanceEvidenceError(
-                    "Persisted Gota Worker identity or result is incoherent"
+            attempt, worker_request_id = load_worker_identity(connection, task_id)
+            try:
+                authorities = self._load_gota_decision_authorities_connection(
+                    connection,
+                    run_id=run_id,
+                    attempt=attempt,
+                    worker_request_id=worker_request_id,
+                    allowed_states=frozenset({TaskState.REVIEW}),
                 )
-            if (
-                verified_commit["request_id"] != worker_result.request_id
-                or verified_commit["task_id"] != worker_result.task_id
-                or verified_commit["run_id"] != worker_result.run_id
-                or verified_commit["attempt"] != worker_result.attempt
-                or verified_commit["commit_sha"] != worker_result.commit_sha
-            ):
+            except (
+                GotaDecisionApplicationError,
+                GotaWorkerReservationError,
+                GotaWorkerResultError,
+                GotaWorkerReviewBoundaryError,
+                GotaReviewResultError,
+                TypeError,
+                ValueError,
+                KeyError,
+            ) as error:
+                message = str(error)
+                if message == "Exactly one durable Worker commit verification is required":
+                    message = (
+                        "Gota DONE requires exactly one "
+                        "gota_worker_commit_verified evidence record"
+                    )
+                elif message == "Exactly one durable ReviewResult is required":
+                    message = (
+                        "Gota DONE requires exactly one gota_review_result "
+                        "evidence record"
+                    )
+                elif message == "Persisted Worker commit verification is incoherent":
+                    message = "Persisted Gota Worker commit SHA or identity is incoherent"
+                elif message == "Durable ReviewResult identity or Worker SHA is incoherent":
+                    message = "Persisted Gota Review result is incoherent or not PASSED"
                 raise AcceptanceEvidenceError(
-                    "Persisted Gota Worker commit SHA or identity is incoherent"
+                    message
+                ) from error
+            if authorities.fencing_token != lease.fencing_token:
+                raise AcceptanceEvidenceError(
+                    "Gota durable authorities do not match the active fencing token"
                 )
-            if (
-                review_result.run_id != run_id
-                or review_result.task_id != task_id
-                or review_result.attempt != worker_result.attempt
-                or review_result.decision is not ReviewDecision.PASSED
-                or review_result.reviewed_commit_sha != worker_result.commit_sha
-            ):
+            if authorities.review_result.decision is not ReviewDecision.PASSED:
                 raise AcceptanceEvidenceError(
                     "Persisted Gota Review result is incoherent or not PASSED"
                 )
@@ -874,16 +889,16 @@ class SQLiteCoordinatorStore:
             acceptance_payload = {
                 "run_id": run_id,
                 "task_id": task_id,
-                "attempt": worker_result.attempt,
-                "worker_request_id": worker_result.request_id,
-                "review_request_id": review_result.request_id,
-                "worker_commit_sha": worker_result.commit_sha,
-                "reviewed_commit_sha": review_result.reviewed_commit_sha,
-                "decision": review_result.decision.value,
+                "attempt": authorities.worker_result.attempt,
+                "worker_request_id": authorities.worker_result.request_id,
+                "review_request_id": authorities.review_result.request_id,
+                "worker_commit_sha": authorities.worker_result.commit_sha,
+                "reviewed_commit_sha": authorities.review_result.reviewed_commit_sha,
+                "decision": authorities.review_result.decision.value,
                 "fencing_token": lease.fencing_token,
-                "worker_result_evidence_id": worker_row["evidence_id"],
-                "worker_commit_evidence_id": verified_row["evidence_id"],
-                "review_result_evidence_id": review_row["evidence_id"],
+                "worker_result_evidence_id": authorities.worker_result_evidence.evidence_id,
+                "worker_commit_evidence_id": authorities.worker_commit_evidence.evidence_id,
+                "review_result_evidence_id": authorities.review_evidence.evidence_id,
             }
             self._insert_evidence(
                 connection,
@@ -924,6 +939,8 @@ class SQLiteCoordinatorStore:
                     isoformat(trusted_now),
                 ),
             )
+            final_now = self._trusted_now()
+            self._assert_fenced_connection(connection, lease, final_now)
         return self.get_run(run_id)
 
     @staticmethod
@@ -2535,6 +2552,1088 @@ class SQLiteCoordinatorStore:
             anchor,
             reservation,
         )
+
+    @staticmethod
+    def _decision_worker_request_id(
+        run_id: str,
+        attempt: int,
+        request_id: str,
+    ) -> str:
+        """Accept only the two canonical request identities at this boundary."""
+
+        if type(run_id) is not str or not run_id.strip():
+            raise GotaDecisionApplicationError(
+                "Gota run identity must be a non-empty string"
+            )
+        if type(attempt) is not int or attempt < 1:
+            raise GotaDecisionApplicationError(
+                "Gota attempt must be a positive integer"
+            )
+        worker_request_id = f"{run_id}:{attempt}:worker"
+        review_request_id = f"{run_id}:{attempt}:review"
+        if type(request_id) is not str or request_id not in {
+            worker_request_id,
+            review_request_id,
+        }:
+            raise GotaDecisionApplicationError(
+                "Gota decision request identity is not canonical"
+            )
+        return worker_request_id
+
+    @staticmethod
+    def _task_run_from_row(row: sqlite3.Row) -> TaskRun:
+        return TaskRun(
+            run_id=row["run_id"],
+            task_id=row["task_id"],
+            state=TaskState(row["state"]),
+            created_at=parse_datetime(row["created_at"]),
+            updated_at=parse_datetime(row["updated_at"]),
+        )
+
+    def _load_gota_decision_authorities_connection(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        run_id: str,
+        attempt: int,
+        worker_request_id: str,
+        allowed_states: frozenset[TaskState],
+    ) -> GotaDecisionAuthorities:
+        """Load every durable authority needed by DecisionPolicy."""
+
+        run_row = connection.execute(
+            "SELECT * FROM task_runs WHERE run_id = ?", (run_id,)
+        ).fetchone()
+        if run_row is None:
+            raise KeyError(run_id)
+        try:
+            run = self._task_run_from_row(run_row)
+        except (TypeError, ValueError, KeyError) as error:
+            raise GotaDecisionApplicationError(
+                "Gota run state or timestamps are not canonical"
+            ) from error
+        if run.state not in allowed_states:
+            raise GotaDecisionApplicationError(
+                "Gota decision application requires an intact REVIEW or terminal frontier"
+            )
+
+        reservation = self._load_gota_worker_reservation(
+            connection,
+            run_id=run_id,
+            task_id=run.task_id,
+            attempt=attempt,
+            request_id=worker_request_id,
+        )
+        if reservation is None:
+            raise GotaDecisionApplicationError(
+                "Durable Worker request and invocation reservation are required"
+            )
+        request = reservation.request
+        if (
+            request.run_id != run_id
+            or request.task_id != run.task_id
+            or request.attempt != attempt
+            or request.request_id != worker_request_id
+        ):
+            raise GotaDecisionApplicationError(
+                "Durable Worker request identity is incoherent"
+            )
+
+        result_rows = connection.execute(
+            """
+            SELECT * FROM evidence
+            WHERE run_id = ? AND kind = ?
+            ORDER BY rowid
+            """,
+            (run_id, "gota_worker_result_received"),
+        ).fetchall()
+        if len(result_rows) != 1:
+            raise GotaDecisionApplicationError(
+                "Exactly one durable WorkerResult is required"
+            )
+        result_row = result_rows[0]
+        try:
+            worker_result, worker_payload = self._stored_worker_result(
+                result_row,
+                expected_run_id=run_id,
+                expected_task_id=run.task_id,
+            )
+        except GotaWorkerResultError as error:
+            raise GotaDecisionApplicationError(str(error)) from error
+        if (
+            worker_result.request_id != worker_request_id
+            or worker_result.attempt != attempt
+            or worker_result.result is not WorkerResultStatus.READY_FOR_REVIEW
+        ):
+            raise GotaDecisionApplicationError(
+                "Durable WorkerResult identity or status is incoherent"
+            )
+
+        authority_ids = (
+            reservation.request_evidence.evidence_id,
+            reservation.invocation_evidence.evidence_id,
+            result_row["evidence_id"],
+        )
+        authority_rows = connection.execute(
+            """
+            SELECT evidence_id, fencing_token
+            FROM evidence
+            WHERE evidence_id IN (?, ?, ?)
+            """,
+            authority_ids,
+        ).fetchall()
+        if len(authority_rows) != len(authority_ids):
+            raise GotaDecisionApplicationError(
+                "Durable Worker authorities are incomplete"
+            )
+        try:
+            fencing_tokens = {int(row["fencing_token"]) for row in authority_rows}
+        except (TypeError, ValueError) as error:
+            raise GotaDecisionApplicationError(
+                "Durable Worker authority fencing is not canonical"
+            ) from error
+        if len(fencing_tokens) != 1:
+            raise GotaDecisionApplicationError(
+                "Durable Worker authorities disagree on fencing"
+            )
+        fencing_token = next(iter(fencing_tokens))
+
+        commit_rows = connection.execute(
+            """
+            SELECT * FROM evidence
+            WHERE run_id = ? AND kind = ?
+            ORDER BY rowid
+            """,
+            (run_id, "gota_worker_commit_verified"),
+        ).fetchall()
+        if len(commit_rows) != 1:
+            raise GotaDecisionApplicationError(
+                "Exactly one durable Worker commit verification is required"
+            )
+        commit_row = commit_rows[0]
+        try:
+            worker_commit_evidence, commit_payload = (
+                self._stored_worker_commit_verified(
+                    commit_row,
+                    expected_run_id=run_id,
+                    expected_task_id=run.task_id,
+                )
+            )
+        except GotaWorkerReviewBoundaryError as error:
+            raise GotaDecisionApplicationError(str(error)) from error
+        expected_commit_identity = self._worker_commit_identity_payload(
+            request,
+            worker_result,
+            request_evidence_id=authority_ids[0],
+            invocation_evidence_id=authority_ids[1],
+            result_evidence_id=authority_ids[2],
+        )
+        if any(
+            commit_payload[field] != value
+            for field, value in expected_commit_identity.items()
+        ):
+            raise GotaDecisionApplicationError(
+                "Persisted Worker commit verification is incoherent"
+            )
+        if int(commit_row["fencing_token"]) != fencing_token:
+            raise GotaDecisionApplicationError(
+                "Worker commit verification fencing is incoherent"
+            )
+
+        try:
+            worker_review_anchor = self._load_gota_worker_review_boundary_anchor(
+                connection,
+                run_id=run_id,
+                attempt=attempt,
+                request_id=worker_request_id,
+            )
+            self._validate_gota_worker_review_boundary_links(
+                connection,
+                worker_review_anchor,
+                commit_evidence_row=commit_row,
+                expected_fencing_token=fencing_token,
+                expected_actor=None,
+            )
+        except GotaWorkerReviewBoundaryError as error:
+            raise GotaDecisionApplicationError(str(error)) from error
+
+        review_request_id = f"{run_id}:{attempt}:review"
+        review_rows = connection.execute(
+            """
+            SELECT * FROM evidence
+            WHERE run_id = ? AND kind = ?
+            ORDER BY rowid
+            """,
+            (run_id, "gota_review_result"),
+        ).fetchall()
+        if len(review_rows) != 1:
+            raise GotaDecisionApplicationError(
+                "Exactly one durable ReviewResult is required"
+            )
+        review_row = review_rows[0]
+        try:
+            review_result, review_payload = self._stored_review_result(
+                review_row,
+                expected_run_id=run_id,
+                expected_task_id=run.task_id,
+            )
+        except GotaReviewResultError as error:
+            raise GotaDecisionApplicationError(str(error)) from error
+        if (
+            review_result.request_id != review_request_id
+            or review_result.attempt != attempt
+            or review_result.reviewed_commit_sha != worker_result.commit_sha
+        ):
+            raise GotaDecisionApplicationError(
+                "Durable ReviewResult identity or Worker SHA is incoherent"
+            )
+        if int(review_row["fencing_token"]) != fencing_token:
+            raise GotaDecisionApplicationError(
+                "ReviewResult fencing is incoherent"
+            )
+
+        try:
+            review_anchor = self._load_gota_review_result_anchor(
+                connection,
+                run_id=run_id,
+                attempt=attempt,
+                request_id=review_request_id,
+            )
+            self._validate_gota_review_result_anchor_links(
+                connection,
+                review_anchor,
+                review_evidence_row=review_row,
+                worker_commit_evidence_row=commit_row,
+                expected_fencing_token=fencing_token,
+            )
+        except GotaReviewResultError as error:
+            raise GotaDecisionApplicationError(str(error)) from error
+        if review_anchor.worker_commit_evidence_id != commit_row["evidence_id"]:
+            raise GotaDecisionApplicationError(
+                "ReviewResult Worker commit link is incoherent"
+            )
+
+        return GotaDecisionAuthorities(
+            run=run,
+            request=request,
+            worker_result=worker_result,
+            worker_result_evidence=self._evidence_from_row(
+                result_row, worker_payload
+            ),
+            worker_commit_evidence=worker_commit_evidence,
+            worker_review_anchor=worker_review_anchor,
+            review_result=review_result,
+            review_evidence=self._evidence_from_row(review_row, review_payload),
+            review_anchor=review_anchor,
+            fencing_token=fencing_token,
+        )
+
+    def load_gota_decision_authorities(
+        self,
+        run_id: str,
+        attempt: int,
+        request_id: str,
+    ) -> GotaDecisionAuthorities:
+        """Load a coherent durable frontier for application or recovery."""
+
+        worker_request_id = self._decision_worker_request_id(
+            run_id, attempt, request_id
+        )
+        with closing(self._connect()) as connection:
+            try:
+                return self._load_gota_decision_authorities_connection(
+                    connection,
+                    run_id=run_id,
+                    attempt=attempt,
+                    worker_request_id=worker_request_id,
+                    allowed_states=frozenset(
+                        {
+                            TaskState.REVIEW,
+                            TaskState.DONE,
+                            TaskState.NOT_COMPLETED,
+                            TaskState.BLOCKED,
+                        }
+                    ),
+                )
+            except GotaDecisionApplicationError:
+                raise
+            except (
+                GotaWorkerReservationError,
+                GotaWorkerResultError,
+                GotaWorkerReviewBoundaryError,
+                GotaReviewResultError,
+                TypeError,
+                ValueError,
+                KeyError,
+            ) as error:
+                raise GotaDecisionApplicationError(str(error)) from error
+
+    @staticmethod
+    def _validate_gota_policy_resolution(
+        resolution: GotaDecisionResult,
+        authorities: GotaDecisionAuthorities,
+        *,
+        allowed_actions: frozenset[GotaNextAction],
+    ) -> None:
+        """Check that the pure policy result still names durable authority."""
+
+        if type(resolution) is not GotaDecisionResult:
+            raise GotaDecisionApplicationError(
+                "DecisionPolicy did not return a canonical decision result"
+            )
+        if type(resolution.action) is not GotaNextAction:
+            raise GotaDecisionApplicationError(
+                "DecisionPolicy returned a non-canonical action"
+            )
+        if resolution.action not in allowed_actions:
+            raise GotaDecisionApplicationError(
+                "DecisionPolicy action is not valid for this store operation"
+            )
+        if resolution.cycle_failure is not None:
+            raise GotaDecisionApplicationError(
+                "A failed Gota cycle cannot be applied as a business decision"
+            )
+        if type(resolution.reason) is not str:
+            raise GotaDecisionApplicationError(
+                "DecisionPolicy reason is not canonical"
+            )
+        if type(resolution.review_result) is not GotaReviewResult:
+            raise GotaDecisionApplicationError(
+                "DecisionPolicy did not retain the durable ReviewResult"
+            )
+        if resolution.review_decision is not authorities.review_result.decision:
+            raise GotaDecisionApplicationError(
+                "DecisionPolicy ReviewDecision disagrees with durable ReviewResult"
+            )
+        try:
+            _canonical_result, policy_payload = SQLiteCoordinatorStore._canonical_review_result(
+                resolution.review_result
+            )
+        except GotaReviewResultError as error:
+            raise GotaDecisionApplicationError(str(error)) from error
+        if _canonical_json(policy_payload) != _canonical_json(
+            authorities.review_result.to_payload()
+        ):
+            raise GotaDecisionApplicationError(
+                "DecisionPolicy ReviewResult disagrees with durable ReviewResult"
+            )
+
+    @staticmethod
+    def _stored_gota_decision_applied(
+        row: sqlite3.Row,
+        authorities: GotaDecisionAuthorities,
+    ) -> tuple[Evidence, dict[str, Any]]:
+        """Validate the reserved, store-generated non-PASSED authority."""
+
+        required = {
+            "run_id",
+            "task_id",
+            "attempt",
+            "request_id",
+            "worker_request_id",
+            "review_evidence_id",
+            "review_evidence_digest",
+            "worker_result_evidence_id",
+            "worker_commit_evidence_id",
+            "review_decision",
+            "policy_action",
+            "from_state",
+            "to_state",
+            "fencing_token",
+        }
+        try:
+            created_at_value = row["created_at"]
+            created_at = parse_datetime(created_at_value)
+            payload = json.loads(row["payload_json"])
+            if type(payload) is not dict or set(payload) != required:
+                raise GotaDecisionApplicationError(
+                    "Stored Gota decision evidence has invalid fields"
+                )
+            if _digest(payload) != row["digest"]:
+                raise GotaDecisionApplicationError(
+                    "Stored Gota decision evidence failed its digest check"
+                )
+            if _canonical_json(payload) != row["payload_json"]:
+                raise GotaDecisionApplicationError(
+                    "Stored Gota decision evidence is not canonical"
+                )
+            if (
+                type(payload["run_id"]) is not str
+                or payload["run_id"] != authorities.run.run_id
+                or type(payload["task_id"]) is not str
+                or payload["task_id"] != authorities.run.task_id
+                or type(payload["attempt"]) is not int
+                or payload["attempt"] != authorities.worker_result.attempt
+                or type(payload["request_id"]) is not str
+                or payload["request_id"] != authorities.review_result.request_id
+                or type(payload["worker_request_id"]) is not str
+                or payload["worker_request_id"] != authorities.request.request_id
+                or type(payload["review_evidence_id"]) is not str
+                or payload["review_evidence_id"]
+                != authorities.review_evidence.evidence_id
+                or type(payload["review_evidence_digest"]) is not str
+                or payload["review_evidence_digest"]
+                != authorities.review_evidence.digest
+                or type(payload["worker_result_evidence_id"]) is not str
+                or payload["worker_result_evidence_id"]
+                != authorities.worker_result_evidence.evidence_id
+                or type(payload["worker_commit_evidence_id"]) is not str
+                or payload["worker_commit_evidence_id"]
+                != authorities.worker_commit_evidence.evidence_id
+                or type(payload["review_decision"]) is not str
+                or payload["review_decision"]
+                != authorities.review_result.decision.value
+                or type(payload["policy_action"]) is not str
+                or payload["policy_action"]
+                not in {action.value for action in _GOTA_NON_PASSED_ACTIONS}
+                or payload["from_state"] != TaskState.REVIEW.value
+                or payload["to_state"]
+                not in {
+                    TaskState.NOT_COMPLETED.value,
+                    TaskState.BLOCKED.value,
+                }
+                or type(payload["fencing_token"]) is not int
+                or payload["fencing_token"] != int(row["fencing_token"])
+                or payload["fencing_token"] != authorities.fencing_token
+                or type(row["created_at"]) is not str
+                or isoformat(created_at) != created_at_value
+            ):
+                raise GotaDecisionApplicationError(
+                    "Stored Gota decision evidence has non-canonical values"
+                )
+        except GotaDecisionApplicationError:
+            raise
+        except (TypeError, ValueError, KeyError, json.JSONDecodeError) as error:
+            raise GotaDecisionApplicationError(
+                "Stored Gota decision evidence is malformed"
+            ) from error
+        return SQLiteCoordinatorStore._evidence_from_row(row, payload), payload
+
+    @staticmethod
+    def _stored_gota_human_review_hold(
+        row: sqlite3.Row,
+        authorities: GotaDecisionAuthorities,
+        decision_evidence: Evidence,
+    ) -> GotaHumanReviewHold:
+        try:
+            created_at_value = row["created_at"]
+            created_at = parse_datetime(created_at_value)
+            if (
+                type(row["run_id"]) is not str
+                or row["run_id"] != authorities.run.run_id
+                or type(row["attempt"]) is not int
+                or row["attempt"] != authorities.worker_result.attempt
+                or type(row["request_id"]) is not str
+                or row["request_id"] != authorities.review_result.request_id
+                or type(row["review_evidence_id"]) is not str
+                or row["review_evidence_id"] != authorities.review_evidence.evidence_id
+                or type(row["review_evidence_digest"]) is not str
+                or row["review_evidence_digest"] != authorities.review_evidence.digest
+                or type(row["decision_evidence_id"]) is not str
+                or row["decision_evidence_id"] != decision_evidence.evidence_id
+                or type(row["decision_evidence_digest"]) is not str
+                or row["decision_evidence_digest"] != decision_evidence.digest
+                or type(row["created_at"]) is not str
+                or isoformat(created_at) != created_at_value
+                or created_at != decision_evidence.created_at
+            ):
+                raise GotaDecisionApplicationError(
+                    "Gota human-review hold has incoherent links"
+                )
+        except GotaDecisionApplicationError:
+            raise
+        except (TypeError, ValueError, KeyError) as error:
+            raise GotaDecisionApplicationError(
+                "Gota human-review hold is malformed"
+            ) from error
+        return GotaHumanReviewHold(
+            run_id=authorities.run.run_id,
+            attempt=authorities.worker_result.attempt,
+            request_id=authorities.review_result.request_id,
+            review_evidence_id=row["review_evidence_id"],
+            review_evidence_digest=row["review_evidence_digest"],
+            decision_evidence_id=row["decision_evidence_id"],
+            decision_evidence_digest=row["decision_evidence_digest"],
+            created_at=created_at,
+        )
+
+    def _load_gota_human_review_hold_connection(
+        self,
+        connection: sqlite3.Connection,
+        authorities: GotaDecisionAuthorities,
+    ) -> GotaHumanReviewHold | None:
+        rows = connection.execute(
+            """
+            SELECT * FROM gota_human_review_holds
+            WHERE run_id = ? AND attempt = ? AND request_id = ?
+            ORDER BY rowid
+            """,
+            (
+                authorities.run.run_id,
+                authorities.worker_result.attempt,
+                authorities.review_result.request_id,
+            ),
+        ).fetchall()
+        if not rows:
+            return None
+        if len(rows) != 1:
+            raise GotaDecisionApplicationError(
+                "Multiple Gota human-review holds make the run ambiguous"
+            )
+        decision_rows = connection.execute(
+            """
+            SELECT * FROM evidence
+            WHERE run_id = ? AND kind = ?
+            ORDER BY rowid
+            """,
+            (authorities.run.run_id, "gota_decision_applied"),
+        ).fetchall()
+        if len(decision_rows) != 1:
+            raise GotaDecisionApplicationError(
+                "A Gota human-review hold requires exactly one decision authority"
+            )
+        decision_evidence, decision_payload = self._stored_gota_decision_applied(
+            decision_rows[0], authorities
+        )
+        if (
+            decision_payload["policy_action"]
+            != GotaNextAction.WAIT_FOR_HUMAN.value
+            or decision_payload["to_state"] != TaskState.NOT_COMPLETED.value
+        ):
+            raise GotaDecisionApplicationError(
+                "Gota human-review hold is linked to a non-human decision"
+            )
+        return self._stored_gota_human_review_hold(
+            rows[0], authorities, decision_evidence
+        )
+
+    def load_gota_human_review_hold(
+        self,
+        run_id: str,
+        attempt: int,
+        request_id: str,
+    ) -> GotaHumanReviewHold | None:
+        """Read one immutable human-review hold without releasing it."""
+
+        worker_request_id = self._decision_worker_request_id(
+            run_id, attempt, request_id
+        )
+        with closing(self._connect()) as connection:
+            authorities = self._load_gota_decision_authorities_connection(
+                connection,
+                run_id=run_id,
+                attempt=attempt,
+                worker_request_id=worker_request_id,
+                allowed_states=frozenset(
+                    {
+                        TaskState.REVIEW,
+                        TaskState.DONE,
+                        TaskState.NOT_COMPLETED,
+                        TaskState.BLOCKED,
+                    }
+                ),
+            )
+            return self._load_gota_human_review_hold_connection(
+                connection, authorities
+            )
+
+    def _insert_gota_human_review_hold(
+        self,
+        connection: sqlite3.Connection,
+        authorities: GotaDecisionAuthorities,
+        decision_evidence: Evidence,
+        current_time: datetime,
+    ) -> GotaHumanReviewHold:
+        connection.execute(
+            """
+            INSERT INTO gota_human_review_holds(
+                run_id, attempt, request_id, review_evidence_id,
+                review_evidence_digest, decision_evidence_id,
+                decision_evidence_digest, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                authorities.run.run_id,
+                authorities.worker_result.attempt,
+                authorities.review_result.request_id,
+                authorities.review_evidence.evidence_id,
+                authorities.review_evidence.digest,
+                decision_evidence.evidence_id,
+                decision_evidence.digest,
+                isoformat(current_time),
+            ),
+        )
+        return GotaHumanReviewHold(
+            run_id=authorities.run.run_id,
+            attempt=authorities.worker_result.attempt,
+            request_id=authorities.review_result.request_id,
+            review_evidence_id=authorities.review_evidence.evidence_id,
+            review_evidence_digest=authorities.review_evidence.digest,
+            decision_evidence_id=decision_evidence.evidence_id,
+            decision_evidence_digest=decision_evidence.digest,
+            created_at=current_time,
+        )
+
+    def apply_gota_decision(
+        self,
+        run_id: str,
+        lease: Lease,
+        resolution: GotaDecisionResult,
+    ) -> GotaDecisionApplicationPersistence:
+        """Atomically apply only a Policy-produced non-PASSED action."""
+
+        if lease.run_id != run_id:
+            raise FencingTokenError(
+                f"Lease run {lease.run_id} does not match Gota run {run_id}"
+            )
+        if type(resolution) is not GotaDecisionResult or type(
+            resolution.review_result
+        ) is not GotaReviewResult:
+            raise GotaDecisionApplicationError(
+                "A canonical Policy resolution with a ReviewResult is required"
+            )
+        attempt = resolution.review_result.attempt
+        worker_request_id = self._decision_worker_request_id(
+            run_id, attempt, resolution.review_result.request_id
+        )
+        if resolution.action not in _GOTA_NON_PASSED_ACTIONS:
+            raise GotaDecisionApplicationError(
+                "Only a non-PASSED Policy action may use the decision primitive"
+            )
+        target_state, requires_hold = _GOTA_NON_PASSED_ACTIONS[resolution.action]
+        trusted_now = self._trusted_now()
+        decision_evidence: Evidence | None = None
+        hold: GotaHumanReviewHold | None = None
+        with self.fenced_transaction(lease, now=trusted_now) as connection:
+            authorities = self._load_gota_decision_authorities_connection(
+                connection,
+                run_id=run_id,
+                attempt=attempt,
+                worker_request_id=worker_request_id,
+                allowed_states=frozenset({TaskState.REVIEW}),
+            )
+            self._validate_gota_policy_resolution(
+                resolution,
+                authorities,
+                allowed_actions=frozenset(_GOTA_NON_PASSED_ACTIONS),
+            )
+            existing_decisions = connection.execute(
+                """
+                SELECT * FROM evidence
+                WHERE run_id = ? AND kind = ?
+                ORDER BY rowid
+                """,
+                (run_id, "gota_decision_applied"),
+            ).fetchall()
+            if existing_decisions:
+                raise GotaDecisionApplicationError(
+                    "REVIEW contains preexisting Gota decision evidence"
+                )
+            existing_holds = connection.execute(
+                "SELECT * FROM gota_human_review_holds WHERE run_id = ? ORDER BY rowid",
+                (run_id,),
+            ).fetchall()
+            if existing_holds:
+                raise GotaDecisionApplicationError(
+                    "REVIEW contains a preexisting Gota human-review hold"
+                )
+            existing_acceptance = connection.execute(
+                """
+                SELECT * FROM evidence
+                WHERE run_id = ? AND kind = ?
+                ORDER BY rowid
+                """,
+                (run_id, "gota_acceptance_verified"),
+            ).fetchall()
+            if existing_acceptance:
+                raise GotaDecisionApplicationError(
+                    "REVIEW contains preexisting Gota acceptance evidence"
+                )
+            validate_transition(TaskState.REVIEW, target_state)
+            if resolution.review_decision is None:
+                raise GotaDecisionApplicationError(
+                    "A non-PASSED Policy action requires a ReviewDecision"
+                )
+            decision_payload = {
+                "run_id": authorities.run.run_id,
+                "task_id": authorities.run.task_id,
+                "attempt": authorities.worker_result.attempt,
+                "request_id": authorities.review_result.request_id,
+                "worker_request_id": authorities.request.request_id,
+                "review_evidence_id": authorities.review_evidence.evidence_id,
+                "review_evidence_digest": authorities.review_evidence.digest,
+                "worker_result_evidence_id": authorities.worker_result_evidence.evidence_id,
+                "worker_commit_evidence_id": authorities.worker_commit_evidence.evidence_id,
+                "review_decision": resolution.review_decision.value,
+                "policy_action": resolution.action.value,
+                "from_state": TaskState.REVIEW.value,
+                "to_state": target_state.value,
+                "fencing_token": lease.fencing_token,
+            }
+            decision_evidence = self._insert_evidence(
+                connection,
+                run_id,
+                "gota_decision_applied",
+                decision_payload,
+                lease,
+                trusted_now,
+            )
+            updated = connection.execute(
+                """
+                UPDATE task_runs
+                SET state = ?, updated_at = ?
+                WHERE run_id = ? AND state = ?
+                """,
+                (
+                    target_state.value,
+                    isoformat(trusted_now),
+                    run_id,
+                    TaskState.REVIEW.value,
+                ),
+            )
+            if updated.rowcount != 1:
+                raise GotaDecisionApplicationError(
+                    "Gota decision application requires a REVIEW task"
+                )
+            connection.execute(
+                """
+                INSERT INTO transition_events(
+                    run_id, from_state, to_state, actor, reason,
+                    fencing_token, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run_id,
+                    TaskState.REVIEW.value,
+                    target_state.value,
+                    lease.owner_id,
+                    "gota_decision_applied",
+                    lease.fencing_token,
+                    isoformat(trusted_now),
+                ),
+            )
+            if requires_hold:
+                hold = self._insert_gota_human_review_hold(
+                    connection,
+                    authorities,
+                    decision_evidence,
+                    trusted_now,
+                )
+            final_now = self._trusted_now()
+            self._assert_fenced_connection(connection, lease, final_now)
+        assert decision_evidence is not None
+        return GotaDecisionApplicationPersistence(
+            run=self.get_run(run_id),
+            decision_evidence=decision_evidence,
+            hold=hold,
+            created=True,
+        )
+
+    def recognize_gota_decision_application(
+        self,
+        run_id: str,
+        attempt: int,
+        request_id: str,
+        resolution: GotaDecisionResult,
+    ) -> GotaDecisionApplicationPersistence:
+        """Recognize one already-applied non-PASSED decision read-only."""
+
+        worker_request_id = self._decision_worker_request_id(
+            run_id, attempt, request_id
+        )
+        if type(resolution) is not GotaDecisionResult:
+            raise GotaDecisionApplicationError(
+                "A canonical Policy resolution is required for recovery"
+            )
+        if resolution.action not in _GOTA_NON_PASSED_ACTIONS:
+            raise GotaDecisionApplicationError(
+                "Recovery requires a non-PASSED Policy action"
+            )
+        target_state, requires_hold = _GOTA_NON_PASSED_ACTIONS[resolution.action]
+        with closing(self._connect()) as connection:
+            authorities = self._load_gota_decision_authorities_connection(
+                connection,
+                run_id=run_id,
+                attempt=attempt,
+                worker_request_id=worker_request_id,
+                allowed_states=frozenset(
+                    {TaskState.REVIEW, TaskState.NOT_COMPLETED, TaskState.BLOCKED}
+                ),
+            )
+            self._validate_gota_policy_resolution(
+                resolution,
+                authorities,
+                allowed_actions=frozenset(_GOTA_NON_PASSED_ACTIONS),
+            )
+            if authorities.run.state is not target_state:
+                raise GotaDecisionApplicationError(
+                    "Terminal Gota state does not match the Policy action"
+                )
+            decision_rows = connection.execute(
+                """
+                SELECT * FROM evidence
+                WHERE run_id = ? AND kind = ?
+                ORDER BY rowid
+                """,
+                (run_id, "gota_decision_applied"),
+            ).fetchall()
+            if len(decision_rows) != 1:
+                raise GotaDecisionApplicationError(
+                    "Terminal Gota state requires exactly one decision authority"
+                )
+            decision_evidence, decision_payload = self._stored_gota_decision_applied(
+                decision_rows[0], authorities
+            )
+            if (
+                decision_payload["policy_action"] != resolution.action.value
+                or decision_payload["to_state"] != target_state.value
+            ):
+                raise GotaDecisionApplicationError(
+                    "Stored Gota decision action or target state disagrees"
+                )
+            events = connection.execute(
+                """
+                SELECT * FROM transition_events
+                WHERE run_id = ? AND from_state = ?
+                ORDER BY event_id
+                """,
+                (run_id, TaskState.REVIEW.value),
+            ).fetchall()
+            if len(events) != 1:
+                raise GotaDecisionApplicationError(
+                    "Terminal Gota state requires exactly one REVIEW decision event"
+                )
+            event = events[0]
+            try:
+                event_created_at = parse_datetime(event["created_at"])
+                if (
+                    event["to_state"] != target_state.value
+                    or event["reason"] != "gota_decision_applied"
+                    or type(event["actor"]) is not str
+                    or not event["actor"]
+                    or type(event["fencing_token"]) is not int
+                    or event["fencing_token"] != decision_evidence.payload["fencing_token"]
+                    or type(event["created_at"]) is not str
+                    or isoformat(event_created_at) != event["created_at"]
+                    or event_created_at != decision_evidence.created_at
+                ):
+                    raise GotaDecisionApplicationError(
+                        "Gota decision transition event is incoherent"
+                    )
+            except GotaDecisionApplicationError:
+                raise
+            except (TypeError, ValueError, KeyError) as error:
+                raise GotaDecisionApplicationError(
+                    "Gota decision transition event is malformed"
+                ) from error
+            acceptance_rows = connection.execute(
+                """
+                SELECT * FROM evidence
+                WHERE run_id = ? AND kind = ?
+                """,
+                (run_id, "gota_acceptance_verified"),
+            ).fetchall()
+            if acceptance_rows:
+                raise GotaDecisionApplicationError(
+                    "Non-PASSED Gota decision has acceptance evidence"
+                )
+            hold_rows = connection.execute(
+                "SELECT * FROM gota_human_review_holds WHERE run_id = ? ORDER BY rowid",
+                (run_id,),
+            ).fetchall()
+            if requires_hold:
+                if len(hold_rows) != 1:
+                    raise GotaDecisionApplicationError(
+                        "HUMAN_REVIEW_REQUIRED requires exactly one durable hold"
+                    )
+                hold = self._load_gota_human_review_hold_connection(
+                    connection, authorities
+                )
+                if hold is None:
+                    raise GotaDecisionApplicationError(
+                        "HUMAN_REVIEW_REQUIRED hold is missing"
+                    )
+            else:
+                if hold_rows:
+                    raise GotaDecisionApplicationError(
+                        "This Gota decision must not create a human-review hold"
+                    )
+                hold = None
+            return GotaDecisionApplicationPersistence(
+                run=authorities.run,
+                decision_evidence=decision_evidence,
+                hold=hold,
+                created=False,
+            )
+
+    def _stored_gota_acceptance_verified(
+        self,
+        row: sqlite3.Row,
+        authorities: GotaDecisionAuthorities,
+    ) -> Evidence:
+        required = {
+            "run_id",
+            "task_id",
+            "attempt",
+            "worker_request_id",
+            "review_request_id",
+            "worker_commit_sha",
+            "reviewed_commit_sha",
+            "decision",
+            "fencing_token",
+            "worker_result_evidence_id",
+            "worker_commit_evidence_id",
+            "review_result_evidence_id",
+        }
+        try:
+            created_at_value = row["created_at"]
+            created_at = parse_datetime(created_at_value)
+            payload = json.loads(row["payload_json"])
+            if type(payload) is not dict or set(payload) != required:
+                raise GotaDecisionApplicationError(
+                    "Stored Gota acceptance evidence has invalid fields"
+                )
+            if _digest(payload) != row["digest"]:
+                raise GotaDecisionApplicationError(
+                    "Stored Gota acceptance evidence failed its digest check"
+                )
+            if _canonical_json(payload) != row["payload_json"]:
+                raise GotaDecisionApplicationError(
+                    "Stored Gota acceptance evidence is not canonical"
+                )
+            if (
+                payload["run_id"] != authorities.run.run_id
+                or payload["task_id"] != authorities.run.task_id
+                or type(payload["attempt"]) is not int
+                or payload["attempt"] != authorities.worker_result.attempt
+                or payload["worker_request_id"] != authorities.request.request_id
+                or payload["review_request_id"] != authorities.review_result.request_id
+                or payload["worker_commit_sha"] != authorities.worker_result.commit_sha
+                or payload["reviewed_commit_sha"]
+                != authorities.review_result.reviewed_commit_sha
+                or payload["decision"] != ReviewDecision.PASSED.value
+                or type(payload["fencing_token"]) is not int
+                or payload["fencing_token"] != int(row["fencing_token"])
+                or payload["fencing_token"] != authorities.fencing_token
+                or payload["worker_result_evidence_id"]
+                != authorities.worker_result_evidence.evidence_id
+                or payload["worker_commit_evidence_id"]
+                != authorities.worker_commit_evidence.evidence_id
+                or payload["review_result_evidence_id"]
+                != authorities.review_evidence.evidence_id
+                or type(row["created_at"]) is not str
+                or isoformat(created_at) != created_at_value
+            ):
+                raise GotaDecisionApplicationError(
+                    "Stored Gota acceptance evidence has incoherent values"
+                )
+        except GotaDecisionApplicationError:
+            raise
+        except (TypeError, ValueError, KeyError, json.JSONDecodeError) as error:
+            raise GotaDecisionApplicationError(
+                "Stored Gota acceptance evidence is malformed"
+            ) from error
+        return self._evidence_from_row(row, payload)
+
+    def recognize_gota_acceptance(
+        self,
+        run_id: str,
+        attempt: int,
+        request_id: str,
+        resolution: GotaDecisionResult,
+    ) -> TaskRun:
+        """Recognize a Gota PASSED/DONE authority without mutating SQLite."""
+
+        worker_request_id = self._decision_worker_request_id(
+            run_id, attempt, request_id
+        )
+        with closing(self._connect()) as connection:
+            authorities = self._load_gota_decision_authorities_connection(
+                connection,
+                run_id=run_id,
+                attempt=attempt,
+                worker_request_id=worker_request_id,
+                allowed_states=frozenset({TaskState.REVIEW, TaskState.DONE}),
+            )
+            self._validate_gota_policy_resolution(
+                resolution,
+                authorities,
+                allowed_actions=frozenset({GotaNextAction.COMPLETE}),
+            )
+            if authorities.run.state is not TaskState.DONE:
+                raise GotaDecisionApplicationError(
+                    "PASSED recovery requires a DONE task"
+                )
+            acceptance_rows = connection.execute(
+                """
+                SELECT * FROM evidence
+                WHERE run_id = ? AND kind = ?
+                ORDER BY rowid
+                """,
+                (run_id, "gota_acceptance_verified"),
+            ).fetchall()
+            if len(acceptance_rows) != 1:
+                raise GotaDecisionApplicationError(
+                    "DONE requires exactly one Gota acceptance authority"
+                )
+            acceptance_evidence = self._stored_gota_acceptance_verified(
+                acceptance_rows[0], authorities
+            )
+            decision_rows = connection.execute(
+                """
+                SELECT * FROM evidence
+                WHERE run_id = ? AND kind = ?
+                """,
+                (run_id, "gota_decision_applied"),
+            ).fetchall()
+            if decision_rows:
+                raise GotaDecisionApplicationError(
+                    "PASSED Gota completion has non-PASSED decision evidence"
+                )
+            hold_rows = connection.execute(
+                "SELECT * FROM gota_human_review_holds WHERE run_id = ?",
+                (run_id,),
+            ).fetchall()
+            if hold_rows:
+                raise GotaDecisionApplicationError(
+                    "PASSED Gota completion has a human-review hold"
+                )
+            events = connection.execute(
+                """
+                SELECT * FROM transition_events
+                WHERE run_id = ? AND from_state = ?
+                ORDER BY event_id
+                """,
+                (run_id, TaskState.REVIEW.value),
+            ).fetchall()
+            if len(events) != 1:
+                raise GotaDecisionApplicationError(
+                    "DONE requires exactly one REVIEW -> DONE Gota event"
+                )
+            event = events[0]
+            try:
+                event_created_at = parse_datetime(event["created_at"])
+                if (
+                    event["to_state"] != TaskState.DONE.value
+                    or event["reason"] != "gota_acceptance_verified"
+                    or type(event["actor"]) is not str
+                    or not event["actor"]
+                    or type(event["fencing_token"]) is not int
+                    or event["fencing_token"] != acceptance_evidence.payload["fencing_token"]
+                    or type(event["created_at"]) is not str
+                    or isoformat(event_created_at) != event["created_at"]
+                    or event_created_at != acceptance_evidence.created_at
+                ):
+                    raise GotaDecisionApplicationError(
+                        "Gota acceptance transition event is incoherent"
+                    )
+            except GotaDecisionApplicationError:
+                raise
+            except (TypeError, ValueError, KeyError) as error:
+                raise GotaDecisionApplicationError(
+                    "Gota acceptance transition event is malformed"
+                ) from error
+            return authorities.run
 
     def persist_gota_review_result(
         self,

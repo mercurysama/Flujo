@@ -1,21 +1,27 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import sqlite3
+import subprocess
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from flow_coordinator.domain import ProjectBinding, TaskState
+from flow_coordinator.domain import ProjectBinding, TaskSpec, TaskState
 from flow_coordinator.executor import FakeExecutor
 from flow_coordinator.gota_protocol import (
     GOTA_PROTOCOL,
     GotaCheckpoint,
     GotaMessage,
+    GotaPhase,
+    GotaRequest,
     GotaReviewResult,
     GotaWorkerResult,
     ReviewDecision,
     WorkerResultStatus,
 )
+from flow_coordinator import GotaWorkerReviewBoundary
 from flow_coordinator.store import (
     AcceptanceEvidenceError,
     FencingTokenError,
@@ -24,6 +30,14 @@ from flow_coordinator.store import (
 )
 
 from support import CoordinatorTestCase
+
+
+def _canonical_json(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _digest(value: object) -> str:
+    return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
 
 
 class FixedClockStore(SQLiteCoordinatorStore):
@@ -36,6 +50,148 @@ class FixedClockStore(SQLiteCoordinatorStore):
 
 
 class SQLiteStoreTest(CoordinatorTestCase):
+    @staticmethod
+    def _git(repository: Path, *arguments: str) -> str:
+        completed = subprocess.run(
+            ("git", *arguments),
+            cwd=repository,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return completed.stdout.rstrip("\n")
+
+    def _rewrite_evidence_payload(
+        self,
+        run_id: str,
+        kind: str,
+        payload: dict[str, object],
+    ) -> str:
+        connection = sqlite3.connect(self.database)
+        try:
+            connection.execute("PRAGMA foreign_keys = OFF")
+            connection.execute("DROP TRIGGER IF EXISTS immutable_evidence_update")
+            row = connection.execute(
+                "SELECT evidence_id FROM evidence WHERE run_id = ? AND kind = ?",
+                (run_id, kind),
+            ).fetchone()
+            self.assertIsNotNone(row)
+            digest = _digest(payload)
+            connection.execute(
+                "UPDATE evidence SET payload_json = ?, digest = ? WHERE evidence_id = ?",
+                (_canonical_json(payload), digest, row[0]),
+            )
+            connection.commit()
+            return digest
+        finally:
+            connection.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS immutable_evidence_update
+                BEFORE UPDATE ON evidence
+                BEGIN SELECT RAISE(ABORT, 'evidence is immutable'); END
+                """
+            )
+            connection.commit()
+            connection.close()
+
+    def _rewrite_evidence_storage(
+        self,
+        run_id: str,
+        kind: str,
+        *,
+        payload_json: str | None = None,
+        digest: str | None = None,
+    ) -> None:
+        self.assertTrue(payload_json is not None or digest is not None)
+        connection = sqlite3.connect(self.database)
+        try:
+            connection.execute("PRAGMA foreign_keys = OFF")
+            connection.execute("DROP TRIGGER IF EXISTS immutable_evidence_update")
+            row = connection.execute(
+                "SELECT evidence_id FROM evidence WHERE run_id = ? AND kind = ?",
+                (run_id, kind),
+            ).fetchone()
+            self.assertIsNotNone(row)
+            assignments: list[str] = []
+            values: list[object] = []
+            if payload_json is not None:
+                assignments.append("payload_json = ?")
+                values.append(payload_json)
+            if digest is not None:
+                assignments.append("digest = ?")
+                values.append(digest)
+            values.append(row[0])
+            connection.execute(
+                f"UPDATE evidence SET {', '.join(assignments)} WHERE evidence_id = ?",
+                values,
+            )
+            connection.commit()
+        finally:
+            connection.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS immutable_evidence_update
+                BEFORE UPDATE ON evidence
+                BEGIN SELECT RAISE(ABORT, 'evidence is immutable'); END
+                """
+            )
+            connection.commit()
+            connection.close()
+
+    def _rewrite_anchor_field(
+        self,
+        table: str,
+        field: str,
+        run_id: str,
+        value: object,
+    ) -> None:
+        self.assertIn(table, {"gota_worker_review_boundaries", "gota_review_results"})
+        self.assertIn(
+            field,
+            {"commit_evidence_digest", "review_evidence_digest"},
+        )
+        connection = sqlite3.connect(self.database)
+        try:
+            connection.execute("PRAGMA foreign_keys = OFF")
+            connection.execute(
+                f"DROP TRIGGER IF EXISTS immutable_{table}_update"
+            )
+            connection.execute(
+                f"UPDATE {table} SET {field} = ? WHERE run_id = ?",
+                (value, run_id),
+            )
+            connection.commit()
+        finally:
+            connection.execute(
+                f"""
+                CREATE TRIGGER IF NOT EXISTS immutable_{table}_update
+                BEFORE UPDATE ON {table}
+                BEGIN SELECT RAISE(ABORT, '{table} is immutable'); END
+                """
+            )
+            connection.commit()
+            connection.close()
+
+    def _remove_evidence_kind(self, run_id: str, kind: str) -> None:
+        connection = sqlite3.connect(self.database)
+        try:
+            connection.execute("PRAGMA foreign_keys = OFF")
+            connection.execute("DROP TRIGGER IF EXISTS immutable_evidence_delete")
+            connection.execute(
+                "DELETE FROM evidence WHERE run_id = ? AND kind = ?",
+                (run_id, kind),
+            )
+            connection.commit()
+        finally:
+            connection.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS immutable_evidence_delete
+                BEFORE DELETE ON evidence
+                BEGIN SELECT RAISE(ABORT, 'evidence is immutable'); END
+                """
+            )
+            connection.commit()
+            connection.close()
+
     @staticmethod
     def _worker_result(
         run_id: str,
@@ -87,7 +243,7 @@ class SQLiteStoreTest(CoordinatorTestCase):
         self,
         task_id: str,
         *,
-        worker_sha: str = "a" * 40,
+        worker_sha: str | None = None,
         verified_sha: str | None = None,
         reviewed_sha: str | None = None,
         decision: ReviewDecision = ReviewDecision.PASSED,
@@ -98,59 +254,150 @@ class SQLiteStoreTest(CoordinatorTestCase):
         ),
         now: datetime | None = None,
     ):
-        _, run = self.create_task(task_id)
-        lease = self.service.start(run.run_id, owner_id="worker", now=now)
-        self.service.complete_execution(run.run_id, lease, now=now)
-        worker = self._worker_result(run.run_id, run.task_id, commit_sha=worker_sha)
-        review = self._review_result(
-            run.run_id,
-            run.task_id,
-            reviewed_commit_sha=reviewed_sha or worker_sha,
-            decision=decision,
+        repository = self.root / f"repository-{task_id}"
+        repository.mkdir()
+        branch = f"feature/{task_id}"
+        self._git(repository, "init", f"--initial-branch={branch}")
+        self._git(repository, "config", "user.name", "Gota Store Test")
+        self._git(repository, "config", "user.email", "gota-store@example.invalid")
+        (repository / "src").mkdir()
+        (repository / "src/change.py").write_text(
+            "value = 'base'\n", encoding="utf-8"
         )
-        evidence = {
-            "gota_worker_result_received": worker.to_payload(),
-            "gota_worker_commit_verified": {
-                "request_id": worker.request_id,
-                "task_id": worker.task_id,
-                "run_id": worker.run_id,
-                "attempt": worker.attempt,
-                "commit_sha": verified_sha or worker_sha,
-            },
-            "gota_review_result": review.to_payload(),
-        }
+        self._git(repository, "add", "--", "src/change.py")
+        self._git(repository, "commit", "-m", "fixture base")
+        base_sha = self._git(repository, "rev-parse", "HEAD")
+
+        spec = TaskSpec(
+            task_id=task_id,
+            title=f"Task {task_id}",
+            objective="Exercise the local coordinator core",
+            project_id="project-a",
+            repository_id="repo-project-a",
+            branch=branch,
+            base_sha=base_sha,
+            context_id=f"context-{task_id}",
+            allowed_paths=("src/change.py",),
+            protected_paths=("demo/main.tscn", "export_presets.cfg"),
+            required_resources=(),
+            acceptance_criteria=("All focal checks pass",),
+            commit_message=f"test: complete {task_id}",
+        )
+        run = self.service.create_task(
+            spec,
+            {"workspace": str(repository), "task": task_id},
+        )
+        lease = self.service.start(
+            run.run_id,
+            owner_id="worker",
+            now=now,
+        )
         persistence_store = (
             FixedClockStore(self.database, now) if now is not None else self.store
         )
-        for kind in evidence_kinds:
-            if kind == "gota_worker_result_received":
-                persistence_store.persist_gota_worker_result(
-                    run.run_id, worker, lease
-                )
-            elif kind == "gota_worker_commit_verified":
-                with persistence_store.transaction(immediate=True) as connection:
-                    persistence_store._insert_evidence(
-                        connection,
-                        run.run_id,
-                        kind,
-                        evidence[kind],
-                        lease,
-                        persistence_store._trusted_now(),
-                    )
-            elif kind == "gota_review_result":
-                with persistence_store.transaction(immediate=True) as connection:
-                    persistence_store._insert_evidence(
-                        connection,
-                        run.run_id,
-                        kind,
-                        evidence[kind],
-                        lease,
-                        persistence_store._trusted_now(),
-                    )
-            else:
-                persistence_store.append_evidence(
-                    run.run_id, kind, evidence[kind], lease, now=now
-                )
+        if not evidence_kinds:
+            self.service.complete_execution(run.run_id, lease, now=now)
+            return run, lease, None, None
+        request = GotaRequest(
+            protocol=GOTA_PROTOCOL,
+            request_id=f"{run.run_id}:1:worker",
+            task_id=run.task_id,
+            run_id=run.run_id,
+            attempt=1,
+            phase=GotaPhase.WORKER,
+            objective=spec.objective,
+            acceptance_criteria=spec.acceptance_criteria,
+            workspace=str(repository),
+            branch=branch,
+            base_sha=base_sha,
+            allowed_paths=spec.allowed_paths,
+            protected_paths=spec.protected_paths,
+        )
+        persistence_store.reserve_gota_worker_invocation(
+            run.run_id, request, lease
+        )
+        (repository / "src/change.py").write_text(
+            "value = 'worker'\n", encoding="utf-8"
+        )
+        self._git(repository, "add", "--", "src/change.py")
+        self._git(repository, "commit", "-m", "worker change")
+        actual_worker_sha = self._git(repository, "rev-parse", "HEAD")
+        worker = self._worker_result(
+            run.run_id,
+            run.task_id,
+            commit_sha=actual_worker_sha,
+        )
+        persistence_store.persist_gota_worker_result(
+            run.run_id, worker, lease
+        )
+        entered = GotaWorkerReviewBoundary(
+            repository,
+            store=persistence_store,
+        ).run(
+            run.run_id,
+            lease,
+            attempt=1,
+            request_id=request.request_id,
+        )
+        self.assertEqual(entered.state, TaskState.REVIEW)
+        review = self._review_result(
+            run.run_id,
+            run.task_id,
+            reviewed_commit_sha=actual_worker_sha,
+            decision=decision,
+        )
+        persistence_store.persist_gota_review_result(
+            run.run_id, review, lease
+        )
+
+        if worker_sha is not None and worker_sha != actual_worker_sha:
+            worker_payload = dict(worker.to_payload())
+            worker_payload["commit_sha"] = worker_sha
+            self._rewrite_evidence_payload(
+                run.run_id,
+                "gota_worker_result_received",
+                worker_payload,
+            )
+        if verified_sha is not None and verified_sha != actual_worker_sha:
+            commit_evidence = next(
+                item
+                for item in self.store.list_evidence(run.run_id)
+                if item.kind == "gota_worker_commit_verified"
+            )
+            commit_payload = dict(commit_evidence.payload)
+            commit_payload["commit_sha"] = verified_sha
+            commit_payload["head"] = verified_sha
+            commit_digest = self._rewrite_evidence_payload(
+                run.run_id,
+                "gota_worker_commit_verified",
+                commit_payload,
+            )
+            self._rewrite_anchor_field(
+                "gota_worker_review_boundaries",
+                "commit_evidence_digest",
+                run.run_id,
+                commit_digest,
+            )
+        if reviewed_sha is not None and reviewed_sha != actual_worker_sha:
+            review_payload = dict(review.to_payload())
+            review_payload["reviewed_commit_sha"] = reviewed_sha
+            review_digest = self._rewrite_evidence_payload(
+                run.run_id,
+                "gota_review_result",
+                review_payload,
+            )
+            self._rewrite_anchor_field(
+                "gota_review_results",
+                "review_evidence_digest",
+                run.run_id,
+                review_digest,
+            )
+        for kind in {
+            "gota_worker_result_received",
+            "gota_worker_commit_verified",
+            "gota_review_result",
+        } - set(evidence_kinds):
+            self._remove_evidence_kind(run.run_id, kind)
         return run, lease, worker, review
 
     def test_schema_contains_every_required_operational_table(self) -> None:
@@ -289,6 +536,8 @@ class SQLiteStoreTest(CoordinatorTestCase):
         self.assertEqual(
             [item.kind for item in evidence],
             [
+                "gota_worker_request_registered",
+                "gota_worker_invocation_started",
                 "gota_worker_result_received",
                 "gota_worker_commit_verified",
                 "gota_review_result",
@@ -408,11 +657,111 @@ class SQLiteStoreTest(CoordinatorTestCase):
     def test_transition_gota_to_done_rejects_distinct_reviewed_sha(self) -> None:
         run, lease, _, _ = self._gota_review_fixture(
             "gota-reviewed-sha",
-            worker_sha="a" * 40,
             reviewed_sha="b" * 40,
         )
 
         with self.assertRaisesRegex(AcceptanceEvidenceError, "incoherent or not PASSED"):
+            self.store.transition_gota_to_done(run.run_id, lease)
+        self.assertEqual(self.store.get_run(run.run_id).state, TaskState.REVIEW)
+
+    def test_transition_gota_to_done_rejects_wrong_worker_identity_fields(self) -> None:
+        run, lease, _, _ = self._gota_review_fixture("gota-worker-identity")
+        commit_evidence = next(
+            item
+            for item in self.store.list_evidence(run.run_id)
+            if item.kind == "gota_worker_commit_verified"
+        )
+        original_payload = dict(commit_evidence.payload)
+        original_digest = commit_evidence.digest
+        mutations = {
+            "run_id": "other-run",
+            "task_id": "other-task",
+            "attempt": 2,
+            "request_id": f"{run.run_id}:1:review",
+        }
+        for field, value in mutations.items():
+            with self.subTest(field=field):
+                payload = dict(original_payload)
+                payload[field] = value
+                digest = self._rewrite_evidence_payload(
+                    run.run_id,
+                    "gota_worker_commit_verified",
+                    payload,
+                )
+                self._rewrite_anchor_field(
+                    "gota_worker_review_boundaries",
+                    "commit_evidence_digest",
+                    run.run_id,
+                    digest,
+                )
+                with self.assertRaises(AcceptanceEvidenceError):
+                    self.store.transition_gota_to_done(run.run_id, lease)
+                self.assertEqual(
+                    self.store.get_run(run.run_id).state,
+                    TaskState.REVIEW,
+                )
+                self._rewrite_evidence_payload(
+                    run.run_id,
+                    "gota_worker_commit_verified",
+                    original_payload,
+                )
+                self._rewrite_anchor_field(
+                    "gota_worker_review_boundaries",
+                    "commit_evidence_digest",
+                    run.run_id,
+                    original_digest,
+                )
+
+    def test_transition_gota_to_done_rejects_malformed_and_bad_digest_commit_evidence(
+        self,
+    ) -> None:
+        run, lease, _, _ = self._gota_review_fixture("gota-corrupt-commit")
+        commit_evidence = next(
+            item
+            for item in self.store.list_evidence(run.run_id)
+            if item.kind == "gota_worker_commit_verified"
+        )
+        with self.assertRaises(AcceptanceEvidenceError):
+            self._rewrite_evidence_storage(
+                run.run_id,
+                commit_evidence.kind,
+                payload_json="{",
+                digest=commit_evidence.digest,
+            )
+            self.store.transition_gota_to_done(run.run_id, lease)
+        self._rewrite_evidence_payload(
+            run.run_id,
+            commit_evidence.kind,
+            dict(commit_evidence.payload),
+        )
+        with self.assertRaises(AcceptanceEvidenceError):
+            self._rewrite_evidence_storage(
+                run.run_id,
+                commit_evidence.kind,
+                digest="0" * 64,
+            )
+            self.store.transition_gota_to_done(run.run_id, lease)
+
+    def test_transition_gota_to_done_rejects_duplicate_commit_evidence(self) -> None:
+        run, lease, _, _ = self._gota_review_fixture("gota-duplicate-commit")
+        commit_evidence = next(
+            item
+            for item in self.store.list_evidence(run.run_id)
+            if item.kind == "gota_worker_commit_verified"
+        )
+        with self.store.transaction(immediate=True) as connection:
+            self.store._insert_evidence(
+                connection,
+                run.run_id,
+                commit_evidence.kind,
+                dict(commit_evidence.payload),
+                lease,
+                self.store._trusted_now(),
+            )
+        with self.assertRaisesRegex(
+            AcceptanceEvidenceError,
+            "gota_worker_commit_verified",
+        ):
             self.store.transition_gota_to_done(run.run_id, lease)
         self.assertEqual(self.store.get_run(run.run_id).state, TaskState.REVIEW)
 

@@ -19,12 +19,20 @@ from .git_transaction import GitAcceptanceWorkflow, TransactionalGitAdapter
 from .store import (
     GotaReviewResultAnchor,
     GotaReviewResultError,
+    GotaDecisionApplicationError,
+    GotaDecisionApplicationPersistence,
+    GotaDecisionAuthorities,
+    GotaHumanReviewHold,
     GotaWorkerInvocationReservation,
     GotaWorkerReservationError,
     GotaWorkerResultError,
     GotaWorkerReviewBoundaryAnchor,
     GotaWorkerReviewBoundaryError,
     SQLiteCoordinatorStore,
+)
+from .gota_decision_application import (
+    GotaDecisionApplicationBoundary,
+    GotaDecisionApplicationResult,
 )
 from .gota_persistence import (
     GotaReviewerPersistenceBoundary,
@@ -96,6 +104,12 @@ __all__ = [
     "SQLiteCoordinatorStore",
     "GotaReviewResultAnchor",
     "GotaReviewResultError",
+    "GotaDecisionApplicationBoundary",
+    "GotaDecisionApplicationError",
+    "GotaDecisionApplicationPersistence",
+    "GotaDecisionApplicationResult",
+    "GotaDecisionAuthorities",
+    "GotaHumanReviewHold",
     "GotaWorkerInvocationReservation",
     "GotaWorkerReservationError",
     "GotaWorkerResultError",
