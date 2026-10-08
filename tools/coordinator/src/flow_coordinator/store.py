@@ -118,6 +118,19 @@ class GotaWorkerReviewPersistence:
     created: bool
 
 
+@dataclass(frozen=True, slots=True)
+class GotaWorkerReviewBoundaryAnchor:
+    """Durable Gota-only authority for one Worker-to-Review frontier."""
+
+    run_id: str
+    attempt: int
+    request_id: str
+    commit_evidence_id: str
+    commit_evidence_digest: str
+    transition_event_id: int
+    created_at: datetime
+
+
 class SQLiteCoordinatorStore:
     """Versioned SQLite storage. Each operation opens its own connection."""
 
@@ -215,6 +228,17 @@ class SQLiteCoordinatorStore:
                     created_at TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS gota_worker_review_boundaries (
+                    run_id TEXT NOT NULL REFERENCES task_runs(run_id),
+                    attempt INTEGER NOT NULL CHECK (attempt > 0),
+                    request_id TEXT NOT NULL,
+                    commit_evidence_id TEXT NOT NULL UNIQUE REFERENCES evidence(evidence_id),
+                    commit_evidence_digest TEXT NOT NULL,
+                    transition_event_id INTEGER NOT NULL UNIQUE REFERENCES transition_events(event_id),
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (run_id, attempt, request_id)
+                );
+
                 CREATE TABLE IF NOT EXISTS evidence (
                     evidence_id TEXT PRIMARY KEY,
                     run_id TEXT NOT NULL REFERENCES task_runs(run_id),
@@ -274,7 +298,13 @@ class SQLiteCoordinatorStore:
                 VALUES ('global', 0, 0);
                 """
             )
-            for table in ("contexts", "transition_events", "evidence", "checkpoints"):
+            for table in (
+                "contexts",
+                "transition_events",
+                "evidence",
+                "checkpoints",
+                "gota_worker_review_boundaries",
+            ):
                 connection.execute(
                     f"""
                     CREATE TRIGGER IF NOT EXISTS immutable_{table}_update
@@ -494,45 +524,65 @@ class SQLiteCoordinatorStore:
         connection = self._connect()
         try:
             connection.execute("BEGIN IMMEDIATE")
-            row = connection.execute(
-                "SELECT * FROM global_lock WHERE lock_name = 'global'"
-            ).fetchone()
-            problem: CoordinatorStoreError | None = None
-            if (
-                row["owner_id"] != lease.owner_id
-                or row["run_id"] != lease.run_id
-                or int(row["fencing_token"]) != lease.fencing_token
-                or bool(row["stale"])
-            ):
-                problem = FencingTokenError(
-                    f"Stale or foreign fencing token {lease.fencing_token} for {lease.owner_id}"
-                )
-            elif parse_datetime(row["lease_expires_at"]) <= current_time:
-                connection.execute(
-                    "UPDATE global_lock SET stale = 1 WHERE lock_name = 'global'"
-                )
-                problem = LeaseExpiredError(
-                    f"Lease {lease.fencing_token} expired at {row['lease_expires_at']}"
-                )
-            if problem is not None:
-                if isinstance(problem, LeaseExpiredError):
-                    connection.commit()
-                else:
-                    connection.rollback()
-                connection.close()
-                raise problem
-            yield connection
-            connection.commit()
-        except (FencingTokenError, LeaseExpiredError):
-            raise
+            try:
+                self._assert_fenced_connection(connection, lease, current_time)
+            except LeaseExpiredError:
+                # An entry check preserves the existing stale-lock marker
+                # semantics.  A check made by the transaction body is
+                # rolled back by the body exception path below.
+                connection.commit()
+                raise
+            except FencingTokenError:
+                connection.rollback()
+                raise
+            try:
+                yield connection
+            except BaseException:
+                connection.rollback()
+                raise
+            else:
+                connection.commit()
         except BaseException:
-            connection.rollback()
+            try:
+                connection.rollback()
+            except sqlite3.Error:
+                pass
             raise
         finally:
             try:
                 connection.close()
             except sqlite3.Error:
                 pass
+
+    @staticmethod
+    def _assert_fenced_connection(
+        connection: sqlite3.Connection,
+        lease: Lease,
+        current_time: datetime,
+    ) -> None:
+        """Validate owner, run, fencing token, and lease expiry on a connection."""
+
+        row = connection.execute(
+            "SELECT * FROM global_lock WHERE lock_name = 'global'"
+        ).fetchone()
+        if row is None:
+            raise FencingTokenError("The global fencing lock is missing")
+        if (
+            row["owner_id"] != lease.owner_id
+            or row["run_id"] != lease.run_id
+            or int(row["fencing_token"]) != lease.fencing_token
+            or bool(row["stale"])
+        ):
+            raise FencingTokenError(
+                f"Stale or foreign fencing token {lease.fencing_token} for {lease.owner_id}"
+            )
+        if parse_datetime(row["lease_expires_at"]) <= current_time:
+            connection.execute(
+                "UPDATE global_lock SET stale = 1 WHERE lock_name = 'global'"
+            )
+            raise LeaseExpiredError(
+                f"Lease {lease.fencing_token} expired at {row['lease_expires_at']}"
+            )
 
     def transition_run(
         self,
@@ -1752,6 +1802,217 @@ class SQLiteCoordinatorStore:
                 )
             return evidence
 
+    @staticmethod
+    def _stored_gota_worker_review_boundary_anchor(
+        row: sqlite3.Row,
+        *,
+        expected_run_id: str,
+        expected_attempt: int,
+        expected_request_id: str,
+    ) -> GotaWorkerReviewBoundaryAnchor:
+        """Validate the canonical fields of one durable Gota boundary anchor."""
+
+        try:
+            created_at_value = row["created_at"]
+            created_at = parse_datetime(created_at_value)
+            if (
+                type(row["run_id"]) is not str
+                or row["run_id"] != expected_run_id
+                or type(row["attempt"]) is not int
+                or row["attempt"] != expected_attempt
+                or type(row["request_id"]) is not str
+                or row["request_id"] != expected_request_id
+                or type(row["commit_evidence_id"]) is not str
+                or not row["commit_evidence_id"]
+                or type(row["commit_evidence_digest"]) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", row["commit_evidence_digest"])
+                is None
+                or type(row["transition_event_id"]) is not int
+                or row["transition_event_id"] < 1
+                or type(created_at_value) is not str
+                or isoformat(created_at) != created_at_value
+            ):
+                raise GotaWorkerReviewBoundaryError(
+                    "Gota Worker review boundary anchor has non-canonical values"
+                )
+        except GotaWorkerReviewBoundaryError:
+            raise
+        except (TypeError, ValueError, KeyError) as error:
+            raise GotaWorkerReviewBoundaryError(
+                "Gota Worker review boundary anchor is malformed"
+            ) from error
+        return GotaWorkerReviewBoundaryAnchor(
+            run_id=expected_run_id,
+            attempt=expected_attempt,
+            request_id=expected_request_id,
+            commit_evidence_id=row["commit_evidence_id"],
+            commit_evidence_digest=row["commit_evidence_digest"],
+            transition_event_id=row["transition_event_id"],
+            created_at=created_at,
+        )
+
+    def _load_gota_worker_review_boundary_anchor(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        run_id: str,
+        attempt: int,
+        request_id: str,
+    ) -> GotaWorkerReviewBoundaryAnchor:
+        rows = connection.execute(
+            """
+            SELECT * FROM gota_worker_review_boundaries
+            WHERE run_id = ? AND attempt = ? AND request_id = ?
+            ORDER BY rowid
+            """,
+            (run_id, attempt, request_id),
+        ).fetchall()
+        if len(rows) != 1:
+            raise GotaWorkerReviewBoundaryError(
+                "REVIEW requires exactly one Gota Worker boundary anchor"
+            )
+        return self._stored_gota_worker_review_boundary_anchor(
+            rows[0],
+            expected_run_id=run_id,
+            expected_attempt=attempt,
+            expected_request_id=request_id,
+        )
+
+    @staticmethod
+    def _validate_gota_worker_review_boundary_links(
+        connection: sqlite3.Connection,
+        anchor: GotaWorkerReviewBoundaryAnchor,
+        *,
+        commit_evidence_row: sqlite3.Row,
+        expected_fencing_token: int | None,
+        expected_actor: str | None,
+    ) -> None:
+        """Validate the anchor's exact evidence and transition-event links."""
+
+        evidence_rows = connection.execute(
+            "SELECT * FROM evidence WHERE evidence_id = ?",
+            (anchor.commit_evidence_id,),
+        ).fetchall()
+        if len(evidence_rows) != 1:
+            raise GotaWorkerReviewBoundaryError(
+                "Gota Worker review boundary anchor points to missing evidence"
+            )
+        evidence_row = evidence_rows[0]
+        if (
+            evidence_row["evidence_id"] != commit_evidence_row["evidence_id"]
+            or evidence_row["evidence_id"] != anchor.commit_evidence_id
+            or evidence_row["run_id"] != anchor.run_id
+            or evidence_row["kind"] != "gota_worker_commit_verified"
+            or evidence_row["digest"] != anchor.commit_evidence_digest
+            or commit_evidence_row["digest"] != anchor.commit_evidence_digest
+        ):
+            raise GotaWorkerReviewBoundaryError(
+                "Gota Worker review boundary anchor evidence link is incoherent"
+            )
+
+        try:
+            evidence_created_at = parse_datetime(evidence_row["created_at"])
+            if (
+                type(evidence_row["created_at"]) is not str
+                or isoformat(evidence_created_at) != evidence_row["created_at"]
+                or evidence_created_at != anchor.created_at
+            ):
+                raise GotaWorkerReviewBoundaryError(
+                    "Gota Worker review boundary anchor timestamp disagrees with evidence"
+                )
+        except GotaWorkerReviewBoundaryError:
+            raise
+        except (TypeError, ValueError) as error:
+            raise GotaWorkerReviewBoundaryError(
+                "Gota Worker review boundary evidence timestamp is malformed"
+            ) from error
+
+        event_rows = connection.execute(
+            "SELECT * FROM transition_events WHERE event_id = ?",
+            (anchor.transition_event_id,),
+        ).fetchall()
+        if len(event_rows) != 1:
+            raise GotaWorkerReviewBoundaryError(
+                "Gota Worker review boundary anchor points to missing transition event"
+            )
+        event_row = event_rows[0]
+        try:
+            event_created_at = parse_datetime(event_row["created_at"])
+            fencing_token = event_row["fencing_token"]
+            if (
+                event_row["run_id"] != anchor.run_id
+                or event_row["from_state"] != TaskState.RUNNING.value
+                or event_row["to_state"] != TaskState.REVIEW.value
+                or event_row["reason"] != "gota_worker_commit_verified"
+                or type(event_row["actor"]) is not str
+                or not event_row["actor"]
+                or type(fencing_token) is not int
+                or event_created_at != anchor.created_at
+                or type(event_row["created_at"]) is not str
+                or isoformat(event_created_at) != event_row["created_at"]
+                or (
+                    expected_fencing_token is not None
+                    and fencing_token != expected_fencing_token
+                )
+                or (expected_actor is not None and event_row["actor"] != expected_actor)
+            ):
+                raise GotaWorkerReviewBoundaryError(
+                    "Gota Worker review boundary transition event is incoherent"
+                )
+        except GotaWorkerReviewBoundaryError:
+            raise
+        except (TypeError, ValueError, KeyError) as error:
+            raise GotaWorkerReviewBoundaryError(
+                "Gota Worker review boundary transition event is malformed"
+            ) from error
+
+    def load_gota_worker_review_boundary(
+        self,
+        run_id: str,
+        attempt: int,
+        request_id: str,
+    ) -> GotaWorkerReviewBoundaryAnchor:
+        """Load and validate the durable Gota Worker-to-Review anchor."""
+
+        self._request_identity(run_id, attempt, request_id)
+        with closing(self._connect()) as connection:
+            run_row = connection.execute(
+                "SELECT task_id FROM task_runs WHERE run_id = ?", (run_id,)
+            ).fetchone()
+            if run_row is None:
+                raise KeyError(run_id)
+            anchor = self._load_gota_worker_review_boundary_anchor(
+                connection,
+                run_id=run_id,
+                attempt=attempt,
+                request_id=request_id,
+            )
+            commit_rows = connection.execute(
+                "SELECT * FROM evidence WHERE evidence_id = ?",
+                (anchor.commit_evidence_id,),
+            ).fetchall()
+            if len(commit_rows) != 1:
+                raise GotaWorkerReviewBoundaryError(
+                    "Gota Worker review boundary anchor points to missing evidence"
+                )
+            _evidence, payload = self._stored_worker_commit_verified(
+                commit_rows[0],
+                expected_run_id=run_id,
+                expected_task_id=run_row["task_id"],
+            )
+            if payload["attempt"] != attempt or payload["request_id"] != request_id:
+                raise GotaWorkerReviewBoundaryError(
+                    "Gota Worker review boundary evidence identity is incoherent"
+                )
+            self._validate_gota_worker_review_boundary_links(
+                connection,
+                anchor,
+                commit_evidence_row=commit_rows[0],
+                expected_fencing_token=None,
+                expected_actor=None,
+            )
+            return anchor
+
     def _persist_gota_worker_commit_verified_and_review(
         self,
         run_id: str,
@@ -1889,6 +2150,14 @@ class SQLiteCoordinatorStore:
                     raise GotaWorkerReviewBoundaryError(
                         "REVIEW requires exactly one Worker commit verification"
                     )
+                anchor_rows = connection.execute(
+                    "SELECT * FROM gota_worker_review_boundaries WHERE run_id = ? ORDER BY rowid",
+                    (run_id,),
+                ).fetchall()
+                if len(anchor_rows) != 1:
+                    raise GotaWorkerReviewBoundaryError(
+                        "REVIEW requires exactly one Gota Worker boundary anchor"
+                    )
                 persisted_evidence, persisted_payload = (
                     self._stored_worker_commit_verified(
                         commit_rows[0],
@@ -1903,26 +2172,50 @@ class SQLiteCoordinatorStore:
                     raise GotaWorkerReviewBoundaryError(
                         "Persisted Worker commit verification is incoherent"
                     )
-                event_rows = connection.execute(
-                    """
-                    SELECT * FROM transition_events
-                    WHERE run_id = ? AND from_state = ? AND to_state = ?
-                      AND reason = ?
-                    ORDER BY event_id
-                    """,
-                    (
-                        run_id,
-                        TaskState.RUNNING.value,
-                        TaskState.REVIEW.value,
-                        "gota_worker_commit_verified",
-                    ),
-                ).fetchall()
-                if len(event_rows) != 1 or int(event_rows[0]["fencing_token"]) != lease.fencing_token:
+                anchor = self._load_gota_worker_review_boundary_anchor(
+                    connection,
+                    run_id=run_id,
+                    attempt=attempt,
+                    request_id=request_id,
+                )
+                self._validate_gota_worker_review_boundary_links(
+                    connection,
+                    anchor,
+                    commit_evidence_row=commit_rows[0],
+                    expected_fencing_token=lease.fencing_token,
+                    expected_actor=lease.owner_id,
+                )
+                current_observation = verify(request, worker_result)
+                self._validate_worker_review_verification(
+                    current_observation,
+                    request=request,
+                    result=worker_result,
+                )
+                persisted_observation = {
+                    "base_sha": persisted_payload["base_sha"],
+                    "commit_sha": persisted_payload["commit_sha"],
+                    "changed_paths": tuple(persisted_payload["changed_paths"]),
+                    "branch": persisted_payload["branch"],
+                    "head": persisted_payload["head"],
+                    "status": persisted_payload["status"],
+                    "refs": tuple(tuple(ref) for ref in persisted_payload["refs"]),
+                }
+                if current_observation != persisted_observation:
                     raise GotaWorkerReviewBoundaryError(
-                        "REVIEW frontier does not have exactly one matching transition event"
+                        "Current Git verification conflicts with the persisted REVIEW frontier"
                     )
                 created = False
+                final_now = self._trusted_now()
+                self._assert_fenced_connection(connection, lease, final_now)
             else:
+                anchor_rows = connection.execute(
+                    "SELECT * FROM gota_worker_review_boundaries WHERE run_id = ?",
+                    (run_id,),
+                ).fetchall()
+                if anchor_rows:
+                    raise GotaWorkerReviewBoundaryError(
+                        "RUNNING contains an unexpected Gota Worker boundary anchor"
+                    )
                 if commit_rows:
                     if len(commit_rows) != 1:
                         raise GotaWorkerReviewBoundaryError(
@@ -1979,7 +2272,7 @@ class SQLiteCoordinatorStore:
                     raise GotaWorkerReviewBoundaryError(
                         "Gota Worker review entry requires a RUNNING task"
                     )
-                connection.execute(
+                event_cursor = connection.execute(
                     """
                     INSERT INTO transition_events(
                         run_id, from_state, to_state, actor, reason, fencing_token, created_at
@@ -1995,6 +2288,32 @@ class SQLiteCoordinatorStore:
                         isoformat(trusted_now),
                     ),
                 )
+                transition_event_id = event_cursor.lastrowid
+                if type(transition_event_id) is not int or transition_event_id < 1:
+                    raise GotaWorkerReviewBoundaryError(
+                        "Gota Worker review entry did not produce a transition event ID"
+                    )
+                if persisted_evidence is None:
+                    raise GotaWorkerReviewBoundaryError(
+                        "Gota Worker review entry did not produce an evidence authority"
+                    )
+                connection.execute(
+                    """
+                    INSERT INTO gota_worker_review_boundaries(
+                        run_id, attempt, request_id, commit_evidence_id,
+                        commit_evidence_digest, transition_event_id, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        run_id,
+                        attempt,
+                        request_id,
+                        persisted_evidence.evidence_id,
+                        persisted_evidence.digest,
+                        transition_event_id,
+                        isoformat(trusted_now),
+                    ),
+                )
                 final_observation = verify(request, worker_result)
                 self._validate_worker_review_verification(
                     final_observation,
@@ -2006,11 +2325,8 @@ class SQLiteCoordinatorStore:
                         "Git verification fingerprint changed before SQLite commit"
                     )
                 created = True
-
-            if persisted_evidence is None:
-                raise GotaWorkerReviewBoundaryError(
-                    "Gota Worker review entry did not produce an evidence authority"
-                )
+                final_now = self._trusted_now()
+                self._assert_fenced_connection(connection, lease, final_now)
 
         return GotaWorkerReviewPersistence(
             run=self.get_run(run_id),

@@ -152,6 +152,7 @@ class SQLiteStoreTest(CoordinatorTestCase):
                 "contexts",
                 "dependencies",
                 "transition_events",
+                "gota_worker_review_boundaries",
                 "evidence",
                 "checkpoints",
                 "resource_attempts",
@@ -161,6 +162,15 @@ class SQLiteStoreTest(CoordinatorTestCase):
             }.issubset(set(self.store.table_names()))
         )
         self.assertEqual(self.store.schema_version(), 1)
+
+    def test_gota_boundary_table_is_recreated_when_an_existing_store_reopens(self) -> None:
+        with self.store.transaction(immediate=True) as connection:
+            connection.execute("DROP TABLE gota_worker_review_boundaries")
+        reopened = SQLiteCoordinatorStore(self.database)
+        self.assertIn(
+            "gota_worker_review_boundaries",
+            reopened.table_names(),
+        )
 
     def test_state_persists_after_coordinator_restart(self) -> None:
         spec, run = self.create_task("persistent")

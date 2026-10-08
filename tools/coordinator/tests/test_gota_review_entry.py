@@ -21,7 +21,7 @@ from flow_coordinator import (
     GotaWorkerReviewBoundaryError,
     WorkerResultStatus,
 )
-from flow_coordinator.domain import TaskSpec, TaskState
+from flow_coordinator.domain import TaskSpec, TaskState, isoformat
 from flow_coordinator.git_adapter import GitSnapshot, ReadOnlyGitAdapter
 from flow_coordinator.service import CoordinatorService
 from flow_coordinator.store import (
@@ -75,6 +75,44 @@ class RefChangingReadOnlyGitAdapter(SpyReadOnlyGitAdapter):
                 ),
             )
         return snapshot
+
+
+class ReviewRefChangingReadOnlyGitAdapter(SpyReadOnlyGitAdapter):
+    def snapshot(self) -> GitSnapshot:
+        self.snapshot_count += 1
+        snapshot = ReadOnlyGitAdapter.snapshot(self)
+        return replace(
+            snapshot,
+            refs=tuple(
+                (*snapshot.refs, ("refs/tags/review-tamper", snapshot.head, ""))
+            ),
+        )
+
+
+class SequencedClockStore(SQLiteCoordinatorStore):
+    def __init__(self, path: str | Path, trusted_times: tuple[datetime, ...]) -> None:
+        self._trusted_times = iter(trusted_times)
+        self._last_trusted_time = trusted_times[-1]
+        super().__init__(path)
+
+    def _trusted_now(self) -> datetime:
+        try:
+            self._last_trusted_time = next(self._trusted_times)
+        except StopIteration:
+            pass
+        return self._last_trusted_time
+
+
+class FailsAfterAnchorStore(SQLiteCoordinatorStore):
+    def __init__(self, path: str | Path) -> None:
+        self.fence_checks = 0
+        super().__init__(path)
+
+    def _assert_fenced_connection(self, connection, lease, current_time) -> None:
+        super()._assert_fenced_connection(connection, lease, current_time)
+        self.fence_checks += 1
+        if self.fence_checks == 2:
+            raise GotaWorkerReviewBoundaryError("controlled after-anchor rollback")
 
 
 class ReviewEntryTest(unittest.TestCase):
@@ -222,6 +260,53 @@ class ReviewEntryTest(unittest.TestCase):
                 (_canonical_json(payload), digest, evidence_id),
             )
 
+    def _rewrite_anchor(self, field: str, value: object) -> None:
+        self.assertIn(
+            field,
+            {
+                "commit_evidence_id",
+                "commit_evidence_digest",
+                "transition_event_id",
+                "created_at",
+            },
+        )
+        with self.store.transaction(immediate=True) as connection:
+            connection.execute("DROP TRIGGER immutable_gota_worker_review_boundaries_update")
+            connection.execute(
+                f"UPDATE gota_worker_review_boundaries SET {field} = ? WHERE run_id = ?",
+                (value, self.run.run_id),
+            )
+
+    def _rewrite_event_created_at(self, event_id: int, value: datetime) -> None:
+        with self.store.transaction(immediate=True) as connection:
+            connection.execute("DROP TRIGGER immutable_transition_events_update")
+            connection.execute(
+                "UPDATE transition_events SET created_at = ? WHERE event_id = ?",
+                (isoformat(value), event_id),
+            )
+
+    def _rewrite_evidence_created_at(self, evidence_id: str, value: datetime) -> None:
+        with self.store.transaction(immediate=True) as connection:
+            connection.execute("DROP TRIGGER immutable_evidence_update")
+            connection.execute(
+                "UPDATE evidence SET created_at = ? WHERE evidence_id = ?",
+                (isoformat(value), evidence_id),
+            )
+
+    def _rewrite_evidence_id_without_foreign_keys(
+        self, evidence_id: str, replacement: str
+    ) -> None:
+        connection = sqlite3.connect(self.database)
+        try:
+            connection.execute("DROP TRIGGER immutable_evidence_update")
+            connection.execute(
+                "UPDATE evidence SET evidence_id = ? WHERE evidence_id = ?",
+                (replacement, evidence_id),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
     def test_happy_path_is_atomic_and_auditable(self) -> None:
         _request, result, commit_sha = self._durable_worker()
         entered = self._boundary().run(
@@ -269,6 +354,23 @@ class ReviewEntryTest(unittest.TestCase):
         self.assertEqual(events[-1].from_state, TaskState.RUNNING)
         self.assertEqual(events[-1].to_state, TaskState.REVIEW)
         self.assertEqual(events[-1].reason, "gota_worker_commit_verified")
+        anchor = self.store.load_gota_worker_review_boundary(
+            self.run.run_id, result.attempt, result.request_id
+        )
+        self.assertEqual(anchor.run_id, self.run.run_id)
+        self.assertEqual(anchor.attempt, result.attempt)
+        self.assertEqual(anchor.request_id, result.request_id)
+        self.assertEqual(anchor.commit_evidence_id, commit_evidence.evidence_id)
+        self.assertEqual(anchor.commit_evidence_digest, commit_evidence.digest)
+        self.assertEqual(anchor.transition_event_id, events[-1].event_id)
+        self.assertEqual(anchor.created_at, commit_evidence.created_at)
+        self.assertEqual(anchor.created_at, events[-1].created_at)
+
+        reopened = SQLiteCoordinatorStore(self.database)
+        reopened_anchor = reopened.load_gota_worker_review_boundary(
+            self.run.run_id, result.attempt, result.request_id
+        )
+        self.assertEqual(reopened_anchor, anchor)
 
     def test_missing_request_reservation_or_result_fails_closed(self) -> None:
         commit_sha = self._commit_worker()
@@ -437,6 +539,410 @@ class ReviewEntryTest(unittest.TestCase):
             ],
         )
         self.assertEqual(self.store.list_events(self.run.run_id)[-1].to_state, TaskState.RUNNING)
+        with self.store._connect() as connection:
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM gota_worker_review_boundaries WHERE run_id = ?",
+                    (self.run.run_id,),
+                ).fetchone()[0],
+                0,
+            )
+
+    def test_failure_after_anchor_rolls_back_everything(self) -> None:
+        request, result, _sha = self._durable_worker()
+        failing_store = FailsAfterAnchorStore(self.database)
+        with self.assertRaisesRegex(
+            GotaWorkerReviewBoundaryError, "controlled after-anchor rollback"
+        ):
+            GotaWorkerReviewBoundary(
+                self.repository, store=failing_store
+            ).run(
+                self.run.run_id,
+                self.lease,
+                attempt=result.attempt,
+                request_id=request.request_id,
+            )
+        self.assertEqual(failing_store.fence_checks, 2)
+        self.assertEqual(failing_store.get_run(self.run.run_id).state, TaskState.RUNNING)
+        self.assertIsNone(
+            failing_store.load_gota_worker_commit_verified(
+                self.run.run_id, result.attempt, request.request_id
+            )
+        )
+        with failing_store._connect() as connection:
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM gota_worker_review_boundaries WHERE run_id = ?",
+                    (self.run.run_id,),
+                ).fetchone()[0],
+                0,
+            )
+        self.assertEqual(
+            self.store.list_events(self.run.run_id)[-1].to_state,
+            TaskState.RUNNING,
+        )
+
+    def test_failure_before_anchor_rolls_back_evidence_and_event(self) -> None:
+        request, result, _sha = self._durable_worker()
+        with self.store.transaction(immediate=True) as connection:
+            connection.execute(
+                """
+                CREATE TRIGGER reject_review_boundary_anchor
+                BEFORE INSERT ON gota_worker_review_boundaries
+                BEGIN
+                    SELECT RAISE(ABORT, 'controlled anchor rollback');
+                END
+                """
+            )
+        try:
+            with self.assertRaisesRegex(sqlite3.IntegrityError, "controlled anchor rollback"):
+                self._boundary().run(
+                    self.run.run_id,
+                    self.lease,
+                    attempt=result.attempt,
+                    request_id=request.request_id,
+                )
+        finally:
+            with self.store.transaction(immediate=True) as connection:
+                connection.execute("DROP TRIGGER reject_review_boundary_anchor")
+        self.assertEqual(self.store.get_run(self.run.run_id).state, TaskState.RUNNING)
+        self.assertIsNone(
+            self.store.load_gota_worker_commit_verified(
+                self.run.run_id, result.attempt, request.request_id
+            )
+        )
+        with self.store._connect() as connection:
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM gota_worker_review_boundaries WHERE run_id = ?",
+                    (self.run.run_id,),
+                ).fetchone()[0],
+                0,
+            )
+        self.assertEqual(self.store.list_events(self.run.run_id)[-1].to_state, TaskState.RUNNING)
+
+    def test_lease_expiry_during_final_verification_rolls_back(self) -> None:
+        request, result, _sha = self._durable_worker()
+        initial = datetime.now(UTC)
+        final = initial + timedelta(seconds=2)
+        with self.store.transaction(immediate=True) as connection:
+            connection.execute(
+                "UPDATE global_lock SET lease_expires_at = ? WHERE lock_name = 'global'",
+                (isoformat(initial + timedelta(seconds=1)),),
+            )
+        clocked_store = SequencedClockStore(self.database, (initial, final))
+        with self.assertRaises(LeaseExpiredError):
+            GotaWorkerReviewBoundary(
+                self.repository, store=clocked_store
+            ).run(
+                self.run.run_id,
+                self.lease,
+                attempt=result.attempt,
+                request_id=request.request_id,
+            )
+        self.assertEqual(clocked_store.get_run(self.run.run_id).state, TaskState.RUNNING)
+        self.assertIsNone(
+            clocked_store.load_gota_worker_commit_verified(
+                self.run.run_id, result.attempt, request.request_id
+            )
+        )
+        with clocked_store._connect() as connection:
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM gota_worker_review_boundaries WHERE run_id = ?",
+                    (self.run.run_id,),
+                ).fetchone()[0],
+                0,
+            )
+
+    def test_anchor_evidence_id_tampering_fails_closed(self) -> None:
+        request, result, _sha = self._durable_worker()
+        self._boundary().run(
+            self.run.run_id, self.lease, attempt=result.attempt, request_id=request.request_id
+        )
+        reservation = self.store.load_gota_worker_invocation(
+            self.run.run_id, result.attempt, request.request_id
+        )
+        assert reservation is not None
+        self._rewrite_anchor("commit_evidence_id", reservation.request_evidence.evidence_id)
+        with self.assertRaises(GotaWorkerReviewBoundaryError):
+            self._boundary().run(
+                self.run.run_id,
+                self.lease,
+                attempt=result.attempt,
+                request_id=request.request_id,
+            )
+
+    def test_anchor_digest_tampering_fails_closed(self) -> None:
+        request, result, _sha = self._durable_worker()
+        self._boundary().run(
+            self.run.run_id, self.lease, attempt=result.attempt, request_id=request.request_id
+        )
+        self._rewrite_anchor("commit_evidence_digest", "0" * 64)
+        with self.assertRaises(GotaWorkerReviewBoundaryError):
+            self._boundary().run(
+                self.run.run_id,
+                self.lease,
+                attempt=result.attempt,
+                request_id=request.request_id,
+            )
+
+    def test_anchor_transition_event_id_tampering_fails_closed(self) -> None:
+        request, result, _sha = self._durable_worker()
+        self._boundary().run(
+            self.run.run_id, self.lease, attempt=result.attempt, request_id=request.request_id
+        )
+        event_id = self.store.list_events(self.run.run_id)[0].event_id
+        self._rewrite_anchor("transition_event_id", event_id)
+        with self.assertRaises(GotaWorkerReviewBoundaryError):
+            self._boundary().run(
+                self.run.run_id,
+                self.lease,
+                attempt=result.attempt,
+                request_id=request.request_id,
+            )
+
+    def test_anchor_and_authority_timestamps_must_match(self) -> None:
+        request, result, _sha = self._durable_worker()
+        self._boundary().run(
+            self.run.run_id, self.lease, attempt=result.attempt, request_id=request.request_id
+        )
+        evidence = self.store.load_gota_worker_commit_verified(
+            self.run.run_id, result.attempt, request.request_id
+        )
+        assert evidence is not None
+        event_id = self.store.list_events(self.run.run_id)[-1].event_id
+        self._rewrite_anchor("created_at", isoformat(evidence.created_at + timedelta(seconds=1)))
+        with self.assertRaises(GotaWorkerReviewBoundaryError):
+            self._boundary().run(
+                self.run.run_id,
+                self.lease,
+                attempt=result.attempt,
+                request_id=request.request_id,
+            )
+
+        self.setUp()
+        request, result, _sha = self._durable_worker()
+        self._boundary().run(
+            self.run.run_id, self.lease, attempt=result.attempt, request_id=request.request_id
+        )
+        evidence = self.store.load_gota_worker_commit_verified(
+            self.run.run_id, result.attempt, request.request_id
+        )
+        assert evidence is not None
+        self._rewrite_evidence_created_at(
+            evidence.evidence_id, evidence.created_at + timedelta(seconds=1)
+        )
+        with self.assertRaises(GotaWorkerReviewBoundaryError):
+            self._boundary().run(
+                self.run.run_id,
+                self.lease,
+                attempt=result.attempt,
+                request_id=request.request_id,
+            )
+
+        self.setUp()
+        request, result, _sha = self._durable_worker()
+        self._boundary().run(
+            self.run.run_id, self.lease, attempt=result.attempt, request_id=request.request_id
+        )
+        event_id = self.store.list_events(self.run.run_id)[-1].event_id
+        self._rewrite_event_created_at(event_id, datetime.now(UTC) + timedelta(seconds=1))
+        with self.assertRaises(GotaWorkerReviewBoundaryError):
+            self._boundary().run(
+                self.run.run_id,
+                self.lease,
+                attempt=result.attempt,
+                request_id=request.request_id,
+            )
+
+    def test_evidence_id_tampering_fails_closed(self) -> None:
+        request, result, _sha = self._durable_worker()
+        self._boundary().run(
+            self.run.run_id, self.lease, attempt=result.attempt, request_id=request.request_id
+        )
+        evidence = self.store.load_gota_worker_commit_verified(
+            self.run.run_id, result.attempt, request.request_id
+        )
+        assert evidence is not None
+        self._rewrite_evidence_id_without_foreign_keys(
+            evidence.evidence_id, f"tampered-{evidence.evidence_id}"
+        )
+        with self.assertRaises(GotaWorkerReviewBoundaryError):
+            self._boundary().run(
+                self.run.run_id,
+                self.lease,
+                attempt=result.attempt,
+                request_id=request.request_id,
+            )
+
+    def test_recalculated_digest_cannot_bypass_review_authority(self) -> None:
+        request, result, _sha = self._durable_worker()
+        self._boundary().run(
+            self.run.run_id, self.lease, attempt=result.attempt, request_id=request.request_id
+        )
+        evidence = self.store.load_gota_worker_commit_verified(
+            self.run.run_id, result.attempt, request.request_id
+        )
+        assert evidence is not None
+        tampered = dict(evidence.payload)
+        refs = list(tampered["refs"])
+        refs.append(["refs/tags/recalculated-tamper", tampered["commit_sha"], ""])
+        tampered["refs"] = sorted(refs)
+        self._rewrite_evidence(evidence.evidence_id, tampered, _digest(tampered))
+        with self.assertRaises(GotaWorkerReviewBoundaryError):
+            self._boundary().run(
+                self.run.run_id,
+                self.lease,
+                attempt=result.attempt,
+                request_id=request.request_id,
+            )
+
+    def test_recalculated_payload_variants_fail_closed(self) -> None:
+        variants = (
+            ("head", "b" * 40),
+            ("status", " M src/change.py"),
+            ("changed_paths", ["other.py"]),
+            ("branch", "tampered-branch"),
+            ("base_sha", "c" * 40),
+        )
+        for field, value in variants:
+            with self.subTest(field=field):
+                case = ReviewEntryTest("test_happy_path_is_atomic_and_auditable")
+                case.setUp()
+                try:
+                    request, result, _sha = case._durable_worker()
+                    case._boundary().run(
+                        case.run.run_id,
+                        case.lease,
+                        attempt=result.attempt,
+                        request_id=request.request_id,
+                    )
+                    evidence = case.store.load_gota_worker_commit_verified(
+                        case.run.run_id, result.attempt, request.request_id
+                    )
+                    assert evidence is not None
+                    tampered = dict(evidence.payload)
+                    tampered[field] = value
+                    case._rewrite_evidence(
+                        evidence.evidence_id, tampered, _digest(tampered)
+                    )
+                    with case.assertRaises(GotaWorkerReviewBoundaryError):
+                        case._boundary().run(
+                            case.run.run_id,
+                            case.lease,
+                            attempt=result.attempt,
+                            request_id=request.request_id,
+                        )
+                finally:
+                    case.doCleanups()
+
+    def test_review_git_refs_head_branch_and_dirty_state_fail_closed(self) -> None:
+        mutations = (
+            ("refs", lambda case: case._git("tag", "review-mutated-ref")),
+            (
+                "head",
+                lambda case: case._git("checkout", "--detach", case.base_sha),
+            ),
+            (
+                "branch",
+                lambda case: case._git("checkout", "-b", "review-mutated-branch"),
+            ),
+            (
+                "status",
+                lambda case: (case.repository / "dirty.txt").write_text(
+                    "dirty\n", encoding="utf-8"
+                ),
+            ),
+        )
+        for field, mutate in mutations:
+            with self.subTest(field=field):
+                case = ReviewEntryTest("test_happy_path_is_atomic_and_auditable")
+                case.setUp()
+                try:
+                    request, result, _sha = case._durable_worker()
+                    case._boundary().run(
+                        case.run.run_id,
+                        case.lease,
+                        attempt=result.attempt,
+                        request_id=request.request_id,
+                    )
+                    evidence_before = case.store.list_evidence(case.run.run_id)
+                    events_before = case.store.list_events(case.run.run_id)
+                    mutate(case)
+                    with case.assertRaises(GotaWorkerReviewBoundaryError):
+                        case._boundary().run(
+                            case.run.run_id,
+                            case.lease,
+                            attempt=result.attempt,
+                            request_id=request.request_id,
+                        )
+                    case.assertEqual(case.store.list_evidence(case.run.run_id), evidence_before)
+                    case.assertEqual(case.store.list_events(case.run.run_id), events_before)
+                finally:
+                    case.doCleanups()
+
+    def test_review_revalidates_git_without_mutating_authorities(self) -> None:
+        request, result, _sha = self._durable_worker()
+        self._boundary().run(
+            self.run.run_id, self.lease, attempt=result.attempt, request_id=request.request_id
+        )
+        evidence_before = self.store.list_evidence(self.run.run_id)
+        events_before = self.store.list_events(self.run.run_id)
+        anchor_before = self.store.load_gota_worker_review_boundary(
+            self.run.run_id, result.attempt, request.request_id
+        )
+        with self.assertRaises(GotaWorkerReviewBoundaryError):
+            self._boundary(git=ReviewRefChangingReadOnlyGitAdapter(self.repository)).run(
+                self.run.run_id,
+                self.lease,
+                attempt=result.attempt,
+                request_id=request.request_id,
+            )
+        self.assertEqual(self.store.list_evidence(self.run.run_id), evidence_before)
+        self.assertEqual(self.store.list_events(self.run.run_id), events_before)
+        self.assertEqual(
+            self.store.load_gota_worker_review_boundary(
+                self.run.run_id, result.attempt, request.request_id
+            ),
+            anchor_before,
+        )
+
+    def test_worker_authority_links_are_revalidated_against_real_evidence(self) -> None:
+        for field in (
+            "request_evidence_id",
+            "invocation_evidence_id",
+            "result_evidence_id",
+        ):
+            with self.subTest(field=field):
+                case = ReviewEntryTest("test_happy_path_is_atomic_and_auditable")
+                case.setUp()
+                try:
+                    request, result, _sha = case._durable_worker()
+                    case._boundary().run(
+                        case.run.run_id,
+                        case.lease,
+                        attempt=result.attempt,
+                        request_id=request.request_id,
+                    )
+                    evidence = case.store.load_gota_worker_commit_verified(
+                        case.run.run_id, result.attempt, request.request_id
+                    )
+                    assert evidence is not None
+                    tampered = dict(evidence.payload)
+                    tampered[field] = "unrelated-evidence-id"
+                    case._rewrite_evidence(
+                        evidence.evidence_id, tampered, _digest(tampered)
+                    )
+                    with case.assertRaises(GotaWorkerReviewBoundaryError):
+                        case._boundary().run(
+                            case.run.run_id,
+                            case.lease,
+                            attempt=result.attempt,
+                            request_id=request.request_id,
+                        )
+                finally:
+                    case.doCleanups()
 
     def test_idempotence_restart_and_zero_worker_calls(self) -> None:
         request, result, _sha = self._durable_worker()
@@ -450,6 +956,9 @@ class ReviewEntryTest(unittest.TestCase):
         )
         evidence_before = self.store.list_evidence(self.run.run_id)
         events_before = self.store.list_events(self.run.run_id)
+        anchor_before = self.store.load_gota_worker_review_boundary(
+            self.run.run_id, result.attempt, request.request_id
+        )
         snapshots_before = adapter.snapshot_count
 
         reopened = SQLiteCoordinatorStore(self.database)
@@ -463,7 +972,13 @@ class ReviewEntryTest(unittest.TestCase):
         self.assertTrue(second.already_completed)
         self.assertEqual(reopened.list_evidence(self.run.run_id), evidence_before)
         self.assertEqual(reopened.list_events(self.run.run_id), events_before)
-        self.assertEqual(adapter.snapshot_count, snapshots_before)
+        self.assertEqual(
+            reopened.load_gota_worker_review_boundary(
+                self.run.run_id, result.attempt, request.request_id
+            ),
+            anchor_before,
+        )
+        self.assertGreater(adapter.snapshot_count, snapshots_before)
 
     def test_tampered_review_evidence_and_partial_states_fail_closed(self) -> None:
         request, result, _sha = self._durable_worker()

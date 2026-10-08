@@ -176,14 +176,27 @@ class GotaWorkerReviewBoundary:
             ) from error
         return self._observation(request, result, verification)
 
-    @staticmethod
-    def _review_already_completed_verifier(
-        _request: GotaRequest,
-        _result: GotaWorkerResult,
-    ) -> Mapping[str, Any]:
-        raise GotaWorkerReviewBoundaryError(
-            "An intact REVIEW frontier must not perform a new Git verification"
-        )
+    def _review_expected_snapshot(self, evidence: Evidence) -> GitSnapshot:
+        """Rebuild the persisted Git fingerprint used for REVIEW revalidation."""
+
+        payload = evidence.payload
+        try:
+            refs = payload["refs"]
+            if type(refs) is not list or any(
+                type(ref) is not list or len(ref) != 3 for ref in refs
+            ):
+                raise ValueError("Persisted REVIEW refs are not canonical")
+            return GitSnapshot(
+                repository=str(self.repository),
+                head=payload["head"],
+                branch=payload["branch"],
+                status=payload["status"],
+                refs=tuple(tuple(ref) for ref in refs),
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise self._authority_error(
+                "Persisted REVIEW Git fingerprint is malformed"
+            ) from error
 
     def run(
         self,
@@ -204,12 +217,25 @@ class GotaWorkerReviewBoundary:
                 raise self._authority_error(
                     "REVIEW requires one coherent Worker commit verification"
                 )
+
+            expected_snapshot = self._review_expected_snapshot(existing)
+
+            def verify_review(
+                durable_request: GotaRequest,
+                durable_result: GotaWorkerResult,
+            ) -> Mapping[str, Any]:
+                return self._verify(
+                    durable_request,
+                    durable_result,
+                    expected_snapshot,
+                )
+
             persistence = self.store._persist_gota_worker_commit_verified_and_review(
                 run_id,
                 attempt,
                 request_id,
                 lease,
-                verify=self._review_already_completed_verifier,
+                verify=verify_review,
             )
             return self._result(persistence)
         if run.state is not TaskState.RUNNING:

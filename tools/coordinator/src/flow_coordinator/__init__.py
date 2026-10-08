@@ -20,6 +20,7 @@ from .store import (
     GotaWorkerInvocationReservation,
     GotaWorkerReservationError,
     GotaWorkerResultError,
+    GotaWorkerReviewBoundaryAnchor,
     GotaWorkerReviewBoundaryError,
     SQLiteCoordinatorStore,
 )
@@ -93,6 +94,7 @@ __all__ = [
     "GotaWorkerInvocationReservation",
     "GotaWorkerReservationError",
     "GotaWorkerResultError",
+    "GotaWorkerReviewBoundaryAnchor",
     "GotaWorkerReviewBoundaryError",
     "GotaWorkerPersistenceBoundary",
     "GotaWorkerRecoveryRequiredError",
