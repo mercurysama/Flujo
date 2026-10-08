@@ -17,12 +17,22 @@ from .domain import Evidence, Lease, TaskRun, TaskState
 from .git_adapter import GitReadError, GitSnapshot, ReadOnlyGitAdapter
 from .gota_phases import (
     GotaCycleRunner,
+    ReviewPhase,
+    ReviewPhaseResult,
+    VerifiedWorkerCommit,
     WorkerPhase,
     WorkerPhaseResult,
     verify_worker_commit_git,
 )
-from .gota_protocol import GotaRequest, GotaWorkerResult, WorkerResultStatus
+from .gota_protocol import (
+    GotaRequest,
+    GotaReviewResult,
+    GotaWorkerResult,
+    WorkerResultStatus,
+)
+from .opencode_runner import OpenCodeRunResult, OpenCodeRunStatus
 from .store import (
+    GotaReviewResultError,
     GotaWorkerResultError,
     GotaWorkerReservationError,
     GotaWorkerReviewBoundaryError,
@@ -281,6 +291,161 @@ class GotaWorkerReviewBoundary:
         )
 
 
+class GotaReviewerPersistenceBoundary:
+    """Run and durably anchor one read-only Reviewer result in REVIEW."""
+
+    def __init__(
+        self,
+        repository: str | Path,
+        *,
+        runner: GotaCycleRunner,
+        store: SQLiteCoordinatorStore,
+        git: ReadOnlyGitAdapter | None = None,
+    ) -> None:
+        self.repository = Path(repository)
+        self.store = store
+        self.worker_review_boundary = GotaWorkerReviewBoundary(
+            self.repository,
+            store=store,
+            git=git,
+        )
+        self.review_phase = ReviewPhase(runner=runner)
+
+    @staticmethod
+    def _durable_handoff(
+        repository: Path,
+        request: GotaRequest,
+        worker_result: GotaWorkerResult,
+        commit_evidence: Evidence,
+    ) -> VerifiedWorkerCommit:
+        """Adapt only durable Worker authorities to ReviewPhase's handoff API."""
+
+        payload = commit_evidence.payload
+        try:
+            refs = payload["refs"]
+            snapshot = GitSnapshot(
+                repository=str(repository),
+                head=payload["head"],
+                branch=payload["branch"],
+                status=payload["status"],
+                refs=tuple(tuple(ref) for ref in refs),
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise GotaReviewResultError(
+                "Durable Worker commit evidence cannot build a ReviewPhase handoff"
+            ) from error
+        execution = OpenCodeRunResult(
+            status=OpenCodeRunStatus.SUCCEEDED,
+            argv=(),
+            cwd=str(repository),
+            stdout="",
+            stderr="",
+            exit_code=0,
+            timed_out=False,
+            payload=worker_result,
+        )
+        return VerifiedWorkerCommit(
+            request=request,
+            repository=repository,
+            base_sha=request.base_sha,
+            branch=request.branch,
+            verified_commit_sha=worker_result.commit_sha,
+            verified_changed_paths=tuple(sorted(worker_result.changed_paths)),
+            worker_execution=execution,
+            worker_payload=worker_result,
+            worker_snapshot=snapshot,
+        )
+
+    def run(
+        self,
+        run_id: str,
+        lease: Lease,
+        *,
+        attempt: int,
+        request_id: str,
+        timeout: float,
+    ) -> ReviewPhaseResult | GotaReviewResult:
+        """Revalidate REVIEW, run Reviewer only when no result is durable."""
+
+        run = self.store.get_run(run_id)
+        if run.state is not TaskState.REVIEW:
+            raise GotaWorkerReviewBoundaryError(
+                "Gota Reviewer persistence requires a REVIEW task"
+            )
+
+        worker_request_id = request_id
+        frontier = self.worker_review_boundary.run(
+            run_id,
+            lease,
+            attempt=attempt,
+            request_id=worker_request_id,
+        )
+        if frontier.state is not TaskState.REVIEW:
+            raise GotaWorkerReviewBoundaryError(
+                "Worker-to-Review frontier did not remain in REVIEW"
+            )
+
+        review_request_id = f"{run_id}:{attempt}:review"
+        durable = self.store.load_gota_review_result(
+            run_id,
+            attempt,
+            review_request_id,
+        )
+        if durable is not None:
+            return durable
+
+        request = self.store.load_gota_worker_request(
+            run_id,
+            attempt,
+            worker_request_id,
+        )
+        worker_result = self.store.load_gota_worker_result(
+            run_id,
+            attempt,
+            worker_request_id,
+        )
+        commit_evidence = self.store.load_gota_worker_commit_verified(
+            run_id,
+            attempt,
+            worker_request_id,
+        )
+        if request is None or worker_result is None or commit_evidence is None:
+            raise GotaWorkerReviewBoundaryError(
+                "An intact Worker-to-Review frontier is required before Reviewer"
+            )
+        if (
+            worker_result.commit_sha != frontier.commit_sha
+            or commit_evidence.payload.get("commit_sha") != worker_result.commit_sha
+        ):
+            raise GotaWorkerReviewBoundaryError(
+                "Reviewer SHA authority does not match the durable WorkerResult"
+            )
+
+        handoff = self._durable_handoff(
+            self.worker_review_boundary.repository,
+            request,
+            worker_result,
+            commit_evidence,
+        )
+        phase_result = self.review_phase.run(handoff, timeout=timeout)
+        if not phase_result.valid:
+            return phase_result
+        review_result = phase_result.review_result
+        if type(review_result) is not GotaReviewResult:
+            raise GotaReviewResultError(
+                "A successful ReviewPhase result has no canonical ReviewResult"
+            )
+
+        self.worker_review_boundary.run(
+            run_id,
+            lease,
+            attempt=attempt,
+            request_id=worker_request_id,
+        )
+        self.store.persist_gota_review_result(run_id, review_result, lease)
+        return phase_result
+
+
 class GotaWorkerPersistenceBoundary:
     """Run WorkerPhase and persist its result before returning success."""
 
@@ -338,6 +503,7 @@ class GotaWorkerPersistenceBoundary:
 
 
 __all__ = [
+    "GotaReviewerPersistenceBoundary",
     "GotaWorkerReviewBoundary",
     "GotaWorkerReviewBoundaryResult",
     "GotaWorkerPersistenceBoundary",

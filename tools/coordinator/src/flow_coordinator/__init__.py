@@ -17,6 +17,8 @@ from .domain import (
 from .service import CoordinatorService
 from .git_transaction import GitAcceptanceWorkflow, TransactionalGitAdapter
 from .store import (
+    GotaReviewResultAnchor,
+    GotaReviewResultError,
     GotaWorkerInvocationReservation,
     GotaWorkerReservationError,
     GotaWorkerResultError,
@@ -25,6 +27,7 @@ from .store import (
     SQLiteCoordinatorStore,
 )
 from .gota_persistence import (
+    GotaReviewerPersistenceBoundary,
     GotaWorkerPersistenceBoundary,
     GotaWorkerRecoveryRequiredError,
     GotaWorkerReviewBoundary,
@@ -91,6 +94,8 @@ __all__ = [
     "ProjectBinding",
     "ResourceState",
     "SQLiteCoordinatorStore",
+    "GotaReviewResultAnchor",
+    "GotaReviewResultError",
     "GotaWorkerInvocationReservation",
     "GotaWorkerReservationError",
     "GotaWorkerResultError",
@@ -100,6 +105,7 @@ __all__ = [
     "GotaWorkerRecoveryRequiredError",
     "GotaWorkerReviewBoundary",
     "GotaWorkerReviewBoundaryResult",
+    "GotaReviewerPersistenceBoundary",
     "TaskRun",
     "TaskSpec",
     "TaskState",

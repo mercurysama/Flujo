@@ -72,6 +72,10 @@ class GotaWorkerResultError(CoordinatorStoreError):
     """Fail-closed error for the durable WorkerResult authority boundary."""
 
 
+class GotaReviewResultError(CoordinatorStoreError):
+    """Fail-closed error for the durable ReviewResult authority boundary."""
+
+
 class GotaWorkerReservationError(GotaWorkerResultError):
     """Fail-closed error for the durable pre-Worker reservation boundary."""
 
@@ -87,6 +91,7 @@ _RESERVED_EVIDENCE_KINDS = frozenset(
         "gota_worker_request_registered",
         "gota_worker_invocation_started",
         "gota_worker_commit_verified",
+        "gota_review_result",
     }
 )
 
@@ -128,6 +133,19 @@ class GotaWorkerReviewBoundaryAnchor:
     commit_evidence_id: str
     commit_evidence_digest: str
     transition_event_id: int
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class GotaReviewResultAnchor:
+    """Durable Gota-only authority for one persisted ReviewResult."""
+
+    run_id: str
+    attempt: int
+    request_id: str
+    review_evidence_id: str
+    review_evidence_digest: str
+    worker_commit_evidence_id: str
     created_at: datetime
 
 
@@ -239,6 +257,17 @@ class SQLiteCoordinatorStore:
                     PRIMARY KEY (run_id, attempt, request_id)
                 );
 
+                CREATE TABLE IF NOT EXISTS gota_review_results (
+                    run_id TEXT NOT NULL REFERENCES task_runs(run_id),
+                    attempt INTEGER NOT NULL CHECK (attempt > 0),
+                    request_id TEXT NOT NULL,
+                    review_evidence_id TEXT NOT NULL UNIQUE REFERENCES evidence(evidence_id),
+                    review_evidence_digest TEXT NOT NULL,
+                    worker_commit_evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (run_id, attempt, request_id)
+                );
+
                 CREATE TABLE IF NOT EXISTS evidence (
                     evidence_id TEXT PRIMARY KEY,
                     run_id TEXT NOT NULL REFERENCES task_runs(run_id),
@@ -304,6 +333,7 @@ class SQLiteCoordinatorStore:
                 "evidence",
                 "checkpoints",
                 "gota_worker_review_boundaries",
+                "gota_review_results",
             ):
                 connection.execute(
                     f"""
@@ -930,6 +960,41 @@ class SQLiteCoordinatorStore:
         return parsed, canonical_payload
 
     @staticmethod
+    def _canonical_review_result(
+        result: GotaReviewResult,
+    ) -> tuple[GotaReviewResult, dict[str, Any]]:
+        """Revalidate one in-memory ReviewResult through the protocol parser."""
+
+        if type(result) is not GotaReviewResult:
+            raise GotaReviewResultError(
+                "Gota Review result must be the canonical GotaReviewResult type"
+            )
+        try:
+            payload = result.to_payload()
+            parsed = parse_gota_payload(payload)
+        except Exception as error:
+            raise GotaReviewResultError(
+                "Gota Review result does not satisfy the canonical protocol"
+            ) from error
+        if type(parsed) is not GotaReviewResult:
+            raise GotaReviewResultError(
+                "Gota Review result payload has the wrong protocol message type"
+            )
+        canonical_payload = parsed.to_payload()
+        try:
+            if _canonical_json(canonical_payload) != _canonical_json(payload):
+                raise GotaReviewResultError(
+                    "Gota Review result payload is not canonical"
+                )
+        except GotaReviewResultError:
+            raise
+        except Exception as error:
+            raise GotaReviewResultError(
+                "Gota Review result payload is not JSON-serializable"
+            ) from error
+        return parsed, canonical_payload
+
+    @staticmethod
     def _stored_worker_result(
         row: sqlite3.Row,
         *,
@@ -977,6 +1042,60 @@ class SQLiteCoordinatorStore:
         if parsed.task_id != expected_task_id:
             raise GotaWorkerResultError(
                 "Stored Gota Worker result task identity is incoherent"
+            )
+        return parsed, canonical_payload
+
+    @staticmethod
+    def _stored_review_result(
+        row: sqlite3.Row,
+        *,
+        expected_run_id: str,
+        expected_task_id: str,
+    ) -> tuple[GotaReviewResult, dict[str, Any]]:
+        """Verify ledger integrity and parse one stored ReviewResult."""
+
+        try:
+            created_at_value = row["created_at"]
+            created_at = parse_datetime(created_at_value)
+            payload = json.loads(row["payload_json"])
+            if type(payload) is not dict:
+                raise GotaReviewResultError(
+                    "Stored Gota Review result payload is not an object"
+                )
+            if _digest(payload) != row["digest"]:
+                raise GotaReviewResultError(
+                    "Stored Gota Review result failed its digest check"
+                )
+            parsed = parse_gota_payload(payload)
+            if type(parsed) is not GotaReviewResult:
+                raise GotaReviewResultError(
+                    "Stored Gota evidence is not a ReviewResult"
+                )
+            canonical_payload = parsed.to_payload()
+            if _canonical_json(canonical_payload) != row["payload_json"]:
+                raise GotaReviewResultError(
+                    "Stored Gota Review result is not canonical"
+                )
+            if (
+                type(row["created_at"]) is not str
+                or isoformat(created_at) != created_at_value
+            ):
+                raise GotaReviewResultError(
+                    "Stored Gota Review result timestamp is not canonical"
+                )
+        except GotaReviewResultError:
+            raise
+        except Exception as error:
+            raise GotaReviewResultError(
+                "Stored Gota Review result is invalid"
+            ) from error
+        if parsed.run_id != expected_run_id:
+            raise GotaReviewResultError(
+                "Stored Gota Review result run identity is incoherent"
+            )
+        if parsed.task_id != expected_task_id:
+            raise GotaReviewResultError(
+                "Stored Gota Review result task identity is incoherent"
             )
         return parsed, canonical_payload
 
@@ -1236,6 +1355,26 @@ class SQLiteCoordinatorStore:
         if type(request_id) is not str or request_id != f"{run_id}:{attempt}:worker":
             raise GotaWorkerReservationError(
                 "Gota Worker request identity is not canonical"
+            )
+        return run_id, attempt, request_id
+
+    @staticmethod
+    def _review_request_identity(
+        run_id: str,
+        attempt: int,
+        request_id: str,
+    ) -> tuple[str, int, str]:
+        if type(run_id) is not str or not run_id.strip():
+            raise GotaReviewResultError(
+                "Gota run identity must be a non-empty string"
+            )
+        if type(attempt) is not int or attempt < 1:
+            raise GotaReviewResultError(
+                "Gota attempt must be a positive integer"
+            )
+        if type(request_id) is not str or request_id != f"{run_id}:{attempt}:review":
+            raise GotaReviewResultError(
+                "Gota Review request identity is not canonical"
             )
         return run_id, attempt, request_id
 
@@ -2012,6 +2151,602 @@ class SQLiteCoordinatorStore:
                 expected_actor=None,
             )
             return anchor
+
+    @staticmethod
+    def _stored_gota_review_result_anchor(
+        row: sqlite3.Row,
+        *,
+        expected_run_id: str,
+        expected_attempt: int,
+        expected_request_id: str,
+    ) -> GotaReviewResultAnchor:
+        """Validate the canonical fields of one ReviewResult anchor."""
+
+        try:
+            created_at_value = row["created_at"]
+            created_at = parse_datetime(created_at_value)
+            if (
+                type(row["run_id"]) is not str
+                or row["run_id"] != expected_run_id
+                or type(row["attempt"]) is not int
+                or row["attempt"] != expected_attempt
+                or type(row["request_id"]) is not str
+                or row["request_id"] != expected_request_id
+                or type(row["review_evidence_id"]) is not str
+                or not row["review_evidence_id"]
+                or type(row["review_evidence_digest"]) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", row["review_evidence_digest"])
+                is None
+                or type(row["worker_commit_evidence_id"]) is not str
+                or not row["worker_commit_evidence_id"]
+                or type(created_at_value) is not str
+                or isoformat(created_at) != created_at_value
+            ):
+                raise GotaReviewResultError(
+                    "Gota Review result anchor has non-canonical values"
+                )
+        except GotaReviewResultError:
+            raise
+        except (TypeError, ValueError, KeyError) as error:
+            raise GotaReviewResultError(
+                "Gota Review result anchor is malformed"
+            ) from error
+        return GotaReviewResultAnchor(
+            run_id=expected_run_id,
+            attempt=expected_attempt,
+            request_id=expected_request_id,
+            review_evidence_id=row["review_evidence_id"],
+            review_evidence_digest=row["review_evidence_digest"],
+            worker_commit_evidence_id=row["worker_commit_evidence_id"],
+            created_at=created_at,
+        )
+
+    def _load_gota_review_result_anchor(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        run_id: str,
+        attempt: int,
+        request_id: str,
+    ) -> GotaReviewResultAnchor:
+        rows = connection.execute(
+            """
+            SELECT * FROM gota_review_results
+            WHERE run_id = ?
+            ORDER BY rowid
+            """,
+            (run_id,),
+        ).fetchall()
+        if len(rows) != 1:
+            raise GotaReviewResultError(
+                "REVIEW requires exactly one Gota Review result anchor"
+            )
+        return self._stored_gota_review_result_anchor(
+            rows[0],
+            expected_run_id=run_id,
+            expected_attempt=attempt,
+            expected_request_id=request_id,
+        )
+
+    def load_gota_review_result_anchor(
+        self,
+        run_id: str,
+        attempt: int,
+        request_id: str,
+    ) -> GotaReviewResultAnchor:
+        """Load and validate the independent ReviewResult anchor."""
+
+        self._review_request_identity(run_id, attempt, request_id)
+        worker_request_id = f"{run_id}:{attempt}:worker"
+        with closing(self._connect()) as connection:
+            task_id, _request, worker_result, _result_row, commit_row, _worker_anchor, _reservation = self._load_gota_review_frontier(
+                connection,
+                run_id=run_id,
+                attempt=attempt,
+                request_id=worker_request_id,
+                expected_fencing_token=None,
+                expected_actor=None,
+            )
+            review_rows = connection.execute(
+                """
+                SELECT * FROM evidence
+                WHERE run_id = ? AND kind = ?
+                ORDER BY rowid
+                """,
+                (run_id, "gota_review_result"),
+            ).fetchall()
+            if len(review_rows) != 1:
+                raise GotaReviewResultError(
+                    "REVIEW requires exactly one Gota Review result evidence record"
+                )
+            review_row = review_rows[0]
+            result, _payload = self._stored_review_result(
+                review_row,
+                expected_run_id=run_id,
+                expected_task_id=task_id,
+            )
+            if (
+                result.attempt != attempt
+                or result.request_id != request_id
+                or result.reviewed_commit_sha != worker_result.commit_sha
+            ):
+                raise GotaReviewResultError(
+                    "Stored Gota Review result identity or Worker SHA is incoherent"
+                )
+            anchor = self._load_gota_review_result_anchor(
+                connection,
+                run_id=run_id,
+                attempt=attempt,
+                request_id=request_id,
+            )
+            self._validate_gota_review_result_anchor_links(
+                connection,
+                anchor,
+                review_evidence_row=review_row,
+                worker_commit_evidence_row=commit_row,
+                expected_fencing_token=None,
+            )
+            return anchor
+
+    @staticmethod
+    def _validate_gota_review_result_anchor_links(
+        connection: sqlite3.Connection,
+        anchor: GotaReviewResultAnchor,
+        *,
+        review_evidence_row: sqlite3.Row,
+        worker_commit_evidence_row: sqlite3.Row,
+        expected_fencing_token: int | None,
+    ) -> None:
+        """Validate the ReviewResult anchor's exact evidence links."""
+
+        review_rows = connection.execute(
+            "SELECT * FROM evidence WHERE evidence_id = ?",
+            (anchor.review_evidence_id,),
+        ).fetchall()
+        if len(review_rows) != 1:
+            raise GotaReviewResultError(
+                "Gota Review result anchor points to missing evidence"
+            )
+        review_row = review_rows[0]
+        if (
+            review_row["evidence_id"] != review_evidence_row["evidence_id"]
+            or review_row["evidence_id"] != anchor.review_evidence_id
+            or review_row["run_id"] != anchor.run_id
+            or review_row["kind"] != "gota_review_result"
+            or review_row["digest"] != anchor.review_evidence_digest
+            or review_evidence_row["digest"] != anchor.review_evidence_digest
+        ):
+            raise GotaReviewResultError(
+                "Gota Review result anchor evidence link is incoherent"
+            )
+
+        try:
+            review_created_at = parse_datetime(review_row["created_at"])
+            if (
+                type(review_row["created_at"]) is not str
+                or isoformat(review_created_at) != review_row["created_at"]
+                or review_created_at != anchor.created_at
+            ):
+                raise GotaReviewResultError(
+                    "Gota Review result anchor timestamp disagrees with evidence"
+                )
+        except GotaReviewResultError:
+            raise
+        except (TypeError, ValueError) as error:
+            raise GotaReviewResultError(
+                "Gota Review result evidence timestamp is malformed"
+            ) from error
+
+        worker_commit_rows = connection.execute(
+            "SELECT * FROM evidence WHERE evidence_id = ?",
+            (anchor.worker_commit_evidence_id,),
+        ).fetchall()
+        if len(worker_commit_rows) != 1:
+            raise GotaReviewResultError(
+                "Gota Review result anchor points to missing Worker commit evidence"
+            )
+        worker_commit_row = worker_commit_rows[0]
+        if (
+            worker_commit_row["evidence_id"]
+            != worker_commit_evidence_row["evidence_id"]
+            or worker_commit_row["evidence_id"]
+            != anchor.worker_commit_evidence_id
+            or worker_commit_row["run_id"] != anchor.run_id
+            or worker_commit_row["kind"] != "gota_worker_commit_verified"
+        ):
+            raise GotaReviewResultError(
+                "Gota Review result anchor Worker commit link is incoherent"
+            )
+        if (
+            type(review_row["fencing_token"]) is not int
+            or type(worker_commit_row["fencing_token"]) is not int
+            or review_row["fencing_token"] != worker_commit_row["fencing_token"]
+            or (
+                expected_fencing_token is not None
+                and review_row["fencing_token"] != expected_fencing_token
+            )
+        ):
+            raise GotaReviewResultError(
+                "Gota Review result authorities do not match the active fencing token"
+            )
+
+    def _load_gota_review_frontier(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        run_id: str,
+        attempt: int,
+        request_id: str,
+        expected_fencing_token: int | None,
+        expected_actor: str | None,
+    ) -> tuple[
+        str,
+        GotaRequest,
+        GotaWorkerResult,
+        sqlite3.Row,
+        sqlite3.Row,
+        GotaWorkerReviewBoundaryAnchor,
+        GotaWorkerInvocationReservation,
+    ]:
+        """Load and cross-check the complete durable Worker-to-Review frontier."""
+
+        run_row = connection.execute(
+            "SELECT task_id, state FROM task_runs WHERE run_id = ?",
+            (run_id,),
+        ).fetchone()
+        if run_row is None:
+            raise KeyError(run_id)
+        if TaskState(run_row["state"]) is not TaskState.REVIEW:
+            raise GotaReviewResultError(
+                "Gota Review result requires a REVIEW task"
+            )
+        task_id = run_row["task_id"]
+        reservation = self._load_gota_worker_reservation(
+            connection,
+            run_id=run_id,
+            task_id=task_id,
+            attempt=attempt,
+            request_id=request_id,
+        )
+        if reservation is None:
+            raise GotaReviewResultError(
+                "Durable Worker request and invocation reservation are required"
+            )
+        request = reservation.request
+        if (
+            request.run_id != run_id
+            or request.task_id != task_id
+            or request.attempt != attempt
+            or request.request_id != request_id
+        ):
+            raise GotaReviewResultError(
+                "Durable Worker request identity is incoherent"
+            )
+
+        result_rows = connection.execute(
+            """
+            SELECT * FROM evidence
+            WHERE run_id = ? AND kind = ?
+            ORDER BY rowid
+            """,
+            (run_id, "gota_worker_result_received"),
+        ).fetchall()
+        if len(result_rows) != 1:
+            raise GotaReviewResultError(
+                "Exactly one durable WorkerResult is required"
+            )
+        result_row = result_rows[0]
+        worker_result, _result_payload = self._stored_worker_result(
+            result_row,
+            expected_run_id=run_id,
+            expected_task_id=task_id,
+        )
+        if (
+            worker_result.request_id != request_id
+            or worker_result.attempt != attempt
+            or worker_result.result is not WorkerResultStatus.READY_FOR_REVIEW
+        ):
+            raise GotaReviewResultError(
+                "Durable WorkerResult identity or status is incoherent"
+            )
+
+        authority_ids = (
+            reservation.request_evidence.evidence_id,
+            reservation.invocation_evidence.evidence_id,
+            result_row["evidence_id"],
+        )
+        authority_rows = connection.execute(
+            """
+            SELECT evidence_id, fencing_token
+            FROM evidence
+            WHERE evidence_id IN (?, ?, ?)
+            """,
+            authority_ids,
+        ).fetchall()
+        if len(authority_rows) != len(authority_ids) or (
+            expected_fencing_token is not None
+            and any(
+                int(row["fencing_token"]) != expected_fencing_token
+                for row in authority_rows
+            )
+        ):
+            raise GotaReviewResultError(
+                "Durable Worker authorities do not match the active fencing token"
+            )
+
+        commit_rows = connection.execute(
+            """
+            SELECT * FROM evidence
+            WHERE run_id = ? AND kind = ?
+            ORDER BY rowid
+            """,
+            (run_id, "gota_worker_commit_verified"),
+        ).fetchall()
+        if len(commit_rows) != 1:
+            raise GotaReviewResultError(
+                "Exactly one durable Worker commit verification is required"
+            )
+        commit_row = commit_rows[0]
+        _commit_evidence, commit_payload = self._stored_worker_commit_verified(
+            commit_row,
+            expected_run_id=run_id,
+            expected_task_id=task_id,
+        )
+        expected_commit_identity = self._worker_commit_identity_payload(
+            request,
+            worker_result,
+            request_evidence_id=authority_ids[0],
+            invocation_evidence_id=authority_ids[1],
+            result_evidence_id=authority_ids[2],
+        )
+        if any(
+            commit_payload[field] != value
+            for field, value in expected_commit_identity.items()
+        ):
+            raise GotaReviewResultError(
+                "Persisted Worker commit verification is incoherent"
+            )
+        if expected_fencing_token is not None and int(
+            commit_row["fencing_token"]
+        ) != expected_fencing_token:
+            raise GotaReviewResultError(
+                "Worker commit verification does not match the active fencing token"
+            )
+
+        anchor = self._load_gota_worker_review_boundary_anchor(
+            connection,
+            run_id=run_id,
+            attempt=attempt,
+            request_id=request_id,
+        )
+        self._validate_gota_worker_review_boundary_links(
+            connection,
+            anchor,
+            commit_evidence_row=commit_row,
+            expected_fencing_token=expected_fencing_token,
+            expected_actor=expected_actor,
+        )
+        return (
+            task_id,
+            request,
+            worker_result,
+            result_row,
+            commit_row,
+            anchor,
+            reservation,
+        )
+
+    def persist_gota_review_result(
+        self,
+        run_id: str,
+        result: GotaReviewResult,
+        lease: Lease,
+    ) -> Evidence:
+        """Persist one canonical ReviewResult and its independent anchor."""
+
+        if type(run_id) is not str or not run_id.strip():
+            raise GotaReviewResultError(
+                "Gota run identity must be a non-empty string"
+            )
+        if lease.run_id != run_id:
+            raise FencingTokenError(
+                f"Lease run {lease.run_id} does not match Gota run {run_id}"
+            )
+        canonical_result, payload = self._canonical_review_result(result)
+        if canonical_result.run_id != run_id:
+            raise GotaReviewResultError(
+                "Gota Review result run identity does not match the requested run"
+            )
+        self._review_request_identity(
+            run_id, canonical_result.attempt, canonical_result.request_id
+        )
+        worker_request_id = f"{run_id}:{canonical_result.attempt}:worker"
+
+        trusted_now = self._trusted_now()
+        with self.fenced_transaction(lease, now=trusted_now) as connection:
+            task_id, worker_request, worker_result, _result_row, commit_row, _worker_anchor, _reservation = self._load_gota_review_frontier(
+                connection,
+                run_id=run_id,
+                attempt=canonical_result.attempt,
+                request_id=worker_request_id,
+                expected_fencing_token=lease.fencing_token,
+                expected_actor=lease.owner_id,
+            )
+            if (
+                canonical_result.task_id != task_id
+                or canonical_result.attempt != worker_result.attempt
+                or canonical_result.request_id
+                != f"{run_id}:{worker_result.attempt}:review"
+                or worker_request.task_id != canonical_result.task_id
+                or canonical_result.reviewed_commit_sha != worker_result.commit_sha
+            ):
+                raise GotaReviewResultError(
+                    "Gota Review result identity or Worker SHA is incoherent"
+                )
+
+            review_rows = connection.execute(
+                """
+                SELECT * FROM evidence
+                WHERE run_id = ? AND kind = ?
+                ORDER BY rowid
+                """,
+                (run_id, "gota_review_result"),
+            ).fetchall()
+            anchor_rows = connection.execute(
+                "SELECT * FROM gota_review_results WHERE run_id = ? ORDER BY rowid",
+                (run_id,),
+            ).fetchall()
+            if len(review_rows) > 1:
+                raise GotaReviewResultError(
+                    "Multiple durable Gota Review results make the run ambiguous"
+                )
+            if len(anchor_rows) > 1:
+                raise GotaReviewResultError(
+                    "Multiple Gota Review result anchors make the run ambiguous"
+                )
+            if bool(review_rows) != bool(anchor_rows):
+                raise GotaReviewResultError(
+                    "Gota Review result evidence and anchor must be paired"
+                )
+
+            if review_rows:
+                review_row = review_rows[0]
+                existing, existing_payload = self._stored_review_result(
+                    review_row,
+                    expected_run_id=run_id,
+                    expected_task_id=task_id,
+                )
+                anchor = self._stored_gota_review_result_anchor(
+                    anchor_rows[0],
+                    expected_run_id=run_id,
+                    expected_attempt=canonical_result.attempt,
+                    expected_request_id=canonical_result.request_id,
+                )
+                self._validate_gota_review_result_anchor_links(
+                    connection,
+                    anchor,
+                    review_evidence_row=review_row,
+                    worker_commit_evidence_row=commit_row,
+                    expected_fencing_token=lease.fencing_token,
+                )
+                if _canonical_json(existing_payload) != _canonical_json(payload):
+                    raise GotaReviewResultError(
+                        "A different Gota Review result already exists for the run"
+                    )
+                if (
+                    existing.attempt != canonical_result.attempt
+                    or existing.request_id != canonical_result.request_id
+                    or anchor.worker_commit_evidence_id != commit_row["evidence_id"]
+                ):
+                    raise GotaReviewResultError(
+                        "Existing Gota Review result authority is incoherent"
+                    )
+                final_now = self._trusted_now()
+                self._assert_fenced_connection(connection, lease, final_now)
+                return self._evidence_from_row(review_row, existing_payload)
+
+            review_evidence = self._insert_evidence(
+                connection,
+                run_id,
+                "gota_review_result",
+                payload,
+                lease,
+                trusted_now,
+            )
+            connection.execute(
+                """
+                INSERT INTO gota_review_results(
+                    run_id, attempt, request_id, review_evidence_id,
+                    review_evidence_digest, worker_commit_evidence_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run_id,
+                    canonical_result.attempt,
+                    canonical_result.request_id,
+                    review_evidence.evidence_id,
+                    review_evidence.digest,
+                    commit_row["evidence_id"],
+                    isoformat(trusted_now),
+                ),
+            )
+            final_now = self._trusted_now()
+            self._assert_fenced_connection(connection, lease, final_now)
+            return review_evidence
+
+    def load_gota_review_result(
+        self,
+        run_id: str,
+        attempt: int,
+        request_id: str,
+    ) -> GotaReviewResult | None:
+        """Load one complete, anchored canonical ReviewResult or ``None``."""
+
+        self._review_request_identity(run_id, attempt, request_id)
+        worker_request_id = f"{run_id}:{attempt}:worker"
+        with closing(self._connect()) as connection:
+            task_id, _request, worker_result, _result_row, commit_row, _worker_anchor, _reservation = self._load_gota_review_frontier(
+                connection,
+                run_id=run_id,
+                attempt=attempt,
+                request_id=worker_request_id,
+                expected_fencing_token=None,
+                expected_actor=None,
+            )
+            review_rows = connection.execute(
+                """
+                SELECT * FROM evidence
+                WHERE run_id = ? AND kind = ?
+                ORDER BY rowid
+                """,
+                (run_id, "gota_review_result"),
+            ).fetchall()
+            anchor_rows = connection.execute(
+                "SELECT * FROM gota_review_results WHERE run_id = ? ORDER BY rowid",
+                (run_id,),
+            ).fetchall()
+            if not review_rows and not anchor_rows:
+                return None
+            if len(review_rows) != 1:
+                raise GotaReviewResultError(
+                    "REVIEW requires exactly one Gota Review result evidence record"
+                )
+            if len(anchor_rows) != 1:
+                raise GotaReviewResultError(
+                    "REVIEW requires exactly one Gota Review result anchor"
+                )
+            review_row = review_rows[0]
+            result, _payload = self._stored_review_result(
+                review_row,
+                expected_run_id=run_id,
+                expected_task_id=task_id,
+            )
+            if (
+                result.attempt != attempt
+                or result.request_id != request_id
+                or result.reviewed_commit_sha != worker_result.commit_sha
+            ):
+                raise GotaReviewResultError(
+                    "Stored Gota Review result identity or Worker SHA is incoherent"
+                )
+            anchor = self._stored_gota_review_result_anchor(
+                anchor_rows[0],
+                expected_run_id=run_id,
+                expected_attempt=attempt,
+                expected_request_id=request_id,
+            )
+            self._validate_gota_review_result_anchor_links(
+                connection,
+                anchor,
+                review_evidence_row=review_row,
+                worker_commit_evidence_row=commit_row,
+                expected_fencing_token=None,
+            )
+            if anchor.worker_commit_evidence_id != commit_row["evidence_id"]:
+                raise GotaReviewResultError(
+                    "Stored Gota Review result Worker commit link is incoherent"
+                )
+            return result
 
     def _persist_gota_worker_commit_verified_and_review(
         self,

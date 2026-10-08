@@ -491,6 +491,22 @@
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": ["tools/coordinator/tests/test_gota_review_entry.py"]
+    },
+    {
+      "id": "FLUJO-BHV-GOTA-REVIEW-PERSISTENCE-001",
+      "area": "Durable flujo.gota/v1 Reviewer result boundary",
+      "precondition": "A TaskRun is in REVIEW with one intact durable Worker request, reservation, WorkerResult, and anchored Worker-to-Review frontier for the same attempt.",
+      "public_action": "Call GotaReviewerPersistenceBoundary.run() with the active lease and Worker request identity.",
+      "expected_result": "The existing ReviewPhase reviews exactly the durable Worker commit, and one complete canonical ReviewResult is persisted with an independent evidence anchor while the TaskRun remains REVIEW.",
+      "invariants": [
+        "Worker-to-Review is revalidated before Reviewer and again before ReviewResult persistence.",
+        "A missing ReviewResult permits a later read-only retry on the same durable Worker SHA; an intact ReviewResult suppresses Reviewer execution.",
+        "The gota_review_result evidence and its anchor share one trusted timestamp, and the anchor fixes the evidence ID, evidence digest, and real gota_worker_commit_verified evidence ID.",
+        "Tampering, duplicate or conflicting authorities, stale leases, stale fencing, and Git changes fail closed without changing REVIEW or creating terminal evidence."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tools/coordinator/tests/test_gota_review_persistence.py"]
     }
   ]
 }

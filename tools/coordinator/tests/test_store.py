@@ -137,6 +137,16 @@ class SQLiteStoreTest(CoordinatorTestCase):
                         lease,
                         persistence_store._trusted_now(),
                     )
+            elif kind == "gota_review_result":
+                with persistence_store.transaction(immediate=True) as connection:
+                    persistence_store._insert_evidence(
+                        connection,
+                        run.run_id,
+                        kind,
+                        evidence[kind],
+                        lease,
+                        persistence_store._trusted_now(),
+                    )
             else:
                 persistence_store.append_evidence(
                     run.run_id, kind, evidence[kind], lease, now=now
@@ -153,6 +163,7 @@ class SQLiteStoreTest(CoordinatorTestCase):
                 "dependencies",
                 "transition_events",
                 "gota_worker_review_boundaries",
+                "gota_review_results",
                 "evidence",
                 "checkpoints",
                 "resource_attempts",
@@ -171,6 +182,12 @@ class SQLiteStoreTest(CoordinatorTestCase):
             "gota_worker_review_boundaries",
             reopened.table_names(),
         )
+
+    def test_gota_review_result_table_is_recreated_when_an_existing_store_reopens(self) -> None:
+        with self.store.transaction(immediate=True) as connection:
+            connection.execute("DROP TABLE gota_review_results")
+        reopened = SQLiteCoordinatorStore(self.database)
+        self.assertIn("gota_review_results", reopened.table_names())
 
     def test_state_persists_after_coordinator_restart(self) -> None:
         spec, run = self.create_task("persistent")
@@ -225,6 +242,16 @@ class SQLiteStoreTest(CoordinatorTestCase):
                     lease,
                 )
             elif kind == "gota_worker_commit_verified":
+                with self.store.transaction(immediate=True) as connection:
+                    self.store._insert_evidence(
+                        connection,
+                        run.run_id,
+                        kind,
+                        {"source": "fixture"},
+                        lease,
+                        self.store._trusted_now(),
+                    )
+            elif kind == "gota_review_result":
                 with self.store.transaction(immediate=True) as connection:
                     self.store._insert_evidence(
                         connection,
