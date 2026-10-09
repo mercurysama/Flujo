@@ -29,7 +29,7 @@ from flow_coordinator import (
     TaskState,
     WorkerResultStatus,
 )
-from flow_coordinator.domain import TaskSpec, isoformat
+from flow_coordinator.domain import Lease, TaskSpec, isoformat
 from flow_coordinator.service import CoordinatorService
 from flow_coordinator.store import (
     AcceptanceEvidenceError,
@@ -248,6 +248,22 @@ class GotaReviewPersistenceTest(unittest.TestCase):
         self.assertEqual(entered.state, TaskState.REVIEW)
         return worker_result
 
+    def _takeover_lease(self) -> Lease:
+        takeover_now = self.lease.expires_at + timedelta(seconds=1)
+        with self.store.transaction(immediate=True) as connection:
+            connection.execute(
+                "UPDATE global_lock SET lease_expires_at = ? WHERE lock_name = 'global'",
+                (isoformat(self.lease.expires_at),),
+            )
+        with self.assertRaises(LeaseExpiredError):
+            self.service.locks.acquire(
+                "reviewer-b", self.run.run_id, now=takeover_now
+            )
+        self.service.locks.recover_stale(authorized=True)
+        return self.service.locks.acquire(
+            "reviewer-b", self.run.run_id, now=takeover_now
+        )
+
     def _boundary(self, runner: ReviewRunner, *, store=None) -> GotaReviewerPersistenceBoundary:
         return GotaReviewerPersistenceBoundary(
             self.repository,
@@ -378,6 +394,65 @@ class GotaReviewPersistenceTest(unittest.TestCase):
 
         second = self._run_boundary(boundary)
         self.assertIsInstance(second, GotaReviewResult)
+        self.assertEqual(second, expected)
+        self.assertEqual(len(runner.calls), 1)
+
+    def test_reviewer_takeover_uses_new_lease_and_same_worker_sha(self) -> None:
+        worker = self._durable_worker_and_review_frontier()
+        expected = self._review_result(commit_sha=worker.commit_sha)
+        historical_evidence = self.store.list_evidence(self.run.run_id)
+        historical_events = self.store.list_events(self.run.run_id)
+        takeover = self._takeover_lease()
+        runner = ReviewRunner(lambda _prompt: self._successful_execution(expected))
+        boundary = self._boundary(runner)
+
+        first = boundary.run(
+            self.run.run_id,
+            takeover,
+            attempt=1,
+            request_id=self.request.request_id,
+            timeout=3,
+        )
+
+        self.assertIsInstance(first, ReviewPhaseResult)
+        assert isinstance(first, ReviewPhaseResult)
+        self.assertTrue(first.valid)
+        self.assertEqual(first.review_result, expected)
+        self.assertEqual(len(runner.calls), 1)
+        self.assertIn(worker.commit_sha, str(runner.calls[0]["prompt"]))
+        self.assertEqual(
+            self.store.list_evidence(self.run.run_id)[: len(historical_evidence)],
+            historical_evidence,
+        )
+        self.assertEqual(
+            self.store.list_events(self.run.run_id)[: len(historical_events)],
+            historical_events,
+        )
+        with self.store._connect() as connection:
+            fences = connection.execute(
+                "SELECT kind, fencing_token FROM evidence WHERE run_id = ? ORDER BY rowid",
+                (self.run.run_id,),
+            ).fetchall()
+        self.assertEqual(
+            [row["fencing_token"] for row in fences],
+            [self.lease.fencing_token] * 4 + [takeover.fencing_token],
+        )
+
+        with self.assertRaises(FencingTokenError):
+            boundary.run(
+                self.run.run_id,
+                self.lease,
+                attempt=1,
+                request_id=self.request.request_id,
+                timeout=3,
+            )
+        second = boundary.run(
+            self.run.run_id,
+            takeover,
+            attempt=1,
+            request_id=self.request.request_id,
+            timeout=3,
+        )
         self.assertEqual(second, expected)
         self.assertEqual(len(runner.calls), 1)
 

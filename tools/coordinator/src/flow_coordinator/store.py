@@ -174,6 +174,8 @@ class GotaDecisionAuthorities:
     review_result: GotaReviewResult
     review_evidence: Evidence
     review_anchor: GotaReviewResultAnchor
+    # The fence of the immutable Worker frontier, not the fence of a later
+    # mutation such as ReviewResult or terminal decision application.
     fencing_token: int
 
 
@@ -877,10 +879,6 @@ class SQLiteCoordinatorStore:
                 raise AcceptanceEvidenceError(
                     message
                 ) from error
-            if authorities.fencing_token != lease.fencing_token:
-                raise AcceptanceEvidenceError(
-                    "Gota durable authorities do not match the active fencing token"
-                )
             if authorities.review_result.decision is not ReviewDecision.PASSED:
                 raise AcceptanceEvidenceError(
                     "Persisted Gota Review result is incoherent or not PASSED"
@@ -1785,6 +1783,22 @@ class SQLiteCoordinatorStore:
             created_at=parse_datetime(row["created_at"]),
         )
 
+    @staticmethod
+    def _coherent_historical_fencing_token(
+        rows: Sequence[sqlite3.Row],
+        *,
+        error_type: type[CoordinatorStoreError],
+        context: str,
+    ) -> int:
+        """Return the one fence shared by authorities created as one frontier."""
+
+        tokens = [row["fencing_token"] for row in rows]
+        if any(type(token) is not int or token < 1 for token in tokens):
+            raise error_type(f"{context} fencing token is invalid")
+        if len(set(tokens)) != 1:
+            raise error_type(f"{context} authorities disagree on fencing")
+        return tokens[0]
+
     def persist_gota_worker_result(
         self,
         run_id: str,
@@ -2095,6 +2109,7 @@ class SQLiteCoordinatorStore:
         try:
             event_created_at = parse_datetime(event_row["created_at"])
             fencing_token = event_row["fencing_token"]
+            evidence_fencing_token = evidence_row["fencing_token"]
             if (
                 event_row["run_id"] != anchor.run_id
                 or event_row["from_state"] != TaskState.RUNNING.value
@@ -2103,6 +2118,10 @@ class SQLiteCoordinatorStore:
                 or type(event_row["actor"]) is not str
                 or not event_row["actor"]
                 or type(fencing_token) is not int
+                or fencing_token < 1
+                or type(evidence_fencing_token) is not int
+                or evidence_fencing_token < 1
+                or fencing_token != evidence_fencing_token
                 or event_created_at != anchor.created_at
                 or type(event_row["created_at"]) is not str
                 or isoformat(event_created_at) != event_row["created_at"]
@@ -2261,8 +2280,6 @@ class SQLiteCoordinatorStore:
                 run_id=run_id,
                 attempt=attempt,
                 request_id=worker_request_id,
-                expected_fencing_token=None,
-                expected_actor=None,
             )
             review_rows = connection.execute(
                 """
@@ -2301,7 +2318,6 @@ class SQLiteCoordinatorStore:
                 anchor,
                 review_evidence_row=review_row,
                 worker_commit_evidence_row=commit_row,
-                expected_fencing_token=None,
             )
             return anchor
 
@@ -2312,7 +2328,6 @@ class SQLiteCoordinatorStore:
         *,
         review_evidence_row: sqlite3.Row,
         worker_commit_evidence_row: sqlite3.Row,
-        expected_fencing_token: int | None,
     ) -> None:
         """Validate the ReviewResult anchor's exact evidence links."""
 
@@ -2377,14 +2392,11 @@ class SQLiteCoordinatorStore:
         if (
             type(review_row["fencing_token"]) is not int
             or type(worker_commit_row["fencing_token"]) is not int
-            or review_row["fencing_token"] != worker_commit_row["fencing_token"]
-            or (
-                expected_fencing_token is not None
-                and review_row["fencing_token"] != expected_fencing_token
-            )
+            or review_row["fencing_token"] < 1
+            or worker_commit_row["fencing_token"] < 1
         ):
             raise GotaReviewResultError(
-                "Gota Review result authorities do not match the active fencing token"
+                "Gota Review result authority fencing is malformed"
             )
 
     def _load_gota_review_frontier(
@@ -2394,8 +2406,6 @@ class SQLiteCoordinatorStore:
         run_id: str,
         attempt: int,
         request_id: str,
-        expected_fencing_token: int | None,
-        expected_actor: str | None,
     ) -> tuple[
         str,
         GotaRequest,
@@ -2480,16 +2490,15 @@ class SQLiteCoordinatorStore:
             """,
             authority_ids,
         ).fetchall()
-        if len(authority_rows) != len(authority_ids) or (
-            expected_fencing_token is not None
-            and any(
-                int(row["fencing_token"]) != expected_fencing_token
-                for row in authority_rows
-            )
-        ):
+        if len(authority_rows) != len(authority_ids):
             raise GotaReviewResultError(
-                "Durable Worker authorities do not match the active fencing token"
+                "Durable Worker authorities are incomplete"
             )
+        historical_fencing_token = self._coherent_historical_fencing_token(
+            authority_rows,
+            error_type=GotaReviewResultError,
+            context="Durable Worker",
+        )
 
         commit_rows = connection.execute(
             """
@@ -2523,11 +2532,12 @@ class SQLiteCoordinatorStore:
             raise GotaReviewResultError(
                 "Persisted Worker commit verification is incoherent"
             )
-        if expected_fencing_token is not None and int(
-            commit_row["fencing_token"]
-        ) != expected_fencing_token:
+        if (
+            type(commit_row["fencing_token"]) is not int
+            or commit_row["fencing_token"] != historical_fencing_token
+        ):
             raise GotaReviewResultError(
-                "Worker commit verification does not match the active fencing token"
+                "Worker commit verification fencing is incoherent"
             )
 
         anchor = self._load_gota_worker_review_boundary_anchor(
@@ -2540,8 +2550,8 @@ class SQLiteCoordinatorStore:
             connection,
             anchor,
             commit_evidence_row=commit_row,
-            expected_fencing_token=expected_fencing_token,
-            expected_actor=expected_actor,
+            expected_fencing_token=historical_fencing_token,
+            expected_actor=None,
         )
         return (
             task_id,
@@ -2686,17 +2696,11 @@ class SQLiteCoordinatorStore:
             raise GotaDecisionApplicationError(
                 "Durable Worker authorities are incomplete"
             )
-        try:
-            fencing_tokens = {int(row["fencing_token"]) for row in authority_rows}
-        except (TypeError, ValueError) as error:
-            raise GotaDecisionApplicationError(
-                "Durable Worker authority fencing is not canonical"
-            ) from error
-        if len(fencing_tokens) != 1:
-            raise GotaDecisionApplicationError(
-                "Durable Worker authorities disagree on fencing"
-            )
-        fencing_token = next(iter(fencing_tokens))
+        fencing_token = self._coherent_historical_fencing_token(
+            authority_rows,
+            error_type=GotaDecisionApplicationError,
+            context="Durable Worker",
+        )
 
         commit_rows = connection.execute(
             """
@@ -2735,7 +2739,10 @@ class SQLiteCoordinatorStore:
             raise GotaDecisionApplicationError(
                 "Persisted Worker commit verification is incoherent"
             )
-        if int(commit_row["fencing_token"]) != fencing_token:
+        if (
+            type(commit_row["fencing_token"]) is not int
+            or commit_row["fencing_token"] != fencing_token
+        ):
             raise GotaDecisionApplicationError(
                 "Worker commit verification fencing is incoherent"
             )
@@ -2787,9 +2794,12 @@ class SQLiteCoordinatorStore:
             raise GotaDecisionApplicationError(
                 "Durable ReviewResult identity or Worker SHA is incoherent"
             )
-        if int(review_row["fencing_token"]) != fencing_token:
+        if (
+            type(review_row["fencing_token"]) is not int
+            or review_row["fencing_token"] < 1
+        ):
             raise GotaDecisionApplicationError(
-                "ReviewResult fencing is incoherent"
+                "ReviewResult fencing is malformed"
             )
 
         try:
@@ -2804,7 +2814,6 @@ class SQLiteCoordinatorStore:
                 review_anchor,
                 review_evidence_row=review_row,
                 worker_commit_evidence_row=commit_row,
-                expected_fencing_token=fencing_token,
             )
         except GotaReviewResultError as error:
             raise GotaDecisionApplicationError(str(error)) from error
@@ -2994,7 +3003,6 @@ class SQLiteCoordinatorStore:
                 }
                 or type(payload["fencing_token"]) is not int
                 or payload["fencing_token"] != int(row["fencing_token"])
-                or payload["fencing_token"] != authorities.fencing_token
                 or type(row["created_at"]) is not str
                 or isoformat(created_at) != created_at_value
             ):
@@ -3514,7 +3522,6 @@ class SQLiteCoordinatorStore:
                 or payload["decision"] != ReviewDecision.PASSED.value
                 or type(payload["fencing_token"]) is not int
                 or payload["fencing_token"] != int(row["fencing_token"])
-                or payload["fencing_token"] != authorities.fencing_token
                 or payload["worker_result_evidence_id"]
                 != authorities.worker_result_evidence.evidence_id
                 or payload["worker_commit_evidence_id"]
@@ -3668,8 +3675,6 @@ class SQLiteCoordinatorStore:
                 run_id=run_id,
                 attempt=canonical_result.attempt,
                 request_id=worker_request_id,
-                expected_fencing_token=lease.fencing_token,
-                expected_actor=lease.owner_id,
             )
             if (
                 canonical_result.task_id != task_id
@@ -3726,7 +3731,6 @@ class SQLiteCoordinatorStore:
                     anchor,
                     review_evidence_row=review_row,
                     worker_commit_evidence_row=commit_row,
-                    expected_fencing_token=lease.fencing_token,
                 )
                 if _canonical_json(existing_payload) != _canonical_json(payload):
                     raise GotaReviewResultError(
@@ -3789,8 +3793,6 @@ class SQLiteCoordinatorStore:
                 run_id=run_id,
                 attempt=attempt,
                 request_id=worker_request_id,
-                expected_fencing_token=None,
-                expected_actor=None,
             )
             review_rows = connection.execute(
                 """
@@ -3839,7 +3841,6 @@ class SQLiteCoordinatorStore:
                 anchor,
                 review_evidence_row=review_row,
                 worker_commit_evidence_row=commit_row,
-                expected_fencing_token=None,
             )
             if anchor.worker_commit_evidence_id != commit_row["evidence_id"]:
                 raise GotaReviewResultError(
@@ -3954,13 +3955,15 @@ class SQLiteCoordinatorStore:
                 """,
                 authority_ids,
             ).fetchall()
-            if len(authority_rows) != len(authority_ids) or any(
-                int(row["fencing_token"]) != lease.fencing_token
-                for row in authority_rows
-            ):
+            if len(authority_rows) != len(authority_ids):
                 raise GotaWorkerReviewBoundaryError(
-                    "Durable Worker authorities do not match the active fencing token"
+                    "Durable Worker authorities are incomplete"
                 )
+            historical_fencing_token = self._coherent_historical_fencing_token(
+                authority_rows,
+                error_type=GotaWorkerReviewBoundaryError,
+                context="Durable Worker",
+            )
 
             commit_rows = connection.execute(
                 """
@@ -4016,8 +4019,8 @@ class SQLiteCoordinatorStore:
                     connection,
                     anchor,
                     commit_evidence_row=commit_rows[0],
-                    expected_fencing_token=lease.fencing_token,
-                    expected_actor=lease.owner_id,
+                    expected_fencing_token=historical_fencing_token,
+                    expected_actor=None,
                 )
                 current_observation = verify(request, worker_result)
                 self._validate_worker_review_verification(

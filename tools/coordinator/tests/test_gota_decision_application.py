@@ -29,7 +29,7 @@ from flow_coordinator import (
     TaskState,
     WorkerResultStatus,
 )
-from flow_coordinator.domain import isoformat
+from flow_coordinator.domain import Lease, isoformat
 from flow_coordinator.service import CoordinatorService
 from flow_coordinator.store import FencingTokenError, LeaseExpiredError
 
@@ -183,6 +183,22 @@ class GotaDecisionApplicationTest(unittest.TestCase):
             request_id=self.request.request_id,
         )
         self.assertEqual(entered.state, TaskState.REVIEW)
+
+    def _takeover_lease(self) -> Lease:
+        takeover_now = self.lease.expires_at + timedelta(seconds=1)
+        with self.store.transaction(immediate=True) as connection:
+            connection.execute(
+                "UPDATE global_lock SET lease_expires_at = ? WHERE lock_name = 'global'",
+                (isoformat(self.lease.expires_at),),
+            )
+        with self.assertRaises(LeaseExpiredError):
+            self.service.locks.acquire(
+                "decision-b", self.run.run_id, now=takeover_now
+            )
+        self.service.locks.recover_stale(authorized=True)
+        return self.service.locks.acquire(
+            "decision-b", self.run.run_id, now=takeover_now
+        )
 
     def _review_result(
         self,
@@ -390,6 +406,158 @@ class GotaDecisionApplicationTest(unittest.TestCase):
             result = self._apply(ReviewDecision.PASSED)
         transition.assert_called_once_with(self.run.run_id, self.lease)
         self.assertEqual(result.state, TaskState.DONE)
+
+    def test_passed_takeover_uses_new_lease_without_rewriting_authorities(self) -> None:
+        self._persist_review(ReviewDecision.PASSED)
+        historical_evidence = self.store.list_evidence(self.run.run_id)
+        historical_events = self.store.list_events(self.run.run_id)
+        takeover = self._takeover_lease()
+        boundary = GotaDecisionApplicationBoundary(self.store)
+
+        with self.assertRaises(FencingTokenError):
+            boundary.run(
+                self.run.run_id,
+                self.lease,
+                attempt=1,
+                request_id=self.request.request_id,
+            )
+        self.assertEqual(self.store.get_run(self.run.run_id).state, TaskState.REVIEW)
+        self.assertEqual(self.store.list_evidence(self.run.run_id), historical_evidence)
+        self.assertEqual(self.store.list_events(self.run.run_id), historical_events)
+
+        result = boundary.run(
+            self.run.run_id,
+            takeover,
+            attempt=1,
+            request_id=self.request.request_id,
+        )
+
+        self.assertEqual(result.state, TaskState.DONE)
+        self.assertEqual(
+            sum(
+                item.kind == "gota_acceptance_verified"
+                for item in self.store.list_evidence(self.run.run_id)
+            ),
+            1,
+        )
+        self.assertEqual(
+            self._evidence("gota_acceptance_verified").payload["fencing_token"],
+            takeover.fencing_token,
+        )
+        self.assertEqual(
+            self.store.list_evidence(self.run.run_id)[: len(historical_evidence)],
+            historical_evidence,
+        )
+        self.assertEqual(
+            self.store.list_events(self.run.run_id)[: len(historical_events)],
+            historical_events,
+        )
+        with self.store._connect() as connection:
+            fences = connection.execute(
+                "SELECT kind, fencing_token FROM evidence WHERE run_id = ? ORDER BY rowid",
+                (self.run.run_id,),
+            ).fetchall()
+        self.assertEqual(
+            [row["fencing_token"] for row in fences],
+            [self.lease.fencing_token] * 5 + [takeover.fencing_token],
+        )
+
+    def test_correction_takeover_uses_current_fence_and_stays_fail_closed_for_old_owner(
+        self,
+    ) -> None:
+        self._persist_review(ReviewDecision.CORRECTION_REQUIRED)
+        historical_evidence = self.store.list_evidence(self.run.run_id)
+        takeover = self._takeover_lease()
+        boundary = GotaDecisionApplicationBoundary(self.store)
+
+        with self.assertRaises(FencingTokenError):
+            boundary.run(
+                self.run.run_id,
+                self.lease,
+                attempt=1,
+                request_id=self.request.request_id,
+            )
+        result = boundary.run(
+            self.run.run_id,
+            takeover,
+            attempt=1,
+            request_id=self.request.request_id,
+        )
+
+        self.assertEqual(result.action, GotaNextAction.CORRECT)
+        self.assertEqual(result.state, TaskState.NOT_COMPLETED)
+        decision = self._evidence("gota_decision_applied")
+        self.assertEqual(decision.payload["fencing_token"], takeover.fencing_token)
+        self.assertIsNone(
+            self.store.load_gota_human_review_hold(
+                self.run.run_id, 1, self.review_request_id
+            )
+        )
+        self.assertEqual(
+            self.store.list_evidence(self.run.run_id)[: len(historical_evidence)],
+            historical_evidence,
+        )
+
+    def test_terminal_takeover_accepts_review_result_created_under_new_lease(self) -> None:
+        historical_evidence = self.store.list_evidence(self.run.run_id)
+        takeover = self._takeover_lease()
+        review = self._review_result(ReviewDecision.PASSED)
+        self.store.persist_gota_review_result(self.run.run_id, review, takeover)
+        boundary = GotaDecisionApplicationBoundary(self.store)
+
+        with self.assertRaises(FencingTokenError):
+            boundary.run(
+                self.run.run_id,
+                self.lease,
+                attempt=1,
+                request_id=self.request.request_id,
+            )
+        result = boundary.run(
+            self.run.run_id,
+            takeover,
+            attempt=1,
+            request_id=self.request.request_id,
+        )
+
+        self.assertEqual(result.state, TaskState.DONE)
+        with self.store._connect() as connection:
+            fences = connection.execute(
+                "SELECT kind, fencing_token FROM evidence WHERE run_id = ? ORDER BY rowid",
+                (self.run.run_id,),
+            ).fetchall()
+        self.assertEqual(
+            [row["fencing_token"] for row in fences],
+            [self.lease.fencing_token] * len(historical_evidence)
+            + [takeover.fencing_token, takeover.fencing_token],
+        )
+        self.assertEqual(
+            sum(
+                item.kind == "gota_acceptance_verified"
+                for item in self.store.list_evidence(self.run.run_id)
+            ),
+            1,
+        )
+
+    def test_incoherent_historical_worker_fence_fails_closed(self) -> None:
+        self._persist_review(ReviewDecision.PASSED)
+        worker_result = self._evidence("gota_worker_result_received")
+        with self.store.transaction(immediate=True) as connection:
+            connection.execute("DROP TRIGGER immutable_evidence_update")
+            connection.execute(
+                "UPDATE evidence SET fencing_token = ? WHERE evidence_id = ?",
+                (self.lease.fencing_token + 100, worker_result.evidence_id),
+            )
+            connection.execute(
+                """
+                CREATE TRIGGER immutable_evidence_update
+                BEFORE UPDATE ON evidence
+                BEGIN SELECT RAISE(ABORT, 'evidence is immutable'); END
+                """
+            )
+        with self.assertRaises(GotaDecisionApplicationError):
+            self.store.load_gota_decision_authorities(
+                self.run.run_id, 1, self.request.request_id
+            )
 
     def test_passed_creates_exactly_one_acceptance_evidence(self) -> None:
         self._apply(ReviewDecision.PASSED)

@@ -21,7 +21,7 @@ from flow_coordinator import (
     GotaWorkerReviewBoundaryError,
     WorkerResultStatus,
 )
-from flow_coordinator.domain import TaskSpec, TaskState, isoformat
+from flow_coordinator.domain import Lease, TaskSpec, TaskState, isoformat
 from flow_coordinator.git_adapter import GitSnapshot, ReadOnlyGitAdapter
 from flow_coordinator.service import CoordinatorService
 from flow_coordinator.store import (
@@ -231,6 +231,22 @@ class ReviewEntryTest(unittest.TestCase):
         self.store.persist_gota_worker_result(self.run.run_id, result, self.lease)
         return request, result, commit_sha
 
+    def _takeover_lease(self) -> Lease:
+        takeover_now = self.lease.expires_at + timedelta(seconds=1)
+        with self.store.transaction(immediate=True) as connection:
+            connection.execute(
+                "UPDATE global_lock SET lease_expires_at = ? WHERE lock_name = 'global'",
+                (isoformat(self.lease.expires_at),),
+            )
+        with self.assertRaises(LeaseExpiredError):
+            self.service.locks.acquire(
+                "reviewer-b", self.run.run_id, now=takeover_now
+            )
+        self.service.locks.recover_stale(authorized=True)
+        return self.service.locks.acquire(
+            "reviewer-b", self.run.run_id, now=takeover_now
+        )
+
     def _boundary(
         self,
         *,
@@ -350,6 +366,7 @@ class ReviewEntryTest(unittest.TestCase):
                 "result_evidence_id": evidence[2].evidence_id,
             },
         )
+
         events = self.store.list_events(self.run.run_id)
         self.assertEqual(events[-1].from_state, TaskState.RUNNING)
         self.assertEqual(events[-1].to_state, TaskState.REVIEW)
@@ -371,6 +388,39 @@ class ReviewEntryTest(unittest.TestCase):
             self.run.run_id, result.attempt, result.request_id
         )
         self.assertEqual(reopened_anchor, anchor)
+
+    def test_takeover_after_worker_result_enters_review_with_new_lease(self) -> None:
+        request, result, _sha = self._durable_worker()
+        historical_evidence = self.store.list_evidence(self.run.run_id)
+        historical_events = self.store.list_events(self.run.run_id)
+        takeover = self._takeover_lease()
+
+        entered = self._boundary().run(
+            self.run.run_id,
+            takeover,
+            attempt=result.attempt,
+            request_id=request.request_id,
+        )
+
+        self.assertEqual(entered.state, TaskState.REVIEW)
+        self.assertTrue(entered.created)
+        self.assertEqual(takeover.fencing_token, self.lease.fencing_token + 1)
+        self.assertEqual(
+            self.store.list_evidence(self.run.run_id)[: len(historical_evidence)],
+            historical_evidence,
+        )
+        self.assertEqual(
+            self.store.list_events(self.run.run_id)[: len(historical_events)],
+            historical_events,
+        )
+        with self.assertRaises(FencingTokenError):
+            self._boundary().run(
+                self.run.run_id,
+                self.lease,
+                attempt=result.attempt,
+                request_id=request.request_id,
+            )
+        self.assertEqual(self.store.get_run(self.run.run_id).state, TaskState.REVIEW)
 
     def test_missing_request_reservation_or_result_fails_closed(self) -> None:
         commit_sha = self._commit_worker()
