@@ -101,6 +101,7 @@ class OpenCodeRunner:
         return [
             self.executable,
             "run",
+            "--standalone",
             "--model",
             self.model if self.variant is None else f"{self.model}#{self.variant}",
             "--agent",
@@ -421,6 +422,7 @@ class OpenCodeRunner:
             )
 
         environment = os.environ.copy()
+        environment["OPENCODE_CONFIG_DIR"] = str(Path(__file__).resolve().parents[4] / ".opencode")
         environment["GIT_PAGER"] = "cat"
         environment["PAGER"] = "cat"
 

@@ -66,6 +66,7 @@ class OpenCodeRunnerTest(unittest.TestCase):
                     "    'git_pager': os.environ.get('GIT_PAGER'),",
                     "    'pager': os.environ.get('PAGER'),",
                     "    'probe_env': os.environ.get('FLOW_RUNNER_PROBE'),",
+                    "    'config_dir': os.environ.get('OPENCODE_CONFIG_DIR'),",
                     "}, ensure_ascii=False), encoding='utf-8')",
                     f"sys.stdout.write({json.dumps(stdout, ensure_ascii=False)})",
                     "sys.stdout.flush()",
@@ -412,6 +413,7 @@ class OpenCodeRunnerTest(unittest.TestCase):
             (
                 str(executable),
                 "run",
+                "--standalone",
                 "--model",
                 "model/test#fast",
                 "--agent",
@@ -453,6 +455,7 @@ class OpenCodeRunnerTest(unittest.TestCase):
             result.argv[1:],
             (
                 "run",
+                "--standalone",
                 "--model",
                 "openai/gpt-5.6-luna#max",
                 "--agent",
@@ -465,6 +468,41 @@ class OpenCodeRunnerTest(unittest.TestCase):
         self.assertEqual(invocation["git_pager"], "cat")
         self.assertEqual(invocation["pager"], "cat")
         self.assertEqual(invocation["probe_env"], "$literal ${HOME} & Unicode 🌧️")
+
+    def test_canonical_config_dir_overrides_inherited_value_only_in_child(self) -> None:
+        executable, record = self._fake_executable()
+        canonical_config = Path(__file__).resolve().parents[3] / ".opencode"
+        inherited_config = str(self.root / "other-config")
+
+        with patch.dict(os.environ, {"OPENCODE_CONFIG_DIR": inherited_config}):
+            OpenCodeRunner(executable=executable).run(
+                agent="gota-reviewer",
+                prompt="canonical configuration",
+                cwd=self.cwd,
+                timeout=2,
+            )
+            self.assertEqual(os.environ["OPENCODE_CONFIG_DIR"], inherited_config)
+
+        invocation = self._record(record)
+        self.assertEqual(invocation["config_dir"], str(canonical_config))
+        self.assertNotEqual(canonical_config, self.cwd / ".opencode")
+        self.assertEqual(invocation["cwd"], str(self.cwd))
+
+    def test_standalone_preserves_requested_canonical_agent(self) -> None:
+        executable, record = self._fake_executable()
+        for agent in ("gota-worker", "gota-reviewer"):
+            with self.subTest(agent=agent):
+                result = OpenCodeRunner(executable=executable).run(
+                    agent=agent,
+                    prompt="agent selection",
+                    cwd=self.cwd,
+                    timeout=2,
+                )
+                self.assertEqual(result.argv[:3], (str(executable), "run", "--standalone"))
+                self.assertEqual(result.argv.count("--standalone"), 1)
+                invocation = self._record(record)
+                self.assertEqual(invocation["argv"], list(result.argv[1:]))
+                self.assertEqual(invocation["argv"][invocation["argv"].index("--agent") + 1], agent)
 
     def test_model_without_variant_keeps_exact_argv(self) -> None:
         executable, record = self._fake_executable()
@@ -483,6 +521,7 @@ class OpenCodeRunnerTest(unittest.TestCase):
             (
                 str(executable),
                 "run",
+                "--standalone",
                 "--model",
                 "model/test",
                 "--agent",
