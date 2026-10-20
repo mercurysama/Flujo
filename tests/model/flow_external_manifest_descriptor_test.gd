@@ -86,6 +86,64 @@ func _test_manifest() -> void:
 		not null_entry.is_valid() and null_entry.validation_errors() == ["null_block_descriptor:0"],
 		"A null descriptor is rejected without changing the ordered collection."
 	)
+	_test_mixed_invalid_manifest()
+
+
+func _test_mixed_invalid_manifest() -> void:
+	var mixed: FlowPackageManifest = FlowPackageManifest.new("demo", 2)
+	var empty: FlowExternalBlockDescriptor = FlowExternalBlockDescriptor.new("", "", "", "")
+	var mismatch: FlowExternalBlockDescriptor = FlowExternalBlockDescriptor.new(
+		"other", "mismatch", "res://flow_packages/other/mismatch.gd", "Mismatch"
+	)
+	var duplicate_first: FlowExternalBlockDescriptor = FlowExternalBlockDescriptor.new(
+		"demo", "shared", "res://flow_packages/demo/first.gd", "First shared"
+	)
+	var duplicate_second: FlowExternalBlockDescriptor = FlowExternalBlockDescriptor.new(
+		"demo", "shared", "res://flow_packages/demo/second.gd", "Second shared"
+	)
+	mixed.blocks = [empty, null, mismatch, duplicate_first, duplicate_second]
+	var expected_errors: Array[String] = [
+		"unsupported_manifest_version",
+		"block_0:empty_package_id",
+		"block_0:empty_type_id",
+		"block_0:empty_script_path",
+		"block_0:empty_display_name",
+		"block_package_id_mismatch:0",
+		"null_block_descriptor:1",
+		"block_package_id_mismatch:2",
+		"duplicate_block_type_id:demo:shared",
+	]
+	var first_errors: Array[String] = mixed.validation_errors()
+	var second_errors: Array[String] = mixed.validation_errors()
+	_check(
+		not mixed.is_valid() and first_errors == expected_errors and second_errors == expected_errors,
+		"Mixed invalid manifest data accumulates deterministic diagnostics in authored order."
+	)
+	_check(
+		mixed.package_id == "demo"
+			and mixed.manifest_version == 2
+			and mixed.blocks.size() == 5
+			and mixed.blocks[0] == empty
+			and mixed.blocks[1] == null
+			and mixed.blocks[2] == mismatch
+			and mixed.blocks[3] == duplicate_first
+			and mixed.blocks[4] == duplicate_second
+			and empty.package_id.is_empty()
+			and empty.type_id.is_empty()
+			and empty.script_path.is_empty()
+			and empty.display_name.is_empty()
+			and mismatch.package_id == "other"
+			and mismatch.type_id == "mismatch"
+			and mismatch.script_path == "res://flow_packages/other/mismatch.gd"
+			and mismatch.display_name == "Mismatch"
+			and duplicate_first.global_type_id() == "demo:shared"
+			and duplicate_first.script_path == "res://flow_packages/demo/first.gd"
+			and duplicate_first.display_name == "First shared"
+			and duplicate_second.global_type_id() == "demo:shared"
+			and duplicate_second.script_path == "res://flow_packages/demo/second.gd"
+			and duplicate_second.display_name == "Second shared",
+		"Validation preserves authored fields, descriptor identities, order, and the null slot."
+	)
 
 
 func _test_scope() -> void:
