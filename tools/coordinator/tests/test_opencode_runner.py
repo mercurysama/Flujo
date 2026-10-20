@@ -413,9 +413,7 @@ class OpenCodeRunnerTest(unittest.TestCase):
                 str(executable),
                 "run",
                 "--model",
-                "model/test",
-                "--variant",
-                "fast",
+                "model/test#fast",
                 "--agent",
                 agent,
                 "--auto",
@@ -424,6 +422,7 @@ class OpenCodeRunnerTest(unittest.TestCase):
         )
         invocation = self._record(record)
         self.assertEqual(invocation["argv"], list(result.argv[1:]))
+        self.assertNotIn("--variant", invocation["argv"])
         self.assertEqual(invocation["cwd"], str(self.cwd))
         self.assertEqual(Path.cwd(), before_cwd)
         self.assertFalse(marker.exists())
@@ -455,9 +454,7 @@ class OpenCodeRunnerTest(unittest.TestCase):
             (
                 "run",
                 "--model",
-                "openai/gpt-5.6-luna",
-                "--variant",
-                "max",
+                "openai/gpt-5.6-luna#max",
                 "--agent",
                 "worker",
                 "--auto",
@@ -468,6 +465,41 @@ class OpenCodeRunnerTest(unittest.TestCase):
         self.assertEqual(invocation["git_pager"], "cat")
         self.assertEqual(invocation["pager"], "cat")
         self.assertEqual(invocation["probe_env"], "$literal ${HOME} & Unicode 🌧️")
+
+    def test_model_without_variant_keeps_exact_argv(self) -> None:
+        executable, record = self._fake_executable()
+
+        result = OpenCodeRunner(
+            model="model/test", variant=None, executable=executable
+        ).run(
+            agent="worker",
+            prompt="model without variant",
+            cwd=self.cwd,
+            timeout=2,
+        )
+
+        self.assertEqual(
+            result.argv,
+            (
+                str(executable),
+                "run",
+                "--model",
+                "model/test",
+                "--agent",
+                "worker",
+                "--auto",
+                "model without variant",
+            ),
+        )
+        invocation = self._record(record)
+        self.assertEqual(invocation["argv"], list(result.argv[1:]))
+        self.assertNotIn("--variant", invocation["argv"])
+
+    def test_blank_variant_remains_invalid(self) -> None:
+        for variant in ("", " \t\n"):
+            with self.subTest(variant=variant):
+                with self.assertRaisesRegex(ValueError, "variant must be a non-empty string"):
+                    OpenCodeRunner(variant=variant)
 
     def test_captures_output_and_validates_worker_payload(self) -> None:
         stdout = self._frame(self._worker_payload())

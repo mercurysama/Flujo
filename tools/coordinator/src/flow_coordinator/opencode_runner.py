@@ -84,11 +84,11 @@ class OpenCodeRunner:
         *,
         executable: str | Path = "opencode",
         model: str = DEFAULT_OPENCODE_MODEL,
-        variant: str = DEFAULT_OPENCODE_VARIANT,
+        variant: str | None = DEFAULT_OPENCODE_VARIANT,
     ) -> None:
         self.executable = self._required_text(executable, "executable")
         self.model = self._required_text(model, "model")
-        self.variant = self._required_text(variant, "variant")
+        self.variant = None if variant is None else self._required_text(variant, "variant")
 
     @staticmethod
     def _required_text(value: str | Path, field: str) -> str:
@@ -102,9 +102,7 @@ class OpenCodeRunner:
             self.executable,
             "run",
             "--model",
-            self.model,
-            "--variant",
-            self.variant,
+            self.model if self.variant is None else f"{self.model}#{self.variant}",
             "--agent",
             agent,
             "--auto",
