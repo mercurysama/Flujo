@@ -71,6 +71,7 @@
 - Run the selected Godot command with `--headless --path . tests/model/flow_model_smoke_test.tscn`.
 - The mist test must print `[Flujo] Model mist test passed`. The existing `flow_model_smoke_test.tscn` scene loads `flow_model_mist_test.gd` and remains the compatible command entry point.
 - Report warnings separately from project errors.
+- Known baseline debt: the Godot diagnostic `ERROR: Index dragger_index = 2 is out of bounds` at `update_position (scene/gui/split_container.cpp:124)` is pre-existing BASELINE DEBT. When the command exits normally with code 0 and the relevant tests pass, record this diagnostic separately; do not attribute it to the current Gota and do not increment that Gota's failure counter. This exception does not authorize a repair and does not cover other errors, failed tests, abnormal termination, or demonstrated regressions. The existing `Scan thread aborted` rule remains unchanged.
 - Report every modified file and the final Git status.
 
 # Visual Review
@@ -106,4 +107,4 @@
 - Never commit machine-specific absolute paths in shared configuration.
 - Tool paths belong in user configuration.
 - Report every emerging error, read/write failure, denied permission, or fallback recovery in the final report.
-- If the same resource fails twice, stop and report it even if an alternative exists.
+- If the same resource fails twice, stop and report it even if an alternative exists. Only actual failures attributable to the current Gota increment that Gota's failure counter; the known baseline debt exception above does not count as a resource failure when its conditions are met.
