@@ -10,6 +10,7 @@ func _init() -> void:
 func _run() -> void:
 	_test_descriptor()
 	_test_manifest()
+	_test_mixed_manifest_preservation()
 	_test_scope()
 	if _failures.is_empty():
 		print("[Flujo] External manifest descriptor test passed")
@@ -86,6 +87,76 @@ func _test_manifest() -> void:
 		not null_entry.is_valid() and null_entry.validation_errors() == ["null_block_descriptor:0"],
 		"A null descriptor is rejected without changing the ordered collection."
 	)
+
+
+func _test_mixed_manifest_preservation() -> void:
+	var empty_descriptor: FlowExternalBlockDescriptor = FlowExternalBlockDescriptor.new("", "", "", "")
+	var mismatch_descriptor: FlowExternalBlockDescriptor = FlowExternalBlockDescriptor.new(
+		"other", "mismatch", "res://flow_packages/other/mismatch.gd", "Mismatch"
+	)
+	var duplicate_first: FlowExternalBlockDescriptor = FlowExternalBlockDescriptor.new(
+		"demo", "duplicate", "res://flow_packages/demo/first.gd", "First duplicate"
+	)
+	var duplicate_second: FlowExternalBlockDescriptor = FlowExternalBlockDescriptor.new(
+		"demo", "duplicate", "res://flow_packages/demo/second.gd", "Second duplicate"
+	)
+	var mixed: FlowPackageManifest = FlowPackageManifest.new("demo", 2)
+	mixed.blocks = [empty_descriptor, null, mismatch_descriptor, duplicate_first, duplicate_second]
+	var expected_errors: Array[String] = [
+		"unsupported_manifest_version",
+		"block_0:empty_package_id",
+		"block_0:empty_type_id",
+		"block_0:empty_script_path",
+		"block_0:empty_display_name",
+		"block_package_id_mismatch:0",
+		"null_block_descriptor:1",
+		"block_package_id_mismatch:2",
+		"duplicate_block_type_id:demo:duplicate",
+	]
+	var first_errors: Array[String] = mixed.validation_errors()
+	var second_errors: Array[String] = mixed.validation_errors()
+	_check(first_errors == expected_errors, "Mixed manifest diagnostics are complete and ordered deterministically.")
+	_check(second_errors == expected_errors, "Repeated mixed manifest validation keeps the exact diagnostic order.")
+	_check(first_errors == second_errors, "Repeated mixed manifest validation returns the same diagnostics.")
+	var first_is_valid: bool = mixed.is_valid()
+	var second_is_valid: bool = mixed.is_valid()
+	_check(not first_is_valid, "The mixed invalid manifest remains invalid on the first is_valid call.")
+	_check(not second_is_valid, "The mixed invalid manifest remains invalid on the repeated is_valid call.")
+
+	_check(mixed.manifest_version == 2, "Repeated validation preserves the authored manifest version.")
+	_check(mixed.package_id == "demo", "Repeated validation preserves the authored manifest package ID.")
+	_check(mixed.blocks.size() == 5, "Repeated validation preserves the authored descriptor array size.")
+	_check(mixed.blocks[0] == empty_descriptor, "Repeated validation preserves the first descriptor reference.")
+	_check(mixed.blocks[1] == null, "Repeated validation preserves the deliberate null position.")
+	_check(mixed.blocks[2] == mismatch_descriptor, "Repeated validation preserves the mismatch descriptor reference.")
+	_check(mixed.blocks[3] == duplicate_first, "Repeated validation preserves the first duplicate descriptor reference.")
+	_check(mixed.blocks[4] == duplicate_second, "Repeated validation preserves the second duplicate descriptor reference.")
+
+	_check(empty_descriptor.package_id == "", "Repeated validation preserves the empty descriptor package field.")
+	_check(empty_descriptor.type_id == "", "Repeated validation preserves the empty descriptor type field.")
+	_check(empty_descriptor.script_path == "", "Repeated validation preserves the empty descriptor script field.")
+	_check(empty_descriptor.display_name == "", "Repeated validation preserves the empty descriptor display field.")
+	_check(mismatch_descriptor.package_id == "other", "Repeated validation preserves the mismatch package field.")
+	_check(mismatch_descriptor.type_id == "mismatch", "Repeated validation preserves the mismatch type field.")
+	_check(
+		mismatch_descriptor.script_path == "res://flow_packages/other/mismatch.gd",
+		"Repeated validation preserves the mismatch script field."
+	)
+	_check(mismatch_descriptor.display_name == "Mismatch", "Repeated validation preserves the mismatch display field.")
+	_check(duplicate_first.package_id == "demo", "Repeated validation preserves the first duplicate package field.")
+	_check(duplicate_first.type_id == "duplicate", "Repeated validation preserves the first duplicate type field.")
+	_check(
+		duplicate_first.script_path == "res://flow_packages/demo/first.gd",
+		"Repeated validation preserves the first duplicate script field."
+	)
+	_check(duplicate_first.display_name == "First duplicate", "Repeated validation preserves the first duplicate display field.")
+	_check(duplicate_second.package_id == "demo", "Repeated validation preserves the second duplicate package field.")
+	_check(duplicate_second.type_id == "duplicate", "Repeated validation preserves the second duplicate type field.")
+	_check(
+		duplicate_second.script_path == "res://flow_packages/demo/second.gd",
+		"Repeated validation preserves the second duplicate script field."
+	)
+	_check(duplicate_second.display_name == "Second duplicate", "Repeated validation preserves the second duplicate display field.")
 
 
 func _test_scope() -> void:
