@@ -72,6 +72,48 @@ fabricated. There is no plugin runtime/model/schema/UI change or visual review
 requirement. Test totals, RED evidence, isolated real-agent smoke and final commit
 are recorded in the delivery report; durations/credit consumption are not measured.
 
+### FIX-REVIEW-TAKEOVER-001 — durable frontier recovery
+
+Recovery/takeover never rewrites historical authority. The Worker request,
+invocation and WorkerResult retain one coherent positive historical fence.
+Each durable frontier keeps the fencing generation that created it: REVIEW's
+`gota_worker_commit_verified` and its exact anchored RUNNING → REVIEW event
+must share a positive fence **at least** as new as the Worker authority.
+The anchor fixes the evidence ID/digest, event ID and shared timestamp; it does
+not need a new fencing column or a schema migration.
+
+Reentry validates that persisted frontier's historical authority, not the
+Worker fence or a replacement lease's fence. The current lease still passes
+`fenced_transaction` and final trusted-clock checks; only it authorizes new
+mutations. Reentry rejects a frontier newer than that current lease. Thus a
+takeover between durable WorkerResult and REVIEW can enter REVIEW without
+repeating Worker. A crash after persisting REVIEW but before Reviewer can resume
+Reviewer without duplicating the transition, commit verification or anchor.
+A subsequent takeover during REVIEW preserves that frontier while new Reviewer
+evidence uses the new lease.
+
+Trace: FIX-REVIEW-TAKEOVER-001 → `src/flow_coordinator/store.py`
+(`_review_entry_fencing_token`, entry/review/decision authority readers) →
+`test_takeover_before_review_reentry_preserves_frontier_after_restart`,
+`test_takeover_before_review_continues_reviewer_once_after_restart` and
+`test_takeover_frontier_fencing_tampering_fails_closed` in `tests/`, plus existing
+same-generation, post-REVIEW takeover, anchor/Git tampering and stale-lease tests →
+the single `fix: preserve Gota review frontier across lease takeover` commit.
+Both recovery regressions reproduced the exact transition-incoherence error
+against unchanged production before the fix. The prior tests covered initial
+entry after takeover and reentry separately, but never their composition.
+
+This correction derives REVIEW fencing explicitly from persisted commit evidence
+and checks its anchored event; disabling fence validation, rewriting old evidence,
+special-casing pilot identities and changing the FSM/API/schema were rejected.
+Review packet and deny-by-default Reviewer permissions remain unchanged. No real
+agent/pilot execution or plugin model/runtime/UI change is needed; visual review
+is not applicable. Limits: absent WorkerResult still requires human recovery;
+this fix does not reconstruct missing authority. Baseline: 366 tests passed;
+three new tests include ten adversarial fencing variants. Final test totals and
+isolated persistence smoke are delivery evidence. Review time, credits and
+lead time are not measured.
+
 The operational store is SQLite. The future default location is
 `~/.local/state/flow-coordinator/coordinator.sqlite3`; tests always pass an
 isolated temporary database explicitly.

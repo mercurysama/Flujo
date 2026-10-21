@@ -9,6 +9,7 @@ import unittest
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from flow_coordinator import (
     GOTA_PROTOCOL,
@@ -421,6 +422,104 @@ class ReviewEntryTest(unittest.TestCase):
                 request_id=request.request_id,
             )
         self.assertEqual(self.store.get_run(self.run.run_id).state, TaskState.REVIEW)
+
+    def test_takeover_before_review_reentry_preserves_frontier_after_restart(self) -> None:
+        request, result, sha = self._durable_worker()
+        historical = self.store.list_evidence(self.run.run_id)
+        now = self.lease.expires_at + timedelta(seconds=1)
+        with self.assertRaises(LeaseExpiredError):
+            self.service.locks.acquire("reviewer-b", self.run.run_id, now=now)
+        self.assertEqual(self.service.locks.inspect()["stale"], 1)
+        self.service.locks.recover_stale(authorized=True)
+        takeover = self.service.locks.acquire("reviewer-b", self.run.run_id, now=now)
+        self.assertEqual(takeover.fencing_token, self.lease.fencing_token + 1)
+
+        with patch.object(self.store, "_trusted_now", return_value=now):
+            entered = self._boundary().run(
+                self.run.run_id, takeover, attempt=1, request_id=request.request_id
+            )
+        self.assertTrue(entered.created)
+        self.assertEqual(entered.commit_sha, sha)
+        evidence = self.store.list_evidence(self.run.run_id)
+        events = self.store.list_events(self.run.run_id)
+        anchor = self.store.load_gota_worker_review_boundary(
+            self.run.run_id, 1, request.request_id
+        )
+        self.assertEqual(evidence[:3], historical)
+        with self.store._connect() as connection:
+            fences = connection.execute(
+                "SELECT fencing_token FROM evidence WHERE run_id = ? ORDER BY rowid",
+                (self.run.run_id,),
+            ).fetchall()
+            event_fence = connection.execute(
+                "SELECT fencing_token FROM transition_events WHERE event_id = ?",
+                (events[-1].event_id,),
+            ).fetchone()[0]
+        self.assertEqual([row[0] for row in fences], [self.lease.fencing_token] * 3 + [takeover.fencing_token])
+        self.assertEqual(event_fence, takeover.fencing_token)
+        self.assertEqual(anchor.commit_evidence_id, entered.commit_evidence.evidence_id)
+        self.assertEqual(anchor.transition_event_id, events[-1].event_id)
+
+        # This is the missing crash/restart window: REVIEW exists, Reviewer has
+        # not run, and Worker authority still belongs to the previous lease.
+        reopened = SQLiteCoordinatorStore(self.database)
+        with patch.object(reopened, "_trusted_now", return_value=now):
+            again = self._boundary(store=reopened).run(
+                self.run.run_id, takeover, attempt=1, request_id=request.request_id
+            )
+        self.assertTrue(again.already_completed)
+        self.assertEqual(again.commit_sha, result.commit_sha)
+        self.assertEqual(reopened.list_evidence(self.run.run_id), evidence)
+        self.assertEqual(reopened.list_events(self.run.run_id), events)
+        self.assertEqual(reopened.load_gota_worker_review_boundary(self.run.run_id, 1, request.request_id), anchor)
+
+    def test_takeover_frontier_fencing_tampering_fails_closed(self) -> None:
+        # Worker fence 2, REVIEW fence 3: include a positive but older REVIEW
+        # generation, not just malformed tokens or unequal evidence/event fences.
+        variants = (
+            ("commit", 0), ("commit", "invalid"), ("commit", 2),
+            ("event", 0), ("event", "invalid"), ("event", 2),
+            ("both", 1), ("both", 4),
+            ("worker_result", 0), ("worker_result", 1),
+        )
+        for target, token in variants:
+            with self.subTest(target=target, token=token):
+                case = ReviewEntryTest("test_happy_path_is_atomic_and_auditable")
+                case.setUp()
+                try:
+                    case.service.locks.release(case.lease)
+                    case.lease = case.service.locks.acquire("worker", case.run.run_id)
+                    request, _result, _sha = case._durable_worker()
+                    now = case.lease.expires_at + timedelta(seconds=1)
+                    with case.assertRaises(LeaseExpiredError):
+                        case.service.locks.acquire("reviewer-b", case.run.run_id, now=now)
+                    case.service.locks.recover_stale(authorized=True)
+                    takeover = case.service.locks.acquire("reviewer-b", case.run.run_id, now=now)
+                    with patch.object(case.store, "_trusted_now", return_value=now):
+                        case._boundary().run(case.run.run_id, takeover, attempt=1, request_id=request.request_id)
+                    with case.store.transaction(immediate=True) as connection:
+                        if target in {"commit", "both", "worker_result"}:
+                            connection.execute("DROP TRIGGER immutable_evidence_update")
+                            kind = "gota_worker_result_received" if target == "worker_result" else "gota_worker_commit_verified"
+                            connection.execute(
+                                "UPDATE evidence SET fencing_token = ? WHERE run_id = ? AND kind = ?",
+                                (token, case.run.run_id, kind),
+                            )
+                        if target in {"event", "both"}:
+                            connection.execute("DROP TRIGGER immutable_transition_events_update")
+                            connection.execute(
+                                "UPDATE transition_events SET fencing_token = ? WHERE run_id = ? AND reason = ?",
+                                (token, case.run.run_id, "gota_worker_commit_verified"),
+                            )
+                    evidence = case.store.list_evidence(case.run.run_id)
+                    events = case.store.list_events(case.run.run_id)
+                    with patch.object(case.store, "_trusted_now", return_value=now):
+                        with case.assertRaises(GotaWorkerReviewBoundaryError):
+                            case._boundary().run(case.run.run_id, takeover, attempt=1, request_id=request.request_id)
+                    case.assertEqual(case.store.list_evidence(case.run.run_id), evidence)
+                    case.assertEqual(case.store.list_events(case.run.run_id), events)
+                finally:
+                    case.doCleanups()
 
     def test_missing_request_reservation_or_result_fails_closed(self) -> None:
         commit_sha = self._commit_worker()

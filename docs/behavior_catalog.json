@@ -486,11 +486,13 @@
         "REVIEW requires exactly one coherent commit-verification evidence record, one Gota-specific boundary anchor for run/attempt/request, and the exact anchored transition event with matching evidence ID, digest, fencing, and timestamp.",
         "The final trusted lease/fencing check occurs after the anchor and last Git verification; any failure rolls back the complete frontier transaction.",
         "A repeated call revalidates the anchored evidence, transition event, links, and current Git fingerprint read-only; it is idempotent and does not execute Worker or duplicate evidence, events, or the anchor.",
-        "The boundary invokes only the read-only Git adapter and never invokes Reviewer, ReviewResult persistence, DecisionPolicy, or transition_gota_to_done."
+        "The boundary invokes only the read-only Git adapter and never invokes Reviewer, ReviewResult persistence, DecisionPolicy, or transition_gota_to_done.",
+        "FIX-REVIEW-TAKEOVER-001: historical Worker request/invocation/result share one positive fence; REVIEW commit verification and its anchored transition share their own positive fence, never older than Worker authority. Reentry after takeover before or after REVIEW preserves both generations and never repeats Worker or duplicates the frontier; only the current valid lease authorizes new mutations."
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
-      "test_paths": ["tools/coordinator/tests/test_gota_review_entry.py"]
+      "test_paths": ["tools/coordinator/tests/test_gota_review_entry.py"],
+      "notes": "FIX-REVIEW-TAKEOVER-001 corrects existing recovery behavior, not a behavior-preserving refactor. The new pre-REVIEW takeover/reentry regression reproduced the exact transition event incoherence against unchanged production; prior takeover coverage stopped after first REVIEW entry. Explicit fencing tampering variants protect fail-closed validation."
     },
     {
       "id": "FLUJO-BHV-GOTA-REVIEW-PERSISTENCE-001",

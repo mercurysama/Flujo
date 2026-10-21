@@ -1799,6 +1799,27 @@ class SQLiteCoordinatorStore:
             raise error_type(f"{context} authorities disagree on fencing")
         return tokens[0]
 
+    @staticmethod
+    def _review_entry_fencing_token(
+        commit_row: sqlite3.Row,
+        historical_worker_fencing: int,
+        *,
+        error_type: type[CoordinatorStoreError],
+    ) -> int:
+        """REVIEW owns its creator's fence, not necessarily Worker's fence.
+
+        The anchor links this evidence to the exact transition, whose equal
+        positive fence is checked separately. Recovery never rewrites either.
+        """
+
+        review_entry_fencing = commit_row["fencing_token"]
+        if (
+            type(review_entry_fencing) is not int
+            or review_entry_fencing < historical_worker_fencing
+        ):
+            raise error_type("Worker commit verification fencing is incoherent")
+        return review_entry_fencing
+
     def persist_gota_worker_result(
         self,
         run_id: str,
@@ -2532,13 +2553,9 @@ class SQLiteCoordinatorStore:
             raise GotaReviewResultError(
                 "Persisted Worker commit verification is incoherent"
             )
-        if (
-            type(commit_row["fencing_token"]) is not int
-            or commit_row["fencing_token"] != historical_fencing_token
-        ):
-            raise GotaReviewResultError(
-                "Worker commit verification fencing is incoherent"
-            )
+        review_entry_fencing = self._review_entry_fencing_token(
+            commit_row, historical_fencing_token, error_type=GotaReviewResultError
+        )
 
         anchor = self._load_gota_worker_review_boundary_anchor(
             connection,
@@ -2550,7 +2567,7 @@ class SQLiteCoordinatorStore:
             connection,
             anchor,
             commit_evidence_row=commit_row,
-            expected_fencing_token=historical_fencing_token,
+            expected_fencing_token=review_entry_fencing,
             expected_actor=None,
         )
         return (
@@ -2739,13 +2756,9 @@ class SQLiteCoordinatorStore:
             raise GotaDecisionApplicationError(
                 "Persisted Worker commit verification is incoherent"
             )
-        if (
-            type(commit_row["fencing_token"]) is not int
-            or commit_row["fencing_token"] != fencing_token
-        ):
-            raise GotaDecisionApplicationError(
-                "Worker commit verification fencing is incoherent"
-            )
+        review_entry_fencing = self._review_entry_fencing_token(
+            commit_row, fencing_token, error_type=GotaDecisionApplicationError
+        )
 
         try:
             worker_review_anchor = self._load_gota_worker_review_boundary_anchor(
@@ -2758,7 +2771,7 @@ class SQLiteCoordinatorStore:
                 connection,
                 worker_review_anchor,
                 commit_evidence_row=commit_row,
-                expected_fencing_token=fencing_token,
+                expected_fencing_token=review_entry_fencing,
                 expected_actor=None,
             )
         except GotaWorkerReviewBoundaryError as error:
@@ -4015,11 +4028,20 @@ class SQLiteCoordinatorStore:
                     attempt=attempt,
                     request_id=request_id,
                 )
+                review_entry_fencing = self._review_entry_fencing_token(
+                    commit_rows[0],
+                    historical_fencing_token,
+                    error_type=GotaWorkerReviewBoundaryError,
+                )
+                if review_entry_fencing > lease.fencing_token:
+                    raise GotaWorkerReviewBoundaryError(
+                        "REVIEW fencing is newer than the current lease"
+                    )
                 self._validate_gota_worker_review_boundary_links(
                     connection,
                     anchor,
                     commit_evidence_row=commit_rows[0],
-                    expected_fencing_token=historical_fencing_token,
+                    expected_fencing_token=review_entry_fencing,
                     expected_actor=None,
                 )
                 current_observation = verify(request, worker_result)
@@ -4045,6 +4067,10 @@ class SQLiteCoordinatorStore:
                 final_now = self._trusted_now()
                 self._assert_fenced_connection(connection, lease, final_now)
             else:
+                if lease.fencing_token < historical_fencing_token:
+                    raise GotaWorkerReviewBoundaryError(
+                        "REVIEW entry fencing predates durable Worker authority"
+                    )
                 anchor_rows = connection.execute(
                     "SELECT * FROM gota_worker_review_boundaries WHERE run_id = ?",
                     (run_id,),

@@ -228,7 +228,7 @@ class GotaReviewPersistenceTest(unittest.TestCase):
             payload=result,
         )
 
-    def _durable_worker_and_review_frontier(self) -> GotaWorkerResult:
+    def _durable_worker_and_review_frontier(self, *, enter_review: bool = True) -> GotaWorkerResult:
         self.store.reserve_gota_worker_invocation(
             self.run.run_id, self.request, self.lease
         )
@@ -242,6 +242,8 @@ class GotaReviewPersistenceTest(unittest.TestCase):
         self.store.persist_gota_worker_result(
             self.run.run_id, worker_result, self.lease
         )
+        if not enter_review:
+            return worker_result
         entered = GotaWorkerReviewBoundary(self.repository, store=self.store).run(
             self.run.run_id,
             self.lease,
@@ -600,6 +602,57 @@ class GotaReviewPersistenceTest(unittest.TestCase):
         )
         self.assertEqual(second, expected)
         self.assertEqual(len(runner.calls), 1)
+
+    def test_takeover_before_review_continues_reviewer_once_after_restart(self) -> None:
+        worker = self._durable_worker_and_review_frontier(enter_review=False)
+        historical = self.store.list_evidence(self.run.run_id)
+        now = self.lease.expires_at + timedelta(seconds=1)
+        with self.assertRaises(LeaseExpiredError):
+            self.service.locks.acquire("reviewer-b", self.run.run_id, now=now)
+        self.assertEqual(self.service.locks.inspect()["stale"], 1)
+        self.service.locks.recover_stale(authorized=True)
+        takeover = self.service.locks.acquire("reviewer-b", self.run.run_id, now=now)
+        self.assertEqual(takeover.fencing_token, self.lease.fencing_token + 1)
+        with patch.object(self.store, "_trusted_now", return_value=now):
+            GotaWorkerReviewBoundary(self.repository, store=self.store).run(
+                self.run.run_id, takeover, attempt=1, request_id=self.request.request_id
+            )
+        anchor = self.store.load_gota_worker_review_boundary(self.run.run_id, 1, self.request.request_id)
+        events = self.store.list_events(self.run.run_id)
+        expected = self._review_result(commit_sha=worker.commit_sha)
+        runner = ReviewRunner(lambda _prompt: self._successful_execution(expected))
+        reopened = SQLiteCoordinatorStore(self.database)
+        boundary = self._boundary(runner, store=reopened)
+        with patch.object(reopened, "_trusted_now", return_value=now):
+            outcome = boundary.run(self.run.run_id, takeover, attempt=1,
+                                   request_id=self.request.request_id, timeout=3)
+            self.assertTrue(outcome.valid)
+            self.assertEqual(outcome.review_result, expected)
+            self.assertEqual(boundary.run(self.run.run_id, takeover, attempt=1,
+                                         request_id=self.request.request_id, timeout=3), expected)
+            with self.assertRaises(FencingTokenError):
+                boundary.run(self.run.run_id, self.lease, attempt=1,
+                             request_id=self.request.request_id, timeout=3)
+        self.assertEqual([call["agent"] for call in runner.calls], ["gota-reviewer"])
+        self.assertIn(worker.commit_sha, str(runner.calls[0]["prompt"]))
+        final = SQLiteCoordinatorStore(self.database)
+        self.assertEqual(final.load_gota_review_result(self.run.run_id, 1, expected.request_id), expected)
+        authorities = final.load_gota_decision_authorities(self.run.run_id, 1, self.request.request_id)
+        self.assertEqual(authorities.worker_result, worker)
+        self.assertEqual(authorities.review_result, expected)
+        self.assertEqual(final.load_gota_worker_result(self.run.run_id, 1, self.request.request_id), worker)
+        self.assertEqual(final.load_gota_worker_review_boundary(self.run.run_id, 1, self.request.request_id), anchor)
+        self.assertEqual(final.list_events(self.run.run_id), events)
+        self.assertEqual(sum(event.to_state is TaskState.REVIEW for event in events), 1)
+        evidence = final.list_evidence(self.run.run_id)
+        self.assertEqual(evidence[:3], historical)
+        self.assertEqual(sum(item.kind == "gota_worker_commit_verified" for item in evidence), 1)
+        with final._connect() as connection:
+            fences = connection.execute(
+                "SELECT fencing_token FROM evidence WHERE run_id = ? ORDER BY rowid",
+                (self.run.run_id,),
+            ).fetchall()
+        self.assertEqual([row[0] for row in fences], [self.lease.fencing_token] * 3 + [takeover.fencing_token] * 2)
 
     def test_all_canonical_decisions_remain_review(self) -> None:
         for decision in ReviewDecision:
