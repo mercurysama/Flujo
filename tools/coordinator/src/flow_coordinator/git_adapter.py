@@ -117,6 +117,39 @@ class ReadOnlyGitAdapter:
         )
         return tuple(sorted(paths))
 
+    def patch_between(self, ancestor_sha: str, descendant_sha: str) -> str:
+        """Return the complete patch, including binary data and final newlines."""
+
+        return self._run_bytes(
+            "diff", "--binary", "--full-index", "--no-ext-diff", "--no-textconv",
+            "--no-color", ancestor_sha, descendant_sha, "--",
+        ).decode("utf-8", errors="surrogateescape")
+
+    def commit_metadata(self, commit_sha: str) -> str:
+        """Read the commit object's tree, parents, author, committer and message."""
+
+        return self._run_bytes("cat-file", "commit", commit_sha).decode(
+            "utf-8", errors="surrogateescape"
+        )
+
+    def diff_check(self, ancestor_sha: str, descendant_sha: str) -> dict[str, object]:
+        """Distinguish whitespace findings (exit 2) from failed Git inspection."""
+
+        result = subprocess.run(
+            ["git", "diff", "--check", "--no-ext-diff", "--no-textconv", "--no-color",
+             ancestor_sha, descendant_sha, "--"],
+            cwd=self.repository, check=False, capture_output=True, shell=False,
+        )
+        if result.returncode not in (0, 2):
+            raise GitReadError(
+                result.stderr.decode("utf-8", errors="replace").strip()
+                or "Git diff check failed"
+            )
+        return {
+            "passed": result.returncode == 0,
+            "output": (result.stdout + result.stderr).decode("utf-8", errors="surrogateescape"),
+        }
+
     def refs(self) -> tuple[tuple[str, str, str], ...]:
         raw_refs = self._run_bytes(
             "for-each-ref",

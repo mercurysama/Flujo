@@ -427,7 +427,34 @@ class GotaReviewerPersistenceBoundary:
             worker_result,
             commit_evidence,
         )
-        phase_result = self.review_phase.run(handoff, timeout=timeout)
+        # Carry persisted report bodies, never external paths to be rediscovered
+        # by Reviewer. These are semantic evidence, not an alternative Git authority.
+        reports = tuple(
+            {
+                "evidence_id": evidence.evidence_id,
+                "kind": evidence.kind,
+                "payload": dict(evidence.payload),
+                "digest": evidence.digest,
+                "created_at": evidence.created_at.isoformat(),
+            }
+            for evidence in self.store.list_evidence(run_id)
+        )
+        spec = self.store.get_task_spec(run.task_id)
+        context = self.store.get_context(spec.context_id)
+        reports += ({"kind": "task_context", "payload": dict(context.payload)},)
+        reports += tuple(
+            {
+                "kind": "persisted_checkpoint",
+                "checkpoint_id": checkpoint.checkpoint_id,
+                "payload": dict(checkpoint.payload),
+                "digest": checkpoint.digest,
+                "created_at": checkpoint.created_at.isoformat(),
+            }
+            for checkpoint in self.store.list_checkpoints(run_id)
+        )
+        phase_result = self.review_phase.run(
+            handoff, timeout=timeout, persisted_reports=reports
+        )
         if not phase_result.valid:
             return phase_result
         review_result = phase_result.review_result

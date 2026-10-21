@@ -31,6 +31,47 @@ optional `test` dependency `jsonschema`; it is not a runtime dependency.
 The Gota protocol type is available only as the explicit `GotaCheckpoint`
 name; it is not exported through a generic `Checkpoint` alias.
 
+### FIX-REVIEW-ACCESS-001 — verified semantic review packet
+
+The authorized correction to REVIEW-ACCESS-001 separates mechanical Git
+verification (Coordinator) from read-only semantic audit (Reviewer). The closed
+PILOT-001S remains historical BLOCKED evidence and must not be retried or edited.
+
+After the existing `verify_worker_commit_git()` accepts the handoff, `ReviewPhase`
+builds a self-contained packet with the review request/acceptance criteria,
+allowed/protected paths, verified base/commit/changed paths, exact binary/full-index
+patch, raw commit metadata, ancestry, exactly-one-commit, clean worktree and
+`diff --check` result. `ReadOnlyGitAdapter` supplies the new read-only inspections;
+Git fingerprints are checked again before execution and after review. No patch
+truncation or new size policy is introduced. Existing process/OS limits remain
+observable execution failures, never permission to silently omit evidence.
+
+The complete WorkerResult (including evidence, checkpoint and reported warnings)
+is a separate `worker_report`, not Git authority. The persistence boundary embeds
+the run's persisted evidence bodies, task context and checkpoints as
+`persisted_reports`; their contents remain reports, not independently verified
+test results. It never follows report paths or asks Reviewer to read external
+baseline files. Callers must persist necessary report bodies, not only references;
+genuinely missing semantic evidence can still require correction or human review.
+
+The canonical `gota-reviewer` permits only read/glob/grep. Shell, external-directory
+access, edits, subagents and skills remain denied by default; no model is pinned.
+The prompt requires auditing only the packet and returning one `flujo.gota/v1`
+`review.result`. `--auto` is not human authorization and cannot override denials.
+ReviewResult anchors, lease/fencing, restart idempotence and DecisionApplication
+are unchanged. Push/merge support is not added.
+
+Trace: FIX-REVIEW-ACCESS-001 → `gota_phases.py`, `gota_persistence.py`,
+`git_adapter.py`, `.opencode/agents/gota-reviewer.md` → packet/permission tests in
+`tests/test_gota_review_persistence.py`, existing entry/cycle/protocol/persistence/
+decision tests → the single `fix: make Gota review packet self-contained` commit.
+Widening permissions, trusting Worker stdout, following arbitrary external paths
+and adding a parallel Git authority were rejected. Remaining limitations: test
+reports are not rerun by Reviewer, and incomplete persisted evidence is not
+fabricated. There is no plugin runtime/model/schema/UI change or visual review
+requirement. Test totals, RED evidence, isolated real-agent smoke and final commit
+are recorded in the delivery report; durations/credit consumption are not measured.
+
 The operational store is SQLite. The future default location is
 `~/.local/state/flow-coordinator/coordinator.sqlite3`; tests always pass an
 isolated temporary database explicitly.

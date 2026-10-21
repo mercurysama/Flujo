@@ -521,8 +521,27 @@
         "Incomplete, duplicate, tampered, stale, expired, or legacy authorities fail closed, and CYCLE_FAILED is not materialized from an intact durable ReviewResult."
       ],
       "coverage": "automatic",
-      "baseline_status": "failing",
+      "baseline_status": "passing",
       "test_paths": ["tools/coordinator/tests/test_gota_decision_application.py"]
+    },
+    {
+      "id": "FLUJO-BHV-GOTA-REVIEW-PACKET-001",
+      "area": "Self-contained verified Gota semantic review packet",
+      "precondition": "The existing Coordinator Git verifier accepts a coherent Worker handoff or durable Worker-to-Review frontier.",
+      "public_action": "Run ReviewPhase, optionally through GotaReviewerPersistenceBoundary.",
+      "expected_result": "Reviewer receives the exact Coordinator-read patch and commit metadata, verified Git facts, request criteria and paths, and separately identified complete Worker reports and persisted evidence bodies without shell or external evidence reads.",
+      "invariants": [
+        "Only the existing Coordinator Git verifier establishes commit, ancestry, exactly-one-commit, changed paths and clean worktree authority; Worker claims never replace it.",
+        "Packet construction checks the Git fingerprint before Reviewer and existing post-review verification remains mandatory.",
+        "The complete binary/full-index patch preserves final newlines and is never silently truncated; diff-check findings remain explicit.",
+        "SHA/path incoherence or failed packet Git inspection never starts Reviewer.",
+        "Canonical Reviewer allows only read, glob and grep; shell, edit, external_directory, subagent and skill remain denied and no model is fixed.",
+        "ReviewResult persistence and DecisionApplication keep their existing anchors, fencing and restart guarantees."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tools/coordinator/tests/test_gota_review_persistence.py", "tools/coordinator/tests/test_gota_cycle.py", "tools/coordinator/tests/test_gota_decision_application.py"],
+      "notes": "Authorized behavior correction FIX-REVIEW-ACCESS-001, not a behavior-preserving refactor. Four new focal tests failed against unchanged production before implementation. DecisionApplication historical failing status corrected after a fresh passing baseline. Real-agent discovery/no-tool smoke is delivery evidence, not implied by these unit test paths."
     }
   ]
 }

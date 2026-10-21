@@ -10,6 +10,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Callable
+from unittest.mock import patch
 
 from flow_coordinator import (
     GOTA_PROTOCOL,
@@ -30,11 +31,13 @@ from flow_coordinator import (
     WorkerResultStatus,
 )
 from flow_coordinator.domain import Lease, TaskSpec, isoformat
+from flow_coordinator.git_adapter import ReadOnlyGitAdapter, GitReadError
 from flow_coordinator.service import CoordinatorService
 from flow_coordinator.store import (
     AcceptanceEvidenceError,
     FencingTokenError,
     GotaReviewResultError,
+    GotaWorkerReviewBoundaryError,
     LeaseExpiredError,
     SQLiteCoordinatorStore,
 )
@@ -396,6 +399,148 @@ class GotaReviewPersistenceTest(unittest.TestCase):
         self.assertIsInstance(second, GotaReviewResult)
         self.assertEqual(second, expected)
         self.assertEqual(len(runner.calls), 1)
+
+    def test_verified_packet_contains_exact_git_patch_and_durable_reports(self) -> None:
+        # An external path is a reference, never an instruction to read a file.
+        baseline = {"tests": "baseline passed", "external_reference": str(self.root / "baseline.json")}
+        self.store.append_evidence(self.run.run_id, "baseline_tests", baseline, self.lease)
+        checkpoint = {"test_output": "persisted focal test passed"}
+        self.store.append_checkpoint(self.run.run_id, checkpoint, self.lease)
+        worker = self._durable_worker_and_review_frontier()
+        expected = self._review_result(commit_sha=worker.commit_sha)
+        exact_patch = subprocess.run(
+            ("git", "diff", "--binary", "--full-index", "--no-ext-diff", "--no-textconv",
+             self.base_sha, worker.commit_sha, "--"),
+            cwd=self.repository, check=True, capture_output=True,
+        ).stdout.decode("utf-8", errors="surrogateescape")
+        reopened = SQLiteCoordinatorStore(self.database)
+
+        def audit(prompt: str) -> OpenCodeRunResult:
+            packet = json.loads(prompt.split("Verified review packet JSON:\n", 1)[1])
+            request = packet["request"]
+            authority = packet["coordinator_git"]
+            self.assertEqual(request["acceptance_criteria"], list(self.request.acceptance_criteria))
+            self.assertEqual(request["allowed_paths"], ["src/change.py"])
+            self.assertEqual(authority["base_sha"], self.base_sha)
+            self.assertEqual(authority["verified_commit_sha"], worker.commit_sha)
+            self.assertEqual(authority["verified_changed_paths"], ["src/change.py"])
+            self.assertEqual(authority["patch"], exact_patch)
+            self.assertIn("worker change", authority["commit_metadata"])
+            self.assertTrue(authority["base_is_ancestor"])
+            self.assertEqual(authority["commit_count"], 1)
+            self.assertEqual(authority["worktree_status"], "")
+            self.assertEqual(authority["diff_check"], {"passed": True, "output": ""})
+            self.assertEqual(packet["worker_report"], worker.to_payload())
+            self.assertIn("not Git authority", packet["report_provenance"])
+            self.assertIn(baseline, [item["payload"] for item in packet["persisted_reports"]])
+            self.assertIn(checkpoint, [item["payload"] for item in packet["persisted_reports"]])
+            self.assertIn("do not use shell", prompt)
+            self.assertIn("do not reconstruct Git authority", prompt)
+            self.assertIn("do not access paths outside the workspace", prompt)
+            return self._successful_execution(expected)
+
+        runner = ReviewRunner(audit)
+        # No packet construction may follow external evidence references.
+        with patch.object(Path, "read_text", side_effect=AssertionError("external read")):
+            outcome = self._run_boundary(self._boundary(runner, store=reopened))
+        self.assertTrue(outcome.valid)
+        self.assertEqual(reopened.load_gota_review_result(self.run.run_id, 1, expected.request_id), expected)
+        self.assertEqual(len(runner.calls), 1)
+
+    def test_packet_does_not_promote_worker_git_claims(self) -> None:
+        self.store.reserve_gota_worker_invocation(self.run.run_id, self.request, self.lease)
+        (self.repository / "src/change.py").write_text("value = 'worker'\n", encoding="utf-8")
+        self._git("add", "--", "src/change.py")
+        self._git("commit", "-m", "worker change")
+        sha = self._git("rev-parse", "HEAD")
+        worker = replace(self._worker_result(sha), evidence=({
+            "verified_commit_sha": "b" * 40, "patch": "invented patch",
+            "worktree_status": "invented status", "warnings": ["baseline debt reported"],
+        },))
+        self.store.persist_gota_worker_result(self.run.run_id, worker, self.lease)
+        GotaWorkerReviewBoundary(self.repository, store=self.store).run(
+            self.run.run_id, self.lease, attempt=1, request_id=self.request.request_id)
+        expected = self._review_result(commit_sha=sha)
+        runner = ReviewRunner(lambda _prompt: self._successful_execution(expected))
+        outcome = self._run_boundary(self._boundary(runner))
+        self.assertTrue(outcome.valid)
+        packet = json.loads(str(runner.calls[0]["prompt"]).split("Verified review packet JSON:\n", 1)[1])
+        self.assertEqual(packet["worker_report"], worker.to_payload())
+        self.assertEqual(packet["coordinator_git"]["verified_commit_sha"], sha)
+        self.assertNotEqual(packet["coordinator_git"]["patch"], "invented patch")
+        self.assertEqual(packet["coordinator_git"]["worktree_status"], "")
+
+    def test_reviewer_definition_has_no_shell_or_mutating_allow(self) -> None:
+        definition = (Path(__file__).resolve().parents[3] / ".opencode/agents/gota-reviewer.md").read_text()
+        frontmatter = definition.split("---", 2)[1]
+        rules = frontmatter.split("  - action: ")[1:]
+        allowed = [rule.splitlines()[0] for rule in rules if "effect: allow" in rule]
+        self.assertEqual(allowed, ["read", "glob", "grep"])
+        self.assertIn('action: "*"\n    resource: "*"\n    effect: deny', frontmatter)
+        self.assertNotIn("model:", frontmatter)
+
+    def test_read_only_git_packet_operations_preserve_exact_newlines(self) -> None:
+        worker = self._durable_worker_and_review_frontier()
+        adapter = ReadOnlyGitAdapter(self.repository)
+        before = adapter.snapshot()
+        exact = subprocess.run(
+            ("git", "diff", "--binary", "--full-index", "--no-ext-diff", "--no-textconv",
+             self.base_sha, worker.commit_sha, "--"),
+            cwd=self.repository, check=True, capture_output=True,
+        ).stdout.decode("utf-8", errors="surrogateescape")
+        self.assertEqual(adapter.patch_between(self.base_sha, worker.commit_sha), exact)
+        self.assertTrue(exact.endswith("\n"))
+        self.assertEqual(adapter.diff_check(self.base_sha, worker.commit_sha), {"passed": True, "output": ""})
+        self.assertIn("worker change", adapter.commit_metadata(worker.commit_sha))
+        self.assertEqual(adapter.snapshot(), before)
+        with self.assertRaises(GitReadError):
+            adapter.patch_between(self.base_sha, "0" * 40)
+
+    def test_packet_git_read_failure_never_invokes_reviewer(self) -> None:
+        self._durable_worker_and_review_frontier()
+        runner = ReviewRunner(lambda _prompt: self.fail("Reviewer must not start"))
+        with patch.object(ReadOnlyGitAdapter, "patch_between", side_effect=GitReadError("unreadable patch")):
+            outcome = self._run_boundary(self._boundary(runner))
+        self.assertFalse(outcome.valid)
+        self.assertEqual(runner.calls, [])
+        self.assertEqual(self.store.get_run(self.run.run_id).state, TaskState.REVIEW)
+
+    def test_inconsistent_durable_sha_or_paths_never_invokes_reviewer(self) -> None:
+        self.store.reserve_gota_worker_invocation(self.run.run_id, self.request, self.lease)
+        (self.repository / "src/change.py").write_text("value = 'worker'\n", encoding="utf-8")
+        self._git("add", "--", "src/change.py")
+        self._git("commit", "-m", "worker change")
+        sha = self._git("rev-parse", "HEAD")
+        # Each variant uses a fresh store because WorkerResult is immutable.
+        for field, value in (("commit_sha", "b" * 40), ("changed_paths", ("other.py",))):
+            with self.subTest(field=field):
+                database = self.root / f"{field}.sqlite3"
+                store = SQLiteCoordinatorStore(database)
+                service = CoordinatorService(store)
+                run = service.create_task(self.store.get_task_spec(self.run.task_id), {"workspace": str(self.repository)})
+                lease = service.start(run.run_id, owner_id="worker")
+                request = replace(self.request, run_id=run.run_id, request_id=f"{run.run_id}:1:worker")
+                worker = replace(self._worker_result(sha), run_id=run.run_id, request_id=request.request_id, **{field: value})
+                store.reserve_gota_worker_invocation(run.run_id, request, lease)
+                store.persist_gota_worker_result(run.run_id, worker, lease)
+                with self.assertRaises(GotaWorkerReviewBoundaryError) as caught:
+                    GotaWorkerReviewBoundary(self.repository, store=store).run(
+                        run.run_id, lease, attempt=1, request_id=request.request_id)
+                self.assertIn("Independent Git verification failed", str(caught.exception))
+                self.assertEqual(store.get_run(run.run_id).state, TaskState.RUNNING)
+
+    def test_git_diff_check_reports_whitespace_without_hiding_patch(self) -> None:
+        (self.repository / "src/change.py").write_text("value = 'trailing'   \n", encoding="utf-8")
+        self._git("add", "--", "src/change.py")
+        self._git("commit", "-m", "whitespace fixture")
+        sha = self._git("rev-parse", "HEAD")
+        adapter = ReadOnlyGitAdapter(self.repository)
+        check = adapter.diff_check(self.base_sha, sha)
+        self.assertFalse(check["passed"])
+        self.assertIn("trailing whitespace", check["output"])
+        self.assertIn("+value = 'trailing'   \n", adapter.patch_between(self.base_sha, sha))
+        with self.assertRaises(GitReadError):
+            adapter.diff_check(self.base_sha, "0" * 40)
 
     def test_reviewer_takeover_uses_new_lease_and_same_worker_sha(self) -> None:
         worker = self._durable_worker_and_review_frontier()
