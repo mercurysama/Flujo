@@ -10,6 +10,7 @@ func _init() -> void:
 func _run() -> void:
 	_test_descriptor()
 	_test_manifest()
+	_test_mixed_invalid_manifest()
 	_test_scope()
 	if _failures.is_empty():
 		print("[Flujo] External manifest descriptor test passed")
@@ -85,6 +86,68 @@ func _test_manifest() -> void:
 	_check(
 		not null_entry.is_valid() and null_entry.validation_errors() == ["null_block_descriptor:0"],
 		"A null descriptor is rejected without changing the ordered collection."
+	)
+
+
+func _test_mixed_invalid_manifest() -> void:
+	var manifest: FlowPackageManifest = FlowPackageManifest.new("", 2)
+	var empty_descriptor: FlowExternalBlockDescriptor = FlowExternalBlockDescriptor.new(
+		"", "", "", ""
+	)
+	var mismatched_descriptor: FlowExternalBlockDescriptor = FlowExternalBlockDescriptor.new(
+		"foreign", "mismatch", "res://flow_packages/foreign/mismatch.gd", "Mismatch"
+	)
+	var duplicate_descriptor: FlowExternalBlockDescriptor = FlowExternalBlockDescriptor.new(
+		"foreign", "duplicate", "res://flow_packages/foreign/duplicate.gd", "Duplicate"
+	)
+	var repeated_descriptor: FlowExternalBlockDescriptor = FlowExternalBlockDescriptor.new(
+		"foreign", "duplicate", "res://flow_packages/foreign/repeated.gd", "Repeated"
+	)
+	manifest.blocks = [empty_descriptor, mismatched_descriptor, duplicate_descriptor, repeated_descriptor, null]
+	var expected_errors: Array[String] = [
+		"unsupported_manifest_version",
+		"empty_package_id",
+		"block_0:empty_package_id",
+		"block_0:empty_type_id",
+		"block_0:empty_script_path",
+		"block_0:empty_display_name",
+		"block_package_id_mismatch:1",
+		"block_package_id_mismatch:2",
+		"block_package_id_mismatch:3",
+		"duplicate_block_type_id:foreign:duplicate",
+		"null_block_descriptor:4",
+	]
+	var first_errors: Array[String] = manifest.validation_errors()
+	var second_errors: Array[String] = manifest.validation_errors()
+	_check(not manifest.is_valid(), "A mixed-invalid manifest is rejected.")
+	_check(first_errors == expected_errors, "Mixed-invalid diagnostics use the exact stable order.")
+	_check(second_errors == expected_errors and second_errors == first_errors, "Mixed-invalid validation is repeatable.")
+	_check(
+		manifest.manifest_version == 2 and manifest.package_id == ""
+		and empty_descriptor.package_id == "" and empty_descriptor.type_id == ""
+		and empty_descriptor.script_path == "" and empty_descriptor.display_name == ""
+		and mismatched_descriptor.package_id == "foreign"
+		and mismatched_descriptor.type_id == "mismatch"
+		and mismatched_descriptor.script_path == "res://flow_packages/foreign/mismatch.gd"
+		and mismatched_descriptor.display_name == "Mismatch"
+		and duplicate_descriptor.package_id == "foreign"
+		and duplicate_descriptor.type_id == "duplicate"
+		and duplicate_descriptor.script_path == "res://flow_packages/foreign/duplicate.gd"
+		and duplicate_descriptor.display_name == "Duplicate"
+		and repeated_descriptor.package_id == "foreign"
+		and repeated_descriptor.type_id == "duplicate"
+		and repeated_descriptor.script_path == "res://flow_packages/foreign/repeated.gd"
+		and repeated_descriptor.display_name == "Repeated",
+		"Validation preserves every authored manifest and descriptor field."
+	)
+	_check(
+		manifest.blocks.size() == 5
+		and manifest.blocks[0] == empty_descriptor
+		and manifest.blocks[1] == mismatched_descriptor
+		and manifest.blocks[2] == duplicate_descriptor
+		and manifest.blocks[3] == repeated_descriptor
+		and manifest.blocks[4] == null,
+		"Validation preserves descriptor references, order, and the null position."
 	)
 
 
