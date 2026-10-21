@@ -86,6 +86,66 @@ func _test_manifest() -> void:
 		not null_entry.is_valid() and null_entry.validation_errors() == ["null_block_descriptor:0"],
 		"A null descriptor is rejected without changing the ordered collection."
 	)
+	var mixed: FlowPackageManifest = FlowPackageManifest.new("", 2)
+	var empty_descriptor: FlowExternalBlockDescriptor = FlowExternalBlockDescriptor.new(
+		"", "", "", ""
+	)
+	var mismatch_descriptor: FlowExternalBlockDescriptor = FlowExternalBlockDescriptor.new(
+		"other", "mismatch", "res://flow_packages/other/mismatch.gd", "Mismatch"
+	)
+	var duplicate_first: FlowExternalBlockDescriptor = FlowExternalBlockDescriptor.new(
+		"other", "duplicate", "res://flow_packages/other/duplicate.gd", "Duplicate"
+	)
+	var duplicate_second: FlowExternalBlockDescriptor = FlowExternalBlockDescriptor.new(
+		"other", "duplicate", "res://flow_packages/other/duplicate_other.gd", "Duplicate Other"
+	)
+	mixed.blocks = [empty_descriptor, null, mismatch_descriptor, duplicate_first, duplicate_second]
+	var authored_manifest_version: int = mixed.manifest_version
+	var authored_package_id: String = mixed.package_id
+	var authored_empty_fields: Array[String] = _descriptor_fields(empty_descriptor)
+	var authored_mismatch_fields: Array[String] = _descriptor_fields(mismatch_descriptor)
+	var authored_duplicate_first_fields: Array[String] = _descriptor_fields(duplicate_first)
+	var authored_duplicate_second_fields: Array[String] = _descriptor_fields(duplicate_second)
+	var expected_errors: Array[String] = [
+		"unsupported_manifest_version",
+		"empty_package_id",
+		"block_0:empty_package_id",
+		"block_0:empty_type_id",
+		"block_0:empty_script_path",
+		"block_0:empty_display_name",
+		"null_block_descriptor:1",
+		"block_package_id_mismatch:2",
+		"block_package_id_mismatch:3",
+		"block_package_id_mismatch:4",
+		"duplicate_block_type_id:other:duplicate",
+	]
+	var first_errors: Array[String] = mixed.validation_errors()
+	var first_is_valid: bool = mixed.is_valid()
+	var second_errors: Array[String] = mixed.validation_errors()
+	var second_is_valid: bool = mixed.is_valid()
+	_check(
+		not first_is_valid
+			and not second_is_valid
+			and first_errors == expected_errors
+			and second_errors == expected_errors
+			and first_errors == second_errors,
+		"Mixed invalid manifest diagnostics are complete, ordered and repeatable."
+	)
+	_check(
+		mixed.manifest_version == authored_manifest_version
+			and mixed.package_id == authored_package_id
+			and mixed.blocks.size() == 5
+			and mixed.blocks[0] == empty_descriptor
+			and mixed.blocks[1] == null
+			and mixed.blocks[2] == mismatch_descriptor
+			and mixed.blocks[3] == duplicate_first
+			and mixed.blocks[4] == duplicate_second
+			and _descriptor_fields(empty_descriptor) == authored_empty_fields
+			and _descriptor_fields(mismatch_descriptor) == authored_mismatch_fields
+			and _descriptor_fields(duplicate_first) == authored_duplicate_first_fields
+			and _descriptor_fields(duplicate_second) == authored_duplicate_second_fields,
+		"Validation preserves manifest fields, descriptor fields, references, order and null position."
+	)
 
 
 func _test_scope() -> void:
@@ -100,6 +160,10 @@ func _test_scope() -> void:
 	_check(not combined.contains("FlowBlockRegistry"), "Manifest data does not depend on the built-in registry.")
 	_check(not combined.contains("FlowIfBlock"), "Manifest data does not depend on a future IF block.")
 	_check(not combined.contains("ResourceLoader"), "Manifest data does not load scripts or resources.")
+
+
+func _descriptor_fields(descriptor: FlowExternalBlockDescriptor) -> Array[String]:
+	return [descriptor.package_id, descriptor.type_id, descriptor.script_path, descriptor.display_name]
 
 
 func _check(condition: bool, message: String) -> void:
