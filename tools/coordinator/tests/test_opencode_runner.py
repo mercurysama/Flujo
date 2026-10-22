@@ -7,6 +7,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -577,6 +578,57 @@ class OpenCodeRunnerTest(unittest.TestCase):
         self.assertEqual(result.status, OpenCodeRunStatus.SUCCEEDED)
         self.assertIsInstance(result.payload, GotaReviewResult)
         self.assertEqual(result.payload.request_id, "run-42:1:review")
+
+    def test_optional_observer_streams_stdout_and_stderr_without_changing_result(self) -> None:
+        stdout = self._frame(self._worker_payload())
+        executable, _ = self._fake_executable(
+            stdout=stdout,
+            stderr="live diagnostic 🌧️\n",
+        )
+        observed: list[tuple[str, str]] = []
+
+        result = OpenCodeRunner(executable=executable).run(
+            agent="worker",
+            prompt="stream output",
+            cwd=self.cwd,
+            timeout=2,
+            output_callback=lambda source, text: observed.append((source, text)),
+        )
+
+        self.assertEqual(result.status, OpenCodeRunStatus.SUCCEEDED)
+        self.assertEqual("".join(text for source, text in observed if source == "stdout"), stdout)
+        self.assertEqual(
+            "".join(text for source, text in observed if source == "stderr"),
+            "live diagnostic 🌧️\n",
+        )
+
+    def test_optional_cancellation_is_distinct_and_does_not_accept_output(self) -> None:
+        marker = self.root / "completed-after-cancellation"
+        executable, _ = self._fake_executable(
+            stdout="before cancellation\n",
+            sleep_seconds=10,
+            marker=marker,
+        )
+        cancel_event = threading.Event()
+        timer = threading.Timer(0.2, cancel_event.set)
+        timer.start()
+        try:
+            result = OpenCodeRunner(executable=executable).run(
+                agent="worker",
+                prompt="cancel output",
+                cwd=self.cwd,
+                timeout=5,
+                cancel_event=cancel_event,
+            )
+        finally:
+            timer.join(timeout=1.0)
+
+        self.assertEqual(result.status, OpenCodeRunStatus.CANCELLED)
+        self.assertFalse(result.timed_out)
+        self.assertIn("before cancellation", result.stdout)
+        self.assertIsNone(result.payload)
+        time.sleep(0.1)
+        self.assertFalse(marker.exists())
 
     def test_invalid_framing_or_payload_is_not_accepted(self) -> None:
         executable, _ = self._fake_executable(

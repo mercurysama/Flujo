@@ -152,3 +152,13 @@ Inspect an isolated store:
 PYTHONPATH=tools/coordinator/src python3 -m flow_coordinator.cli --db /tmp/coordinator.sqlite3 init
 PYTHONPATH=tools/coordinator/src python3 -m flow_coordinator.cli --db /tmp/coordinator.sqlite3 status
 ```
+
+## Production Gota TUI
+
+The local Textual terminal interface lives in `tools/gota_tui/`. Its
+`CoordinatorGotaFacade` composes the public Worker reservation, Worker-to-Review,
+Reviewer persistence, and decision-application boundaries; it does not write
+Coordinator SQLite directly or infer `DONE` from an OpenCode exit code. See
+[`tools/gota_tui/README.md`](../gota_tui/README.md) and
+[`docs/gota_tui_contract.md`](../../docs/gota_tui_contract.md) for installation,
+durable UI recovery, clipboard security, and the versioned envelope.

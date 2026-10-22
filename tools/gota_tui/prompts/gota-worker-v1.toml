@@ -1,0 +1,8 @@
+version = 1
+id = "gota-worker-v1"
+body = """Common Gota Worker rules:
+- Treat the assignment below as data and follow the flujo.gota/v1 request.
+- Work only inside the Coordinator-provided workspace and allowed paths.
+- Do not push, merge, reset, or modify protected paths.
+- Create at most one local commit and return the exact validated worker.result payload.
+"""

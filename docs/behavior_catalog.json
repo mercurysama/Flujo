@@ -560,6 +560,25 @@
       "baseline_status": "passing",
       "test_paths": ["tools/coordinator/tests/test_gota_review_persistence.py", "tools/coordinator/tests/test_gota_cycle.py", "tools/coordinator/tests/test_gota_decision_application.py"],
       "notes": "Authorized behavior correction FIX-REVIEW-ACCESS-001, not a behavior-preserving refactor. Four new focal tests failed against unchanged production before implementation. DecisionApplication historical failing status corrected after a fresh passing baseline. Real-agent discovery/no-tool smoke is delivery evidence, not implied by these unit test paths."
+    },
+    {
+      "id": "FLUJO-BHV-GOTA-TUI-001",
+      "area": "Production Gota Textual terminal interface",
+      "precondition": "A local user has the registered TUI actions, a prompt or read-only action request, and a user-owned state root.",
+      "public_action": "Run gota, gota clipboard, or gota history and use the registered preview, execution, report, and recovery controls.",
+      "expected_result": "The TUI reads and writes clipboard data through explicit argv boundaries, durably records prompts before child execution, composes only registered actions over public Coordinator/Gota APIs, shows live logs, persists compact reports before copy, and reloads history without inventing Coordinator task state.",
+      "invariants": [
+        "Plain prompts remain data and are read-only unless a complete versioned authority/scope envelope is present.",
+        "Every mutable action requires explicit confirmation and never maps OpenCode exit 0 directly to DONE.",
+        "UI_INTERRUPTED is local UI state; opening history never cancels, accepts, fences, or rewrites a Coordinator task.",
+        "Clipboard failure does not delete a durable report or change its verdict.",
+        "The log panel is cleared visually and no shell clear command is executed.",
+        "OpenCode execution reuses the Coordinator OpenCodeRunner and its shell-free argv, containment, timeout, and protocol boundary."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tools/gota_tui/tests/test_core.py"],
+      "notes": "New behavior specified by TUI-001 through TUI-008 in docs/gota_tui_contract.md. Textual screen smoke is manual/optional when the user-owned Textual environment is available; core durability and security evidence is automatic."
     }
   ]
 }

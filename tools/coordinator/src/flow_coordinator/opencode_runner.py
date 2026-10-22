@@ -9,12 +9,14 @@ import signal
 import subprocess
 import sys
 import tempfile
+import codecs
+import threading
 import time
 import uuid
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Final
+from typing import Any, Callable, Final
 
 from .gota_protocol import (
     GotaProtocolError,
@@ -45,6 +47,7 @@ class OpenCodeRunStatus(StrEnum):
     INVALID_PAYLOAD = "invalid_payload"
     NON_ZERO_EXIT = "non_zero_exit"
     TIMEOUT = "timeout"
+    CANCELLED = "cancelled"
     START_FAILED = "start_failed"
 
 
@@ -57,6 +60,7 @@ class OpenCodeStartFailure(StrEnum):
 
 
 GotaResult = GotaWorkerResult | GotaReviewResult
+OutputCallback = Callable[[str, str], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,6 +259,120 @@ class OpenCodeRunner:
             return stdout, stderr
 
     @classmethod
+    def _stream_communication(
+        cls,
+        process: subprocess.Popen[bytes],
+        *,
+        timeout: float,
+        output_callback: OutputCallback,
+        cancel_event: threading.Event | None,
+        systemd_tools: tuple[str, str] | None,
+        unit: str | None,
+    ) -> tuple[str, str, str | None, str | None]:
+        """Capture binary pipes while optionally publishing decoded chunks.
+
+        The default runner path remains ``communicate``. This path is used only
+        by the TUI observer/cancellation boundary, so the existing capture and
+        timeout semantics remain unchanged for Coordinator callers that do not
+        ask for observation.
+        """
+
+        output: dict[str, list[str]] = {"stdout": [], "stderr": []}
+        threads: list[threading.Thread] = []
+
+        def pump(stream: Any, key: str, source: str) -> None:
+            decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+            try:
+                while True:
+                    read = getattr(stream, "read1", stream.read)
+                    chunk = read(4096)
+                    if not chunk:
+                        break
+                    text = decoder.decode(chunk, final=False)
+                    if text:
+                        output[key].append(text)
+                        try:
+                            output_callback(source, text)
+                        except Exception:
+                            # Logging must never change the process boundary.
+                            pass
+                final_text = decoder.decode(b"", final=True)
+                if final_text:
+                    output[key].append(final_text)
+                    try:
+                        output_callback(source, final_text)
+                    except Exception:
+                        pass
+            except (OSError, ValueError):
+                return
+
+        if process.stdout is not None:
+            threads.append(
+                threading.Thread(
+                    target=pump,
+                    args=(process.stdout, "stdout", "stdout"),
+                    daemon=True,
+                )
+            )
+        if process.stderr is not None:
+            threads.append(
+                threading.Thread(
+                    target=pump,
+                    args=(process.stderr, "stderr", "stderr"),
+                    daemon=True,
+                )
+            )
+        for thread in threads:
+            thread.start()
+
+        deadline = time.monotonic() + timeout
+        terminal: str | None = None
+        cleanup_error: str | None = None
+        while process.poll() is None:
+            if cancel_event is not None and cancel_event.is_set():
+                terminal = "cancelled"
+                if sys.platform == "linux":
+                    if systemd_tools is not None and unit is not None:
+                        cleanup_error = cls._stop_systemd_unit(
+                            systemd_tools[1], unit, process
+                        )
+                else:
+                    cls._terminate_process(process)
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                terminal = "timeout"
+                if sys.platform == "linux":
+                    if systemd_tools is not None and unit is not None:
+                        cleanup_error = cls._stop_systemd_unit(
+                            systemd_tools[1], unit, process
+                        )
+                else:
+                    cls._terminate_process(process)
+                break
+            try:
+                process.wait(timeout=min(0.05, remaining))
+            except subprocess.TimeoutExpired:
+                pass
+
+        for thread in threads:
+            thread.join(timeout=_POST_TIMEOUT_COMMUNICATE_SECONDS)
+        for stream in (process.stdout, process.stderr):
+            if stream is not None:
+                try:
+                    stream.close()
+                except (OSError, ValueError):
+                    pass
+        for thread in threads:
+            thread.join(timeout=_PROCESS_REAP_GRACE_SECONDS)
+        return (
+            "".join(output["stdout"]),
+            "".join(output["stderr"]),
+            terminal,
+            cleanup_error,
+        )
+
+    @classmethod
     def _unit_may_contain_processes(cls, systemctl: str, unit: str) -> bool:
         result = cls._run_systemctl(
             systemctl,
@@ -396,6 +514,8 @@ class OpenCodeRunner:
         prompt: str,
         cwd: str | Path,
         timeout: float,
+        output_callback: OutputCallback | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> OpenCodeRunResult:
         """Execute OpenCode once and classify its captured result."""
 
@@ -407,6 +527,18 @@ class OpenCodeRunner:
         cwd_path = Path(cwd)
         argv = self._build_argv(agent, prompt)
         argv_tuple = tuple(argv)
+
+        if cancel_event is not None and cancel_event.is_set():
+            return OpenCodeRunResult(
+                status=OpenCodeRunStatus.CANCELLED,
+                argv=argv_tuple,
+                cwd=str(cwd_path),
+                stdout="",
+                stderr="",
+                exit_code=None,
+                timed_out=False,
+                error="run cancelled before process start",
+            )
 
         if not cwd_path.exists() or not cwd_path.is_dir():
             return OpenCodeRunResult(
@@ -446,7 +578,8 @@ class OpenCodeRunner:
         unit: str | None = None
         startup_status = "started"
         startup_error: str | None = None
-        process: subprocess.Popen[str]
+        process: subprocess.Popen[Any]
+        streaming = output_callback is not None or cancel_event is not None
         try:
             if sys.platform == "linux":
                 assert systemd_tools is not None
@@ -469,9 +602,9 @@ class OpenCodeRunner:
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
+                    text=not streaming,
+                    encoding="utf-8" if not streaming else None,
+                    errors="replace" if not streaming else None,
                 )
             else:
                 process = subprocess.Popen(
@@ -481,9 +614,9 @@ class OpenCodeRunner:
                     shell=False,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
+                    text=not streaming,
+                    encoding="utf-8" if not streaming else None,
+                    errors="replace" if not streaming else None,
                     start_new_session=os.name == "posix",
                 )
         except (OSError, ValueError) as error:
@@ -512,37 +645,71 @@ class OpenCodeRunner:
             )
 
         try:
-            try:
-                stdout, stderr = process.communicate(timeout=timeout_seconds)
-            except subprocess.TimeoutExpired as timeout_error:
-                cleanup_error: str | None = None
-                if sys.platform == "linux":
-                    assert systemd_tools is not None
-                    _systemd_run, systemctl = systemd_tools
-                    assert unit is not None
-                    cleanup_error = self._stop_systemd_unit(
-                        systemctl,
-                        unit,
-                        process,
+            if streaming:
+                callback = output_callback or (lambda _source, _text: None)
+                stdout, stderr, terminal, cleanup_error = self._stream_communication(
+                    process,
+                    timeout=timeout_seconds,
+                    output_callback=callback,
+                    cancel_event=cancel_event,
+                    systemd_tools=systemd_tools,
+                    unit=unit,
+                )
+                if terminal in {"timeout", "cancelled"}:
+                    message = (
+                        "process exceeded timeout of "
+                        f"{timeout_seconds:g} seconds"
+                        if terminal == "timeout"
+                        else "process cancelled by caller"
                     )
-                else:
-                    self._terminate_process(process)
-                stdout, stderr = self._bounded_timeout_communication(
-                    process, timeout_error
-                )
-                timeout_message = f"process exceeded timeout of {timeout_seconds:g} seconds"
-                if cleanup_error is not None:
-                    timeout_message = f"{timeout_message}; cleanup: {cleanup_error}"
-                return OpenCodeRunResult(
-                    status=OpenCodeRunStatus.TIMEOUT,
-                    argv=argv_tuple,
-                    cwd=str(cwd_path),
-                    stdout=stdout,
-                    stderr=stderr,
-                    exit_code=process.returncode,
-                    timed_out=True,
-                    error=timeout_message,
-                )
+                    if cleanup_error is not None:
+                        message = f"{message}; cleanup: {cleanup_error}"
+                    return OpenCodeRunResult(
+                        status=(
+                            OpenCodeRunStatus.TIMEOUT
+                            if terminal == "timeout"
+                            else OpenCodeRunStatus.CANCELLED
+                        ),
+                        argv=argv_tuple,
+                        cwd=str(cwd_path),
+                        stdout=stdout,
+                        stderr=stderr,
+                        exit_code=process.returncode,
+                        timed_out=terminal == "timeout",
+                        error=message,
+                    )
+            else:
+                try:
+                    stdout, stderr = process.communicate(timeout=timeout_seconds)
+                except subprocess.TimeoutExpired as timeout_error:
+                    cleanup_error = None
+                    if sys.platform == "linux":
+                        assert systemd_tools is not None
+                        _systemd_run, systemctl = systemd_tools
+                        assert unit is not None
+                        cleanup_error = self._stop_systemd_unit(
+                            systemctl,
+                            unit,
+                            process,
+                        )
+                    else:
+                        self._terminate_process(process)
+                    stdout, stderr = self._bounded_timeout_communication(
+                        process, timeout_error
+                    )
+                    timeout_message = f"process exceeded timeout of {timeout_seconds:g} seconds"
+                    if cleanup_error is not None:
+                        timeout_message = f"{timeout_message}; cleanup: {cleanup_error}"
+                    return OpenCodeRunResult(
+                        status=OpenCodeRunStatus.TIMEOUT,
+                        argv=argv_tuple,
+                        cwd=str(cwd_path),
+                        stdout=stdout,
+                        stderr=stderr,
+                        exit_code=process.returncode,
+                        timed_out=True,
+                        error=timeout_message,
+                    )
 
             if sys.platform == "linux":
                 assert status_file is not None

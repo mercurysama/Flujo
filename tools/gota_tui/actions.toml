@@ -1,0 +1,131 @@
+version = 1
+
+[[actions]]
+id = "execute-task"
+label = "Execute task"
+backend = "gota-task"
+mutable = true
+requires_prompt = true
+requires_confirmation = true
+agent = "gota-worker"
+model = "openai/gpt-5.6-luna"
+variant = "max"
+template = "gota-worker-v1"
+description = "Run a validated Gota Worker, Reviewer, and Coordinator decision cycle."
+
+[[actions]]
+id = "clipboard-prompt"
+label = "Execute prompt from clipboard"
+backend = "clipboard-preview"
+mutable = false
+requires_prompt = true
+requires_confirmation = false
+agent = ""
+model = ""
+variant = ""
+template = "read-only-v1"
+description = "Load clipboard data, preview it, and choose a registered action."
+
+[[actions]]
+id = "review"
+label = "Review existing Gota run"
+backend = "gota-review"
+mutable = true
+requires_prompt = true
+requires_confirmation = true
+agent = "gota-reviewer"
+model = "openai/gpt-5.6-luna"
+variant = "max"
+template = "gota-review-v1"
+description = "Resume a durable REVIEW frontier through the read-only Reviewer boundary."
+
+[[actions]]
+id = "audit-readonly"
+label = "Read-only audit"
+backend = "git-audit"
+mutable = false
+requires_prompt = true
+requires_confirmation = false
+agent = ""
+model = ""
+variant = ""
+template = "read-only-v1"
+description = "Inspect repository facts without changing files or Coordinator state."
+
+[[actions]]
+id = "revalidate-production"
+label = "Revalidate production"
+backend = "production-validation"
+mutable = false
+requires_prompt = false
+requires_confirmation = false
+agent = ""
+model = ""
+variant = ""
+template = ""
+description = "Run the pinned production validation entry point with fixed arguments."
+
+[[actions]]
+id = "run-tests"
+label = "Run tests"
+backend = "coordinator-tests"
+mutable = false
+requires_prompt = false
+requires_confirmation = false
+agent = ""
+model = ""
+variant = ""
+template = ""
+description = "Run the fixed Coordinator test suite without accepting task state."
+
+[[actions]]
+id = "diagnostics"
+label = "Diagnostics"
+backend = "diagnostics"
+mutable = false
+requires_prompt = false
+requires_confirmation = false
+agent = ""
+model = ""
+variant = ""
+template = ""
+description = "Show local dependency, clipboard, repository, and Coordinator diagnostics."
+
+[[actions]]
+id = "recovery"
+label = "Recovery"
+backend = "recovery-readonly"
+mutable = false
+requires_prompt = false
+requires_confirmation = false
+agent = ""
+model = ""
+variant = ""
+template = ""
+description = "Inspect interrupted UI runs without mutating operational task state."
+
+[[actions]]
+id = "status"
+label = "View status"
+backend = "coordinator-status"
+mutable = false
+requires_prompt = false
+requires_confirmation = false
+agent = ""
+model = ""
+variant = ""
+template = ""
+description = "Read current Coordinator task, run, and lease information."
+
+[[actions]]
+id = "history"
+label = "History"
+backend = "history"
+mutable = false
+requires_prompt = false
+requires_confirmation = false
+agent = ""
+model = ""
+variant = ""
+template = ""
+description = "Open durable TUI history and recover previous prompts and reports."
