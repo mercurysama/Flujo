@@ -8,11 +8,12 @@ Coordinator/Gota boundaries; it is not a second task state machine.
 
 ## TUI-001 — Local durable run record
 
-After prompt confirmation and before any Worker, OpenCode, or child process,
-the TUI writes a complete UTF-8 prompt, SHA-256, request metadata, and an
-empty live log below the XDG state root. Writes use replacement files and
-flushes where the platform permits. A run has a stable UI `run_id`; the
-Coordinator-created run identity is recorded separately when available.
+After the user activates an action that will execute, and before any Worker,
+OpenCode, or child process, the TUI writes a complete UTF-8 prompt, SHA-256,
+request metadata, and an empty live log below the XDG state root. Writes use
+replacement files and flushes where the platform permits. A run has a stable
+UI `run_id`; the Coordinator-created run identity is recorded separately when
+available.
 
 ## TUI-002 — Clipboard data boundary
 
@@ -24,22 +25,24 @@ the durable report.
 
 ## TUI-003 — Versioned prompt envelope
 
-Plain text is previewable and may be used only by read-only actions. A
-mutable Gota action requires a versioned TOML frontmatter envelope containing
-the Coordinator authority and scope fields it needs. Missing or invalid fields
-fail closed; the TUI does not derive paths, behavior identity, base SHA,
-acceptance criteria, or task identity from prose or the current Git state.
+Plain text is previewable and may be used by read-only actions and the direct
+clipboard OpenCode action. A mutable Gota action requires a versioned TOML
+frontmatter envelope containing the Coordinator authority and scope fields it
+needs. Missing or invalid fields fail closed; the TUI does not derive paths,
+behavior identity, base SHA, acceptance criteria, or task identity from prose
+or the current Git state.
 
 ## TUI-004 — Action and prompt registries
 
 Visible actions and their mutability, confirmation, agent, model, backend, and
 prompt-template metadata are declarative TOML. Only registered backends can
-execute. Prompt templates and the clipboard assignment are persisted and
-combined as distinct, auditable data.
+execute. Prompt templates, when configured, and the clipboard assignment are
+persisted and combined as distinct, auditable data; the direct clipboard
+backend intentionally passes the raw assignment as its prompt data.
 
 ## TUI-005 — Coordinator authority
 
-Mutable execution composes the public Coordinator/Gota APIs in this order:
+Formal mutable execution composes the public Coordinator/Gota APIs in this order:
 create/start through `CoordinatorService`, durable Worker reservation and
 result persistence, read-only Git Worker-to-Review entry, durable read-only
 Reviewer result persistence, and `GotaDecisionApplicationBoundary`. The TUI
@@ -69,15 +72,35 @@ the installer never uses its own `sys.executable` as the product runtime.
 `gota doctor` and `gota --self-check` import Textual, Rich, and `GotaApp`, and
 check the state root, Action Registry, Prompt Library, and clipboard backends.
 Clipboard backend absence is a warning when the TUI dependencies and app load
-successfully. Mutable clipboard actions always show preview and confirmation;
-`--action` never suppresses confirmation.
+successfully. `Execute task` and `Review existing Gota run` retain preview and
+confirmation. `Execute prompt from clipboard` is itself the confirmation: one
+menu Enter starts direct OpenCode execution, and `gota clipboard` starts the
+same flow without opening an action selector.
+
+## TUI-009 — Direct clipboard OpenCode prompt
+
+`Execute prompt from clipboard` and `gota clipboard` read one non-empty
+clipboard prompt and execute it immediately through the existing
+`OpenCodeRunner`. The default invocation is OpenCode 2.0.32 with model
+`openai/gpt-5.6-luna#max` and agent `build`; the prompt remains one argv data
+value and is never evaluated as shell syntax. This action does not create a
+Coordinator `TaskRun`, lease, Worker result, Reviewer result, or decision.
+
+The durable local run is written before the runner starts, streams stdout and
+stderr into `live.log`, captures the Git HEAD before and after execution,
+persists `report.txt` before attempting clipboard output, clears the live view,
+shows the final report, and retains history after a UI interruption. Its report
+uses `NOT_APPLICABLE` for `TASK_ID`, `CONTEXT_ID`, `COORDINATOR_STATE`,
+`WORKER_RESULT`, and `REVIEW_RESULT`. Empty input does not start OpenCode;
+runner start failure is `FAIL`, timeout is `FAIL/TIMEOUT`, and clipboard output
+failure is a warning that does not remove the report.
 
 ## Traceability
 
-`TUI-001`–`TUI-008` map to the implementation modules and tests in
+`TUI-001`–`TUI-009` map to the implementation modules and tests in
 `tools/gota_tui/`, the `FLUJO-BHV-GOTA-TUI-001` behavior-catalog entry, and
-the cohesive `feat: add production Gota TUI` commit. Coordinator/Gota
-authority behavior remains covered by the existing
+the original production-TUI commit plus this direct-clipboard behavior-fix
+commit. Coordinator/Gota authority behavior remains covered by the existing
 `FLUJO-BHV-GOTA-*` and `FLUJO-BHV-OPENCODE-RUNNER-001` entries.
 
 ## Decisions and limitations

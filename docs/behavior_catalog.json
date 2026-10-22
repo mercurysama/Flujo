@@ -565,22 +565,25 @@
       "id": "FLUJO-BHV-GOTA-TUI-001",
       "area": "Production Gota Textual terminal interface",
       "precondition": "A local user has the registered TUI actions, a prompt or read-only action request, and a user-owned state root.",
-      "public_action": "Run gota, gota clipboard, gota history, or gota doctor/--self-check and use the registered preview, execution, report, and recovery controls.",
-      "expected_result": "The TUI reads and writes clipboard data through explicit argv boundaries, durably records prompts before child execution, composes only registered actions over public Coordinator/Gota APIs, shows live logs, persists compact reports before copy, reloads history without inventing Coordinator task state, and the installed launcher runs the dedicated XDG venv whose Python can import Textual, Rich, and GotaApp.",
+      "public_action": "Run gota, gota clipboard, gota history, or gota doctor/--self-check; activate Execute prompt from clipboard from the main menu or use the direct clipboard command.",
+      "expected_result": "The TUI reads and writes clipboard data through explicit argv boundaries, durably records prompts before child execution, executes the selected clipboard prompt immediately through the existing OpenCodeRunner without creating Coordinator task state, keeps formal Execute task/Review actions on public Coordinator/Gota APIs, shows live logs, persists compact reports before copy, reloads history without inventing Coordinator task state, and the installed launcher runs the dedicated XDG venv whose Python can import Textual, Rich, and GotaApp.",
       "invariants": [
-        "Plain prompts remain data and are read-only unless a complete versioned authority/scope envelope is present.",
-        "Every mutable action requires explicit confirmation and never maps OpenCode exit 0 directly to DONE.",
+        "Plain prompts remain data; direct clipboard prompts do not require a Coordinator envelope, while formal mutable actions do.",
+        "Execute task and Review retain explicit confirmation; one clipboard-prompt activation is its confirmation and never maps OpenCode exit 0 to Coordinator DONE.",
+        "gota clipboard reads one non-empty prompt and starts direct execution without opening a second selector or confirmation screen.",
+        "Direct clipboard execution defaults to OpenCode model openai/gpt-5.6-luna#max and agent build, and reports NOT_APPLICABLE for Coordinator-only fields.",
+        "Direct clipboard execution captures the Git HEAD before and after the runner, including a final HEAD changed by the prompt.",
         "UI_INTERRUPTED is local UI state; opening history never cancels, accepts, fences, or rewrites a Coordinator task.",
         "Clipboard failure does not delete a durable report or change its verdict.",
         "The log panel is cleared visually and no shell clear command is executed.",
-        "OpenCode execution reuses the Coordinator OpenCodeRunner and its shell-free argv, containment, timeout, and protocol boundary.",
+        "OpenCode execution reuses the Coordinator OpenCodeRunner and its shell-free argv, containment, timeout, and protocol boundary; direct zero-exit raw output is not PREVIEW_ONLY.",
         "The launcher never uses the installer or system Python as the final TUI runtime.",
         "Self-check imports Textual, Rich, and GotaApp and reports clipboard absence as warning-only."
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": ["tools/gota_tui/tests/test_core.py", "tools/gota_tui/tests/test_runtime.py"],
-      "notes": "New behavior specified by TUI-001 through TUI-008 in docs/gota_tui_contract.md. Core durability, security, dedicated-runtime, and headless Textual screen smoke evidence is automatic. The activation regression is covered by test_plain_preview_enter_confirmation_enter_starts_read_only_action, test_cli_preselection_requires_confirmation_escape_returns_and_focus_is_safe, test_plain_prompt_marks_mutable_action_unavailable_and_blocks_enter, test_mouse_selected_event_uses_the_same_preview_activation_path, and test_structured_mutable_preview_keeps_mandatory_confirmation; interactive visual acceptance remains outside headless coverage."
+      "notes": "Behavior specified by TUI-001 through TUI-009 in docs/gota_tui_contract.md. Core durability, security, dedicated-runtime, direct-runner, CLI, and headless Textual screen smoke evidence is automatic; interactive visual acceptance remains outside headless coverage. Direct clipboard execution is an intentional public behavior correction, not a behavior-preserving refactor."
     }
   ]
 }

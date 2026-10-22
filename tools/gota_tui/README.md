@@ -1,8 +1,8 @@
 # Production Gota TUI
 
 `gota_tui` is the local Textual terminal interface for Flujo Coordinator/Gota.
-It replaces long shell invocations with a small menu, clipboard preview, live
-logs, durable reports, and recoverable history. Historical prototypes remain
+It replaces long shell invocations with a small menu, direct clipboard prompt
+execution, live logs, durable reports, and recoverable history. Historical prototypes remain
 outside this checkout and are not imported by the implementation.
 
 ## Installation
@@ -43,18 +43,19 @@ path is committed.
 ```sh
 gota
 gota clipboard
-gota clipboard --action execute-task
 gota history
 gota doctor
 gota --self-check
 ```
 
-`--action` only preselects an action. Mutable actions always show the preview
-and an explicit confirmation screen. `C` retries clipboard input, `H` opens
-history, `R`/`C` copies an available report, `Enter` accepts or returns,
-`Escape` cancels/returns, and `Q` quits. A cancellation during a child process
-requests controlled termination; it does not mark a Coordinator task
-`CANCELLED`.
+`gota clipboard` reads and executes the current clipboard prompt immediately.
+From the main menu, `Enter` runs the selected action; selecting `Execute prompt
+from clipboard` is the confirmation and does not open a second selector or
+confirmation screen. `Execute task` and `Review existing Gota run` retain
+preview and explicit confirmation. `C` runs the direct clipboard action,
+`H` opens history, `R`/`C` copies an available report, `Escape` cancels/returns,
+and `Q` quits. A cancellation during a child process requests controlled
+termination; it does not mark a Coordinator task `CANCELLED`.
 
 ## Actions
 
@@ -77,11 +78,13 @@ uses `wl-copy`, `xclip`, then `xsel`. Clipboard text is UTF-8 data passed as
 argv or stdin; it is never evaluated, sourced, or run as shell. Missing
 backends and copy errors leave the UI/report functional.
 
-OpenCode execution reuses
+Direct and formal OpenCode execution reuse
 `tools/coordinator/src/flow_coordinator/opencode_runner.py`, including
 `--standalone`, canonical agents, provider/model#variant, bounded cleanup,
-Linux containment, and protocol validation. The optional observer only streams
-captured stdout/stderr to the TUI; it does not change Coordinator authority.
+Linux containment, and shell-free argv construction. Formal Gota actions retain
+protocol validation. The direct clipboard action treats a zero-exit raw
+response as a direct result and does not create Coordinator authority. The
+optional observer streams captured stdout/stderr to the TUI.
 
 ## Prompt library and envelope
 
@@ -90,8 +93,8 @@ with the clipboard assignment using explicit `TEMPLATE_BEGIN` and
 `ASSIGNMENT_BEGIN` markers. Both the original prompt and template/version
 metadata are recorded in the local run request.
 
-Plain text is always previewable and is allowed for read-only actions only.
-Mutable actions require all authority/scope values; the TUI does not invent
+Plain text is always previewable and is allowed for read-only actions and the
+direct clipboard action. Mutable actions require all authority/scope values; the TUI does not invent
 `allowed_paths`, behavior IDs, base SHAs, task identity, or acceptance
 criteria.
 
@@ -143,7 +146,7 @@ Coordinator state is displayed separately through public read APIs. Opening
 history never transitions, cancels, accepts, or rewrites a Coordinator task.
 
 The final report is compact and includes `RUN_ID`, `ACTION`, `TASK_ID`,
-`CONTEXT_ID`, model/variant, OpenCode version, repository/base/commit,
+`CONTEXT_ID`, model/variant, OpenCode version/agent, repository/base/commit,
 Coordinator/Worker/Review state, tests, diff check, prompt SHA, report/log
 paths, clipboard status, findings, and verdict. Full output remains in
 `live.log`. The report is persisted before copy is attempted, and a clipboard

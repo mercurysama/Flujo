@@ -36,8 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Check the dedicated runtime and production TUI dependencies",
     )
     subcommands = parser.add_subparsers(dest="command")
-    clipboard = subcommands.add_parser("clipboard", help="Preview the Fedora clipboard")
-    clipboard.add_argument("--action", help="Preselect an action; confirmation remains required")
+    subcommands.add_parser("clipboard", help="Execute the current clipboard prompt directly")
     subcommands.add_parser("history", help="Open durable TUI history")
     subcommands.add_parser(
         "doctor", help="Check the dedicated runtime and production TUI dependencies"
@@ -187,10 +186,13 @@ def main(arguments: list[str] | None = None) -> int:
             initial_prompt = ClipboardReader().read()
         except Exception as error:
             print(f"Clipboard diagnostic: {error}", file=sys.stderr)
+            return 2
+        if not initial_prompt.strip():
+            print("Clipboard diagnostic: Clipboard prompt is empty", file=sys.stderr)
+            return 2
+        initial_action = "clipboard-prompt"
     if options.command == "history":
         initial_prompt = None
-    if options.command == "clipboard":
-        initial_action = options.action
     app = GotaApp(
         registry=registry,
         runs=runs,

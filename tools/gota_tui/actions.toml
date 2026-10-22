@@ -16,15 +16,15 @@ description = "Run a validated Gota Worker, Reviewer, and Coordinator decision c
 [[actions]]
 id = "clipboard-prompt"
 label = "Execute prompt from clipboard"
-backend = "clipboard-preview"
+backend = "opencode-direct"
 mutable = false
 requires_prompt = true
 requires_confirmation = false
-agent = ""
-model = ""
-variant = ""
-template = "read-only-v1"
-description = "Load clipboard data, preview it, and choose a registered action."
+agent = "build"
+model = "openai/gpt-5.6-luna"
+variant = "max"
+template = ""
+description = "Run the clipboard prompt directly in OpenCode without Coordinator task state."
 
 [[actions]]
 id = "review"

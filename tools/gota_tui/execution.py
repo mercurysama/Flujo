@@ -14,12 +14,16 @@ from pathlib import Path
 from threading import Event
 from typing import Any, Callable, Mapping
 
-from flow_coordinator import SQLiteCoordinatorStore
+from flow_coordinator import OpenCodeRunStatus, SQLiteCoordinatorStore
 from flow_coordinator.git_adapter import GitReadError, ReadOnlyGitAdapter
 
 from .actions import ActionDefinition
 from .clipboard import ClipboardWriter
-from .coordinator_facade import CoordinatorGotaFacade, CoordinatorOutcome
+from .coordinator_facade import (
+    CoordinatorGotaFacade,
+    CoordinatorOutcome,
+    OpenCodePromptFacade,
+)
 from .durable import DurableRunStore, RunPaths, default_coordinator_database
 from .envelope import PromptEnvelope
 from .prompt_library import PromptComposition, PromptLibrary
@@ -173,16 +177,74 @@ class ActionExecutor:
                 ).review_existing(prepared.envelope)
                 return self._finish(prepared, outcome)
 
+            if action.backend == "opencode-direct":
+                outcome = self._execute_direct_prompt(prepared, cancel)
+                return self._finish(prepared, outcome)
+
             outcome = self._execute_registered_read_only(prepared, cancel)
             return self._finish(prepared, outcome)
         except Exception as error:
             return self._finish(
                 prepared,
                 CoordinatorOutcome(
-                    verdict="CYCLE_FAILED",
+                    verdict="FAIL" if action.backend == "opencode-direct" else "CYCLE_FAILED",
                     diagnostic=f"Registered backend failed: {type(error).__name__}: {error}",
                 ),
             )
+
+    def _execute_direct_prompt(
+        self,
+        prepared: PreparedAction,
+        cancel: Event,
+    ) -> CoordinatorOutcome:
+        """Execute raw clipboard text without creating Coordinator state."""
+        run_id = prepared.paths.run_id
+        base_sha = self._git_head()
+        result = OpenCodePromptFacade(
+            opencode_executable=self.config.opencode_executable,
+            model=self._model(prepared.action),
+            variant=self._variant(prepared.action),
+            timeout=self.config.timeout,
+            output=self._open_code_output(run_id),
+            cancel_event=cancel,
+        ).execute(
+            agent=prepared.action.agent,
+            prompt=prepared.envelope.original,
+            cwd=self.config.repository,
+        )
+        commit_sha = self._git_head()
+        diagnostic = result.error or "Direct OpenCode prompt completed"
+        if result.status is OpenCodeRunStatus.INVALID_PAYLOAD and result.exit_code == 0:
+            diagnostic = (
+                "Direct OpenCode prompt completed without a Coordinator payload; "
+                "raw output is available in live.log"
+            )
+        if result.status in {OpenCodeRunStatus.SUCCEEDED, OpenCodeRunStatus.INVALID_PAYLOAD}:
+            verdict = "SUCCEEDED" if result.exit_code == 0 else "FAIL"
+        elif result.status is OpenCodeRunStatus.TIMEOUT:
+            verdict = "FAIL/TIMEOUT"
+        elif result.status is OpenCodeRunStatus.CANCELLED:
+            verdict = "FAIL/CANCELLED"
+        else:
+            verdict = "FAIL"
+        self._log(
+            run_id,
+            f"Direct OpenCode status={result.status.value} exit={result.exit_code}"
+            f" diagnostic={diagnostic}",
+        )
+        return CoordinatorOutcome(
+            base_sha=base_sha,
+            commit_sha=commit_sha,
+            verdict=verdict,
+            diagnostic=diagnostic,
+            cancelled=result.status is OpenCodeRunStatus.CANCELLED,
+        )
+
+    def _git_head(self) -> str | None:
+        try:
+            return ReadOnlyGitAdapter(self.config.repository).head()
+        except GitReadError:
+            return None
 
     def _open_code_output(self, run_id: str) -> Callable[[str, str], None]:
         def receive(source: str, text: str) -> None:
@@ -254,11 +316,6 @@ class ActionExecutor:
                     "5",
                 ],
                 tests=True,
-            )
-        if action.backend == "clipboard-preview":
-            return CoordinatorOutcome(
-                verdict="PREVIEW_ONLY",
-                diagnostic="Clipboard prompt is ready for action selection",
             )
         if action.backend == "history":
             return CoordinatorOutcome(verdict="PREVIEW_ONLY", diagnostic="History is a UI view")
@@ -434,24 +491,40 @@ class ActionExecutor:
         result_payload["ui_run_id"] = prepared.paths.run_id
         self.runs.persist_result(prepared.paths.run_id, result_payload)
 
-        report_data = ReportData(
-            run_id=prepared.paths.run_id,
-            action=action.id,
-            task_id=task_id,
-            context_id=(
+        direct_prompt = action.backend == "opencode-direct"
+        report_task_id = "NOT_APPLICABLE" if direct_prompt else task_id
+        report_context_id = (
+            "NOT_APPLICABLE"
+            if direct_prompt
+            else (
                 prepared.envelope.metadata.get("context_id")
                 if type(prepared.envelope.metadata.get("context_id")) is str
                 else None
-            ),
+            )
+        )
+        report_coordinator_state = "NOT_APPLICABLE" if direct_prompt else coordinator_state
+        report_worker_result = "NOT_APPLICABLE" if direct_prompt else outcome.worker_result
+        report_review_result = "NOT_APPLICABLE" if direct_prompt else outcome.review_result
+
+        report_data = ReportData(
+            run_id=prepared.paths.run_id,
+            action=action.id,
+            task_id=report_task_id,
+            context_id=report_context_id,
             model=self._model(action) or None,
             variant=self._variant(action) or None,
-            opencode_version=self._opencode_version() if action.backend in {"gota-task", "gota-review"} else None,
+            opencode_version=(
+                self._opencode_version()
+                if action.backend in {"gota-task", "gota-review", "opencode-direct"}
+                else None
+            ),
+            agent=action.agent or None,
             repository=str(self.config.repository),
             base_sha=outcome.base_sha,
             commit_sha=outcome.commit_sha,
-            coordinator_state=coordinator_state,
-            worker_result=outcome.worker_result,
-            review_result=outcome.review_result,
+            coordinator_state=report_coordinator_state,
+            worker_result=report_worker_result,
+            review_result=report_review_result,
             tests=outcome.tests,
             diff_check=outcome.diff_check,
             prompt_sha256=request.get("prompt_sha256"),
@@ -469,8 +542,8 @@ class ActionExecutor:
             prepared.paths.run_id,
             ui_state=ui_state,
             verdict=verdict,
-            coordinator_state=coordinator_state,
-            task_id=task_id,
+            coordinator_state=report_coordinator_state,
+            task_id=report_task_id,
             coordinator_run_id=coordinator_run_id,
         )
         return ActionExecutionResult(
@@ -482,8 +555,8 @@ class ActionExecutor:
             clipboard_status=persisted.clipboard_status,
             clipboard_error=persisted.clipboard_error,
             verdict=verdict,
-            coordinator_state=coordinator_state,
-            task_id=task_id,
+            coordinator_state=report_coordinator_state,
+            task_id=report_task_id,
             coordinator_run_id=coordinator_run_id,
             diagnostic=outcome.diagnostic,
         )

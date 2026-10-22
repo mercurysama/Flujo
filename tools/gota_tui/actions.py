@@ -15,7 +15,7 @@ class ActionRegistryError(ValueError):
 KNOWN_BACKENDS = frozenset(
     {
         "gota-task",
-        "clipboard-preview",
+        "opencode-direct",
         "gota-review",
         "git-audit",
         "production-validation",
@@ -111,11 +111,21 @@ class ActionDefinition:
                 raise ActionRegistryError(
                     f"OpenCode action {self.id!r} requires agent, model, and variant"
                 )
-        if self.backend in {"gota-task", "gota-review", "git-audit", "clipboard-preview"}:
-            if not self.template.strip():
+        if self.backend == "opencode-direct":
+            if self.mutable:
                 raise ActionRegistryError(
-                    f"Prompt action {self.id!r} requires a template"
+                    f"Direct OpenCode action {self.id!r} cannot be a Coordinator task"
                 )
+            if not self.agent.strip() or not self.model.strip() or not self.variant.strip():
+                raise ActionRegistryError(
+                    f"Direct OpenCode action {self.id!r} requires agent, model, and variant"
+                )
+        if self.backend in {"gota-task", "gota-review", "git-audit", "opencode-direct"}:
+            if not self.template.strip():
+                if self.backend != "opencode-direct":
+                    raise ActionRegistryError(
+                        f"Prompt action {self.id!r} requires a template"
+                    )
 
 
 class ActionRegistry:

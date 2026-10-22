@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from gota_tui.actions import ActionRegistry, ActionRegistryError
 from gota_tui.clipboard import (
@@ -17,7 +18,8 @@ from gota_tui.clipboard import (
 )
 from gota_tui.durable import DurableRunStore
 from gota_tui.envelope import PromptEnvelope, PromptEnvelopeError
-from gota_tui.execution import ActionExecutor, TUIConfig
+from gota_tui.execution import ActionExecutor, ExecutionError, TUIConfig
+from flow_coordinator import OpenCodeRunResult, OpenCodeRunStatus
 from gota_tui.prompt_library import PromptLibrary
 from gota_tui.reporting import ReportData, ReportManager, render_report
 
@@ -75,6 +77,11 @@ class GotaTUICoreTest(unittest.TestCase):
             },
         )
         self.assertTrue(registry.get("execute-task").requires_confirmation)
+        direct = registry.get("clipboard-prompt")
+        self.assertEqual(direct.backend, "opencode-direct")
+        self.assertEqual(direct.model + "#" + direct.variant, "openai/gpt-5.6-luna#max")
+        self.assertEqual(direct.agent, "build")
+        self.assertFalse(direct.requires_confirmation)
         with self.assertRaises(ActionRegistryError):
             ActionRegistry.from_mapping(
                 {
@@ -299,6 +306,225 @@ class GotaTUICoreTest(unittest.TestCase):
         self.assertEqual(self.state.read_report(result.run_id), result.report)
         self.assertEqual(result.report_path, str(prepared.paths.report))
 
+    def test_direct_clipboard_execution_reuses_runner_and_persists_before_start(self) -> None:
+        prompt = "Responde únicamente: GOTA_CLIPBOARD_DIRECT_OK"
+        writer_observations: list[bool] = []
+        runner_observations: list[dict[str, object]] = []
+
+        class Writer:
+            def copy(self, text: str) -> str:
+                writer_observations.append(self.report_path.exists())
+                self.copied = text
+                return "mock"
+
+            report_path: Path
+            copied: str = ""
+
+        writer = Writer()
+
+        class Runner:
+            def __init__(self, *, executable: str, model: str, variant: str) -> None:
+                runner_observations.append(
+                    {"executable": executable, "model": model, "variant": variant}
+                )
+
+            def run(self, *, agent: str, prompt: str, cwd: Path, timeout: float, output_callback: Any, cancel_event: Any) -> OpenCodeRunResult:
+                del timeout, cancel_event
+                paths = prepared.paths
+                runner_observations.append(
+                    {
+                        "agent": agent,
+                        "prompt": prompt,
+                        "cwd": cwd,
+                        "persisted": paths.prompt.exists()
+                        and paths.prompt_sha.exists()
+                        and paths.request.exists()
+                        and paths.live_log.exists(),
+                    }
+                )
+                output_callback("stdout", "stdout direct\n")
+                output_callback("stderr", "stderr direct\n")
+                return OpenCodeRunResult(
+                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                    argv=("opencode", "run", "--auto", prompt),
+                    cwd=str(cwd),
+                    stdout="stdout direct\n",
+                    stderr="stderr direct\n",
+                    exit_code=0,
+                    timed_out=False,
+                    error="response was not Coordinator protocol",
+                )
+
+        action = ActionRegistry.default().get("clipboard-prompt")
+        executor = ActionExecutor(
+            config=TUIConfig(
+                repository=self.root,
+                database=self.root / "coordinator.sqlite3",
+                opencode_executable="opencode",
+            ),
+            runs=self.state,
+            prompts=PromptLibrary.default(),
+            clipboard_writer=writer,
+        )
+        prepared = executor.prepare(action, PromptEnvelope.parse(prompt), run_id="direct-run")
+        writer.report_path = prepared.paths.report
+
+        with patch("gota_tui.coordinator_facade.OpenCodeRunner", Runner):
+            result = executor.execute(prepared)
+
+        self.assertEqual(result.verdict, "SUCCEEDED")
+        self.assertEqual(runner_observations[0]["model"] + "#" + runner_observations[0]["variant"], "openai/gpt-5.6-luna#max")
+        self.assertEqual(runner_observations[1]["agent"], "build")
+        self.assertEqual(runner_observations[1]["prompt"], prompt)
+        self.assertTrue(runner_observations[1]["persisted"])
+        live_log = prepared.paths.live_log.read_text(encoding="utf-8")
+        self.assertIn("[STDOUT] stdout direct", live_log)
+        self.assertIn("[STDERR] stderr direct", live_log)
+        report = self.state.read_report("direct-run")
+        for line in (
+            "ACTION=clipboard-prompt",
+            "TASK_ID=NOT_APPLICABLE",
+            "CONTEXT_ID=NOT_APPLICABLE",
+            "COORDINATOR_STATE=NOT_APPLICABLE",
+            "WORKER_RESULT=NOT_APPLICABLE",
+            "REVIEW_RESULT=NOT_APPLICABLE",
+            "MODEL=openai/gpt-5.6-luna",
+            "VARIANT=max",
+            "AGENT=build",
+            "VERDICT=SUCCEEDED",
+        ):
+            self.assertIn(line, report)
+        self.assertEqual(writer_observations, [True])
+        self.assertNotIn("PREVIEW_ONLY", report)
+        self.assertEqual(self.state.history_records()[0]["ui_state"], "COMPLETED")
+
+    def test_direct_empty_prompt_never_starts_runner(self) -> None:
+        action = ActionRegistry.default().get("clipboard-prompt")
+        executor = ActionExecutor(
+            config=TUIConfig(
+                repository=self.root,
+                database=self.root / "coordinator.sqlite3",
+            ),
+            runs=self.state,
+            prompts=PromptLibrary.default(),
+            clipboard_writer=ClipboardWriter(which=lambda _: None),
+        )
+        with self.assertRaisesRegex(ExecutionError, "non-empty prompt"):
+            executor.prepare(action, PromptEnvelope(" \n", " \n", False, {}))
+
+    def test_direct_start_failure_and_timeout_are_failures_not_preview(self) -> None:
+        from unittest.mock import patch
+
+        action = ActionRegistry.default().get("clipboard-prompt")
+
+        class Writer:
+            def copy(self, text: str) -> str:
+                return "mock"
+
+        class Runner:
+            status = OpenCodeRunStatus.START_FAILED
+
+            def __init__(self, *, executable: str, model: str, variant: str) -> None:
+                del executable, model, variant
+
+            def run(self, **kwargs: Any) -> OpenCodeRunResult:
+                prompt = kwargs["prompt"]
+                cwd = kwargs["cwd"]
+                return OpenCodeRunResult(
+                    status=self.status,
+                    argv=("opencode", "run", "--auto", prompt),
+                    cwd=str(cwd),
+                    stdout="",
+                    stderr="failed",
+                    exit_code=None,
+                    timed_out=self.status is OpenCodeRunStatus.TIMEOUT,
+                    error="injected failure",
+                )
+
+        for status, expected in (
+            (OpenCodeRunStatus.START_FAILED, "FAIL"),
+            (OpenCodeRunStatus.TIMEOUT, "FAIL/TIMEOUT"),
+        ):
+            with self.subTest(status=status):
+                Runner.status = status
+                state = DurableRunStore(self.root / f"state-{status.value}")
+                executor = ActionExecutor(
+                    config=TUIConfig(
+                        repository=self.root,
+                        database=self.root / "coordinator.sqlite3",
+                        opencode_executable=sys.executable,
+                    ),
+                    runs=state,
+                    prompts=PromptLibrary.default(),
+                    clipboard_writer=Writer(),
+                )
+                prepared = executor.prepare(
+                    action,
+                    PromptEnvelope.parse("failure prompt"),
+                    run_id=f"failure-{status.value}",
+                )
+                with patch("gota_tui.coordinator_facade.OpenCodeRunner", Runner):
+                    result = executor.execute(prepared)
+                self.assertEqual(result.verdict, expected)
+                self.assertNotIn("PREVIEW_ONLY", state.read_report(result.run_id))
+
+    def test_direct_report_captures_final_git_head(self) -> None:
+        action = ActionRegistry.default().get("clipboard-prompt")
+
+        class Writer:
+            def copy(self, text: str) -> str:
+                return "mock"
+
+        class Runner:
+            def __init__(self, *, executable: str, model: str, variant: str) -> None:
+                del executable, model, variant
+
+            def run(self, **kwargs: Any) -> OpenCodeRunResult:
+                callback = kwargs["output_callback"]
+                callback("stdout", "no commit\n")
+                return OpenCodeRunResult(
+                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                    argv=("opencode", "run"),
+                    cwd=str(kwargs["cwd"]),
+                    stdout="no commit\n",
+                    stderr="",
+                    exit_code=0,
+                    timed_out=False,
+                )
+
+        class Git:
+            heads = iter(("base-head", "final-head"))
+
+            def __init__(self, repository: Path) -> None:
+                del repository
+
+            def head(self) -> str:
+                return next(self.heads)
+
+        state = DurableRunStore(self.root / "git-state")
+        executor = ActionExecutor(
+            config=TUIConfig(
+                repository=self.root,
+                database=self.root / "coordinator.sqlite3",
+                opencode_executable=sys.executable,
+            ),
+            runs=state,
+            prompts=PromptLibrary.default(),
+            clipboard_writer=Writer(),
+        )
+        prepared = executor.prepare(
+            action,
+            PromptEnvelope.parse("capture git head"),
+            run_id="git-head-run",
+        )
+        with patch("gota_tui.coordinator_facade.OpenCodeRunner", Runner), patch(
+            "gota_tui.execution.ReadOnlyGitAdapter", Git
+        ):
+            result = executor.execute(prepared)
+        report = state.read_report(result.run_id)
+        self.assertIn("BASE_SHA=base-head", report)
+        self.assertIn("COMMIT_SHA=final-head", report)
+
     def test_shell_like_prompt_is_data_and_no_new_tui_source_uses_shell_true(self) -> None:
         prompt = "$(touch /tmp/not-created); source evil.sh\nUnicode 🌧️"
         self.assertEqual(PromptEnvelope.parse(prompt).assignment, prompt)
@@ -311,16 +537,12 @@ class GotaTUICoreTest(unittest.TestCase):
             if action.mutable:
                 self.assertTrue(action.requires_confirmation)
 
-    def test_launcher_argument_parsing_keeps_action_as_selection_only(self) -> None:
+    def test_launcher_clipboard_argument_is_direct_without_action_selection(self) -> None:
         from gota_tui.cli import build_parser
 
-        options = build_parser().parse_args(["clipboard", "--action", "execute-task"])
+        options = build_parser().parse_args(["clipboard"])
         self.assertEqual(options.command, "clipboard")
-        self.assertEqual(options.action, "execute-task")
-        readonly_options = build_parser().parse_args(
-            ["clipboard", "--action", "audit-readonly"]
-        )
-        self.assertEqual(readonly_options.action, "audit-readonly")
+        self.assertFalse(hasattr(options, "action"))
 
 
 if __name__ == "__main__":

@@ -67,7 +67,7 @@ class GotaApp(App[None]):
         ("r", "copy_report", "Copy report"),
         ("o", "open_report", "Open report"),
         ("p", "open_prompt", "Open prompt"),
-        ("enter", "accept", "Select/confirm"),
+        ("enter", "accept", "Run selected action"),
         ("escape", "back", "Back/cancel"),
         ("q", "quit_requested", "Quit"),
     ]
@@ -124,6 +124,9 @@ class GotaApp(App[None]):
         self._populate_actions()
         if self.initial_history:
             self._show_history()
+        elif self.initial_prompt is not None and self.initial_action == "clipboard-prompt":
+            self._select_action("clipboard-prompt")
+            self._start_clipboard_prompt(self.initial_prompt)
         elif self.initial_prompt is not None:
             self._show_prompt(self.initial_prompt, self.initial_action)
         else:
@@ -158,7 +161,8 @@ class GotaApp(App[None]):
         self._set_hidden("prompt-view", "live-log", "report-view")
         self.query_one("#screen-title", Static).update("GOTA  ·  Main menu")
         self.query_one("#status", Static).update(
-            "Select an action. C loads clipboard; Enter accepts; H opens history; Q quits."
+            "Select an action. C runs the clipboard prompt; Enter runs the selected action; "
+            "H opens history; Q quits."
         )
         self._populate_actions()
         if self._selected_action is None and len(self.registry) > 0:
@@ -187,8 +191,9 @@ class GotaApp(App[None]):
             "GOTA  ·  Prompt preview  ·  scroll independently"
         )
         self._set_status(
-            "Structured envelope: yes" if envelope.structured else
-            "Plain text: read-only actions only"
+            "Structured envelope: yes"
+            if envelope.structured
+            else "Plain text: direct prompt and read-only actions; formal Gota actions require an envelope"
         )
         self._populate_actions()
         if action_id is not None:
@@ -254,7 +259,10 @@ class GotaApp(App[None]):
             "GOTA  ·  Running  ·  Esc cancels UI process request"
         )
         self.query_one("#live-log", RichLog).clear()
-        self._set_status("Coordinator state is authoritative; exit=0 is not DONE.")
+        if self._selected_action is not None and self._selected_action.backend == "opencode-direct":
+            self._set_status("Direct OpenCode prompt running; stdout/stderr stream to live.log.")
+        else:
+            self._set_status("Coordinator state is authoritative; exit=0 is not DONE.")
 
     def _show_final(self, result: ActionExecutionResult) -> None:
         self._screen = "final"
@@ -304,11 +312,13 @@ class GotaApp(App[None]):
         unavailable = self._action_unavailable_reason(action)
         if unavailable is not None:
             message += f"  · unavailable: {unavailable}"
-        elif action.requires_confirmation or self._screen == "preview":
+        elif action.requires_confirmation or (
+            self._screen == "preview" and action.id != "clipboard-prompt"
+        ):
             message += "  · confirmation required"
         if self._screen == "preview":
-            message += "  · Enter Select/confirm"
-            if self._envelope is not None and not self._envelope.structured:
+            message += "  · Enter Run selected action"
+            if self._envelope is not None and not self._envelope.structured and action.id != "clipboard-prompt":
                 message += "  · plain text: read-only actions only"
         self._set_status(message)
 
@@ -316,6 +326,9 @@ class GotaApp(App[None]):
         """Use one activation path for keyboard, mouse, and selected actions."""
         if self._selected_action is None:
             self._set_status("Select a registered action first.")
+            return
+        if self._screen == "running":
+            self._set_status("Already running; Escape requests controlled cancellation.")
             return
         action = self._selected_action
         unavailable = self._action_unavailable_reason(action)
@@ -328,6 +341,9 @@ class GotaApp(App[None]):
             return
         if action.id == "clipboard-prompt" and self._screen == "menu":
             self.action_clipboard()
+            return
+        if action.id == "clipboard-prompt" and self._screen == "preview":
+            self._start_execution()
             return
         if action.requires_prompt and self._envelope is None:
             self._set_status("This action requires a clipboard prompt. Press C first.")
@@ -384,7 +400,18 @@ class GotaApp(App[None]):
         except ClipboardError as error:
             self._set_status(f"Clipboard diagnostic: {error}")
             return
-        self._show_prompt(prompt)
+        self._select_action("clipboard-prompt")
+        self._start_clipboard_prompt(prompt)
+
+    def _start_clipboard_prompt(self, prompt: str) -> None:
+        if type(prompt) is not str or not prompt.strip():
+            self._set_status("Clipboard diagnostic: Clipboard prompt is empty")
+            return
+        self._prompt = prompt
+        # Direct prompts are intentionally not parsed as Coordinator envelopes.
+        # Their complete text remains argument data, including frontmatter-like text.
+        self._envelope = PromptEnvelope(prompt, prompt, False, {})
+        self._start_execution()
 
     def action_history(self) -> None:
         self._show_history()

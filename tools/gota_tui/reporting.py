@@ -42,6 +42,7 @@ class ReportData:
     model: str | None = None
     variant: str | None = None
     opencode_version: str | None = None
+    agent: str | None = None
     repository: str | None = None
     base_sha: str | None = None
     commit_sha: str | None = None
@@ -69,6 +70,7 @@ def render_report(data: ReportData) -> str:
         f"MODEL={_value(data.model)}",
         f"VARIANT={_value(data.variant)}",
         f"OPENCODE_VERSION={_value(data.opencode_version)}",
+        f"AGENT={_value(data.agent)}",
         f"REPOSITORY={_value(data.repository)}",
         f"BASE_SHA={_value(data.base_sha)}",
         f"COMMIT_SHA={_value(data.commit_sha)}",
@@ -133,6 +135,7 @@ class ReportManager:
             model=data.model,
             variant=data.variant,
             opencode_version=data.opencode_version,
+            agent=data.agent,
             repository=data.repository,
             base_sha=data.base_sha,
             commit_sha=data.commit_sha,

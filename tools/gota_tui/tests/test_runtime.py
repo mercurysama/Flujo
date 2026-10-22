@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from gota_tui.runtime import default_tui_python
 
@@ -128,6 +131,178 @@ class GotaTUIRuntimeTest(unittest.TestCase):
 
         asyncio.run(exercise())
 
+    def test_main_menu_clipboard_prompt_runs_with_one_enter_and_shows_final_report(self) -> None:
+        from flow_coordinator import OpenCodeRunResult, OpenCodeRunStatus
+        from gota_tui.actions import ActionRegistry
+        from gota_tui.app import GotaApp
+        from gota_tui.durable import DurableRunStore
+        from gota_tui.execution import TUIConfig
+        from gota_tui.prompt_library import PromptLibrary
+
+        prompt = "Responde únicamente: GOTA_CLIPBOARD_DIRECT_OK"
+        started = threading.Event()
+        release = threading.Event()
+        runner_calls: list[dict[str, object]] = []
+        copied: list[str] = []
+
+        class Reader:
+            def read(self) -> str:
+                return prompt
+
+        class Writer:
+            def copy(self, text: str) -> str:
+                copied.append(text)
+                return "mock"
+
+        class Runner:
+            def __init__(self, *, executable: str, model: str, variant: str) -> None:
+                runner_calls.append(
+                    {"executable": executable, "model": model, "variant": variant}
+                )
+
+            def run(
+                self,
+                *,
+                agent: str,
+                prompt: str,
+                cwd: Path,
+                timeout: float,
+                output_callback: object,
+                cancel_event: object,
+            ) -> OpenCodeRunResult:
+                del timeout, cancel_event
+                runner_calls.append(
+                    {"agent": agent, "prompt": prompt, "cwd": cwd}
+                )
+                assert callable(output_callback)
+                output_callback("stdout", "direct stdout\n")  # type: ignore[operator]
+                started.set()
+                release.wait(timeout=2.0)
+                output_callback("stderr", "direct stderr\n")  # type: ignore[operator]
+                return OpenCodeRunResult(
+                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                    argv=("opencode", "run", "--auto", prompt),
+                    cwd=str(cwd),
+                    stdout="direct stdout\n",
+                    stderr="direct stderr\n",
+                    exit_code=0,
+                    timed_out=False,
+                    error="plain direct response",
+                )
+
+        async def exercise() -> None:
+            with tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                state = DurableRunStore(root / "state")
+                app = GotaApp(
+                    registry=ActionRegistry.default(),
+                    runs=state,
+                    prompts=PromptLibrary.default(),
+                    config=TUIConfig(
+                        repository=root,
+                        database=root / "coordinator.sqlite3",
+                        opencode_executable=sys.executable,
+                    ),
+                    clipboard_reader=Reader(),  # type: ignore[arg-type]
+                    clipboard_writer=Writer(),  # type: ignore[arg-type]
+                )
+                with patch("gota_tui.coordinator_facade.OpenCodeRunner", Runner):
+                    async with app.run_test(size=(100, 40)) as pilot:
+                        await pilot.pause()
+                        action_list = app.query_one("#action-list")
+                        action_list.focus()
+                        await pilot.press("down")
+                        await pilot.pause()
+                        self.assertEqual(app._selected_action.id, "clipboard-prompt")
+
+                        await pilot.press("enter")
+                        self.assertTrue(await asyncio.to_thread(started.wait, 1.0))
+                        await pilot.pause()
+                        self.assertEqual(app._screen, "running")
+                        self.assertFalse(app._confirming)
+                        self.assertNotIn(app._screen, {"preview", "confirmation"})
+                        self.assertEqual(len(runner_calls), 2)
+
+                        release.set()
+                        for _ in range(100):
+                            await pilot.pause(0.01)
+                            if app._screen == "final":
+                                break
+                        self.assertEqual(app._screen, "final")
+                        self.assertIn("Final report", str(app.query_one("#screen-title").render()))
+                        self.assertIn("TASK_ID=NOT_APPLICABLE", str(app.query_one("#report-view").render()))
+                        self.assertEqual(len(runner_calls), 2)
+                        self.assertEqual(len(copied), 1)
+                        run_id = app._result.run_id
+                        paths = state.paths(run_id)
+                        self.assertEqual(paths.prompt.read_text(encoding="utf-8"), prompt)
+                        self.assertEqual(
+                            paths.prompt_sha.read_text(encoding="utf-8").strip(),
+                            hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+                        )
+                        self.assertTrue(paths.request.exists())
+                        self.assertTrue(paths.live_log.exists())
+                        self.assertTrue(paths.result.exists())
+                        self.assertTrue(paths.report.exists())
+                        live_log = paths.live_log.read_text(encoding="utf-8")
+                        self.assertIn("[STDOUT] direct stdout", live_log)
+                        self.assertIn("[STDERR] direct stderr", live_log)
+                        self.assertTrue(paths.report.exists())
+                        self.assertIn("CLIPBOARD_COPY=OK", paths.report.read_text(encoding="utf-8"))
+                        self.assertEqual(state.history_records()[0]["ui_state"], "COMPLETED")
+
+        asyncio.run(exercise())
+
+    def test_cli_clipboard_reads_and_starts_direct_flow_without_selector(self) -> None:
+        from gota_tui.cli import main
+
+        prompt = "direct CLI prompt"
+        created: list[dict[str, object]] = []
+
+        class Reader:
+            def read(self) -> str:
+                return prompt
+
+        class App:
+            def __init__(self, **kwargs: object) -> None:
+                created.append(kwargs)
+
+            def run(self) -> None:
+                return None
+
+        with patch("gota_tui.cli.ClipboardReader", return_value=Reader()), patch(
+            "gota_tui.cli.ClipboardWriter"
+        ), patch("gota_tui.app.GotaApp", App):
+            result = main(
+                [
+                    "--repo",
+                    str(self.repository),
+                    "--state-root",
+                    str(self.repository / ".godot/flujo_tests/cli-state"),
+                    "clipboard",
+                ]
+            )
+
+        self.assertEqual(result, 0)
+        self.assertEqual(len(created), 1)
+        self.assertEqual(created[0]["initial_action"], "clipboard-prompt")
+        self.assertEqual(created[0]["initial_prompt"], prompt)
+
+    def test_empty_cli_clipboard_does_not_construct_or_start_app(self) -> None:
+        from gota_tui.cli import main
+
+        class Reader:
+            def read(self) -> str:
+                return " \n"
+
+        with patch("gota_tui.cli.ClipboardReader", return_value=Reader()), patch(
+            "gota_tui.app.GotaApp"
+        ) as app:
+            result = main(["clipboard"])
+
+        self.assertEqual(result, 2)
+        app.assert_not_called()
+
     def test_plain_preview_enter_confirmation_enter_starts_read_only_action(self) -> None:
         from gota_tui.actions import ActionRegistry
         from gota_tui.app import GotaApp
@@ -220,9 +395,9 @@ class GotaTUIRuntimeTest(unittest.TestCase):
                     self.assertEqual(app._selected_action.id, "audit-readonly")
                     self.assertFalse(app._confirming)
                     self.assertIsNone(app._execution_task)
-                    self.assertIn("Enter Select/confirm", str(app.query_one("#status").render()))
+                    self.assertIn("Enter Run selected action", str(app.query_one("#status").render()))
                     enter_binding = next(binding for binding in app.BINDINGS if binding[0] == "enter")
-                    self.assertEqual(enter_binding[2], "Select/confirm")
+                    self.assertEqual(enter_binding[2], "Run selected action")
 
                     await pilot.press("enter")
                     await pilot.pause()

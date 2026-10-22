@@ -15,6 +15,7 @@ from flow_coordinator import (
     GotaReviewerPersistenceBoundary,
     GotaWorkerPersistenceBoundary,
     GotaWorkerReviewBoundary,
+    OpenCodeRunResult,
     OpenCodeRunner,
     SQLiteCoordinatorStore,
     TaskState,
@@ -69,7 +70,9 @@ class _ObservingRunner:
         self._output = output
         self._cancel_event = cancel_event
 
-    def run(self, *, agent: str, prompt: str, cwd: str | Path, timeout: float):
+    def run(
+        self, *, agent: str, prompt: str, cwd: str | Path, timeout: float
+    ) -> OpenCodeRunResult:
         return self._runner.run(
             agent=agent,
             prompt=prompt,
@@ -78,6 +81,36 @@ class _ObservingRunner:
             output_callback=self._output,
             cancel_event=self._cancel_event,
         )
+
+
+class OpenCodePromptFacade:
+    """Run one direct prompt through the existing shell-free OpenCodeRunner."""
+
+    def __init__(
+        self,
+        *,
+        opencode_executable: str,
+        model: str,
+        variant: str,
+        timeout: float,
+        output: OutputCallback,
+        cancel_event: Event,
+    ) -> None:
+        self.opencode_executable = opencode_executable
+        self.model = model
+        self.variant = variant
+        self.timeout = timeout
+        self.output = output
+        self.cancel_event = cancel_event
+
+    def execute(self, *, agent: str, prompt: str, cwd: str | Path) -> OpenCodeRunResult:
+        return _ObservingRunner(
+            model=self.model,
+            variant=self.variant,
+            executable=self.opencode_executable,
+            output=self.output,
+            cancel_event=self.cancel_event,
+        ).run(agent=agent, prompt=prompt, cwd=cwd, timeout=self.timeout)
 
 
 class CoordinatorGotaFacade:
