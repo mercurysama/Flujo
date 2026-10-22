@@ -67,7 +67,7 @@ class GotaApp(App[None]):
         ("r", "copy_report", "Copy report"),
         ("o", "open_report", "Open report"),
         ("p", "open_prompt", "Open prompt"),
-        ("enter", "accept", "Accept"),
+        ("enter", "accept", "Select/confirm"),
         ("escape", "back", "Back/cancel"),
         ("q", "quit_requested", "Quit"),
     ]
@@ -133,7 +133,18 @@ class GotaApp(App[None]):
         action_list = self.query_one("#action-list", ListView)
         action_list.clear()
         for action in self.registry:
-            action_list.append(ListItem(Label(f"{action.label}  [dim]{action.id}[/dim]")))
+            unavailable = self._action_unavailable_reason(action)
+            label = f"{action.label}  [dim]{action.id}[/dim]"
+            if unavailable is not None:
+                label += f"  [yellow](unavailable: {unavailable})[/yellow]"
+            action_list.append(
+                ListItem(Label(label), disabled=unavailable is not None)
+            )
+
+    def _action_unavailable_reason(self, action: ActionDefinition) -> str | None:
+        if self._envelope is not None and not self._envelope.structured and action.mutable:
+            return "plain text requires a structured envelope"
+        return None
 
     def _show_menu(self) -> None:
         self._screen = "menu"
@@ -179,8 +190,25 @@ class GotaApp(App[None]):
             "Structured envelope: yes" if envelope.structured else
             "Plain text: read-only actions only"
         )
+        self._populate_actions()
         if action_id is not None:
             self._select_action(action_id)
+        elif self._selected_action is not None:
+            self._select_action(self._selected_action.id)
+        action_list = self.query_one("#action-list", ListView)
+        action_list.focus()
+
+    def _show_confirmation(self) -> None:
+        assert self._selected_action is not None
+        self._screen = "confirmation"
+        self._confirming = True
+        self._set_visible("prompt-view")
+        self._set_hidden("action-list", "live-log", "report-view")
+        self.query_one("#screen-title", Static).update("GOTA  ·  Confirmation")
+        self._set_status(
+            f"CONFIRM {self._selected_action.label}? Enter confirms; Escape cancels."
+        )
+        self.set_focus(None)
 
     def _show_history(self) -> None:
         self.runs.recover_interrupted()
@@ -272,29 +300,80 @@ class GotaApp(App[None]):
             if candidate.id == action_id:
                 action_list.index = index
                 break
-        self._set_status(
-            f"Selected: {action.label} — {action.description}"
-            + ("  · confirmation required" if action.requires_confirmation else "")
+        message = f"Selected: {action.label} — {action.description}"
+        unavailable = self._action_unavailable_reason(action)
+        if unavailable is not None:
+            message += f"  · unavailable: {unavailable}"
+        elif action.requires_confirmation or self._screen == "preview":
+            message += "  · confirmation required"
+        if self._screen == "preview":
+            message += "  · Enter Select/confirm"
+            if self._envelope is not None and not self._envelope.structured:
+                message += "  · plain text: read-only actions only"
+        self._set_status(message)
+
+    def _activate_selected_action(self) -> None:
+        """Use one activation path for keyboard, mouse, and selected actions."""
+        if self._selected_action is None:
+            self._set_status("Select a registered action first.")
+            return
+        action = self._selected_action
+        unavailable = self._action_unavailable_reason(action)
+        if unavailable is not None:
+            self._set_status(f"Action unavailable: {unavailable}.")
+            return
+        if self._screen == "confirmation":
+            self._confirming = False
+            self._start_execution()
+            return
+        if action.id == "clipboard-prompt" and self._screen == "menu":
+            self.action_clipboard()
+            return
+        if action.requires_prompt and self._envelope is None:
+            self._set_status("This action requires a clipboard prompt. Press C first.")
+            return
+        if self._screen == "preview":
+            self._show_confirmation()
+            return
+        if action.requires_confirmation:
+            self._show_confirmation()
+            return
+        self._start_execution()
+
+    def _show_prompt_preview_again(self) -> None:
+        if self._prompt is None:
+            self._show_menu()
+            return
+        self._screen = "preview"
+        self._confirming = False
+        self._set_visible("action-list", "prompt-view")
+        self._set_hidden("live-log", "report-view")
+        self.query_one("#screen-title", Static).update(
+            "GOTA  ·  Prompt preview  ·  scroll independently"
         )
+        self._populate_actions()
+        if self._selected_action is not None:
+            self._select_action(self._selected_action.id)
+        self.query_one("#action-list", ListView).focus()
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         if self._screen == "menu" or self._screen == "preview":
             index = event.list_view.index
             if index is not None and 0 <= index < len(self.registry.actions):
-                if (
-                    self._selected_action is None
-                    or self._selected_action.id != self.registry.actions[index].id
-                ):
-                    self._confirming = False
-                self._selected_action = self.registry.actions[index]
-                self._set_status(
-                    f"Selected: {self._selected_action.label} — {self._selected_action.description}"
-                )
+                self._select_action(self.registry.actions[index].id)
+                self._activate_selected_action()
         elif self._screen == "history":
             index = event.list_view.index
             if index is not None and 0 <= index < len(self._history):
                 self._history_index = index
                 self._render_history_detail()
+
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        if self._screen not in {"menu", "preview"} or event.item is None:
+            return
+        index = event.list_view.index
+        if index is not None and 0 <= index < len(self.registry.actions):
+            self._select_action(self.registry.actions[index].id)
 
     def action_clipboard(self) -> None:
         if self._screen in {"final", "history"}:
@@ -323,23 +402,9 @@ class GotaApp(App[None]):
         if self._screen == "running":
             self._set_status("Already running; Escape requests controlled cancellation.")
             return
-        if self._selected_action is None:
-            self._set_status("Select a registered action first.")
+        if self._screen == "historical-prompt":
             return
-        if self._selected_action.id == "clipboard-prompt":
-            self.action_clipboard()
-            return
-        if self._selected_action.requires_prompt and self._envelope is None:
-            self._set_status("This action requires a clipboard prompt. Press C first.")
-            return
-        if self._selected_action.requires_confirmation and not self._confirming:
-            self._confirming = True
-            self._set_status(
-                f"CONFIRM {self._selected_action.label}? Enter confirms; Escape cancels."
-            )
-            return
-        self._confirming = False
-        self._start_execution()
+        self._activate_selected_action()
 
     def _start_execution(self) -> None:
         assert self._selected_action is not None
@@ -453,6 +518,9 @@ class GotaApp(App[None]):
         if self._screen == "running":
             self._cancel_event.set()
             self._set_status("Cancellation requested; waiting for controlled process cleanup.")
+            return
+        if self._screen == "confirmation":
+            self._show_prompt_preview_again()
             return
         if self._screen == "historical-prompt":
             self._show_history()

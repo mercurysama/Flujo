@@ -317,6 +317,10 @@ class GotaTUICoreTest(unittest.TestCase):
         options = build_parser().parse_args(["clipboard", "--action", "execute-task"])
         self.assertEqual(options.command, "clipboard")
         self.assertEqual(options.action, "execute-task")
+        readonly_options = build_parser().parse_args(
+            ["clipboard", "--action", "audit-readonly"]
+        )
+        self.assertEqual(readonly_options.action, "audit-readonly")
 
 
 if __name__ == "__main__":

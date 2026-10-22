@@ -580,7 +580,7 @@
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": ["tools/gota_tui/tests/test_core.py", "tools/gota_tui/tests/test_runtime.py"],
-      "notes": "New behavior specified by TUI-001 through TUI-008 in docs/gota_tui_contract.md. Core durability, security, dedicated-runtime, and headless Textual screen smoke evidence is automatic; interactive visual acceptance remains outside headless coverage."
+      "notes": "New behavior specified by TUI-001 through TUI-008 in docs/gota_tui_contract.md. Core durability, security, dedicated-runtime, and headless Textual screen smoke evidence is automatic. The activation regression is covered by test_plain_preview_enter_confirmation_enter_starts_read_only_action, test_cli_preselection_requires_confirmation_escape_returns_and_focus_is_safe, test_plain_prompt_marks_mutable_action_unavailable_and_blocks_enter, test_mouse_selected_event_uses_the_same_preview_activation_path, and test_structured_mutable_preview_keeps_mandatory_confirmation; interactive visual acceptance remains outside headless coverage."
     }
   ]
 }
