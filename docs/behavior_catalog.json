@@ -565,20 +565,22 @@
       "id": "FLUJO-BHV-GOTA-TUI-001",
       "area": "Production Gota Textual terminal interface",
       "precondition": "A local user has the registered TUI actions, a prompt or read-only action request, and a user-owned state root.",
-      "public_action": "Run gota, gota clipboard, or gota history and use the registered preview, execution, report, and recovery controls.",
-      "expected_result": "The TUI reads and writes clipboard data through explicit argv boundaries, durably records prompts before child execution, composes only registered actions over public Coordinator/Gota APIs, shows live logs, persists compact reports before copy, and reloads history without inventing Coordinator task state.",
+      "public_action": "Run gota, gota clipboard, gota history, or gota doctor/--self-check and use the registered preview, execution, report, and recovery controls.",
+      "expected_result": "The TUI reads and writes clipboard data through explicit argv boundaries, durably records prompts before child execution, composes only registered actions over public Coordinator/Gota APIs, shows live logs, persists compact reports before copy, reloads history without inventing Coordinator task state, and the installed launcher runs the dedicated XDG venv whose Python can import Textual, Rich, and GotaApp.",
       "invariants": [
         "Plain prompts remain data and are read-only unless a complete versioned authority/scope envelope is present.",
         "Every mutable action requires explicit confirmation and never maps OpenCode exit 0 directly to DONE.",
         "UI_INTERRUPTED is local UI state; opening history never cancels, accepts, fences, or rewrites a Coordinator task.",
         "Clipboard failure does not delete a durable report or change its verdict.",
         "The log panel is cleared visually and no shell clear command is executed.",
-        "OpenCode execution reuses the Coordinator OpenCodeRunner and its shell-free argv, containment, timeout, and protocol boundary."
+        "OpenCode execution reuses the Coordinator OpenCodeRunner and its shell-free argv, containment, timeout, and protocol boundary.",
+        "The launcher never uses the installer or system Python as the final TUI runtime.",
+        "Self-check imports Textual, Rich, and GotaApp and reports clipboard absence as warning-only."
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
-      "test_paths": ["tools/gota_tui/tests/test_core.py"],
-      "notes": "New behavior specified by TUI-001 through TUI-008 in docs/gota_tui_contract.md. Textual screen smoke is manual/optional when the user-owned Textual environment is available; core durability and security evidence is automatic."
+      "test_paths": ["tools/gota_tui/tests/test_core.py", "tools/gota_tui/tests/test_runtime.py"],
+      "notes": "New behavior specified by TUI-001 through TUI-008 in docs/gota_tui_contract.md. Core durability, security, dedicated-runtime, and headless Textual screen smoke evidence is automatic; interactive visual acceptance remains outside headless coverage."
     }
   ]
 }

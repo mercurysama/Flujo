@@ -82,8 +82,13 @@ class ClipboardReader:
             if self._which(backend.executable) is not None
         )
 
+    def available_backends(self) -> tuple[ClipboardBackend, ...]:
+        """Return reader backends available without invoking any command."""
+
+        return self._available()
+
     def read(self) -> str:
-        available = self._available()
+        available = self.available_backends()
         if not available:
             names = ", ".join(backend.executable for backend in self._backends)
             raise ClipboardUnavailable(
@@ -134,10 +139,15 @@ class ClipboardWriter:
             is not None
         )
 
+    def available_backends(self) -> tuple[ClipboardBackend, ...]:
+        """Return writer backends available without invoking any command."""
+
+        return self._available()
+
     def copy(self, text: str) -> str:
         if type(text) is not str:
             raise TypeError("Clipboard text must be a string")
-        available = self._available()
+        available = self.available_backends()
         if not available:
             names = ", ".join(backend.executable for backend in self._backends)
             raise ClipboardUnavailable(

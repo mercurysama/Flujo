@@ -12,28 +12,30 @@ that framework and requires a user-owned environment; it never installs system
 packages or uses `sudo`.
 
 ```sh
-python3 -m venv ~/.local/share/flow-coordinator/gota-tui-venv
-~/.local/share/flow-coordinator/gota-tui-venv/bin/python -m pip install \
+DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+VENV="$DATA_HOME/flow-coordinator/gota-tui-venv"
+python3 -m venv "$VENV"
+"$VENV/bin/python" -m pip install \
   -r tools/gota_tui/requirements.txt
-ln -sfn "$(pwd)/tools/gota_tui/gota.py" ~/.local/bin/gota
 ```
 
-For a dedicated venv launcher that is independent of the current shell, run
-the versioned installer from that venv instead:
+The system Python is used only to bootstrap the venv. The installed launcher
+always uses `$DATA_HOME/flow-coordinator/gota-tui-venv/bin/python`, even when
+the installer itself is invoked by a different Python:
 
 ```sh
-~/.local/share/flow-coordinator/gota-tui-venv/bin/python \
-  tools/gota_tui/install_launcher.py
+"$VENV/bin/python" tools/gota_tui/install_launcher.py --force
 ```
 
 It writes only `~/.local/bin/gota`, refuses to replace an existing file unless
 `--force` is supplied, and reports when that directory is not in `PATH`.
 
 If `~/.local/bin` is not in `PATH`, add it in the user's environment outside
-this project; the launcher does not edit shell startup files. A launcher
-diagnostic is available with `gota --help` or `gota --version`. The installed
-launcher is a small user-local wrapper that selects the dedicated venv and
-invokes the versioned `tools/gota_tui/gota.py` target, so no machine-specific
+this project; the launcher does not edit shell startup files. `gota doctor` or
+`gota --self-check` verifies the actual Python runtime, venv, Textual, Rich,
+`GotaApp`, state root, registries, and clipboard backends. Clipboard warnings
+are non-fatal. The installed launcher invokes the versioned
+`tools/gota_tui/gota.py` target with the dedicated venv, so no machine-specific
 path is committed.
 
 ## Usage
@@ -43,6 +45,8 @@ gota
 gota clipboard
 gota clipboard --action execute-task
 gota history
+gota doctor
+gota --self-check
 ```
 
 `--action` only preselects an action. Mutable actions always show the preview

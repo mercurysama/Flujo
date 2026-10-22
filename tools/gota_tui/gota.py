@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""User-facing launcher target; installation may symlink ``~/.local/bin/gota`` here."""
+"""User-facing launcher target invoked by the dedicated-venv installer."""
 
 from __future__ import annotations
 

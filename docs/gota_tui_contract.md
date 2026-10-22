@@ -60,11 +60,17 @@ persisted before clipboard copy is attempted. Copy failure changes only the
 clipboard diagnostic, not the verdict. The log panel is cleared by changing
 the Textual view, never by launching a shell `clear` command.
 
-## TUI-008 — Launcher
+## TUI-008 — Dedicated-venv launcher and runtime check
 
 The versioned launcher supports `gota`, `gota clipboard`, and `gota history`,
-including `--help` and `--version`. Mutable clipboard actions always show
-preview and confirmation; `--action` never suppresses confirmation.
+including `--help` and `--version`. Its runtime is exclusively the dedicated
+user venv at `${XDG_DATA_HOME:-$HOME/.local/share}/flow-coordinator/gota-tui-venv`;
+the installer never uses its own `sys.executable` as the product runtime.
+`gota doctor` and `gota --self-check` import Textual, Rich, and `GotaApp`, and
+check the state root, Action Registry, Prompt Library, and clipboard backends.
+Clipboard backend absence is a warning when the TUI dependencies and app load
+successfully. Mutable clipboard actions always show preview and confirmation;
+`--action` never suppresses confirmation.
 
 ## Traceability
 

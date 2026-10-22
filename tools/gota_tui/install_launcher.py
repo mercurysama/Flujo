@@ -11,6 +11,13 @@ import tempfile
 from pathlib import Path
 
 
+_PACKAGE_ROOT = Path(__file__).resolve().parent.parent
+if str(_PACKAGE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PACKAGE_ROOT))
+
+from gota_tui.runtime import RuntimePathError, default_tui_python
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="install-gota-launcher")
     parser.add_argument(
@@ -27,7 +34,20 @@ def main(arguments: list[str] | None = None) -> int:
     options = build_parser().parse_args(arguments)
     destination = options.destination.expanduser()
     target = Path(__file__).resolve().with_name("gota.py")
-    interpreter = Path(sys.executable).resolve()
+    try:
+        interpreter = default_tui_python()
+    except RuntimePathError as error:
+        print(f"Cannot resolve the dedicated Gota TUI venv: {error}", file=sys.stderr)
+        return 2
+    if not interpreter.is_file() or not os.access(interpreter, os.X_OK):
+        print(
+            "Dedicated Gota TUI Python is missing or not executable: "
+            f"{interpreter}\n"
+            "Create the venv and install tools/gota_tui/requirements.txt before "
+            "installing the launcher.",
+            file=sys.stderr,
+        )
+        return 2
     if destination.exists() or destination.is_symlink():
         if not options.force:
             print(f"Refusing to replace existing launcher: {destination}", file=sys.stderr)
@@ -65,7 +85,7 @@ def main(arguments: list[str] | None = None) -> int:
             pass
         raise
     in_path = str(destination.parent) in os.environ.get("PATH", "").split(os.pathsep)
-    print(f"Installed {destination} -> {target}")
+    print(f"Installed {destination} -> {target} using {interpreter}")
     if not in_path:
         print(f"Notice: {destination.parent} is not in PATH", file=sys.stderr)
     return 0
