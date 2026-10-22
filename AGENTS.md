@@ -66,7 +66,8 @@
 # Verification
 
 - Run `git diff --check`.
-- Run the behavior catalog validator with `godot --headless --path . --script tests/governance/behavior_catalog_validator_test.gd`.
+- For all authoritative Godot commands below, use the production resolver prefix `PYTHONDONTWRITEBYTECODE=1 python3 -B tools/godot/resolve_godot.py --` in place of `godot`.
+- Run the behavior catalog validator with that prefix followed by `--headless --path . --script tests/governance/behavior_catalog_validator_test.gd`.
 - Run the selected Godot command with `--headless --editor --path . --quit-after 5`.
 - Run the selected Godot command with `--headless --path . tests/model/flow_model_smoke_test.tscn`.
 - The mist test must print `[Flujo] Model mist test passed`. The existing `flow_model_smoke_test.tscn` scene loads `flow_model_mist_test.gd` and remains the compatible command entry point.
@@ -83,7 +84,9 @@
 
 # Fedora Flatpak Environment
 
-- On Fedora, select the Godot executor in this order. Confirm every selected executor reports Godot 4.7.2 before using it.
+- Production authority on every host is governed by [GODOT-PIN-001–003](docs/production_godot_contract.md): `FLUJO_GODOT_BIN` when present, otherwise the canonical XDG/HOME pinned executable. `tools/godot/resolve_godot.py` validates the exact `4.7.2.stable.official.ed1daf0bf` version and fails closed. No PATH or Flatpak fallback is authorized for production. Baseline and prove must use this same resolver for every authoritative invocation, including focal tests.
+- SYSTEM is a separate, explicitly requested compatibility/diagnostic lane, not production authority. FUTURE versions such as 4.8 are tested in parallel before changing the supported minimum.
+- Only for opt-in SYSTEM compatibility on Fedora, select the executor in this order. Confirm every selected executor reports Godot 4.7.2 before using it; Fedora builds cannot satisfy production authority.
   1. Use native `godot` when it is available in `PATH` and `godot --version` reports 4.7.2.
   2. If Codex runs inside the VS Code Flatpak, use `flatpak-spawn --host flatpak run org.godotengine.Godot` when native Godot is unavailable or is not 4.7.2. VS Code uses `com.visualstudio.code` and Godot uses `org.godotengine.Godot`.
   3. If Flatpak is available directly, use `flatpak run org.godotengine.Godot` when neither prior executor works.

@@ -3,6 +3,22 @@
   "catalog_version": 1,
   "behaviors": [
     {
+      "id": "FLUJO-BHV-GODOT-PRODUCTION-001",
+      "area": "Production Godot executor resolution",
+      "precondition": "Production baseline or prove needs a Godot executable under GODOT-PIN-001–003.",
+      "public_action": "Resolve or invoke Godot through tools/godot/resolve_godot.py.",
+      "expected_result": "An explicit FLUJO_GODOT_BIN or canonical XDG/HOME pinned executable is accepted only at exactly 4.7.2.stable.official.ed1daf0bf; invalid selections fail closed with diagnostics.",
+      "invariants": [
+        "No silent PATH, system Godot or Flatpak fallback; invalid override never falls through.",
+        "Fedora builds are compatibility-only even with the same commit.",
+        "Baseline and prove share one resolver; no machine-specific project path or Coordinator dependency.",
+        "Godot arguments remain literal shell-free data and child exit status is propagated."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tests/tooling/test_godot_resolver.py"]
+    },
+    {
       "id": "FLUJO-BHV-F4-001",
       "area": "F4 and PVController",
       "precondition": "An editable scene has either a selected target node, a scene root, or an existing usable PVController; the game is not running.",
