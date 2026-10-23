@@ -54,6 +54,11 @@ class ReportData:
     prompt_sha256: str | None = None
     report_path: str | None = None
     log_path: str | None = None
+    output_path: str | None = None
+    timestamp: str | None = None
+    timeout: float | None = None
+    readonly_policy: str | None = None
+    mutation_guard: str | None = None
     clipboard_copy: str = "NOT_ATTEMPTED"
     findings: list[Mapping[str, Any]] = field(default_factory=list)
     verdict: str = "UNKNOWN"
@@ -82,6 +87,11 @@ def render_report(data: ReportData) -> str:
         f"PROMPT_SHA256={_value(data.prompt_sha256)}",
         f"REPORT_PATH={_value(data.report_path)}",
         f"LOG_PATH={_value(data.log_path)}",
+        f"OUTPUT_PATH={_value(data.output_path)}",
+        f"TIMESTAMP={_value(data.timestamp)}",
+        f"TIMEOUT={_value(data.timeout)}",
+        f"READONLY_POLICY={_value(data.readonly_policy)}",
+        f"UNEXPECTED_MUTATION_GUARD={_value(data.mutation_guard)}",
         f"CLIPBOARD_COPY={_value(data.clipboard_copy)}",
         f"FINDINGS={_findings(data.findings)}",
         f"DIAGNOSTIC={_value(data.diagnostic)}",
@@ -147,6 +157,11 @@ class ReportManager:
             prompt_sha256=data.prompt_sha256,
             report_path=data.report_path,
             log_path=data.log_path,
+            output_path=data.output_path,
+            timestamp=data.timestamp,
+            timeout=data.timeout,
+            readonly_policy=data.readonly_policy,
+            mutation_guard=data.mutation_guard,
             clipboard_copy=status,
             findings=list(data.findings),
             verdict=data.verdict,

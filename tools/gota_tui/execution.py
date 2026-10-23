@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -27,6 +28,7 @@ from .coordinator_facade import (
 from .durable import DurableRunStore, RunPaths, default_coordinator_database
 from .envelope import PromptEnvelope
 from .prompt_library import PromptComposition, PromptLibrary
+from .read_only_agent import ReadOnlyAgentError, validate_read_only_agent
 from .reporting import ReportData, ReportManager, PersistedReport
 
 
@@ -92,6 +94,22 @@ class ActionExecutor:
     def _variant(self, action: ActionDefinition) -> str:
         return self.config.variant_override or action.variant or ""
 
+    def _validate_opencode_audit_configuration(self, action: ActionDefinition) -> None:
+        if action.backend != "opencode-readonly":
+            return
+        if action.mutable:
+            raise ExecutionError("OpenCode audit action is mutable")
+        model = self._model(action)
+        variant = self._variant(action)
+        if re.fullmatch(r"[^\s/#]+/[^\s#]+", model) is None:
+            raise ExecutionError(f"Invalid OpenCode model: {model!r}")
+        if re.fullmatch(r"[^\s#]+", variant) is None:
+            raise ExecutionError(f"Invalid OpenCode variant: {variant!r}")
+        try:
+            validate_read_only_agent(action.agent)
+        except ReadOnlyAgentError as error:
+            raise ExecutionError(str(error)) from error
+
     def prepare(
         self,
         action: ActionDefinition,
@@ -103,6 +121,7 @@ class ActionExecutor:
             raise ExecutionError(f"Action {action.id} requires a non-empty prompt")
         if action.mutable:
             envelope.require_mutable_fields()
+        self._validate_opencode_audit_configuration(action)
         composition: PromptComposition | None = None
         if action.template:
             composition = self.prompts.compose(action.template, envelope.assignment)
@@ -126,6 +145,8 @@ class ActionExecutor:
             envelope=envelope.metadata,
             run_id=run_id,
             allow_empty_prompt=not action.requires_prompt,
+            timeout=self.config.timeout,
+            opencode_output=action.backend == "opencode-readonly",
         )
         return PreparedAction(action, envelope, composition, paths)
 
@@ -181,13 +202,26 @@ class ActionExecutor:
                 outcome = self._execute_direct_prompt(prepared, cancel)
                 return self._finish(prepared, outcome)
 
+            if action.backend == "opencode-readonly":
+                outcome = self._execute_opencode_audit(prepared, cancel)
+                return self._finish(prepared, outcome)
+
             outcome = self._execute_registered_read_only(prepared, cancel)
             return self._finish(prepared, outcome)
         except Exception as error:
             return self._finish(
                 prepared,
                 CoordinatorOutcome(
-                    verdict="FAIL" if action.backend == "opencode-direct" else "CYCLE_FAILED",
+                    verdict=(
+                        "FAIL"
+                        if action.backend in {"opencode-direct", "opencode-readonly"}
+                        else "CYCLE_FAILED"
+                    ),
+                    coordinator_state=(
+                        "READ_ONLY"
+                        if action.backend in {"git-audit", "opencode-readonly"}
+                        else None
+                    ),
                     diagnostic=f"Registered backend failed: {type(error).__name__}: {error}",
                 ),
             )
@@ -240,6 +274,295 @@ class ActionExecutor:
             cancelled=result.status is OpenCodeRunStatus.CANCELLED,
         )
 
+    def _read_durable_audit_prompt(
+        self, prepared: PreparedAction
+    ) -> tuple[str, Mapping[str, Any]]:
+        """Read and verify the prompt that was persisted before confirmation."""
+
+        request = self.runs.request(prepared.paths.run_id)
+        if request.get("action_id") != prepared.action.id:
+            raise ExecutionError("Durable request action does not match audit action")
+        try:
+            prompt = self.runs.read_prompt(prepared.paths.run_id)
+        except Exception as error:
+            raise ExecutionError(f"Durable audit prompt is unavailable: {error}") from error
+        if not prompt.strip():
+            raise ExecutionError("Durable audit prompt is empty")
+        prompt_sha256 = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        if request.get("prompt_sha256") != prompt_sha256:
+            raise ExecutionError("Durable audit prompt SHA-256 does not match request metadata")
+        return prompt, request
+
+    @staticmethod
+    def _snapshot_payload(snapshot: Any) -> dict[str, Any]:
+        return {
+            "repository": snapshot.repository,
+            "head": snapshot.head,
+            "branch": snapshot.branch,
+            "status": snapshot.status,
+            "refs": [list(ref) for ref in snapshot.refs],
+        }
+
+    @staticmethod
+    def _mutation_attempt_detected(stdout: str, stderr: str) -> bool:
+        text = f"{stdout}\n{stderr}".lower()
+        patterns = (
+            r"(?:permission|operation|tool|action).{0,100}(?:denied|forbidden|not allowed|blocked).{0,100}(?:edit|write|shell|bash|commit|push|reset|checkout|clean|merge|rebase)",
+            r"(?:edit|write|shell|bash|git\s+(?:commit|push|reset|checkout|clean|merge|rebase)).{0,100}(?:denied|forbidden|not allowed|blocked)",
+        )
+        return any(re.search(pattern, text, re.DOTALL) is not None for pattern in patterns)
+
+    @staticmethod
+    def _requested_delimited_blocks(prompt: str, output: str) -> tuple[str, ...]:
+        """Find complete marker blocks requested by a generic prompt.
+
+        No output schema is imposed. A prompt that names ``FOO_BEGIN`` causes
+        the matching ``FOO_END`` block to be identified and the complete model
+        output remains in the associated artifact.
+        """
+
+        markers = re.findall(
+            r"(?<![A-Za-z0-9_.-])([A-Za-z0-9][A-Za-z0-9_.-]*_BEGIN)(?![A-Za-z0-9_.-])",
+            prompt,
+        )
+        blocks: list[str] = []
+        for begin in dict.fromkeys(markers):
+            end = begin[: -len("_BEGIN")] + "_END"
+            start_index = output.find(begin)
+            if start_index < 0:
+                continue
+            end_index = output.find(end, start_index + len(begin))
+            if end_index < 0:
+                continue
+            blocks.append(output[start_index : end_index + len(end)])
+        return tuple(blocks)
+
+    def _audit_findings(
+        self,
+        *,
+        prompt: str,
+        stdout: str,
+        stderr: str,
+        output_path: str,
+        failed: bool,
+    ) -> list[Mapping[str, Any]]:
+        combined = stdout if stdout.strip() else stderr
+        first_line = next((line.strip() for line in combined.splitlines() if line.strip()), "")
+        findings: list[Mapping[str, Any]] = []
+        if first_line:
+            findings.append(
+                {
+                    "id": "OPENCODE_OUTPUT",
+                    "severity": "error" if failed else "info",
+                    "description": first_line,
+                    "path": output_path,
+                }
+            )
+        blocks = self._requested_delimited_blocks(prompt, stdout + "\n" + stderr)
+        for index, block in enumerate(blocks, start=1):
+            marker = block.splitlines()[0] if block.splitlines() else f"BLOCK_{index}"
+            findings.append(
+                {
+                    "id": f"DELIMITED_BLOCK_{index}",
+                    "severity": "error" if failed else "info",
+                    "description": f"{marker} preserved in the complete OpenCode output artifact",
+                    "path": output_path,
+                }
+            )
+        if not findings:
+            findings.append(
+                {
+                    "id": "OPENCODE_OUTPUT",
+                    "severity": "error" if failed else "info",
+                    "description": "OpenCode produced no textual findings; complete channels are preserved",
+                    "path": output_path,
+                }
+            )
+        return findings
+
+    def _execute_opencode_audit(
+        self,
+        prepared: PreparedAction,
+        cancel: Event,
+    ) -> CoordinatorOutcome:
+        """Run the generic prompt through the canonical read-only boundary."""
+
+        action = prepared.action
+        if action.backend != "opencode-readonly" or action.mutable:
+            raise ExecutionError("OpenCode audit backend is not read-only")
+        self._validate_opencode_audit_configuration(action)
+        prompt, request = self._read_durable_audit_prompt(prepared)
+        policy = validate_read_only_agent(action.agent)
+        repository = self.config.repository
+        try:
+            before = ReadOnlyGitAdapter(repository).snapshot()
+        except GitReadError as error:
+            raise ExecutionError(f"OpenCode audit repository preflight failed: {error}") from error
+
+        version = self._opencode_version()
+        timestamp = str(request.get("timestamp") or datetime.now(UTC).isoformat())
+        started_at = datetime.now(UTC).isoformat()
+        metadata: dict[str, Any] = {
+            "run_id": prepared.paths.run_id,
+            "action_id": action.id,
+            "prompt_sha256": request.get("prompt_sha256"),
+            "model": self._model(action),
+            "variant": self._variant(action),
+            "opencode_version": version,
+            "agent": action.agent,
+            "repository": str(repository.resolve()),
+            "timestamp": timestamp,
+            "started_at": started_at,
+            "timeout": self.config.timeout,
+            "readonly_policy": "deny-all; read, glob, grep, and read-only Git shell patterns only",
+            "readonly_policy_sha256": policy.sha256,
+            "base_sha": before.head,
+            "branch_before": before.branch,
+            "git_status_before": before.status,
+            "refs_before": [list(ref) for ref in before.refs],
+        }
+        self.runs.update_request(
+            prepared.paths.run_id,
+            opencode_version=version,
+            readonly_agent=policy.agent_id,
+            readonly_policy_sha256=policy.sha256,
+            started_at=started_at,
+            base_sha=before.head,
+            branch_before=before.branch,
+            git_status_before=before.status,
+            refs_before=metadata["refs_before"],
+        )
+
+        result: Any = None
+        runner_error: str | None = None
+        if version.startswith("unavailable"):
+            runner_error = f"OpenCode version preflight failed: {version}"
+        else:
+            try:
+                result = OpenCodePromptFacade(
+                    opencode_executable=self.config.opencode_executable,
+                    model=self._model(action),
+                    variant=self._variant(action),
+                    timeout=self.config.timeout,
+                    output=self._open_code_output(prepared.paths.run_id),
+                    cancel_event=cancel,
+                ).execute(
+                    agent=action.agent,
+                    prompt=prompt,
+                    cwd=repository,
+                )
+            except Exception as error:
+                runner_error = f"OpenCode runner failed: {type(error).__name__}: {error}"
+
+        stdout = "" if result is None else result.stdout
+        stderr = "" if result is None else result.stderr
+        if runner_error:
+            stderr = f"{stderr}\n{runner_error}" if stderr else runner_error
+        output_path = self.runs.persist_opencode_output(
+            prepared.paths.run_id, stdout, stderr
+        )
+        try:
+            after = ReadOnlyGitAdapter(repository).snapshot()
+        except GitReadError as error:
+            after = None
+            runner_error = f"OpenCode audit repository postflight failed: {error}"
+
+        mutation_reasons: list[str] = []
+        if after is not None:
+            if before.head != after.head:
+                mutation_reasons.append("HEAD changed")
+            if before.branch != after.branch:
+                mutation_reasons.append("branch changed")
+            if before.status != after.status:
+                mutation_reasons.append("git status changed")
+            if before.refs != after.refs:
+                mutation_reasons.append("Git refs changed")
+        if self._mutation_attempt_detected(stdout, stderr):
+            mutation_reasons.append("OpenCode reported a denied mutation attempt")
+
+        if after is not None:
+            metadata.update(
+                {
+                    "commit_sha": after.head,
+                    "branch_after": after.branch,
+                    "git_status_after": after.status,
+                    "refs_after": [list(ref) for ref in after.refs],
+                }
+            )
+        else:
+            metadata["commit_sha"] = None
+        metadata.update(
+            {
+                "output_path": str(output_path),
+                "mutation_guard": "PASS" if not mutation_reasons and after is not None else "FAIL",
+                "mutation_reasons": mutation_reasons,
+                "finished_at": datetime.now(UTC).isoformat(),
+            }
+        )
+        self.runs.update_request(
+            prepared.paths.run_id,
+            finished_at=metadata["finished_at"],
+            commit_sha=metadata["commit_sha"],
+            branch_after=metadata.get("branch_after"),
+            git_status_after=metadata.get("git_status_after"),
+            refs_after=metadata.get("refs_after"),
+            output_path=str(output_path),
+            mutation_guard=metadata["mutation_guard"],
+        )
+
+        failed = bool(runner_error or mutation_reasons or after is None)
+        if not failed and result is not None:
+            accepted_status = result.status in {
+                OpenCodeRunStatus.SUCCEEDED,
+                OpenCodeRunStatus.INVALID_PAYLOAD,
+            }
+            failed = result.exit_code != 0 or not accepted_status
+        if failed:
+            if result is not None and result.status is OpenCodeRunStatus.TIMEOUT:
+                verdict = "FAIL/TIMEOUT"
+            elif result is not None and result.status is OpenCodeRunStatus.CANCELLED:
+                verdict = "FAIL/CANCELLED"
+            else:
+                verdict = "FAIL"
+        else:
+            verdict = "READ_ONLY_OK"
+
+        diagnostic_parts = []
+        if runner_error:
+            diagnostic_parts.append(runner_error)
+        elif result is not None:
+            diagnostic_parts.append(
+                f"OpenCode status={result.status.value} exit={result.exit_code}"
+            )
+            if result.status is OpenCodeRunStatus.INVALID_PAYLOAD:
+                diagnostic_parts.append("generic raw output accepted; no Gota payload required")
+            elif result.error and failed:
+                diagnostic_parts.append(result.error)
+        if mutation_reasons:
+            diagnostic_parts.append("; ".join(mutation_reasons))
+        if not diagnostic_parts:
+            diagnostic_parts.append("Read-only OpenCode audit completed")
+        self._log(prepared.paths.run_id, "Read-only OpenCode audit: " + " | ".join(diagnostic_parts))
+        metadata["verdict"] = verdict
+        return CoordinatorOutcome(
+            base_sha=before.head,
+            commit_sha=after.head if after is not None else None,
+            coordinator_state="READ_ONLY",
+            findings=self._audit_findings(
+                prompt=prompt,
+                stdout=stdout,
+                stderr=stderr,
+                output_path=str(output_path),
+                failed=failed,
+            ),
+            verdict=verdict,
+            diagnostic=" | ".join(diagnostic_parts),
+            cancelled=(
+                result is not None and result.status is OpenCodeRunStatus.CANCELLED
+            ),
+            metadata=metadata,
+        )
+
     def _git_head(self) -> str | None:
         try:
             return ReadOnlyGitAdapter(self.config.repository).head()
@@ -271,6 +594,8 @@ class ActionExecutor:
         run_id = prepared.paths.run_id
         if action.backend == "git-audit":
             return self._git_audit(prepared)
+        if action.backend == "opencode-readonly":
+            return self._execute_opencode_audit(prepared, cancel)
         if action.backend == "coordinator-status":
             return self._coordinator_status(prepared)
         if action.backend == "diagnostics":
@@ -487,49 +812,101 @@ class ActionExecutor:
         task_id = outcome.task_id
         coordinator_state = outcome.coordinator_state
         verdict = cancel_status or outcome.verdict
+        metadata = dict(outcome.metadata)
+        opencode_version = metadata.get("opencode_version")
+        if type(opencode_version) is not str:
+            if action.backend in {"gota-task", "gota-review", "opencode-direct"}:
+                opencode_version = self._opencode_version()
+            elif action.backend == "audit-readonly" or action.backend == "git-audit":
+                opencode_version = "NOT_APPLICABLE"
+            elif action.backend == "opencode-readonly":
+                opencode_version = "NOT_APPLICABLE"
+            else:
+                opencode_version = None
         result_payload = asdict(outcome)
         result_payload["ui_run_id"] = prepared.paths.run_id
+        result_payload.update(
+            {
+                "run_id": prepared.paths.run_id,
+                "action_id": action.id,
+                "action": action.id,
+                "prompt_sha256": request.get("prompt_sha256"),
+                "model": metadata.get("model", self._model(action) or "NOT_APPLICABLE"),
+                "variant": metadata.get("variant", self._variant(action) or "NOT_APPLICABLE"),
+                "opencode_version": opencode_version,
+                "agent": metadata.get("agent", action.agent or "NOT_APPLICABLE"),
+                "repository": metadata.get("repository", str(self.config.repository)),
+                "timestamp": metadata.get("timestamp", request.get("timestamp")),
+                "timeout": metadata.get("timeout", request.get("timeout")),
+                "report_path": str(prepared.paths.report),
+                "log_path": str(prepared.paths.live_log),
+            }
+        )
+        result_payload.update(metadata)
         self.runs.persist_result(prepared.paths.run_id, result_payload)
 
+        non_coordinator = action.backend in {
+            "opencode-direct",
+            "opencode-readonly",
+            "git-audit",
+        }
         direct_prompt = action.backend == "opencode-direct"
-        report_task_id = "NOT_APPLICABLE" if direct_prompt else task_id
+        report_task_id = "NOT_APPLICABLE" if non_coordinator else task_id
         report_context_id = (
             "NOT_APPLICABLE"
-            if direct_prompt
+            if non_coordinator
             else (
                 prepared.envelope.metadata.get("context_id")
                 if type(prepared.envelope.metadata.get("context_id")) is str
                 else None
             )
         )
-        report_coordinator_state = "NOT_APPLICABLE" if direct_prompt else coordinator_state
-        report_worker_result = "NOT_APPLICABLE" if direct_prompt else outcome.worker_result
-        report_review_result = "NOT_APPLICABLE" if direct_prompt else outcome.review_result
+        report_coordinator_state = (
+            "NOT_APPLICABLE"
+            if direct_prompt
+            else (coordinator_state or "READ_ONLY" if non_coordinator else coordinator_state)
+        )
+        report_worker_result = "NOT_APPLICABLE" if non_coordinator else outcome.worker_result
+        report_review_result = "NOT_APPLICABLE" if non_coordinator else outcome.review_result
+        report_model = (
+            "NOT_APPLICABLE"
+            if action.backend == "git-audit"
+            else self._model(action) or "NOT_APPLICABLE"
+        )
+        report_variant = (
+            "NOT_APPLICABLE"
+            if action.backend == "git-audit"
+            else self._variant(action) or "NOT_APPLICABLE"
+        )
+        report_agent = (
+            "NOT_APPLICABLE" if action.backend == "git-audit" else action.agent or "NOT_APPLICABLE"
+        )
 
         report_data = ReportData(
             run_id=prepared.paths.run_id,
             action=action.id,
             task_id=report_task_id,
             context_id=report_context_id,
-            model=self._model(action) or None,
-            variant=self._variant(action) or None,
-            opencode_version=(
-                self._opencode_version()
-                if action.backend in {"gota-task", "gota-review", "opencode-direct"}
-                else None
-            ),
-            agent=action.agent or None,
-            repository=str(self.config.repository),
+            model=report_model,
+            variant=report_variant,
+            opencode_version=opencode_version,
+            agent=report_agent,
+            repository=str(metadata.get("repository", self.config.repository)),
             base_sha=outcome.base_sha,
             commit_sha=outcome.commit_sha,
             coordinator_state=report_coordinator_state,
             worker_result=report_worker_result,
             review_result=report_review_result,
-            tests=outcome.tests,
-            diff_check=outcome.diff_check,
+            tests=outcome.tests or ("NOT_APPLICABLE" if non_coordinator else None),
+            diff_check=outcome.diff_check or ("NOT_REQUESTED" if non_coordinator else None),
             prompt_sha256=request.get("prompt_sha256"),
             report_path=str(prepared.paths.report),
             log_path=str(prepared.paths.live_log),
+            output_path=metadata.get("output_path"),
+            timestamp=metadata.get("timestamp", request.get("timestamp")),
+            timeout=metadata.get("timeout", request.get("timeout")),
+            readonly_policy=metadata.get("readonly_policy"),
+            mutation_guard=metadata.get("mutation_guard"),
             findings=list(outcome.findings),
             verdict=verdict,
             diagnostic=outcome.diagnostic,
@@ -537,6 +914,13 @@ class ActionExecutor:
         persisted: PersistedReport = ReportManager(
             self.runs, self.clipboard_writer
         ).persist_before_copy(report_data)
+        result_payload.update(
+            {
+                "clipboard_copy": persisted.clipboard_status,
+                "report_path": persisted.path,
+            }
+        )
+        self.runs.persist_result(prepared.paths.run_id, result_payload)
         ui_state = "UI_CANCELLED" if outcome.cancelled or cancel_status else "COMPLETED"
         self.runs.finalize(
             prepared.paths.run_id,

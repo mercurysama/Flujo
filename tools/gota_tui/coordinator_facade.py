@@ -46,6 +46,7 @@ class CoordinatorOutcome:
     review_result: str | None = None
     verdict: str = "CYCLE_FAILED"
     findings: list[Mapping[str, Any]] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
     tests: str | None = None
     diff_check: str | None = None
     diagnostic: str = ""

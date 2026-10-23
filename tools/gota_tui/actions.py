@@ -16,6 +16,7 @@ KNOWN_BACKENDS = frozenset(
     {
         "gota-task",
         "opencode-direct",
+        "opencode-readonly",
         "gota-review",
         "git-audit",
         "production-validation",
@@ -111,18 +112,32 @@ class ActionDefinition:
                 raise ActionRegistryError(
                     f"OpenCode action {self.id!r} requires agent, model, and variant"
                 )
-        if self.backend == "opencode-direct":
+        if self.backend in {"opencode-direct", "opencode-readonly"}:
             if self.mutable:
                 raise ActionRegistryError(
-                    f"Direct OpenCode action {self.id!r} cannot be a Coordinator task"
+                    f"Read-only OpenCode action {self.id!r} cannot be a Coordinator task"
                 )
             if not self.agent.strip() or not self.model.strip() or not self.variant.strip():
                 raise ActionRegistryError(
-                    f"Direct OpenCode action {self.id!r} requires agent, model, and variant"
+                    f"OpenCode action {self.id!r} requires agent, model, and variant"
                 )
-        if self.backend in {"gota-task", "gota-review", "git-audit", "opencode-direct"}:
+        if self.backend == "opencode-readonly" and not self.requires_confirmation:
+            raise ActionRegistryError(
+                f"Read-only OpenCode audit {self.id!r} must require confirmation"
+            )
+        if self.backend == "opencode-readonly" and not self.requires_prompt:
+            raise ActionRegistryError(
+                f"Read-only OpenCode audit {self.id!r} must require a prompt"
+            )
+        if self.backend in {
+            "gota-task",
+            "gota-review",
+            "git-audit",
+            "opencode-direct",
+            "opencode-readonly",
+        }:
             if not self.template.strip():
-                if self.backend != "opencode-direct":
+                if self.backend not in {"opencode-direct", "opencode-readonly"}:
                     raise ActionRegistryError(
                         f"Prompt action {self.id!r} requires a template"
                     )

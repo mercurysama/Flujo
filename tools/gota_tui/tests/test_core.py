@@ -20,7 +20,9 @@ from gota_tui.durable import DurableRunStore
 from gota_tui.envelope import PromptEnvelope, PromptEnvelopeError
 from gota_tui.execution import ActionExecutor, ExecutionError, TUIConfig
 from flow_coordinator import OpenCodeRunResult, OpenCodeRunStatus
+from flow_coordinator.git_adapter import GitSnapshot
 from gota_tui.prompt_library import PromptLibrary
+from gota_tui.read_only_agent import ReadOnlyAgentError
 from gota_tui.reporting import ReportData, ReportManager, render_report
 
 
@@ -68,6 +70,7 @@ class GotaTUICoreTest(unittest.TestCase):
                 "clipboard-prompt",
                 "review",
                 "audit-readonly",
+                "audit-opencode",
                 "revalidate-production",
                 "run-tests",
                 "diagnostics",
@@ -82,6 +85,16 @@ class GotaTUICoreTest(unittest.TestCase):
         self.assertEqual(direct.model + "#" + direct.variant, "openai/gpt-5.6-luna#max")
         self.assertEqual(direct.agent, "build")
         self.assertFalse(direct.requires_confirmation)
+        git_audit = registry.get("audit-readonly")
+        self.assertEqual(git_audit.label, "Read-only Git audit")
+        audit = registry.get("audit-opencode")
+        self.assertEqual(audit.label, "Read-only OpenCode audit")
+        self.assertEqual(audit.backend, "opencode-readonly")
+        self.assertTrue(audit.requires_prompt)
+        self.assertTrue(audit.requires_confirmation)
+        self.assertFalse(audit.mutable)
+        self.assertEqual(audit.model + "#" + audit.variant, "openai/gpt-5.6-luna#max")
+        self.assertEqual(audit.agent, "gota-auditor")
         with self.assertRaises(ActionRegistryError):
             ActionRegistry.from_mapping(
                 {
@@ -306,6 +319,355 @@ class GotaTUICoreTest(unittest.TestCase):
         self.assertEqual(self.state.read_report(result.run_id), result.report)
         self.assertEqual(result.report_path, str(prepared.paths.report))
 
+    def test_opencode_audit_reuses_runner_durable_prompt_and_persists_evidence(self) -> None:
+        prompt = "audit $(not-shell)\nFINDINGS_BEGIN\nFINDINGS_END"
+        repository = Path(__file__).resolve().parents[3]
+        state = DurableRunStore(self.root / "opencode-audit-state")
+        runner_calls: list[dict[str, object]] = []
+        copy_observations: list[bool] = []
+        head = "a" * 40
+
+        class Writer:
+            report_path: Path
+
+            def copy(self, text: str) -> str:
+                del text
+                copy_observations.append(self.report_path.exists())
+                return "mock"
+
+        class Runner:
+            def __init__(self, *, executable: str, model: str, variant: str) -> None:
+                runner_calls.append(
+                    {"executable": executable, "model": model, "variant": variant}
+                )
+
+            def run(
+                self,
+                *,
+                agent: str,
+                prompt: str,
+                cwd: Path,
+                timeout: float,
+                output_callback: object,
+                cancel_event: object,
+            ) -> OpenCodeRunResult:
+                del timeout, cancel_event
+                assert callable(output_callback)
+                output_callback("stdout", "real finding\nFINDINGS_BEGIN\nimportant\nFINDINGS_END\n")  # type: ignore[operator]
+                output_callback("stderr", "read-only diagnostic\n")  # type: ignore[operator]
+                runner_calls.append(
+                    {
+                        "agent": agent,
+                        "prompt": prompt,
+                        "cwd": cwd,
+                        "argv": (
+                            "opencode",
+                            "run",
+                            "--standalone",
+                            "--model",
+                            "openai/gpt-5.6-luna#max",
+                            "--agent",
+                            agent,
+                            "--auto",
+                            prompt,
+                        ),
+                    }
+                )
+                return OpenCodeRunResult(
+                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                    argv=(
+                        "opencode",
+                        "run",
+                        "--standalone",
+                        "--model",
+                        "openai/gpt-5.6-luna#max",
+                        "--agent",
+                        agent,
+                        "--auto",
+                        prompt,
+                    ),
+                    cwd=str(cwd),
+                    stdout="real finding\nFINDINGS_BEGIN\nimportant\nFINDINGS_END\n",
+                    stderr="read-only diagnostic\n",
+                    exit_code=0,
+                    timed_out=False,
+                    error="generic output is not a Gota payload",
+                )
+
+        class Git:
+            def __init__(self, root: Path) -> None:
+                self.root = root
+
+            def snapshot(self) -> GitSnapshot:
+                return GitSnapshot(
+                    repository=str(self.root),
+                    head=head,
+                    branch="feature/audit",
+                    status="",
+                    refs=(("refs/heads/feature/audit", head, ""),),
+                )
+
+        writer = Writer()
+        executor = ActionExecutor(
+            config=TUIConfig(
+                repository=repository,
+                database=self.root / "coordinator.sqlite3",
+                opencode_executable="fake-opencode",
+                timeout=37.0,
+            ),
+            runs=state,
+            prompts=PromptLibrary.default(),
+            clipboard_writer=writer,
+        )
+        action = ActionRegistry.default().get("audit-opencode")
+        prepared = executor.prepare(
+            action,
+            PromptEnvelope.parse(prompt),
+            run_id="opencode-audit-run",
+        )
+        writer.report_path = prepared.paths.report
+
+        with patch("gota_tui.coordinator_facade.OpenCodeRunner", Runner), patch(
+            "gota_tui.execution.ReadOnlyGitAdapter", Git
+        ), patch.object(ActionExecutor, "_opencode_version", return_value="opencode v2.0.32"):
+            result = executor.execute(prepared)
+
+        self.assertEqual(result.verdict, "READ_ONLY_OK")
+        self.assertEqual(copy_observations, [True])
+        self.assertEqual(runner_calls[0]["model"], "openai/gpt-5.6-luna")
+        self.assertEqual(runner_calls[0]["variant"], "max")
+        self.assertEqual(runner_calls[1]["agent"], "gota-auditor")
+        self.assertEqual(runner_calls[1]["prompt"], prompt)
+        self.assertEqual(runner_calls[1]["cwd"], repository)
+        self.assertEqual(runner_calls[1]["argv"][4], "openai/gpt-5.6-luna#max")
+        self.assertTrue(prepared.paths.prompt.exists())
+        self.assertIn("[STDOUT] real finding", prepared.paths.live_log.read_text(encoding="utf-8"))
+        self.assertIn("[STDERR] read-only diagnostic", prepared.paths.live_log.read_text(encoding="utf-8"))
+        self.assertIn("FINDINGS_BEGIN\nimportant\nFINDINGS_END", prepared.paths.opencode_output.read_text(encoding="utf-8"))
+        report = state.read_report(result.run_id)
+        for line in (
+            "ACTION=audit-opencode",
+            "MODEL=openai/gpt-5.6-luna",
+            "VARIANT=max",
+            "OPENCODE_VERSION=opencode v2.0.32",
+            "AGENT=gota-auditor",
+            "COORDINATOR_STATE=READ_ONLY",
+            "TASK_ID=NOT_APPLICABLE",
+            "CONTEXT_ID=NOT_APPLICABLE",
+            "WORKER_RESULT=NOT_APPLICABLE",
+            "REVIEW_RESULT=NOT_APPLICABLE",
+            "UNEXPECTED_MUTATION_GUARD=PASS",
+            "VERDICT=READ_ONLY_OK",
+        ):
+            self.assertIn(line, report)
+        request = json.loads(prepared.paths.request.read_text(encoding="utf-8"))
+        stored_result = json.loads(prepared.paths.result.read_text(encoding="utf-8"))
+        self.assertEqual(request["timeout"], 37.0)
+        self.assertEqual(request["opencode_version"], "opencode v2.0.32")
+        self.assertEqual(stored_result["action_id"], "audit-opencode")
+        self.assertEqual(stored_result["model"], "openai/gpt-5.6-luna")
+        self.assertEqual(stored_result["variant"], "max")
+        self.assertEqual(stored_result["opencode_version"], "opencode v2.0.32")
+        self.assertEqual(stored_result["timeout"], 37.0)
+        self.assertEqual(stored_result["clipboard_copy"], "OK")
+
+    def test_opencode_audit_failure_and_unexpected_git_mutation_fail_closed(self) -> None:
+        repository = Path(__file__).resolve().parents[3]
+        action = ActionRegistry.default().get("audit-opencode")
+        head = "b" * 40
+
+        class Writer:
+            def copy(self, text: str) -> str:
+                del text
+                return "mock"
+
+        class Runner:
+            status = OpenCodeRunStatus.NON_ZERO_EXIT
+
+            def __init__(self, *, executable: str, model: str, variant: str) -> None:
+                del executable, model, variant
+
+            def run(self, **kwargs: object) -> OpenCodeRunResult:
+                callback = kwargs["output_callback"]
+                assert callable(callback)
+                callback("stderr", "OpenCode failed\n")  # type: ignore[operator]
+                return OpenCodeRunResult(
+                    status=self.status,
+                    argv=("opencode", "run", "--standalone"),
+                    cwd=str(kwargs["cwd"]),
+                    stdout="",
+                    stderr="OpenCode failed\n",
+                    exit_code=9,
+                    timed_out=False,
+                    error="process exited with code 9",
+                )
+
+        class Git:
+            snapshots: list[GitSnapshot] = []
+
+            def __init__(self, root: Path) -> None:
+                self.root = root
+
+            def snapshot(self) -> GitSnapshot:
+                return self.snapshots.pop(0)
+
+        def snapshot(root: Path, value: str) -> GitSnapshot:
+            return GitSnapshot(
+                repository=str(root),
+                head=value,
+                branch="feature/audit",
+                status="",
+                refs=(("refs/heads/feature/audit", value, ""),),
+            )
+
+        for status, expected in (
+            (OpenCodeRunStatus.NON_ZERO_EXIT, "FAIL"),
+            (OpenCodeRunStatus.INVALID_PAYLOAD, "FAIL"),
+        ):
+            with self.subTest(status=status):
+                state = DurableRunStore(self.root / f"audit-failure-{status.value}")
+                executor = ActionExecutor(
+                    config=TUIConfig(
+                        repository=repository,
+                        database=self.root / "coordinator.sqlite3",
+                        opencode_executable="fake-opencode",
+                    ),
+                    runs=state,
+                    prompts=PromptLibrary.default(),
+                    clipboard_writer=Writer(),
+                )
+                prepared = executor.prepare(
+                    action,
+                    PromptEnvelope.parse("failure audit"),
+                    run_id=f"failure-{status.value}",
+                )
+                Runner.status = status
+                Git.snapshots = [snapshot(repository, head), snapshot(repository, head)]
+                with patch("gota_tui.coordinator_facade.OpenCodeRunner", Runner), patch(
+                    "gota_tui.execution.ReadOnlyGitAdapter", Git
+                ), patch.object(ActionExecutor, "_opencode_version", return_value="opencode v2.0.32"):
+                    result = executor.execute(prepared)
+                self.assertEqual(result.verdict, expected)
+                self.assertNotIn("READ_ONLY_OK", state.read_report(result.run_id))
+
+        state = DurableRunStore(self.root / "audit-mutation")
+        executor = ActionExecutor(
+            config=TUIConfig(
+                repository=repository,
+                database=self.root / "coordinator.sqlite3",
+                opencode_executable="fake-opencode",
+            ),
+            runs=state,
+            prompts=PromptLibrary.default(),
+            clipboard_writer=Writer(),
+        )
+        prepared = executor.prepare(action, PromptEnvelope.parse("mutation audit"), run_id="mutation-audit")
+        Git.snapshots = [snapshot(repository, head), snapshot(repository, "c" * 40)]
+        Runner.status = OpenCodeRunStatus.INVALID_PAYLOAD
+        with patch("gota_tui.coordinator_facade.OpenCodeRunner", Runner), patch(
+            "gota_tui.execution.ReadOnlyGitAdapter", Git
+        ), patch.object(ActionExecutor, "_opencode_version", return_value="opencode v2.0.32"):
+            result = executor.execute(prepared)
+        self.assertEqual(result.verdict, "FAIL")
+        self.assertIn("HEAD changed", state.read_report(result.run_id))
+        self.assertNotIn("READ_ONLY_OK", state.read_report(result.run_id))
+
+    def test_opencode_audit_missing_prompt_invalid_model_and_policy_never_start_runner(self) -> None:
+        repository = Path(__file__).resolve().parents[3]
+        action = ActionRegistry.default().get("audit-opencode")
+
+        class Writer:
+            def copy(self, text: str) -> str:
+                return "mock"
+
+        class NeverRunner:
+            def __init__(self, **kwargs: object) -> None:
+                raise AssertionError(f"runner must not start: {kwargs}")
+
+        state = DurableRunStore(self.root / "missing-prompt")
+        executor = ActionExecutor(
+            config=TUIConfig(
+                repository=repository,
+                database=self.root / "coordinator.sqlite3",
+                opencode_executable="fake-opencode",
+            ),
+            runs=state,
+            prompts=PromptLibrary.default(),
+            clipboard_writer=Writer(),
+        )
+        prepared = executor.prepare(action, PromptEnvelope.parse("durable prompt"), run_id="missing-prompt")
+        prepared.paths.prompt.unlink()
+        with patch("gota_tui.coordinator_facade.OpenCodeRunner", NeverRunner):
+            result = executor.execute(prepared)
+        self.assertEqual(result.verdict, "FAIL")
+        self.assertNotIn("READ_ONLY_OK", state.read_report(result.run_id))
+
+        with self.assertRaises(ExecutionError):
+            ActionExecutor(
+                config=TUIConfig(
+                    repository=repository,
+                    database=self.root / "coordinator.sqlite3",
+                    model_override="invalid model",
+                ),
+                runs=DurableRunStore(self.root / "invalid-model"),
+                prompts=PromptLibrary.default(),
+                clipboard_writer=Writer(),
+            ).prepare(action, PromptEnvelope.parse("prompt"), run_id="invalid-model")
+
+        with patch(
+            "gota_tui.execution.validate_read_only_agent",
+            side_effect=ReadOnlyAgentError("incoherent read-only policy"),
+        ):
+            with self.assertRaises(ExecutionError):
+                ActionExecutor(
+                    config=TUIConfig(
+                        repository=repository,
+                        database=self.root / "coordinator.sqlite3",
+                    ),
+                    runs=DurableRunStore(self.root / "invalid-policy"),
+                    prompts=PromptLibrary.default(),
+                    clipboard_writer=Writer(),
+                ).prepare(action, PromptEnvelope.parse("prompt"), run_id="invalid-policy")
+
+    def test_existing_git_audit_remains_local_and_model_free(self) -> None:
+        repository = Path(__file__).resolve().parents[3]
+        state = DurableRunStore(self.root / "git-audit")
+        action = ActionRegistry.default().get("audit-readonly")
+        head = "d" * 40
+
+        class Writer:
+            def copy(self, text: str) -> str:
+                del text
+                return "mock"
+
+        class Git:
+            def __init__(self, root: Path) -> None:
+                self.root = root
+
+            def snapshot(self) -> GitSnapshot:
+                return GitSnapshot(str(self.root), head, "feature/audit", "", ())
+
+        executor = ActionExecutor(
+            config=TUIConfig(
+                repository=repository,
+                database=self.root / "coordinator.sqlite3",
+                opencode_executable="must-not-run",
+            ),
+            runs=state,
+            prompts=PromptLibrary.default(),
+            clipboard_writer=Writer(),
+        )
+        prepared = executor.prepare(action, PromptEnvelope.parse("local audit"), run_id="git-audit")
+        with patch("gota_tui.execution.ReadOnlyGitAdapter", Git), patch.object(
+            ActionExecutor, "_opencode_version", side_effect=AssertionError("Git audit must not query OpenCode")
+        ):
+            result = executor.execute(prepared)
+        self.assertEqual(result.verdict, "READ_ONLY_OK")
+        report = state.read_report(result.run_id)
+        self.assertIn("ACTION=audit-readonly", report)
+        self.assertIn("MODEL=NOT_APPLICABLE", report)
+        self.assertIn("OPENCODE_VERSION=NOT_APPLICABLE", report)
+
     def test_direct_clipboard_execution_reuses_runner_and_persists_before_start(self) -> None:
         prompt = "Responde únicamente: GOTA_CLIPBOARD_DIRECT_OK"
         writer_observations: list[bool] = []
@@ -524,6 +886,264 @@ class GotaTUICoreTest(unittest.TestCase):
         report = state.read_report(result.run_id)
         self.assertIn("BASE_SHA=base-head", report)
         self.assertIn("COMMIT_SHA=final-head", report)
+
+    def test_opencode_audit_reuses_runner_durable_prompt_and_persists_report_before_copy(self) -> None:
+        from unittest.mock import patch
+
+        repository = Path(__file__).resolve().parents[3]
+        prompt = "Audit $(not-shell) and preserve AUDIT_BEGIN/AUDIT_END."
+        output = "AUDIT_BEGIN\nreal finding 🌧️\nAUDIT_END\n"
+        snapshots = [
+            GitSnapshot(str(repository), "a" * 40, "feature/audit", "", (("refs/heads/feature/audit", "a" * 40, ""),)),
+            GitSnapshot(str(repository), "a" * 40, "feature/audit", "", (("refs/heads/feature/audit", "a" * 40, ""),)),
+        ]
+        runner_calls: list[dict[str, object]] = []
+        copied_after_report: list[bool] = []
+
+        class Writer:
+            report_path: Path
+
+            def copy(self, text: str) -> str:
+                del text
+                copied_after_report.append(self.report_path.exists())
+                return "mock"
+
+        writer = Writer()
+
+        class Git:
+            def __init__(self, path: Path) -> None:
+                self.path = path
+
+            def snapshot(self) -> GitSnapshot:
+                return snapshots.pop(0)
+
+        class Runner:
+            def __init__(self, *, executable: str, model: str, variant: str) -> None:
+                runner_calls.append(
+                    {"executable": executable, "model": model, "variant": variant}
+                )
+
+            def run(self, **kwargs: object) -> OpenCodeRunResult:
+                callback = kwargs["output_callback"]
+                assert callable(callback)
+                callback("stdout", output)
+                callback("stderr", "audit diagnostic\n")
+                runner_calls.append(
+                    {
+                        "agent": kwargs["agent"],
+                        "prompt": kwargs["prompt"],
+                        "cwd": kwargs["cwd"],
+                    }
+                )
+                return OpenCodeRunResult(
+                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                    argv=(
+                        "opencode",
+                        "run",
+                        "--standalone",
+                        "--model",
+                        "openai/gpt-5.6-luna#max",
+                        "--agent",
+                        "gota-auditor",
+                        "--auto",
+                        prompt,
+                    ),
+                    cwd=str(repository),
+                    stdout=output,
+                    stderr="audit diagnostic\n",
+                    exit_code=0,
+                    timed_out=False,
+                    error="generic response",
+                )
+
+        state = DurableRunStore(self.root / "audit-state")
+        executor = ActionExecutor(
+            config=TUIConfig(
+                repository=repository,
+                database=self.root / "coordinator.sqlite3",
+                opencode_executable="opencode",
+                timeout=17.0,
+            ),
+            runs=state,
+            prompts=PromptLibrary.default(),
+            clipboard_writer=writer,
+        )
+        prepared = executor.prepare(
+            ActionRegistry.default().get("audit-opencode"),
+            PromptEnvelope.parse(prompt),
+            run_id="opencode-audit",
+        )
+        writer.report_path = prepared.paths.report
+
+        with (
+            patch("gota_tui.coordinator_facade.OpenCodeRunner", Runner),
+            patch("gota_tui.execution.ReadOnlyGitAdapter", Git),
+            patch.object(executor, "_opencode_version", return_value="opencode v2.0.32"),
+        ):
+            result = executor.execute(prepared)
+
+        self.assertEqual(result.verdict, "READ_ONLY_OK")
+        self.assertEqual(runner_calls[0]["model"], "openai/gpt-5.6-luna")
+        self.assertEqual(runner_calls[0]["variant"], "max")
+        self.assertEqual(runner_calls[1]["agent"], "gota-auditor")
+        self.assertEqual(runner_calls[1]["prompt"], prompt)
+        self.assertEqual(runner_calls[1]["cwd"], repository)
+        self.assertEqual(copied_after_report, [True])
+        live_log = prepared.paths.live_log.read_text(encoding="utf-8")
+        self.assertIn("real finding 🌧️", live_log)
+        self.assertIn("audit diagnostic", live_log)
+        self.assertIn(output, prepared.paths.opencode_output.read_text(encoding="utf-8"))
+        report = state.read_report(result.run_id)
+        for line in (
+            "ACTION=audit-opencode",
+            "MODEL=openai/gpt-5.6-luna",
+            "VARIANT=max",
+            "OPENCODE_VERSION=opencode v2.0.32",
+            "AGENT=gota-auditor",
+            "COORDINATOR_STATE=READ_ONLY",
+            "TASK_ID=NOT_APPLICABLE",
+            "CONTEXT_ID=NOT_APPLICABLE",
+            "WORKER_RESULT=NOT_APPLICABLE",
+            "REVIEW_RESULT=NOT_APPLICABLE",
+            "UNEXPECTED_MUTATION_GUARD=PASS",
+            "VERDICT=READ_ONLY_OK",
+        ):
+            self.assertIn(line, report)
+        request = json.loads(prepared.paths.request.read_text(encoding="utf-8"))
+        persisted_result = json.loads(prepared.paths.result.read_text(encoding="utf-8"))
+        for payload in (request, persisted_result):
+            self.assertEqual(payload["run_id"], "opencode-audit")
+            self.assertEqual(payload["action_id"], "audit-opencode")
+            self.assertEqual(payload["prompt_sha256"], hashlib.sha256(prompt.encode()).hexdigest())
+            self.assertEqual(payload["model"], "openai/gpt-5.6-luna")
+            self.assertEqual(payload["variant"], "max")
+            self.assertEqual(payload["agent"], "gota-auditor")
+            self.assertEqual(payload["repository"], str(repository))
+            self.assertEqual(payload["timeout"], 17.0)
+        self.assertEqual(persisted_result["opencode_version"], "opencode v2.0.32")
+        self.assertEqual(persisted_result["clipboard_copy"], "OK")
+
+    def test_opencode_audit_failures_and_git_mutation_never_report_read_only_ok(self) -> None:
+        from unittest.mock import patch
+
+        repository = Path(__file__).resolve().parents[3]
+        action = ActionRegistry.default().get("audit-opencode")
+
+        class Writer:
+            def copy(self, text: str) -> str:
+                del text
+                return "mock"
+
+        class Runner:
+            status = OpenCodeRunStatus.NON_ZERO_EXIT
+
+            def __init__(self, **kwargs: object) -> None:
+                del kwargs
+
+            def run(self, **kwargs: object) -> OpenCodeRunResult:
+                return OpenCodeRunResult(
+                    status=self.status,
+                    argv=("opencode", "run"),
+                    cwd=str(kwargs["cwd"]),
+                    stdout="failure output\n",
+                    stderr="OpenCode failed\n",
+                    exit_code=9,
+                    timed_out=False,
+                    error="injected failure",
+                )
+
+        class Git:
+            snapshots: list[GitSnapshot] = []
+
+            def __init__(self, path: Path) -> None:
+                del path
+
+            def snapshot(self) -> GitSnapshot:
+                return self.snapshots.pop(0)
+
+        for name, snapshots, status, expected in (
+            (
+                "audit-failure",
+                [
+                    GitSnapshot(str(repository), "b" * 40, "feature/audit", "", ()),
+                    GitSnapshot(str(repository), "b" * 40, "feature/audit", "", ()),
+                ],
+                OpenCodeRunStatus.NON_ZERO_EXIT,
+                "FAIL",
+            ),
+            (
+                "audit-mutation",
+                [
+                    GitSnapshot(str(repository), "c" * 40, "feature/audit", "", ()),
+                    GitSnapshot(str(repository), "d" * 40, "feature/audit", "", ()),
+                ],
+                OpenCodeRunStatus.INVALID_PAYLOAD,
+                "FAIL",
+            ),
+        ):
+            with self.subTest(name=name):
+                state = DurableRunStore(self.root / name)
+                executor = ActionExecutor(
+                    config=TUIConfig(
+                        repository=repository,
+                        database=self.root / "coordinator.sqlite3",
+                        opencode_executable="opencode",
+                    ),
+                    runs=state,
+                    prompts=PromptLibrary.default(),
+                    clipboard_writer=Writer(),
+                )
+                prepared = executor.prepare(
+                    action,
+                    PromptEnvelope.parse("read only audit"),
+                    run_id=name,
+                )
+                Git.snapshots = list(snapshots)
+                Runner.status = status
+                with (
+                    patch("gota_tui.coordinator_facade.OpenCodeRunner", Runner),
+                    patch("gota_tui.execution.ReadOnlyGitAdapter", Git),
+                    patch.object(executor, "_opencode_version", return_value="opencode v2.0.32"),
+                ):
+                    result = executor.execute(prepared)
+                self.assertEqual(result.verdict, expected)
+                self.assertNotIn("VERDICT=READ_ONLY_OK", state.read_report(name))
+
+    def test_opencode_audit_fails_closed_before_runner_for_missing_prompt_or_invalid_model(self) -> None:
+        from unittest.mock import patch
+
+        action = ActionRegistry.default().get("audit-opencode")
+        with self.assertRaises(ExecutionError):
+            ActionExecutor(
+                config=TUIConfig(
+                    repository=Path(__file__).resolve().parents[3],
+                    database=self.root / "coordinator.sqlite3",
+                    model_override="invalid model",
+                ),
+                runs=self.state,
+                prompts=PromptLibrary.default(),
+                clipboard_writer=ClipboardWriter(which=lambda _: None),
+            ).prepare(action, PromptEnvelope.parse("audit"))
+
+        class Runner:
+            def __init__(self, **kwargs: object) -> None:
+                raise AssertionError("runner must not start without durable prompt")
+
+        executor = ActionExecutor(
+            config=TUIConfig(
+                repository=Path(__file__).resolve().parents[3],
+                database=self.root / "coordinator.sqlite3",
+                opencode_executable="opencode",
+            ),
+            runs=self.state,
+            prompts=PromptLibrary.default(),
+            clipboard_writer=ClipboardWriter(which=lambda _: None),
+        )
+        prepared = executor.prepare(action, PromptEnvelope.parse("audit"), run_id="missing-prompt")
+        prepared.paths.prompt.unlink()
+        with patch("gota_tui.coordinator_facade.OpenCodeRunner", Runner):
+            result = executor.execute(prepared)
+        self.assertEqual(result.verdict, "FAIL")
 
     def test_shell_like_prompt_is_data_and_no_new_tui_source_uses_shell_true(self) -> None:
         prompt = "$(touch /tmp/not-created); source evil.sh\nUnicode 🌧️"

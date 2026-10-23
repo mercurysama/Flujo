@@ -49,10 +49,13 @@ gota --self-check
 ```
 
 `gota clipboard` reads and executes the current clipboard prompt immediately.
-From the main menu, `Enter` runs the selected action; selecting `Execute prompt
-from clipboard` is the confirmation and does not open a second selector or
-confirmation screen. `Execute task` and `Review existing Gota run` retain
-preview and explicit confirmation. `C` runs the direct clipboard action,
+From the main menu, `Enter` selects the selected action; selecting `Execute
+prompt from clipboard` is the confirmation and does not open a second selector
+or confirmation screen. `Execute task`, `Review existing Gota run`, and
+`Read-only OpenCode audit` retain preview and explicit confirmation. With
+`Read-only OpenCode audit` selected, `C` loads the clipboard into its durable
+prompt preview; `Enter` then confirms the audit and a second `Enter` starts it.
+With another menu action selected, `C` keeps the direct clipboard action.
 `H` opens history, `R`/`C` copies an available report, `Escape` cancels/returns,
 and `Q` quits. A cancellation during a child process requests controlled
 termination; it does not mark a Coordinator task `CANCELLED`.
@@ -61,14 +64,17 @@ termination; it does not mark a Coordinator task `CANCELLED`.
 
 Actions live in `actions.toml` and are validated by `ActionRegistry`. The
 initial registry contains Execute task, Execute prompt from clipboard, Review
-existing Gota run, Read-only audit, Revalidate production, Run tests,
-Diagnostics, Recovery, View status, and History. Backends are an allowlist;
-there is no arbitrary shell action.
+existing Gota run, Read-only Git audit, Read-only OpenCode audit, Revalidate
+production, Run tests, Diagnostics, Recovery, View status, and History.
+Backends are an allowlist; there is no arbitrary shell action.
 
 Mutable Execute task requires a version 1 envelope. Review requires a durable
 Coordinator `REVIEW` frontier and never gives the Reviewer mutation access.
-Read-only actions use fixed argv or the existing read-only Git/Coordinator
-APIs. The configured default is `openai/gpt-5.6-luna#max`, overridable with
+Read-only Git audit uses the local Git adapter without a model. Read-only
+OpenCode audit validates the canonical `gota-auditor` policy, reads its prompt
+from durable `prompt.txt`, and reuses the existing shell-free OpenCodeRunner.
+It never creates Coordinator task state and fails when Git changes across the
+child. The configured OpenCode default is `openai/gpt-5.6-luna#max`, overridable with
 `--model`, `--variant`, `GOTA_TUI_MODEL`, and `GOTA_TUI_VARIANT`.
 
 ## Clipboard and security
@@ -134,6 +140,7 @@ ${XDG_STATE_HOME:-~/.local/state}/flow-coordinator/tui/
   runs/<ui-run-id>/prompt.txt
   runs/<ui-run-id>/prompt.sha256
   runs/<ui-run-id>/live.log
+  runs/<ui-run-id>/opencode-output.txt
   runs/<ui-run-id>/result.json
   runs/<ui-run-id>/report.txt
   history.jsonl
@@ -147,10 +154,11 @@ history never transitions, cancels, accepts, or rewrites a Coordinator task.
 
 The final report is compact and includes `RUN_ID`, `ACTION`, `TASK_ID`,
 `CONTEXT_ID`, model/variant, OpenCode version/agent, repository/base/commit,
-Coordinator/Worker/Review state, tests, diff check, prompt SHA, report/log
-paths, clipboard status, findings, and verdict. Full output remains in
-`live.log`. The report is persisted before copy is attempted, and a clipboard
-failure never removes it.
+Coordinator/Worker/Review state, tests, diff check, prompt SHA, report/log and
+associated-output paths, read-only policy, mutation guard, clipboard status,
+findings, and verdict. Full output remains in `live.log` and, for the
+OpenCode audit, in `opencode-output.txt`. The report is persisted before copy
+is attempted, and a clipboard failure never removes it.
 
 ## Adding an action or template
 

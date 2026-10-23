@@ -41,7 +41,7 @@ description = "Resume a durable REVIEW frontier through the read-only Reviewer b
 
 [[actions]]
 id = "audit-readonly"
-label = "Read-only audit"
+label = "Read-only Git audit"
 backend = "git-audit"
 mutable = false
 requires_prompt = true
@@ -51,6 +51,19 @@ model = ""
 variant = ""
 template = "read-only-v1"
 description = "Inspect repository facts without changing files or Coordinator state."
+
+[[actions]]
+id = "audit-opencode"
+label = "Read-only OpenCode audit"
+backend = "opencode-readonly"
+mutable = false
+requires_prompt = true
+requires_confirmation = true
+agent = "gota-auditor"
+model = "openai/gpt-5.6-luna"
+variant = "max"
+template = ""
+description = "Analyze the durable prompt through the canonical read-only OpenCode agent."
 
 [[actions]]
 id = "revalidate-production"

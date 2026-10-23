@@ -116,6 +116,10 @@ class RunPaths:
     def report(self) -> Path:
         return self.directory / "report.txt"
 
+    @property
+    def opencode_output(self) -> Path:
+        return self.directory / "opencode-output.txt"
+
 
 class DurableRunStore:
     """Owns only TUI files, never the Coordinator's operational state."""
@@ -143,6 +147,8 @@ class DurableRunStore:
         envelope: Mapping[str, Any],
         run_id: str | None = None,
         allow_empty_prompt: bool = False,
+        timeout: float | None = None,
+        opencode_output: bool = False,
     ) -> RunPaths:
         if type(prompt) is not str or (not allow_empty_prompt and not prompt.strip()):
             raise DurableStateError("Cannot persist an empty prompt")
@@ -157,10 +163,13 @@ class DurableRunStore:
         _atomic_text(paths.prompt, prompt)
         _atomic_text(paths.prompt_sha, prompt_sha256 + "\n")
         _atomic_bytes(paths.live_log, b"")
+        if opencode_output:
+            _atomic_bytes(paths.opencode_output, b"")
         request = {
             "schema": "flow.coordinator/tui-run/v1",
             "run_id": chosen_id,
             "created_at": created_at,
+            "timestamp": created_at,
             "updated_at": created_at,
             "ui_state": "PREPARED",
             "action_id": action_id,
@@ -170,10 +179,13 @@ class DurableRunStore:
             "repository": repository,
             "prompt": prompt,
             "prompt_sha256": prompt_sha256,
+            "timeout": timeout,
             "template": dict(template),
             "envelope": dict(envelope),
             "coordinator_run_id": None,
         }
+        if opencode_output:
+            request["opencode_output_path"] = str(paths.opencode_output)
         _atomic_json(paths.request, request)
         self._append_history(
             {
@@ -253,6 +265,17 @@ class DurableRunStore:
             raise DurableStateError("Cannot persist an empty report")
         path = self.paths(run_id).report
         _atomic_text(path, report)
+        return path
+
+    def persist_opencode_output(self, run_id: str, stdout: str, stderr: str) -> Path:
+        """Persist complete observed OpenCode channels as an associated artifact."""
+
+        if type(stdout) is not str or type(stderr) is not str:
+            raise TypeError("OpenCode output must be text")
+        text = "STDOUT_BEGIN\n" + stdout + "\nSTDOUT_END\n"
+        text += "STDERR_BEGIN\n" + stderr + "\nSTDERR_END\n"
+        path = self.paths(run_id).opencode_output
+        _atomic_text(path, text)
         return path
 
     def finalize(

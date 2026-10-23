@@ -253,6 +253,153 @@ class GotaTUIRuntimeTest(unittest.TestCase):
 
         asyncio.run(exercise())
 
+    def test_clipboard_audit_opencode_requires_confirmation_and_reaches_final_report(self) -> None:
+        from flow_coordinator import OpenCodeRunResult, OpenCodeRunStatus
+        from gota_tui.actions import ActionRegistry
+        from gota_tui.app import GotaApp
+        from gota_tui.durable import DurableRunStore
+        from gota_tui.execution import ActionExecutor, TUIConfig
+        from gota_tui.prompt_library import PromptLibrary
+
+        prompt = "Inspect the repository read-only. Do not modify files."
+        started = threading.Event()
+        release = threading.Event()
+        runner_calls: list[dict[str, object]] = []
+        copied: list[str] = []
+
+        class Reader:
+            reads = 0
+
+            def read(self) -> str:
+                self.reads += 1
+                return prompt
+
+        class Writer:
+            def copy(self, text: str) -> str:
+                copied.append(text)
+                return "mock"
+
+        reader = Reader()
+
+        class Runner:
+            def __init__(self, *, executable: str, model: str, variant: str) -> None:
+                runner_calls.append(
+                    {"executable": executable, "model": model, "variant": variant}
+                )
+
+            def run(
+                self,
+                *,
+                agent: str,
+                prompt: str,
+                cwd: Path,
+                timeout: float,
+                output_callback: object,
+                cancel_event: object,
+            ) -> OpenCodeRunResult:
+                del timeout, cancel_event
+                runner_calls.append(
+                    {"agent": agent, "prompt": prompt, "cwd": cwd}
+                )
+                assert callable(output_callback)
+                output_callback("stdout", "GOTA_READ_ONLY_UI_OK\n")  # type: ignore[operator]
+                started.set()
+                release.wait(timeout=2.0)
+                return OpenCodeRunResult(
+                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                    argv=(
+                        "opencode",
+                        "run",
+                        "--standalone",
+                        "--model",
+                        "openai/gpt-5.6-luna#max",
+                        "--agent",
+                        agent,
+                        "--auto",
+                        prompt,
+                    ),
+                    cwd=str(cwd),
+                    stdout="GOTA_READ_ONLY_UI_OK\n",
+                    stderr="",
+                    exit_code=0,
+                    timed_out=False,
+                    error="generic read-only response",
+                )
+
+        async def exercise() -> None:
+            with tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                state = DurableRunStore(root / "state")
+                app = GotaApp(
+                    registry=ActionRegistry.default(),
+                    runs=state,
+                    prompts=PromptLibrary.default(),
+                    config=TUIConfig(
+                        repository=self.repository,
+                        database=root / "coordinator.sqlite3",
+                        opencode_executable="fake-opencode",
+                    ),
+                    clipboard_reader=reader,  # type: ignore[arg-type]
+                    clipboard_writer=Writer(),  # type: ignore[arg-type]
+                )
+                with patch("gota_tui.coordinator_facade.OpenCodeRunner", Runner), patch.object(
+                    ActionExecutor,
+                    "_opencode_version",
+                    return_value="opencode v2.0.32",
+                ):
+                    async with app.run_test(size=(100, 40)) as pilot:
+                        await pilot.pause()
+                        action_list = app.query_one("#action-list")
+                        audit_index = next(
+                            index
+                            for index, action in enumerate(app.registry.actions)
+                            if action.id == "audit-opencode"
+                        )
+                        action_list.focus()
+                        for _ in range(len(app.registry.actions)):
+                            await pilot.press("down")
+                            await pilot.pause()
+                            if app._selected_action is not None and app._selected_action.id == "audit-opencode":
+                                break
+                        self.assertEqual(app._selected_action.id, "audit-opencode")
+                        self.assertEqual(action_list.index, audit_index)
+
+                        await pilot.press("c")
+                        await pilot.pause()
+                        self.assertEqual(reader.reads, 1)
+                        self.assertEqual(app._screen, "preview")
+                        self.assertEqual(app._selected_action.id, "audit-opencode")
+
+                        await pilot.press("enter")
+                        await pilot.pause()
+                        self.assertEqual(app._screen, "confirmation")
+                        self.assertTrue(app._confirming)
+                        self.assertFalse(started.is_set())
+
+                        await pilot.press("enter")
+                        self.assertTrue(await asyncio.to_thread(started.wait, 1.0))
+                        await pilot.pause()
+                        self.assertEqual(app._screen, "running")
+                        self.assertFalse(app._confirming)
+                        self.assertEqual(reader.reads, 1)
+
+                        release.set()
+                        for _ in range(100):
+                            await pilot.pause(0.01)
+                            if app._screen == "final":
+                                break
+                        self.assertEqual(app._screen, "final")
+                        report = str(app.query_one("#report-view").render())
+                        self.assertIn("ACTION=audit-opencode", report)
+                        self.assertIn("MODEL=openai/gpt-5.6-luna", report)
+                        self.assertIn("AGENT=gota-auditor", report)
+                        self.assertIn("VERDICT=READ_ONLY_OK", report)
+                        self.assertEqual(len(runner_calls), 2)
+                        self.assertEqual(runner_calls[1]["prompt"], prompt)
+                        self.assertEqual(len(copied), 1)
+
+        asyncio.run(exercise())
+
     def test_cli_clipboard_reads_and_starts_direct_flow_without_selector(self) -> None:
         from gota_tui.cli import main
 
@@ -395,9 +542,9 @@ class GotaTUIRuntimeTest(unittest.TestCase):
                     self.assertEqual(app._selected_action.id, "audit-readonly")
                     self.assertFalse(app._confirming)
                     self.assertIsNone(app._execution_task)
-                    self.assertIn("Enter Run selected action", str(app.query_one("#status").render()))
+                    self.assertIn("Enter Select/confirm", str(app.query_one("#status").render()))
                     enter_binding = next(binding for binding in app.BINDINGS if binding[0] == "enter")
-                    self.assertEqual(enter_binding[2], "Run selected action")
+                    self.assertEqual(enter_binding[2], "Select/confirm")
 
                     await pilot.press("enter")
                     await pilot.pause()

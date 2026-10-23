@@ -67,7 +67,7 @@ class GotaApp(App[None]):
         ("r", "copy_report", "Copy report"),
         ("o", "open_report", "Open report"),
         ("p", "open_prompt", "Open prompt"),
-        ("enter", "accept", "Run selected action"),
+        ("enter", "accept", "Select/confirm"),
         ("escape", "back", "Back/cancel"),
         ("q", "quit_requested", "Quit"),
     ]
@@ -161,7 +161,7 @@ class GotaApp(App[None]):
         self._set_hidden("prompt-view", "live-log", "report-view")
         self.query_one("#screen-title", Static).update("GOTA  ·  Main menu")
         self.query_one("#status", Static).update(
-            "Select an action. C runs the clipboard prompt; Enter runs the selected action; "
+            "Select an action. Enter selects/confirms; C loads or runs clipboard data; "
             "H opens history; Q quits."
         )
         self._populate_actions()
@@ -259,7 +259,9 @@ class GotaApp(App[None]):
             "GOTA  ·  Running  ·  Esc cancels UI process request"
         )
         self.query_one("#live-log", RichLog).clear()
-        if self._selected_action is not None and self._selected_action.backend == "opencode-direct":
+        if self._selected_action is not None and self._selected_action.backend == "opencode-readonly":
+            self._set_status("OpenCode read-only analysis running; stdout/stderr stream to live.log.")
+        elif self._selected_action is not None and self._selected_action.backend == "opencode-direct":
             self._set_status("Direct OpenCode prompt running; stdout/stderr stream to live.log.")
         else:
             self._set_status("Coordinator state is authoritative; exit=0 is not DONE.")
@@ -317,7 +319,7 @@ class GotaApp(App[None]):
         ):
             message += "  · confirmation required"
         if self._screen == "preview":
-            message += "  · Enter Run selected action"
+            message += "  · Enter Select/confirm"
             if self._envelope is not None and not self._envelope.structured and action.id != "clipboard-prompt":
                 message += "  · plain text: read-only actions only"
         self._set_status(message)
@@ -399,6 +401,10 @@ class GotaApp(App[None]):
             prompt = self.clipboard_reader.read()
         except ClipboardError as error:
             self._set_status(f"Clipboard diagnostic: {error}")
+            return
+        selected_id = self._selected_action.id if self._selected_action is not None else None
+        if selected_id == "audit-opencode" and self._screen in {"menu", "preview"}:
+            self._show_prompt(prompt, "audit-opencode")
             return
         self._select_action("clipboard-prompt")
         self._start_clipboard_prompt(prompt)

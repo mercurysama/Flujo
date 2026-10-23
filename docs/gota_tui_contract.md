@@ -95,13 +95,55 @@ uses `NOT_APPLICABLE` for `TASK_ID`, `CONTEXT_ID`, `COORDINATOR_STATE`,
 runner start failure is `FAIL`, timeout is `FAIL/TIMEOUT`, and clipboard output
 failure is a warning that does not remove the report.
 
+## GOTA-TUI-002 — Read-only OpenCode audit backend
+
+The production registry exposes two distinct analysis actions. `audit-readonly`
+remains the fast local `git-audit` action and is labelled **Read-only Git audit**.
+The new `audit-opencode` action is labelled **Read-only OpenCode audit** and has
+`mutable = false`, `requires_prompt = true`, `requires_confirmation = true`,
+and backend `opencode-readonly`. Its default model is
+`openai/gpt-5.6-luna#max`, with the existing configuration override boundary
+preserved.
+
+`audit-opencode` uses a canonical project agent whose OpenCode V2 permission
+policy denies modification, shell, external-directory, Git-mutation,
+subagent, and skill capabilities and allows only read/search inspection tools.
+The action fails closed before execution when the durable prompt, repository,
+model, or read-only policy is invalid. It never creates a Coordinator TaskRun,
+acquires a Worker lease, invokes Reviewer, writes operational SQLite, or
+performs Git/file/worktree mutation.
+
+The prompt passed to OpenCode is read from the durable `prompt.txt` created by
+the TUI before confirmation; clipboard contents are not read again. The
+existing `OpenCodeRunner` remains the sole subprocess boundary and supplies
+`--standalone`, canonical configuration, provider/model#variant argv data,
+bounded timeout/termination, shell-free invocation, and incremental stdout and
+stderr observation. The local run request/result persist run/action identity,
+prompt SHA-256, model, variant, OpenCode version, agent, repository, timestamp,
+and timeout.
+
+The audit snapshots Git HEAD, branch, porcelain status, and refs before and
+after the child. Any changed snapshot or detected denied mutation attempt makes
+the verdict `FAIL`; no automatic revert is attempted. A zero-exit generic
+OpenCode response is accepted without requiring a `flujo.gota/v1` payload. The
+complete stdout/stderr remains in `live.log`; a compact report may point to a
+durable associated output artifact and preserves prompt-requested delimited
+blocks without imposing a single findings schema. `TASK_ID`, `CONTEXT_ID`,
+`WORKER_RESULT`, and `REVIEW_RESULT` are `NOT_APPLICABLE` for this action.
+
+The report is persisted before clipboard copy. Clipboard failure is a warning
+only and cannot change the analysis verdict. The Textual path is
+clipboard → `audit-opencode` → Enter → confirmation → Enter → running/live log
+→ durable report → final report; the footer labels remain `Enter Select/confirm`,
+`Esc Back/cancel`, `C Clipboard`, and `H History`.
+
 ## Traceability
 
-`TUI-001`–`TUI-009` map to the implementation modules and tests in
-`tools/gota_tui/`, the `FLUJO-BHV-GOTA-TUI-001` behavior-catalog entry, and
-the original production-TUI commit plus this direct-clipboard behavior-fix
-commit. Coordinator/Gota authority behavior remains covered by the existing
-`FLUJO-BHV-GOTA-*` and `FLUJO-BHV-OPENCODE-RUNNER-001` entries.
+`TUI-001`–`TUI-009` and `GOTA-TUI-002` map to the implementation modules and tests in
+`tools/gota_tui/`, the `FLUJO-BHV-GOTA-TUI-001` and
+`FLUJO-BHV-GOTA-TUI-002` behavior-catalog entries, and the production-TUI
+delivery commits. Coordinator/Gota authority behavior remains covered by the
+existing `FLUJO-BHV-GOTA-*` and `FLUJO-BHV-OPENCODE-RUNNER-001` entries.
 
 ## Decisions and limitations
 
