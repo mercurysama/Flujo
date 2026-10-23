@@ -22,7 +22,12 @@ from gota_tui.execution import ActionExecutor, ExecutionError, TUIConfig
 from flow_coordinator import OpenCodeRunResult, OpenCodeRunStatus
 from flow_coordinator.git_adapter import GitSnapshot
 from gota_tui.prompt_library import PromptLibrary
-from gota_tui.read_only_agent import ReadOnlyAgentError
+from gota_tui.read_only_agent import (
+    CANONICAL_AGENT_PATH,
+    PROTECTED_AUDIT_PATHS,
+    ReadOnlyAgentError,
+    validate_read_only_agent,
+)
 from gota_tui.reporting import ReportData, ReportManager, render_report
 
 
@@ -125,6 +130,59 @@ class GotaTUICoreTest(unittest.TestCase):
                     ],
                 }
             )
+
+    def test_canonical_auditor_is_single_command_read_only_and_blocks_local_credentials(self) -> None:
+        policy = validate_read_only_agent("gota-auditor")
+        self.assertEqual(policy.path, CANONICAL_AGENT_PATH)
+        text = CANONICAL_AGENT_PATH.read_text(encoding="utf-8")
+        normalized = " ".join(text.split())
+        self.assertIn('resource: "git status"', text)
+        self.assertIn('resource: "git log -n *"', text)
+        self.assertIn('resource: "git check-ignore *"', text)
+        self.assertIn("one read-only operation per shell call", normalized)
+        self.assertIn("do not execute Python, unittest, or any test suite", normalized)
+        for path in PROTECTED_AUDIT_PATHS:
+            self.assertIn(f'resource: "{path}"', text)
+            self.assertIn("effect: deny", text[text.index(f'resource: "{path}"') :])
+        self.assertNotIn('resource: "python', text)
+        self.assertNotIn('resource: "unittest', text)
+
+    def test_policy_denial_classification_does_not_promote_read_only_commands_to_mutation(self) -> None:
+        readonly_denials = (
+            "Permission denied: shell",
+            "Permission denied: shell: git status; git log -n 20",
+            "Permission denied: shell: git log -n 20 --oneline | head -20",
+            "Permission denied: shell: python -m unittest discover",
+        )
+        for denied in readonly_denials:
+            with self.subTest(denied=denied):
+                self.assertEqual(
+                    ActionExecutor._denial_classifications("", denied),
+                    ("READONLY_COMMAND_DENIED",),
+                )
+                self.assertFalse(ActionExecutor._mutation_attempt_detected("", denied))
+
+        mutation_denials = (
+            "Permission denied: shell: git commit -m 'nope'",
+            "Permission denied: shell: git push origin HEAD",
+            "Permission denied: edit",
+            "Permission denied: write",
+            "Permission denied: patch",
+        )
+        for denied in mutation_denials:
+            with self.subTest(denied=denied):
+                self.assertEqual(
+                    ActionExecutor._denial_classifications("", denied),
+                    ("MUTATION_ATTEMPT_DENIED",),
+                )
+                self.assertTrue(ActionExecutor._mutation_attempt_detected("", denied))
+
+        self.assertEqual(
+            ActionExecutor._denial_classifications(
+                "", "Permission denied: read .opencode/service.json"
+            ),
+            ("SENSITIVE_PATH_BLOCKED",),
+        )
         with self.assertRaises(ActionRegistryError):
             ActionRegistry.from_mapping(
                 {
@@ -480,6 +538,78 @@ class GotaTUICoreTest(unittest.TestCase):
         self.assertEqual(stored_result["timeout"], 37.0)
         self.assertEqual(stored_result["clipboard_copy"], "OK")
 
+    def test_read_only_shell_denial_is_a_warning_and_keeps_mutation_guard_passed(self) -> None:
+        repository = Path(__file__).resolve().parents[3]
+        state = DurableRunStore(self.root / "readonly-denial")
+        action = ActionRegistry.default().get("audit-opencode")
+
+        class Writer:
+            def copy(self, text: str) -> str:
+                del text
+                return "mock"
+
+        class Runner:
+            def __init__(self, **kwargs: object) -> None:
+                del kwargs
+
+            def run(self, **kwargs: object) -> OpenCodeRunResult:
+                return OpenCodeRunResult(
+                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                    argv=("opencode", "run"),
+                    cwd=str(kwargs["cwd"]),
+                    stdout="GOTA_AUDITOR_POLICY_OK\n",
+                    stderr=(
+                        "Permission denied: shell: git status; git log -n 20 | head -20\n"
+                    ),
+                    exit_code=0,
+                    timed_out=False,
+                    error="generic read-only response",
+                )
+
+        class Git:
+            def __init__(self, root: Path) -> None:
+                self.root = root
+
+            def snapshot(self) -> GitSnapshot:
+                return GitSnapshot(
+                    repository=str(self.root),
+                    head="a" * 40,
+                    branch="feature/audit",
+                    status="",
+                    refs=(("refs/heads/feature/audit", "a" * 40, ""),),
+                )
+
+        executor = ActionExecutor(
+            config=TUIConfig(
+                repository=repository,
+                database=self.root / "coordinator.sqlite3",
+                opencode_executable="fake-opencode",
+            ),
+            runs=state,
+            prompts=PromptLibrary.default(),
+            clipboard_writer=Writer(),
+        )
+        prepared = executor.prepare(
+            action,
+            PromptEnvelope.parse("Inspect Git and answer GOTA_AUDITOR_POLICY_OK"),
+            run_id="readonly-denial",
+        )
+        with (
+            patch("gota_tui.coordinator_facade.OpenCodeRunner", Runner),
+            patch("gota_tui.execution.ReadOnlyGitAdapter", Git),
+            patch.object(executor, "_opencode_version", return_value="opencode v2.0.32"),
+        ):
+            result = executor.execute(prepared)
+
+        self.assertEqual(result.verdict, "READ_ONLY_OK")
+        report = state.read_report(result.run_id)
+        self.assertIn("UNEXPECTED_MUTATION_GUARD=PASS", report)
+        self.assertIn("READONLY_COMMAND_DENIED", report)
+        self.assertNotIn("MUTATION_ATTEMPT_DENIED", report)
+        persisted = json.loads(prepared.paths.result.read_text(encoding="utf-8"))
+        self.assertEqual(persisted["mutation_reasons"], [])
+        self.assertIn("READONLY_COMMAND_DENIED", persisted["audit_classifications"])
+
     def test_opencode_audit_failure_and_unexpected_git_mutation_fail_closed(self) -> None:
         repository = Path(__file__).resolve().parents[3]
         action = ActionRegistry.default().get("audit-opencode")
@@ -579,6 +709,7 @@ class GotaTUICoreTest(unittest.TestCase):
             result = executor.execute(prepared)
         self.assertEqual(result.verdict, "FAIL")
         self.assertIn("HEAD changed", state.read_report(result.run_id))
+        self.assertIn("MUTATION_DETECTED", state.read_report(result.run_id))
         self.assertNotIn("READ_ONLY_OK", state.read_report(result.run_id))
 
     def test_opencode_output_redacts_local_service_credentials_from_durable_artifacts(self) -> None:
@@ -593,7 +724,7 @@ class GotaTUICoreTest(unittest.TestCase):
         )
         state = DurableRunStore(self.root / "redaction-state")
         action = ActionRegistry.default().get("audit-opencode")
-        output = f"password={secret}\n"
+        output = f"password={secret}\nPermission denied: read .opencode/service.json\n"
         error_output = f"Authorization: Bearer {secret}\n"
 
         class Writer:
@@ -656,6 +787,7 @@ class GotaTUICoreTest(unittest.TestCase):
             result = executor.execute(prepared)
 
         self.assertEqual(result.verdict, "READ_ONLY_OK")
+        self.assertIn("SENSITIVE_PATH_BLOCKED", state.read_report(result.run_id))
         for path in (
             prepared.paths.live_log,
             prepared.paths.opencode_output,

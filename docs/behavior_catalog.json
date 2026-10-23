@@ -590,18 +590,19 @@
       "area": "Read-only OpenCode audit in the Gota Textual interface",
       "precondition": "The clipboard contains a non-empty prompt, the repository is valid, and the canonical gota-auditor policy passes validation.",
       "public_action": "Select Read-only OpenCode audit and press Enter once.",
-      "expected_result": "The TUI reads and durably persists the clipboard prompt before invoking the existing OpenCodeRunner with audit-opencode, gota-auditor, and openai/gpt-5.6-luna#max; it captures complete observed output with local credential redaction, produces generic findings and a durable report, and accepts a zero-exit non-Gota response when Git remains unchanged.",
+      "expected_result": "The TUI reads and durably persists the clipboard prompt before invoking the existing OpenCodeRunner with audit-opencode, gota-auditor, and openai/gpt-5.6-luna#max; it captures complete observed output with local credential redaction, produces generic findings and a durable report, accepts a zero-exit non-Gota response when Git remains unchanged, and keeps denied-read warnings separate from mutation evidence.",
       "invariants": [
         "The action is mutable=false, requires a prompt, uses prompt_source=clipboard and selection confirmation, and remains distinct from the local Read-only Git audit.",
         "The clipboard is read by the selected action without a C prerequisite or second Enter; persisted prompt text and the model/variant remain argv data without shell evaluation.",
         "The action never creates Coordinator TaskRun state, acquires a Worker lease, invokes Reviewer, writes operational SQLite, or mutates Git, files, or worktrees.",
-        "HEAD, branch, porcelain status, and refs are compared before and after OpenCode; any change or denied mutation attempt produces FAIL without automatic revert.",
+        "HEAD, branch, porcelain status, and refs are compared before and after OpenCode; any change or explicit denied mutation attempt produces FAIL without automatic revert.",
+        "A generic shell permission denial is not mutation evidence; read-only command denials and protected-path denials remain warning findings.",
         "TASK_ID, CONTEXT_ID, WORKER_RESULT, and REVIEW_RESULT are NOT_APPLICABLE, empty clipboard or invalid audit configuration never starts OpenCode, no failure falls back to clipboard-prompt/build, clipboard failure cannot remove or change the durable analysis verdict, and local credentials are redacted from logs, associated output, reports, and diagnostics."
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": ["tools/gota_tui/tests/test_core.py", "tools/gota_tui/tests/test_runtime.py"],
-      "notes": "Unit coverage uses an injected runner for argv, durable prompt, policy, output, failure, mutation, report-ordering, and Git-audit regressions. GOTA-TUI-003 adds the one-Enter contextual clipboard path and explicit C direct-run regression. The required real OpenCode 2.0.32 smoke is delivery evidence in addition to these deterministic tests; interactive visual approval remains outside headless coverage."
+      "notes": "Unit coverage uses an injected runner for argv, durable prompt, policy, output, failure, mutation, report-ordering, and Git-audit regressions. GOTA-TUI-003 adds the one-Enter contextual clipboard path and explicit C direct-run regression. GOTA-TUI-004 adds denial classification, strict auditor command guidance, test-execution denial, protected service.json policy, and false-positive/redaction regressions. The required real OpenCode 2.0.32 smoke is delivery evidence in addition to these deterministic tests; interactive visual approval remains outside headless coverage."
     },
     {
       "id": "FLUJO-BHV-GOTA-TUI-003",
@@ -620,6 +621,23 @@
       "baseline_status": "passing",
       "test_paths": ["tools/gota_tui/tests/test_core.py", "tools/gota_tui/tests/test_runtime.py"],
       "notes": "Authorized behavior correction GOTA-TUI-003. The one-Enter Textual regression, empty-clipboard failure, direct C footer/agent regression, CLI direct path, durable pre-spawn assertions, report identity, fail-closed policy, and secret-redaction evidence are automatic; real OpenCode smoke and interactive visual approval remain separate delivery evidence."
+    },
+    {
+      "id": "FLUJO-BHV-GOTA-TUI-004",
+      "area": "Read-only auditor denial classification and credential-path boundary",
+      "precondition": "The canonical gota-auditor policy is loaded for audit-opencode and OpenCode returns policy-denial text while the audit runs.",
+      "public_action": "Run the audit-opencode backend and classify denied tool, shell, test, and sensitive-path operations.",
+      "expected_result": "Explicit mutation tools or mutating Git commands produce MUTATION_ATTEMPT_DENIED and fail the mutation guard; changed Git state produces MUTATION_DETECTED; denied read-only commands produce READONLY_COMMAND_DENIED warnings without mutation failure; protected credential paths produce SENSITIVE_PATH_BLOCKED and are not sent to the model.",
+      "invariants": [
+        "UNEXPECTED_MUTATION_GUARD=FAIL is reserved for changed observable Git/file state, explicit mutation attempts, or unavailable postflight state; generic Permission denied: shell text alone is never mutation evidence.",
+        "The shell policy remains deny-by-default, allows only explicit read-only Git forms, rejects chaining/pipes/redirection/subshells, and never authorizes Python or test-suite execution during audit-opencode.",
+        "The canonical auditor denies .opencode/service.json before model access; local secret redaction remains active for live.log, opencode-output, report, and result.",
+        "A normal unchanged read-only audit with no denial ends READ_ONLY_OK."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tools/gota_tui/tests/test_core.py", "tools/gota_tui/tests/test_runtime.py"],
+      "notes": "Authorized behavior correction GOTA-TUI-004. Focal injected-runner regressions cover allowed git status/log shapes, chained and piped read denials, unittest denial, commit/push/edit/write/patch mutation denials, real snapshot mutation, protected service.json policy, false-secret redaction, and unchanged smoke behavior."
     }
   ]
 }

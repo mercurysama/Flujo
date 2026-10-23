@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from pathlib import Path
 READ_ONLY_AGENT_ID = "gota-auditor"
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 CANONICAL_AGENT_PATH = _REPOSITORY_ROOT / ".opencode" / "agents" / f"{READ_ONLY_AGENT_ID}.md"
+PROTECTED_AUDIT_PATHS = (".opencode/service.json", "**/.opencode/service.json")
 
 
 class ReadOnlyAgentError(ValueError):
@@ -36,6 +38,14 @@ _REQUIRED_TEXT = (
     "never run mutable Git commands",
     "never invoke subagents or skills",
     "never access an external directory",
+    "one read-only operation per shell call",
+    "never use `;`, `|`, `&&`, `||`, redirections, subshells, command",
+    "do not execute Python, unittest, or any test suite",
+    "Never read `.opencode/service.json`",
+    "MUTATION_DETECTED",
+    "MUTATION_ATTEMPT_DENIED",
+    "READONLY_COMMAND_DENIED",
+    "SENSITIVE_PATH_BLOCKED",
 )
 
 
@@ -63,6 +73,24 @@ def validate_read_only_agent(agent_id: str) -> ReadOnlyAgentPolicy:
         for fragment in _REQUIRED_TEXT
         if " ".join(fragment.split()) not in normalized
     ]
+    shell_allow_resources = re.findall(
+        r'- action: shell resource: "([^"]*)" effect: allow', normalized
+    )
+    if not shell_allow_resources:
+        missing.append("at least one explicit read-only Git shell allow rule")
+    elif any(
+        not resource.startswith("git ")
+        or any(character in resource for character in ";|&><`()")
+        for resource in shell_allow_resources
+    ):
+        missing.append("shell allow rules must be Git-only and shell-metacharacter-free")
+    read_allow = normalized.find('- action: read resource: "*" effect: allow')
+    for protected_path in PROTECTED_AUDIT_PATHS:
+        protected_rule = (
+            f'- action: read resource: "{protected_path}" effect: deny'
+        )
+        if normalized.find(protected_rule) <= read_allow:
+            missing.append(f"read deny rule for protected path {protected_path!r}")
     if missing:
         raise ReadOnlyAgentError(
             "Canonical read-only agent policy is incomplete: " + "; ".join(missing)
@@ -76,6 +104,7 @@ def validate_read_only_agent(agent_id: str) -> ReadOnlyAgentPolicy:
 
 __all__ = [
     "CANONICAL_AGENT_PATH",
+    "PROTECTED_AUDIT_PATHS",
     "READ_ONLY_AGENT_ID",
     "ReadOnlyAgentError",
     "ReadOnlyAgentPolicy",

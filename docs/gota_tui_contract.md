@@ -163,11 +163,46 @@ clipboard, invalid read-only agent or policy, and an invalid repository fail
 closed before OpenCode execution. No failure path silently changes the action
 to `clipboard-prompt` or the agent to `build`.
 
+## GOTA-TUI-004 — Auditor denial classification and credential boundary
+
+The canonical `gota-auditor` remains deny-by-default. Its shell allowlist is
+limited to explicit read-only Git command forms. The agent must issue one
+operation per shell call: no command chaining, pipes, redirections, subshells,
+or shell metacharacters. `git log -n 20 ...` is the supported replacement for
+`git log ... | head -20`; separate read-only Git calls are required instead of
+`;` or other chaining. The auditor may inspect existing tests and recorded
+results, but it must not execute Python, unittest, or any test suite during
+`audit-opencode` unless a future specialized action explicitly authorizes it.
+
+Known local credential paths, including `.opencode/service.json`, are denied
+before the model can read them. Public tracked configuration, schemas, agent
+policies, and documentation remain the preferred audit sources. Local output
+redaction remains a second defense and does not authorize credential reads.
+
+The mutation guard has four observable classifications. `MUTATION_DETECTED`
+means a changed HEAD, branch, porcelain status, protected ref, or file state;
+`MUTATION_ATTEMPT_DENIED` means an explicitly denied edit/write/patch tool or
+inequivocally mutating shell command; `READONLY_COMMAND_DENIED` means a
+read-only or otherwise non-mutating command was denied by the shell policy;
+and `SENSITIVE_PATH_BLOCKED` means a protected credential path was denied.
+Only the first two classifications can make
+`UNEXPECTED_MUTATION_GUARD=FAIL`. Read-only and sensitive-path denials are
+warning findings and never become mutation evidence merely because the generic
+diagnostic says `Permission denied: shell`. If a denied read was required for
+complete evidence, the audit may remain incomplete/fail closed, but its report
+must retain the non-mutating classification.
+
+The report preserves these categories as distinct findings, redacts local
+credential values from live logs, associated output, reports, and result data,
+and never reads `.opencode/service.json` as audit input. The smoke path with
+unchanged Git state and no denied operation ends in `READ_ONLY_OK`.
+
 ## Traceability
 
-`TUI-001`–`TUI-009` and `GOTA-TUI-002`–`GOTA-TUI-003` map to the implementation modules and tests in
+`TUI-001`–`TUI-009` and `GOTA-TUI-002`–`GOTA-TUI-004` map to the implementation modules and tests in
 `tools/gota_tui/`, the `FLUJO-BHV-GOTA-TUI-001` and
-`FLUJO-BHV-GOTA-TUI-002` and `FLUJO-BHV-GOTA-TUI-003` behavior-catalog entries, and the production-TUI
+`FLUJO-BHV-GOTA-TUI-002`, `FLUJO-BHV-GOTA-TUI-003`, and
+`FLUJO-BHV-GOTA-TUI-004` behavior-catalog entries, and the production-TUI
 delivery commits. Coordinator/Gota authority behavior remains covered by the
 existing `FLUJO-BHV-GOTA-*` and `FLUJO-BHV-OPENCODE-RUNNER-001` entries.
 

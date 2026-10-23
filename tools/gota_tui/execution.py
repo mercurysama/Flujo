@@ -40,6 +40,30 @@ class ExecutionError(RuntimeError):
     """A registered action could not be prepared or executed."""
 
 
+_DENIAL_PATTERN = re.compile(
+    r"\b(?:permission\s+denied|access\s+denied|forbidden|not\s+allowed|blocked|denied)\b",
+    re.IGNORECASE,
+)
+_MUTATION_DENIAL_PATTERN = re.compile(
+    r"(?:\b(?:edit|write|patch|mkdir|touch|rm|mv|cp|install)\b|"
+    r"\bgit\s+(?:add|commit|push|reset|clean|checkout|restore|pull|merge|rebase|"
+    r"cherry-pick|revert|tag|worktree|update-ref)\b|"
+    r"\b(?:python(?:3)?\s+-m\s+)?(?:pip|uv|poetry)\s+install\b|"
+    r"\b(?:npm\s+install|cargo\s+add|go\s+get)\b)",
+    re.IGNORECASE,
+)
+_SENSITIVE_AUDIT_PATH_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_])\.opencode[/\\]service\.json(?![A-Za-z0-9_])",
+    re.IGNORECASE,
+)
+_DENIAL_DESCRIPTIONS = {
+    "MUTATION_DETECTED": "Observable Git or file state changed during the audit",
+    "MUTATION_ATTEMPT_DENIED": "An explicit mutation-capable tool or command was denied",
+    "READONLY_COMMAND_DENIED": "A non-mutating command was denied by the read-only shell policy",
+    "SENSITIVE_PATH_BLOCKED": "A protected local credential path was denied before model access",
+}
+
+
 @dataclass(frozen=True, slots=True)
 class TUIConfig:
     repository: Path
@@ -309,13 +333,32 @@ class ActionExecutor:
         }
 
     @staticmethod
-    def _mutation_attempt_detected(stdout: str, stderr: str) -> bool:
-        text = f"{stdout}\n{stderr}".lower()
-        patterns = (
-            r"(?:permission|operation|tool|action).{0,100}(?:denied|forbidden|not allowed|blocked).{0,100}(?:edit|write|shell|bash|commit|push|reset|checkout|clean|merge|rebase)",
-            r"(?:edit|write|shell|bash|git\s+(?:commit|push|reset|checkout|clean|merge|rebase)).{0,100}(?:denied|forbidden|not allowed|blocked)",
-        )
-        return any(re.search(pattern, text, re.DOTALL) is not None for pattern in patterns)
+    def _denial_classifications(stdout: str, stderr: str) -> tuple[str, ...]:
+        """Classify policy denials without treating generic shell denial as mutation.
+
+        OpenCode's diagnostic for a denied shell call is intentionally broad. A
+        mutation classification therefore requires an explicit mutation-capable
+        command or tool in the same denial line. This keeps read-only command
+        syntax failures and denied test execution as warnings.
+        """
+
+        classifications: list[str] = []
+        for line in f"{stdout}\n{stderr}".splitlines():
+            if _DENIAL_PATTERN.search(line) is None:
+                continue
+            if _SENSITIVE_AUDIT_PATH_PATTERN.search(line) is not None:
+                classification = "SENSITIVE_PATH_BLOCKED"
+            elif _MUTATION_DENIAL_PATTERN.search(line) is not None:
+                classification = "MUTATION_ATTEMPT_DENIED"
+            else:
+                classification = "READONLY_COMMAND_DENIED"
+            if classification not in classifications:
+                classifications.append(classification)
+        return tuple(classifications)
+
+    @classmethod
+    def _mutation_attempt_detected(cls, stdout: str, stderr: str) -> bool:
+        return "MUTATION_ATTEMPT_DENIED" in cls._denial_classifications(stdout, stderr)
 
     @staticmethod
     def _requested_delimited_blocks(prompt: str, output: str) -> tuple[str, ...]:
@@ -350,10 +393,30 @@ class ActionExecutor:
         stderr: str,
         output_path: str,
         failed: bool,
+        classifications: tuple[str, ...] = (),
+        mutation_reasons: tuple[str, ...] = (),
     ) -> list[Mapping[str, Any]]:
         combined = stdout if stdout.strip() else stderr
         first_line = next((line.strip() for line in combined.splitlines() if line.strip()), "")
         findings: list[Mapping[str, Any]] = []
+        for classification in classifications:
+            if classification not in _DENIAL_DESCRIPTIONS:
+                continue
+            description = _DENIAL_DESCRIPTIONS[classification]
+            if classification == "MUTATION_DETECTED" and mutation_reasons:
+                description += ": " + "; ".join(mutation_reasons)
+            findings.append(
+                {
+                    "id": classification,
+                    "severity": (
+                        "error"
+                        if classification in {"MUTATION_DETECTED", "MUTATION_ATTEMPT_DENIED"}
+                        else "warning"
+                    ),
+                    "description": description,
+                    "path": output_path,
+                }
+            )
         if first_line:
             findings.append(
                 {
@@ -477,17 +540,28 @@ class ActionExecutor:
             runner_error = f"OpenCode audit repository postflight failed: {error}"
 
         mutation_reasons: list[str] = []
+        snapshot_mutation_reasons: list[str] = []
         if after is not None:
             if before.head != after.head:
-                mutation_reasons.append("HEAD changed")
+                snapshot_mutation_reasons.append("HEAD changed")
             if before.branch != after.branch:
-                mutation_reasons.append("branch changed")
+                snapshot_mutation_reasons.append("branch changed")
             if before.status != after.status:
-                mutation_reasons.append("git status changed")
+                snapshot_mutation_reasons.append("git status changed")
             if before.refs != after.refs:
-                mutation_reasons.append("Git refs changed")
-        if self._mutation_attempt_detected(raw_stdout, raw_stderr):
-            mutation_reasons.append("OpenCode reported a denied mutation attempt")
+                snapshot_mutation_reasons.append("Git refs changed")
+        mutation_reasons.extend(snapshot_mutation_reasons)
+        denied_classifications = list(self._denial_classifications(raw_stdout, raw_stderr))
+        if "MUTATION_ATTEMPT_DENIED" in denied_classifications:
+            mutation_reasons.append("MUTATION_ATTEMPT_DENIED")
+        classifications: list[str] = []
+        if snapshot_mutation_reasons:
+            classifications.append("MUTATION_DETECTED")
+        classifications.extend(
+            classification
+            for classification in denied_classifications
+            if classification not in classifications
+        )
 
         if after is not None:
             metadata.update(
@@ -505,6 +579,7 @@ class ActionExecutor:
                 "output_path": str(output_path),
                 "mutation_guard": "PASS" if not mutation_reasons and after is not None else "FAIL",
                 "mutation_reasons": mutation_reasons,
+                "audit_classifications": classifications,
                 "finished_at": datetime.now(UTC).isoformat(),
             }
         )
@@ -549,6 +624,8 @@ class ActionExecutor:
                 diagnostic_parts.append(redactor.redact(result.error))
         if mutation_reasons:
             diagnostic_parts.append("; ".join(mutation_reasons))
+        if classifications:
+            diagnostic_parts.append("classifications=" + ",".join(classifications))
         if not diagnostic_parts:
             diagnostic_parts.append("Read-only OpenCode audit completed")
         self._log(prepared.paths.run_id, "Read-only OpenCode audit: " + " | ".join(diagnostic_parts))
@@ -563,6 +640,8 @@ class ActionExecutor:
                 stderr=stderr,
                 output_path=str(output_path),
                 failed=failed,
+                classifications=tuple(classifications),
+                mutation_reasons=tuple(mutation_reasons),
             ),
             verdict=verdict,
             diagnostic=" | ".join(diagnostic_parts),
