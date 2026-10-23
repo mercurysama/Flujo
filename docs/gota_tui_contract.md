@@ -100,8 +100,9 @@ failure is a warning that does not remove the report.
 The production registry exposes two distinct analysis actions. `audit-readonly`
 remains the fast local `git-audit` action and is labelled **Read-only Git audit**.
 The new `audit-opencode` action is labelled **Read-only OpenCode audit** and has
-`mutable = false`, `requires_prompt = true`, `requires_confirmation = true`,
-and backend `opencode-readonly`. Its default model is
+`mutable = false`, `requires_prompt = true`, `prompt_source = "clipboard"`,
+`requires_confirmation = true`, `confirmation_mode = "selection"`, and backend
+`opencode-readonly`. Its default model is
 `openai/gpt-5.6-luna#max`, with the existing configuration override boundary
 preserved.
 
@@ -114,8 +115,9 @@ acquires a Worker lease, invokes Reviewer, writes operational SQLite, or
 performs Git/file/worktree mutation.
 
 The prompt passed to OpenCode is read from the durable `prompt.txt` created by
-the TUI before confirmation; clipboard contents are not read again. The
-existing `OpenCodeRunner` remains the sole subprocess boundary and supplies
+the TUI when the action is activated; clipboard contents are not read again.
+The selection plus Enter is the action confirmation and does not open a second
+confirmation screen. The existing `OpenCodeRunner` remains the sole subprocess boundary and supplies
 `--standalone`, canonical configuration, provider/model#variant argv data,
 bounded timeout/termination, shell-free invocation, and incremental stdout and
 stderr observation. The local run request/result persist run/action identity,
@@ -133,15 +135,39 @@ blocks without imposing a single findings schema. `TASK_ID`, `CONTEXT_ID`,
 
 The report is persisted before clipboard copy. Clipboard failure is a warning
 only and cannot change the analysis verdict. The Textual path is
-clipboard → `audit-opencode` → Enter → confirmation → Enter → running/live log
-→ durable report → final report; the footer labels remain `Enter Select/confirm`,
-`Esc Back/cancel`, `C Clipboard`, and `H History`.
+clipboard → select `audit-opencode` → Enter → running/live log → durable report
+→ final report. The user does not need to press `C`, and the action never
+dispatches `clipboard-prompt` or `build`.
+
+## GOTA-TUI-003 — Contextual clipboard prompt by action
+
+Every declarative action with `requires_prompt = true` declares a supported
+`prompt_source`. For the current clipboard-backed actions the source is
+`clipboard`. When such an action is activated without an already loaded prompt,
+the TUI obtains the current clipboard value through the injectable clipboard
+reader, rejects empty input, and routes the resulting prompt through the
+action's registered backend. The source and backend are resolved from the
+Action Registry; `audit-opencode` is not a special clipboard dispatch.
+
+`Execute prompt from clipboard` remains the direct `clipboard-prompt` action:
+one Enter reads the clipboard, persists the prompt and SHA-256 before spawning,
+and runs OpenCode with `build` and `openai/gpt-5.6-luna#max`. The `C` shortcut
+has the explicit footer label **Run clipboard prompt** and invokes that same
+direct action. `gota clipboard` remains equivalent to this direct flow.
+
+For `audit-opencode`, one action selection plus Enter reads and validates the
+clipboard, persists the prompt and SHA-256 before `OpenCodeRunner`, uses
+`gota-auditor` and `openai/gpt-5.6-luna#max`, preserves the read-only policy,
+streams live output, persists the report, and copies the report. Empty
+clipboard, invalid read-only agent or policy, and an invalid repository fail
+closed before OpenCode execution. No failure path silently changes the action
+to `clipboard-prompt` or the agent to `build`.
 
 ## Traceability
 
-`TUI-001`–`TUI-009` and `GOTA-TUI-002` map to the implementation modules and tests in
+`TUI-001`–`TUI-009` and `GOTA-TUI-002`–`GOTA-TUI-003` map to the implementation modules and tests in
 `tools/gota_tui/`, the `FLUJO-BHV-GOTA-TUI-001` and
-`FLUJO-BHV-GOTA-TUI-002` behavior-catalog entries, and the production-TUI
+`FLUJO-BHV-GOTA-TUI-002` and `FLUJO-BHV-GOTA-TUI-003` behavior-catalog entries, and the production-TUI
 delivery commits. Coordinator/Gota authority behavior remains covered by the
 existing `FLUJO-BHV-GOTA-*` and `FLUJO-BHV-OPENCODE-RUNNER-001` entries.
 

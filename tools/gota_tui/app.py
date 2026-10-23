@@ -62,7 +62,7 @@ class GotaApp(App[None]):
     """
 
     BINDINGS = [
-        ("c", "clipboard", "Clipboard"),
+        ("c", "clipboard", "Run clipboard prompt"),
         ("h", "history", "History"),
         ("r", "copy_report", "Copy report"),
         ("o", "open_report", "Open report"),
@@ -161,7 +161,7 @@ class GotaApp(App[None]):
         self._set_hidden("prompt-view", "live-log", "report-view")
         self.query_one("#screen-title", Static).update("GOTA  ·  Main menu")
         self.query_one("#status", Static).update(
-            "Select an action. Enter selects/confirms; C loads or runs clipboard data; "
+            "Select an action. Enter selects/confirms; C runs the clipboard prompt; "
             "H opens history; Q quits."
         )
         self._populate_actions()
@@ -170,7 +170,7 @@ class GotaApp(App[None]):
         elif self._selected_action is not None:
             self._select_action(self._selected_action.id)
 
-    def _show_prompt(self, prompt: str, action_id: str | None = None) -> None:
+    def _show_prompt(self, prompt: str, action_id: str | None = None) -> bool:
         try:
             envelope = PromptEnvelope.parse(prompt)
         except PromptEnvelopeError as error:
@@ -178,7 +178,7 @@ class GotaApp(App[None]):
             self._envelope = None
             self._show_menu()
             self._set_status(f"Clipboard diagnostic: {error}")
-            return
+            return False
         self._prompt = prompt
         self._envelope = envelope
         self._screen = "preview"
@@ -202,6 +202,7 @@ class GotaApp(App[None]):
             self._select_action(self._selected_action.id)
         action_list = self.query_one("#action-list", ListView)
         action_list.focus()
+        return True
 
     def _show_confirmation(self) -> None:
         assert self._selected_action is not None
@@ -240,7 +241,7 @@ class GotaApp(App[None]):
         record = self._history[self._history_index]
         self._set_status(
             "DATE={date}  RUN_ID={run}  ACTION={action}  STATE={state}  TASK_ID={task}  "
-            "PROMPT_SHA={sha}  VERDICT={verdict}  · O report · P prompt · C copy".format(
+            "PROMPT_SHA={sha}  VERDICT={verdict}  · O report · P prompt · R copy · C Run clipboard prompt".format(
                 date=record.get("updated_at", "UNKNOWN"),
                 run=record.get("run_id", "UNKNOWN"),
                 action=record.get("action_id", "UNKNOWN"),
@@ -282,7 +283,7 @@ class GotaApp(App[None]):
             copy_status += f" ({result.clipboard_error})"
         self._set_status(
             f"VERDICT={result.verdict}  COORDINATOR_STATE={result.coordinator_state or 'UNKNOWN'}  "
-            f"CLIPBOARD_COPY={copy_status}  · C copy · H history · Enter menu · Q quit"
+            f"CLIPBOARD_COPY={copy_status}  · R copy report · C Run clipboard prompt · H history · Enter menu · Q quit"
         )
 
     def _set_visible(self, *ids: str) -> None:
@@ -314,6 +315,8 @@ class GotaApp(App[None]):
         unavailable = self._action_unavailable_reason(action)
         if unavailable is not None:
             message += f"  · unavailable: {unavailable}"
+        elif action.confirmation_mode == "selection":
+            message += "  · Enter reads clipboard and runs; selection confirms"
         elif action.requires_confirmation or (
             self._screen == "preview" and action.id != "clipboard-prompt"
         ):
@@ -341,16 +344,16 @@ class GotaApp(App[None]):
             self._confirming = False
             self._start_execution()
             return
-        if action.id == "clipboard-prompt" and self._screen == "menu":
-            self.action_clipboard()
-            return
-        if action.id == "clipboard-prompt" and self._screen == "preview":
-            self._start_execution()
-            return
         if action.requires_prompt and self._envelope is None:
-            self._set_status("This action requires a clipboard prompt. Press C first.")
+            if not self._load_prompt_from_source(action):
+                return
+            if action.confirmation_mode == "selection" and self._screen == "preview":
+                self._start_execution()
             return
         if self._screen == "preview":
+            if action.confirmation_mode == "selection":
+                self._start_execution()
+                return
             self._show_confirmation()
             return
         if action.requires_confirmation:
@@ -374,6 +377,26 @@ class GotaApp(App[None]):
             self._select_action(self._selected_action.id)
         self.query_one("#action-list", ListView).focus()
 
+    def _load_prompt_from_source(self, action: ActionDefinition) -> bool:
+        if action.prompt_source != "clipboard":
+            self._set_status(
+                f"Action blocked: no supported prompt source for {action.id}."
+            )
+            return False
+        try:
+            prompt = self.clipboard_reader.read()
+        except ClipboardError as error:
+            self._set_status(f"Clipboard diagnostic: {error}")
+            return False
+        if type(prompt) is not str or not prompt.strip():
+            self._set_status("Clipboard diagnostic: Clipboard prompt is empty")
+            return False
+        if action.backend == "opencode-direct":
+            self._select_action(action.id)
+            self._start_clipboard_prompt(prompt)
+            return True
+        return self._show_prompt(prompt, action.id)
+
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         if self._screen == "menu" or self._screen == "preview":
             index = event.list_view.index
@@ -394,17 +417,16 @@ class GotaApp(App[None]):
             self._select_action(self.registry.actions[index].id)
 
     def action_clipboard(self) -> None:
-        if self._screen in {"final", "history"}:
-            self.action_copy_report()
+        if self._screen == "running":
+            self._set_status("Already running; clipboard prompt was not started.")
             return
         try:
             prompt = self.clipboard_reader.read()
         except ClipboardError as error:
             self._set_status(f"Clipboard diagnostic: {error}")
             return
-        selected_id = self._selected_action.id if self._selected_action is not None else None
-        if selected_id == "audit-opencode" and self._screen in {"menu", "preview"}:
-            self._show_prompt(prompt, "audit-opencode")
+        if type(prompt) is not str or not prompt.strip():
+            self._set_status("Clipboard diagnostic: Clipboard prompt is empty")
             return
         self._select_action("clipboard-prompt")
         self._start_clipboard_prompt(prompt)

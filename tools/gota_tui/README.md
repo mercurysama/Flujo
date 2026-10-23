@@ -52,11 +52,10 @@ gota --self-check
 From the main menu, `Enter` selects the selected action; selecting `Execute
 prompt from clipboard` is the confirmation and does not open a second selector
 or confirmation screen. `Execute task`, `Review existing Gota run`, and
-`Read-only OpenCode audit` retain preview and explicit confirmation. With
-`Read-only OpenCode audit` selected, `C` loads the clipboard into its durable
-prompt preview; `Enter` then confirms the audit and a second `Enter` starts it.
-With another menu action selected, `C` keeps the direct clipboard action.
-`H` opens history, `R`/`C` copies an available report, `Escape` cancels/returns,
+`Read-only OpenCode audit` reads the clipboard when selected and runs on that
+same `Enter`; it does not require `C` or a second confirmation. `C` always
+means **Run clipboard prompt** and invokes the direct `clipboard-prompt`
+action with `build`. `H` opens history, `R` copies an available report, `Escape` cancels/returns,
 and `Q` quits. A cancellation during a child process requests controlled
 termination; it does not mark a Coordinator task `CANCELLED`.
 

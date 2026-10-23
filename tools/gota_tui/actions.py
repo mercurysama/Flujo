@@ -27,6 +27,8 @@ KNOWN_BACKENDS = frozenset(
         "history",
     }
 )
+KNOWN_PROMPT_SOURCES = frozenset({"", "clipboard"})
+KNOWN_CONFIRMATION_MODES = frozenset({"explicit", "selection"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,7 +40,9 @@ class ActionDefinition:
     backend: str
     mutable: bool
     requires_prompt: bool
+    prompt_source: str
     requires_confirmation: bool
+    confirmation_mode: str
     agent: str
     model: str
     variant: str
@@ -61,6 +65,13 @@ class ActionDefinition:
             if type(value.get(field)) is not str:
                 raise ActionRegistryError(f"Action field {field!r} must be a string")
 
+        prompt_source = value.get("prompt_source", "")
+        if type(prompt_source) is not str:
+            raise ActionRegistryError("Action field 'prompt_source' must be a string")
+        confirmation_mode = value.get("confirmation_mode", "explicit")
+        if type(confirmation_mode) is not str:
+            raise ActionRegistryError("Action field 'confirmation_mode' must be a string")
+
         for field in ("mutable", "requires_prompt", "requires_confirmation"):
             if type(value.get(field)) is not bool:
                 raise ActionRegistryError(f"Action field {field!r} must be boolean")
@@ -71,7 +82,9 @@ class ActionDefinition:
             backend=value["backend"],
             mutable=value["mutable"],
             requires_prompt=value["requires_prompt"],
+            prompt_source=prompt_source,
             requires_confirmation=value["requires_confirmation"],
+            confirmation_mode=confirmation_mode,
             agent=value["agent"],
             model=value["model"],
             variant=value["variant"],
@@ -90,6 +103,36 @@ class ActionDefinition:
         if self.backend not in KNOWN_BACKENDS:
             raise ActionRegistryError(
                 f"Action {self.id!r} uses unknown backend {self.backend!r}"
+            )
+        if self.prompt_source not in KNOWN_PROMPT_SOURCES:
+            raise ActionRegistryError(
+                f"Action {self.id!r} uses unknown prompt source {self.prompt_source!r}"
+            )
+        if self.confirmation_mode not in KNOWN_CONFIRMATION_MODES:
+            raise ActionRegistryError(
+                f"Action {self.id!r} uses unknown confirmation mode "
+                f"{self.confirmation_mode!r}"
+            )
+        if self.requires_prompt and not self.prompt_source:
+            raise ActionRegistryError(
+                f"Prompt action {self.id!r} requires a prompt source"
+            )
+        if not self.requires_prompt and self.prompt_source:
+            raise ActionRegistryError(
+                f"Action {self.id!r} cannot define a prompt source without requiring a prompt"
+            )
+        if self.confirmation_mode == "selection":
+            if not self.requires_confirmation:
+                raise ActionRegistryError(
+                    f"Selection-confirmed action {self.id!r} must require confirmation"
+                )
+            if self.mutable:
+                raise ActionRegistryError(
+                    f"Mutable action {self.id!r} cannot use selection confirmation"
+                )
+        elif self.requires_confirmation is False and self.confirmation_mode != "explicit":
+            raise ActionRegistryError(
+                f"Non-confirming action {self.id!r} must use explicit confirmation mode"
             )
         if self.backend in {"gota-task", "gota-review"} and not self.mutable:
             raise ActionRegistryError(

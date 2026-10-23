@@ -92,9 +92,18 @@ class GotaTUICoreTest(unittest.TestCase):
         self.assertEqual(audit.backend, "opencode-readonly")
         self.assertTrue(audit.requires_prompt)
         self.assertTrue(audit.requires_confirmation)
+        self.assertEqual(audit.prompt_source, "clipboard")
+        self.assertEqual(audit.confirmation_mode, "selection")
         self.assertFalse(audit.mutable)
         self.assertEqual(audit.model + "#" + audit.variant, "openai/gpt-5.6-luna#max")
         self.assertEqual(audit.agent, "gota-auditor")
+        self.assertTrue(
+            all(
+                action.prompt_source == "clipboard"
+                for action in registry
+                if action.requires_prompt
+            )
+        )
         with self.assertRaises(ActionRegistryError):
             ActionRegistry.from_mapping(
                 {
@@ -1229,6 +1238,45 @@ class GotaTUICoreTest(unittest.TestCase):
         with patch("gota_tui.coordinator_facade.OpenCodeRunner", Runner):
             result = executor.execute(prepared)
         self.assertEqual(result.verdict, "FAIL")
+
+    def test_opencode_audit_invalid_repository_fails_before_runner_without_build_fallback(self) -> None:
+        repository = self.root / "missing-repository"
+        state = DurableRunStore(self.root / "invalid-repository")
+        action = ActionRegistry.default().get("audit-opencode")
+
+        class Writer:
+            def copy(self, text: str) -> str:
+                del text
+                return "mock"
+
+        class NeverRunner:
+            def __init__(self, **kwargs: object) -> None:
+                raise AssertionError(f"OpenCode must not start: {kwargs}")
+
+        executor = ActionExecutor(
+            config=TUIConfig(
+                repository=repository,
+                database=self.root / "coordinator.sqlite3",
+                opencode_executable="must-not-run",
+            ),
+            runs=state,
+            prompts=PromptLibrary.default(),
+            clipboard_writer=Writer(),
+        )
+        prepared = executor.prepare(
+            action,
+            PromptEnvelope.parse("read-only repository audit"),
+            run_id="invalid-repository",
+        )
+        with patch("gota_tui.coordinator_facade.OpenCodeRunner", NeverRunner):
+            result = executor.execute(prepared)
+
+        self.assertEqual(result.verdict, "FAIL")
+        report = state.read_report(result.run_id)
+        self.assertIn("ACTION=audit-opencode", report)
+        self.assertIn("AGENT=gota-auditor", report)
+        self.assertNotIn("AGENT=build", report)
+        self.assertNotIn("VERDICT=READ_ONLY_OK", report)
 
     def test_shell_like_prompt_is_data_and_no_new_tui_source_uses_shell_true(self) -> None:
         prompt = "$(touch /tmp/not-created); source evil.sh\nUnicode 🌧️"

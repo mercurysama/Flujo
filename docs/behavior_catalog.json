@@ -588,20 +588,38 @@
     {
       "id": "FLUJO-BHV-GOTA-TUI-002",
       "area": "Read-only OpenCode audit in the Gota Textual interface",
-      "precondition": "A non-empty prompt is durably stored for the registered audit-opencode action, the repository is valid, and the canonical gota-auditor policy passes validation.",
-      "public_action": "Select Read-only OpenCode audit, load the clipboard prompt with C, then use Enter for selection/confirmation and Enter again to execute the audit.",
-      "expected_result": "The TUI invokes the existing OpenCodeRunner with the durable prompt, gota-auditor, and openai/gpt-5.6-luna#max; it captures complete observed output with local credential redaction, produces generic findings and a durable report, and accepts a zero-exit non-Gota response when Git remains unchanged.",
+      "precondition": "The clipboard contains a non-empty prompt, the repository is valid, and the canonical gota-auditor policy passes validation.",
+      "public_action": "Select Read-only OpenCode audit and press Enter once.",
+      "expected_result": "The TUI reads and durably persists the clipboard prompt before invoking the existing OpenCodeRunner with audit-opencode, gota-auditor, and openai/gpt-5.6-luna#max; it captures complete observed output with local credential redaction, produces generic findings and a durable report, and accepts a zero-exit non-Gota response when Git remains unchanged.",
       "invariants": [
-        "The action is mutable=false, requires a prompt and confirmation, and remains distinct from the local Read-only Git audit.",
-        "The clipboard is not read again after confirmation; prompt text and the model/variant remain argv data without shell evaluation.",
+        "The action is mutable=false, requires a prompt, uses prompt_source=clipboard and selection confirmation, and remains distinct from the local Read-only Git audit.",
+        "The clipboard is read by the selected action without a C prerequisite or second Enter; persisted prompt text and the model/variant remain argv data without shell evaluation.",
         "The action never creates Coordinator TaskRun state, acquires a Worker lease, invokes Reviewer, writes operational SQLite, or mutates Git, files, or worktrees.",
         "HEAD, branch, porcelain status, and refs are compared before and after OpenCode; any change or denied mutation attempt produces FAIL without automatic revert.",
-        "TASK_ID, CONTEXT_ID, WORKER_RESULT, and REVIEW_RESULT are NOT_APPLICABLE, clipboard failure cannot remove or change the durable analysis verdict, and local credentials are redacted from logs, associated output, reports, and diagnostics."
+        "TASK_ID, CONTEXT_ID, WORKER_RESULT, and REVIEW_RESULT are NOT_APPLICABLE, empty clipboard or invalid audit configuration never starts OpenCode, no failure falls back to clipboard-prompt/build, clipboard failure cannot remove or change the durable analysis verdict, and local credentials are redacted from logs, associated output, reports, and diagnostics."
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": ["tools/gota_tui/tests/test_core.py", "tools/gota_tui/tests/test_runtime.py"],
-      "notes": "Unit coverage uses an injected runner for argv, durable prompt, policy, output, failure, mutation, report-ordering, and Git-audit regressions. The required real OpenCode 2.0.32 smoke is delivery evidence in addition to these deterministic tests; interactive visual approval remains outside headless coverage."
+      "notes": "Unit coverage uses an injected runner for argv, durable prompt, policy, output, failure, mutation, report-ordering, and Git-audit regressions. GOTA-TUI-003 adds the one-Enter contextual clipboard path and explicit C direct-run regression. The required real OpenCode 2.0.32 smoke is delivery evidence in addition to these deterministic tests; interactive visual approval remains outside headless coverage."
+    },
+    {
+      "id": "FLUJO-BHV-GOTA-TUI-003",
+      "area": "Contextual clipboard prompt source by registered action",
+      "precondition": "A registered action declares requires_prompt=true and prompt_source=clipboard, and the user activates it without a loaded prompt.",
+      "public_action": "Activate the selected action with Enter while the current clipboard contains prompt text.",
+      "expected_result": "The TUI reads the clipboard through the injectable boundary, validates non-empty text, routes it to the selected registered backend, and persists prompt plus SHA-256 before any child spawn; audit-opencode executes as read-only with one activation while clipboard-prompt remains direct build execution.",
+      "invariants": [
+        "C is explicitly Run clipboard prompt and always selects clipboard-prompt with agent build; it does not reinterpret the selected audit action.",
+        "gota clipboard retains the direct clipboard-prompt behavior without a selector or confirmation screen.",
+        "Empty clipboard blocks execution and cannot create a SUCCEEDED result.",
+        "audit-opencode reports ACTION=audit-opencode, AGENT=gota-auditor, MODEL=openai/gpt-5.6-luna, VARIANT=max, and COORDINATOR_STATE=READ_ONLY.",
+        "Invalid read-only policy, agent, or repository fails closed without silent fallback to build; live logs, durable report, and clipboard copy retain their existing ordering and redaction guarantees."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tools/gota_tui/tests/test_core.py", "tools/gota_tui/tests/test_runtime.py"],
+      "notes": "Authorized behavior correction GOTA-TUI-003. The one-Enter Textual regression, empty-clipboard failure, direct C footer/agent regression, CLI direct path, durable pre-spawn assertions, report identity, fail-closed policy, and secret-redaction evidence are automatic; real OpenCode smoke and interactive visual approval remain separate delivery evidence."
     }
   ]
 }
