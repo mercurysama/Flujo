@@ -17,6 +17,10 @@ from typing import Any, Callable, Mapping
 
 from flow_coordinator import OpenCodeRunStatus, SQLiteCoordinatorStore
 from flow_coordinator.git_adapter import GitReadError, ReadOnlyGitAdapter
+from flow_coordinator.sensitive_output import (
+    SensitiveOutputRedactor,
+    redact_sensitive_data,
+)
 
 from .actions import ActionDefinition
 from .clipboard import ClipboardWriter
@@ -247,7 +251,8 @@ class ActionExecutor:
             cwd=self.config.repository,
         )
         commit_sha = self._git_head()
-        diagnostic = result.error or "Direct OpenCode prompt completed"
+        redactor = self._output_redactor()
+        diagnostic = redactor.redact(result.error or "Direct OpenCode prompt completed")
         if result.status is OpenCodeRunStatus.INVALID_PAYLOAD and result.exit_code == 0:
             diagnostic = (
                 "Direct OpenCode prompt completed without a Coordinator payload; "
@@ -454,10 +459,14 @@ class ActionExecutor:
             except Exception as error:
                 runner_error = f"OpenCode runner failed: {type(error).__name__}: {error}"
 
-        stdout = "" if result is None else result.stdout
-        stderr = "" if result is None else result.stderr
+        raw_stdout = "" if result is None else result.stdout
+        raw_stderr = "" if result is None else result.stderr
+        redactor = self._output_redactor()
+        stdout = redactor.redact(raw_stdout)
+        stderr = redactor.redact(raw_stderr)
         if runner_error:
-            stderr = f"{stderr}\n{runner_error}" if stderr else runner_error
+            safe_runner_error = redactor.redact(runner_error)
+            stderr = f"{stderr}\n{safe_runner_error}" if stderr else safe_runner_error
         output_path = self.runs.persist_opencode_output(
             prepared.paths.run_id, stdout, stderr
         )
@@ -477,7 +486,7 @@ class ActionExecutor:
                 mutation_reasons.append("git status changed")
             if before.refs != after.refs:
                 mutation_reasons.append("Git refs changed")
-        if self._mutation_attempt_detected(stdout, stderr):
+        if self._mutation_attempt_detected(raw_stdout, raw_stderr):
             mutation_reasons.append("OpenCode reported a denied mutation attempt")
 
         if after is not None:
@@ -537,7 +546,7 @@ class ActionExecutor:
             if result.status is OpenCodeRunStatus.INVALID_PAYLOAD:
                 diagnostic_parts.append("generic raw output accepted; no Gota payload required")
             elif result.error and failed:
-                diagnostic_parts.append(result.error)
+                diagnostic_parts.append(redactor.redact(result.error))
         if mutation_reasons:
             diagnostic_parts.append("; ".join(mutation_reasons))
         if not diagnostic_parts:
@@ -570,9 +579,11 @@ class ActionExecutor:
             return None
 
     def _open_code_output(self, run_id: str) -> Callable[[str, str], None]:
+        redactor = self._output_redactor()
+
         def receive(source: str, text: str) -> None:
             stamp = datetime.now(UTC).isoformat()
-            entry = f"{stamp} [{source.upper()}] {text}"
+            entry = redactor.redact(f"{stamp} [{source.upper()}] {text}")
             self.runs.append_log(run_id, entry)
             if self.output_sink is not None:
                 self.output_sink(entry)
@@ -580,10 +591,16 @@ class ActionExecutor:
         return receive
 
     def _log(self, run_id: str, text: str) -> None:
-        entry = f"{datetime.now(UTC).isoformat()} [GOTA] {text}\n"
+        entry = self._output_redactor().redact(
+            f"{datetime.now(UTC).isoformat()} [GOTA] {text}\n"
+        )
         self.runs.append_log(run_id, entry)
         if self.output_sink is not None:
             self.output_sink(entry)
+
+    def _output_redactor(self) -> SensitiveOutputRedactor:
+        config_dir = Path(__file__).resolve().parents[2] / ".opencode"
+        return SensitiveOutputRedactor((self.config.repository, config_dir))
 
     def _execute_registered_read_only(
         self,
@@ -717,7 +734,7 @@ class ActionExecutor:
             )
         except (OSError, subprocess.SubprocessError) as error:
             return f"unavailable ({type(error).__name__}: {error})"
-        output = (result.stdout or result.stderr).strip()
+        output = self._output_redactor().redact((result.stdout or result.stderr).strip())
         return output or f"unavailable (exit={result.returncode})"
 
     def _fixed_command(
@@ -728,6 +745,7 @@ class ActionExecutor:
         *,
         tests: bool,
     ) -> CoordinatorOutcome:
+        redactor = self._output_redactor()
         self._log(prepared.paths.run_id, "Executing fixed read-only argv: " + json.dumps(argv))
         environment = os.environ.copy()
         environment["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -762,7 +780,7 @@ class ActionExecutor:
             for line in iter(stream.readline, ""):
                 with output_lock:
                     stamp = datetime.now(UTC).isoformat()
-                    entry = f"{stamp} [{source}] {line}"
+                    entry = redactor.redact(f"{stamp} [{source}] {line}")
                     self.runs.append_log(prepared.paths.run_id, entry)
                     if self.output_sink is not None:
                         self.output_sink(entry)
@@ -807,6 +825,7 @@ class ActionExecutor:
         cancel_status: str | None = None,
     ) -> ActionExecutionResult:
         action = prepared.action
+        redactor = self._output_redactor()
         request = self.runs.request(prepared.paths.run_id)
         coordinator_run_id = outcome.coordinator_run_id
         task_id = outcome.task_id
@@ -843,6 +862,12 @@ class ActionExecutor:
             }
         )
         result_payload.update(metadata)
+        result_payload = dict(
+            redact_sensitive_data(
+                result_payload,
+                roots=(self.config.repository,),
+            )
+        )
         self.runs.persist_result(prepared.paths.run_id, result_payload)
 
         non_coordinator = action.backend in {
@@ -882,6 +907,12 @@ class ActionExecutor:
             "NOT_APPLICABLE" if action.backend == "git-audit" else action.agent or "NOT_APPLICABLE"
         )
 
+        safe_findings = redact_sensitive_data(
+            list(outcome.findings),
+            roots=(self.config.repository,),
+        )
+        if not isinstance(safe_findings, list):
+            raise ExecutionError("Redacted audit findings are not a list")
         report_data = ReportData(
             run_id=prepared.paths.run_id,
             action=action.id,
@@ -907,9 +938,9 @@ class ActionExecutor:
             timeout=metadata.get("timeout", request.get("timeout")),
             readonly_policy=metadata.get("readonly_policy"),
             mutation_guard=metadata.get("mutation_guard"),
-            findings=list(outcome.findings),
+            findings=safe_findings,
             verdict=verdict,
-            diagnostic=outcome.diagnostic,
+            diagnostic=redactor.redact(outcome.diagnostic),
         )
         persisted: PersistedReport = ReportManager(
             self.runs, self.clipboard_writer
@@ -942,7 +973,7 @@ class ActionExecutor:
             coordinator_state=report_coordinator_state,
             task_id=report_task_id,
             coordinator_run_id=coordinator_run_id,
-            diagnostic=outcome.diagnostic,
+            diagnostic=redactor.redact(outcome.diagnostic),
         )
 
 

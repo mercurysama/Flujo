@@ -126,7 +126,7 @@ The audit snapshots Git HEAD, branch, porcelain status, and refs before and
 after the child. Any changed snapshot or detected denied mutation attempt makes
 the verdict `FAIL`; no automatic revert is attempted. A zero-exit generic
 OpenCode response is accepted without requiring a `flujo.gota/v1` payload. The
-complete stdout/stderr remains in `live.log`; a compact report may point to a
+complete observed stdout/stderr, with local credential values redacted, remains in `live.log`; a compact report may point to a
 durable associated output artifact and preserves prompt-requested delimited
 blocks without imposing a single findings schema. `TASK_ID`, `CONTEXT_ID`,
 `WORKER_RESULT`, and `REVIEW_RESULT` are `NOT_APPLICABLE` for this action.

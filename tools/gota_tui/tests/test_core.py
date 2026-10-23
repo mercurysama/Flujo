@@ -572,6 +572,91 @@ class GotaTUICoreTest(unittest.TestCase):
         self.assertIn("HEAD changed", state.read_report(result.run_id))
         self.assertNotIn("READ_ONLY_OK", state.read_report(result.run_id))
 
+    def test_opencode_output_redacts_local_service_credentials_from_durable_artifacts(self) -> None:
+        repository = self.root / "repository"
+        repository.mkdir()
+        secret = "FAKE_TUI_SERVICE_PASSWORD_123456"
+        service_directory = repository / ".opencode"
+        service_directory.mkdir()
+        (service_directory / "service.json").write_text(
+            json.dumps({"password": secret}),
+            encoding="utf-8",
+        )
+        state = DurableRunStore(self.root / "redaction-state")
+        action = ActionRegistry.default().get("audit-opencode")
+        output = f"password={secret}\n"
+        error_output = f"Authorization: Bearer {secret}\n"
+
+        class Writer:
+            def copy(self, text: str) -> str:
+                del text
+                return "mock"
+
+        class Runner:
+            def __init__(self, **kwargs: object) -> None:
+                del kwargs
+
+            def run(self, **kwargs: object) -> OpenCodeRunResult:
+                callback = kwargs["output_callback"]
+                assert callable(callback)
+                callback("stdout", output)  # type: ignore[operator]
+                callback("stderr", error_output)  # type: ignore[operator]
+                return OpenCodeRunResult(
+                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                    argv=("opencode", "run"),
+                    cwd=str(kwargs["cwd"]),
+                    stdout=output,
+                    stderr=error_output,
+                    exit_code=0,
+                    timed_out=False,
+                    error="generic output",
+                )
+
+        class Git:
+            def __init__(self, root: Path) -> None:
+                self.root = root
+
+            def snapshot(self) -> GitSnapshot:
+                return GitSnapshot(
+                    repository=str(self.root),
+                    head="a" * 40,
+                    branch="feature/audit",
+                    status="",
+                    refs=(("refs/heads/feature/audit", "a" * 40, ""),),
+                )
+
+        executor = ActionExecutor(
+            config=TUIConfig(
+                repository=repository,
+                database=self.root / "coordinator.sqlite3",
+                opencode_executable="fake-opencode",
+            ),
+            runs=state,
+            prompts=PromptLibrary.default(),
+            clipboard_writer=Writer(),
+        )
+        prepared = executor.prepare(
+            action,
+            PromptEnvelope.parse("redact local output"),
+            run_id="redaction-run",
+        )
+
+        with patch("gota_tui.coordinator_facade.OpenCodeRunner", Runner), patch(
+            "gota_tui.execution.ReadOnlyGitAdapter", Git
+        ), patch.object(ActionExecutor, "_opencode_version", return_value="opencode v2.0.32"):
+            result = executor.execute(prepared)
+
+        self.assertEqual(result.verdict, "READ_ONLY_OK")
+        for path in (
+            prepared.paths.live_log,
+            prepared.paths.opencode_output,
+            prepared.paths.report,
+            prepared.paths.result,
+        ):
+            content = path.read_text(encoding="utf-8")
+            self.assertNotIn(secret, content, path)
+            self.assertIn("[REDACTED]", content, path)
+
     def test_opencode_audit_missing_prompt_invalid_model_and_policy_never_start_runner(self) -> None:
         repository = Path(__file__).resolve().parents[3]
         action = ActionRegistry.default().get("audit-opencode")

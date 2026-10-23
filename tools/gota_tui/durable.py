@@ -12,6 +12,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Mapping
 
+from flow_coordinator.sensitive_output import redact_sensitive_text
+
 
 class DurableStateError(RuntimeError):
     """A local TUI state operation could not be completed safely."""
@@ -248,6 +250,7 @@ class DurableRunStore:
     def append_log(self, run_id: str, text: str) -> None:
         if type(text) is not str:
             raise TypeError("TUI log text must be a string")
+        text = redact_sensitive_text(text)
         path = self.paths(run_id).live_log
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("ab") as file:
@@ -272,6 +275,8 @@ class DurableRunStore:
 
         if type(stdout) is not str or type(stderr) is not str:
             raise TypeError("OpenCode output must be text")
+        stdout = redact_sensitive_text(stdout)
+        stderr = redact_sensitive_text(stderr)
         text = "STDOUT_BEGIN\n" + stdout + "\nSTDOUT_END\n"
         text += "STDERR_BEGIN\n" + stderr + "\nSTDERR_END\n"
         path = self.paths(run_id).opencode_output

@@ -156,8 +156,9 @@ The final report is compact and includes `RUN_ID`, `ACTION`, `TASK_ID`,
 `CONTEXT_ID`, model/variant, OpenCode version/agent, repository/base/commit,
 Coordinator/Worker/Review state, tests, diff check, prompt SHA, report/log and
 associated-output paths, read-only policy, mutation guard, clipboard status,
-findings, and verdict. Full output remains in `live.log` and, for the
-OpenCode audit, in `opencode-output.txt`. The report is persisted before copy
+findings, and verdict. Complete observed output with local credential values
+redacted remains in `live.log` and, for the OpenCode audit, in
+`opencode-output.txt`. The report is persisted before copy
 is attempted, and a clipboard failure never removes it.
 
 ## Adding an action or template

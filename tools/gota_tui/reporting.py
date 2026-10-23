@@ -8,12 +8,13 @@ from typing import Any, Iterable, Mapping
 
 from .clipboard import ClipboardError, ClipboardWriter
 from .durable import DurableRunStore
+from flow_coordinator.sensitive_output import redact_sensitive_text
 
 
 def _value(value: object) -> str:
     if value is None or value == "":
         return "UNKNOWN"
-    return str(value).replace("\r", " ").replace("\n", " ").strip()
+    return redact_sensitive_text(str(value)).replace("\r", " ").replace("\n", " ").strip()
 
 
 def _findings(value: Iterable[Mapping[str, Any]] | None) -> str:

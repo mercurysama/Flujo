@@ -25,6 +25,7 @@ from .gota_protocol import (
     GotaWorkerResult,
     parse_gota_output,
 )
+from .sensitive_output import SensitiveOutputRedactor
 
 
 DEFAULT_OPENCODE_MODEL: Final[str] = "openai/gpt-5.6-luna"
@@ -268,6 +269,7 @@ class OpenCodeRunner:
         cancel_event: threading.Event | None,
         systemd_tools: tuple[str, str] | None,
         unit: str | None,
+        redactor: SensitiveOutputRedactor | None = None,
     ) -> tuple[str, str, str | None, str | None]:
         """Capture binary pipes while optionally publishing decoded chunks.
 
@@ -278,7 +280,24 @@ class OpenCodeRunner:
         """
 
         output: dict[str, list[str]] = {"stdout": [], "stderr": []}
+        pending: dict[str, str] = {"stdout": "", "stderr": ""}
         threads: list[threading.Thread] = []
+
+        def publish(source: str, text: str) -> None:
+            if not text:
+                return
+            safe_text = redactor.redact(text) if redactor is not None else text
+            try:
+                output_callback(source, safe_text)
+            except Exception:
+                # Logging must never change the process boundary.
+                pass
+
+        def publish_complete_lines(source: str, text: str) -> None:
+            pending[source] += text
+            while "\n" in pending[source]:
+                line, pending[source] = pending[source].split("\n", 1)
+                publish(source, line + "\n")
 
         def pump(stream: Any, key: str, source: str) -> None:
             decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
@@ -291,18 +310,11 @@ class OpenCodeRunner:
                     text = decoder.decode(chunk, final=False)
                     if text:
                         output[key].append(text)
-                        try:
-                            output_callback(source, text)
-                        except Exception:
-                            # Logging must never change the process boundary.
-                            pass
+                        publish_complete_lines(key, text)
                 final_text = decoder.decode(b"", final=True)
                 if final_text:
                     output[key].append(final_text)
-                    try:
-                        output_callback(source, final_text)
-                    except Exception:
-                        pass
+                    publish_complete_lines(key, final_text)
             except (OSError, ValueError):
                 return
 
@@ -365,6 +377,8 @@ class OpenCodeRunner:
                     pass
         for thread in threads:
             thread.join(timeout=_PROCESS_REAP_GRACE_SECONDS)
+        for key, text in pending.items():
+            publish(key, text)
         return (
             "".join(output["stdout"]),
             "".join(output["stderr"]),
@@ -554,9 +568,11 @@ class OpenCodeRunner:
             )
 
         environment = os.environ.copy()
-        environment["OPENCODE_CONFIG_DIR"] = str(Path(__file__).resolve().parents[4] / ".opencode")
+        config_dir = Path(__file__).resolve().parents[4] / ".opencode"
+        environment["OPENCODE_CONFIG_DIR"] = str(config_dir)
         environment["GIT_PAGER"] = "cat"
         environment["PAGER"] = "cat"
+        redactor = SensitiveOutputRedactor((cwd_path, config_dir))
 
         systemd_tools: tuple[str, str] | None = None
         if sys.platform == "linux":
@@ -654,6 +670,7 @@ class OpenCodeRunner:
                     cancel_event=cancel_event,
                     systemd_tools=systemd_tools,
                     unit=unit,
+                    redactor=redactor,
                 )
                 if terminal in {"timeout", "cancelled"}:
                     message = (

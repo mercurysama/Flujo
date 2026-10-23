@@ -602,6 +602,33 @@ class OpenCodeRunnerTest(unittest.TestCase):
             "live diagnostic 🌧️\n",
         )
 
+    def test_optional_observer_redacts_local_service_credentials(self) -> None:
+        secret = "FAKE_RUNNER_SERVICE_PASSWORD_123456"
+        service_directory = self.cwd / ".opencode"
+        service_directory.mkdir()
+        (service_directory / "service.json").write_text(
+            json.dumps({"password": secret}),
+            encoding="utf-8",
+        )
+        executable, _ = self._fake_executable(
+            stdout=f"password={secret}\n",
+            stderr=f"Authorization: Bearer {secret}\n",
+        )
+        observed: list[tuple[str, str]] = []
+
+        result = OpenCodeRunner(executable=executable).run(
+            agent="worker",
+            prompt="stream credentials safely",
+            cwd=self.cwd,
+            timeout=2,
+            output_callback=lambda source, text: observed.append((source, text)),
+        )
+
+        observed_text = "".join(text for _source, text in observed)
+        self.assertEqual(result.status, OpenCodeRunStatus.INVALID_PAYLOAD)
+        self.assertNotIn(secret, observed_text)
+        self.assertIn("[REDACTED]", observed_text)
+
     def test_optional_cancellation_is_distinct_and_does_not_accept_output(self) -> None:
         marker = self.root / "completed-after-cancellation"
         executable, _ = self._fake_executable(
