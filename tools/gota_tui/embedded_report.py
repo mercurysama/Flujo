@@ -83,11 +83,11 @@ def _single_field(
         match = pattern.fullmatch(line)
         if match is not None:
             values.append(match.group(1).strip())
-    if len(values) > 1:
-        return None, True
-    if len(values) != 1 or not values[0]:
+    if not values:
         return None, False
-    return values[0], False
+    # Keep the first textual value for diagnostics, but never treat repeated
+    # fields as authoritative evidence. Equal repetitions are ambiguous too.
+    return (values[0] if values[0] else None), len(values) > 1
 
 
 def _make_report(report_id: str, raw_text: str, body_text: str) -> EmbeddedReport:

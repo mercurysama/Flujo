@@ -354,6 +354,13 @@ class GotaTUIRuntimeTest(unittest.TestCase):
                     await pilot.pause()
                     report_view = app.query_one("#report-view")
 
+                    app._update_report_view(conflict_report)
+                    self.assertTrue(report_view.has_class("result-conflict"))
+                    app._update_report_view(normal_report)
+                    self.assertFalse(report_view.has_class("result-conflict"))
+                    app._update_report_view(conflict_report)
+                    self.assertTrue(report_view.has_class("result-conflict"))
+
                     app._history = [{"run_id": "conflict"}]
                     app._history_index = 0
                     app._screen = "history"

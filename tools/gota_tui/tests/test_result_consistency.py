@@ -215,6 +215,9 @@ class GotaTUIResultConsistencyTest(unittest.TestCase):
                 parsed = parse_embedded_report(report)
                 self.assertTrue(parsed.ambiguous)
                 self.assertIsNotNone(parsed.report)
+                assert parsed.report is not None
+                self.assertEqual(parsed.report.status, "PASA")
+                self.assertEqual(parsed.report.verdict, "PASA")
                 self.assertEqual(
                     result_consistency(
                         process_status="invalid_payload",

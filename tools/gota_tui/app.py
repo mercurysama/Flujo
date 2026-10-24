@@ -276,21 +276,15 @@ class GotaApp(App[None]):
         else:
             self._set_status("Coordinator state is authoritative; exit=0 is not DONE.")
 
-    def _update_report_view(
-        self, report: str, result_consistency: str | None = None
-    ) -> None:
+    def _update_report_view(self, report: str) -> None:
         report_view = self.query_one("#report-view", Static)
         report_view.remove_class("result-conflict")
-        conflict = result_consistency in _RESULT_CONFLICT_CONSISTENCIES
-        if not conflict:
-            for line in report.splitlines():
-                if not line.startswith(_RESULT_CONSISTENCY_PREFIX):
-                    continue
-                visible_consistency = line[len(_RESULT_CONSISTENCY_PREFIX) :]
-                if visible_consistency in _RESULT_CONFLICT_CONSISTENCIES:
-                    conflict = True
-                    break
-        if conflict:
+        if any(
+            line.startswith(_RESULT_CONSISTENCY_PREFIX)
+            and line[len(_RESULT_CONSISTENCY_PREFIX) :]
+            in _RESULT_CONFLICT_CONSISTENCIES
+            for line in report.splitlines()
+        ):
             report_view.add_class("result-conflict")
         report_view.update(Text(report))
 
@@ -304,7 +298,7 @@ class GotaApp(App[None]):
         self._set_visible("report-view")
         self._set_hidden("action-list", "prompt-view", "live-log")
         self.query_one("#screen-title", Static).update("GOTA  ·  Final report")
-        self._update_report_view(result.report, result.result_consistency)
+        self._update_report_view(result.report)
         copy_status = result.clipboard_status
         if result.clipboard_error:
             copy_status += f" ({result.clipboard_error})"

@@ -647,7 +647,7 @@
       "expected_result": "The process status/exit code and optional stdout embedded report remain separate; exactly one complete report is informational evidence, ambiguous complete reports or duplicate STATUS/VERDICT lines are rejected as ambiguous, non-zero exit never becomes success, conflicts are explicit, and direct stdout is durably redacted before report copy.",
       "invariants": [
         "Only one complete stdout report is parsed; prompt/request text, stderr-only markers, loose verdict words, and incomplete marker pairs are not accepted as complete reports.",
-        "More than one complete report and duplicate STATUS or VERDICT lines are structurally ambiguous even when their values are identical; ambiguous evidence never becomes PROCESS_AND_REPORT_PASS.",
+        "More than one complete report and duplicate STATUS or VERDICT lines are structurally ambiguous even when their values are identical; the first value may remain informational, and ambiguous evidence never becomes PROCESS_AND_REPORT_PASS.",
         "The process exit result remains the technical verdict authority and the Coordinator/Gota/SQLite authority is unchanged.",
         "Original embedded ID/status/verdict text is preserved alongside conservative classification, while unrecognized text cannot infer PASS or FAIL.",
         "opencode-output.txt exists before report copy and local credentials are redacted in live.log, opencode-output.txt, report.txt, and result.json.",

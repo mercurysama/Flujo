@@ -217,7 +217,8 @@ Only one complete, line-delimited stdout block with the exact shape
 `=== <ID>_REPORT_BEGIN ===` and `=== <ID>_REPORT_END ===` is parsed. More than
 one complete block is ambiguous, including repeated identical blocks. A
 duplicate `STATUS` or `VERDICT` line is also structurally ambiguous, even when
-the duplicate values are identical. A BEGIN without its matching END, an END
+the duplicate values are identical; the first observed value may remain only as
+informational evidence. A BEGIN without its matching END, an END
 without BEGIN, a loose `VERDICT` line, arbitrary PASS text, prompt/request
 content, and stderr-only markers do not become an embedded report. The parser
 preserves the original report values and text while conservatively normalizing
