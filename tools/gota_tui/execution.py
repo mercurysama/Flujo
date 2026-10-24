@@ -15,7 +15,7 @@ from pathlib import Path
 from threading import Event
 from typing import Any, Callable, Mapping
 
-from flow_coordinator import OpenCodeRunStatus, SQLiteCoordinatorStore
+from flow_coordinator import OpenCodeRunResult, OpenCodeRunStatus, SQLiteCoordinatorStore
 from flow_coordinator.git_adapter import GitReadError, ReadOnlyGitAdapter
 from flow_coordinator.sensitive_output import (
     SensitiveOutputRedactor,
@@ -30,6 +30,12 @@ from .coordinator_facade import (
     OpenCodePromptFacade,
 )
 from .durable import DurableRunStore, RunPaths, default_coordinator_database
+from .embedded_report import (
+    EmbeddedReportParse,
+    conflict_diagnostic,
+    parse_embedded_report,
+    result_consistency,
+)
 from .envelope import PromptEnvelope
 from .prompt_library import PromptComposition, PromptLibrary
 from .read_only_agent import ReadOnlyAgentError, validate_read_only_agent
@@ -96,6 +102,12 @@ class ActionExecutionResult:
     task_id: str | None
     coordinator_run_id: str | None
     diagnostic: str
+    process_status: str | None
+    process_exit_code: int | None
+    embedded_report_id: str | None
+    embedded_status: str | None
+    embedded_verdict: str | None
+    result_consistency: str
 
 
 class ActionExecutor:
@@ -174,7 +186,7 @@ class ActionExecutor:
             run_id=run_id,
             allow_empty_prompt=not action.requires_prompt,
             timeout=self.config.timeout,
-            opencode_output=action.backend == "opencode-readonly",
+            opencode_output=action.backend in {"opencode-direct", "opencode-readonly"},
         )
         return PreparedAction(action, envelope, composition, paths)
 
@@ -276,12 +288,31 @@ class ActionExecutor:
         )
         commit_sha = self._git_head()
         redactor = self._output_redactor()
+        output_path = self.runs.persist_opencode_output(
+            run_id,
+            redactor.redact(result.stdout),
+            redactor.redact(result.stderr),
+        )
+        metadata = self._process_report_metadata(result, output_path)
+        self.runs.update_request(
+            run_id,
+            output_path=str(output_path),
+            process_status=metadata["process_status"],
+            process_exit_code=metadata["process_exit_code"],
+            result_consistency=metadata["result_consistency"],
+            embedded_report_id=metadata.get("embedded_report_id"),
+            embedded_status=metadata.get("embedded_status"),
+            embedded_verdict=metadata.get("embedded_verdict"),
+        )
         diagnostic = redactor.redact(result.error or "Direct OpenCode prompt completed")
         if result.status is OpenCodeRunStatus.INVALID_PAYLOAD and result.exit_code == 0:
             diagnostic = (
                 "Direct OpenCode prompt completed without a Coordinator payload; "
-                "raw output is available in live.log"
+                "raw output is available in live.log and opencode-output.txt"
             )
+        consistency_diagnostic = metadata.get("result_conflict_diagnostic")
+        if type(consistency_diagnostic) is str:
+            diagnostic = f"{diagnostic} {consistency_diagnostic}"
         if result.status in {OpenCodeRunStatus.SUCCEEDED, OpenCodeRunStatus.INVALID_PAYLOAD}:
             verdict = "SUCCEEDED" if result.exit_code == 0 else "FAIL"
         elif result.status is OpenCodeRunStatus.TIMEOUT:
@@ -301,7 +332,52 @@ class ActionExecutor:
             verdict=verdict,
             diagnostic=diagnostic,
             cancelled=result.status is OpenCodeRunStatus.CANCELLED,
+            metadata=metadata,
         )
+
+    def _process_report_metadata(
+        self, result: OpenCodeRunResult, output_path: Path
+    ) -> dict[str, Any]:
+        """Record process facts and stdout-only embedded evidence.
+
+        The parser receives only the captured agent stdout. The prompt and
+        request files never enter this path, and stderr remains diagnostics.
+        """
+
+        parsed: EmbeddedReportParse = parse_embedded_report(result.stdout)
+        report = parsed.report
+        consistency = result_consistency(
+            process_status=result.status.value,
+            process_exit_code=result.exit_code,
+            parsed=parsed,
+        )
+        metadata: dict[str, Any] = {
+            "process_status": result.status.value,
+            "process_exit_code": result.exit_code,
+            "output_path": str(output_path),
+            "result_consistency": consistency,
+        }
+        if report is not None:
+            redactor = self._output_redactor()
+            metadata.update(
+                {
+                    "embedded_report_id": redactor.redact(report.report_id),
+                    "embedded_status": (
+                        redactor.redact(report.status) if report.status is not None else None
+                    ),
+                    "embedded_verdict": (
+                        redactor.redact(report.verdict) if report.verdict is not None else None
+                    ),
+                    "embedded_report_classification": report.classification,
+                    # The full source block is retained in result.json after
+                    # the normal repository/credential redaction boundary.
+                    "embedded_report_text": redactor.redact(report.raw_text),
+                }
+            )
+        diagnostic = conflict_diagnostic(consistency)
+        if diagnostic is not None:
+            metadata["result_conflict_diagnostic"] = diagnostic
+        return metadata
 
     def _read_durable_audit_prompt(
         self, prepared: PreparedAction
@@ -533,6 +609,8 @@ class ActionExecutor:
         output_path = self.runs.persist_opencode_output(
             prepared.paths.run_id, stdout, stderr
         )
+        if result is not None:
+            metadata.update(self._process_report_metadata(result, output_path))
         try:
             after = ReadOnlyGitAdapter(repository).snapshot()
         except GitReadError as error:
@@ -626,6 +704,9 @@ class ActionExecutor:
             diagnostic_parts.append("; ".join(mutation_reasons))
         if classifications:
             diagnostic_parts.append("classifications=" + ",".join(classifications))
+        consistency_diagnostic = metadata.get("result_conflict_diagnostic")
+        if type(consistency_diagnostic) is str:
+            diagnostic_parts.append(consistency_diagnostic)
         if not diagnostic_parts:
             diagnostic_parts.append("Read-only OpenCode audit completed")
         self._log(prepared.paths.run_id, "Read-only OpenCode audit: " + " | ".join(diagnostic_parts))
@@ -911,6 +992,33 @@ class ActionExecutor:
         coordinator_state = outcome.coordinator_state
         verdict = cancel_status or outcome.verdict
         metadata = dict(outcome.metadata)
+        output_path_value = metadata.get("output_path")
+        if type(output_path_value) is not str:
+            if action.backend in {"opencode-direct", "opencode-readonly"} and prepared.paths.opencode_output.exists():
+                output_path_value = str(prepared.paths.opencode_output)
+            else:
+                output_path_value = None
+        if output_path_value is not None:
+            metadata["output_path"] = output_path_value
+        process_status = metadata.get("process_status")
+        if type(process_status) is not str:
+            process_status = None
+        process_exit_code = metadata.get("process_exit_code")
+        if type(process_exit_code) is not int:
+            process_exit_code = None
+        embedded_report_id = metadata.get("embedded_report_id")
+        if type(embedded_report_id) is not str:
+            embedded_report_id = None
+        embedded_status = metadata.get("embedded_status")
+        if type(embedded_status) is not str:
+            embedded_status = None
+        embedded_verdict = metadata.get("embedded_verdict")
+        if type(embedded_verdict) is not str:
+            embedded_verdict = None
+        result_consistency_value = metadata.get("result_consistency")
+        if type(result_consistency_value) is not str:
+            result_consistency_value = "NO_EMBEDDED_REPORT"
+            metadata["result_consistency"] = result_consistency_value
         opencode_version = metadata.get("opencode_version")
         if type(opencode_version) is not str:
             if action.backend in {"gota-task", "gota-review", "opencode-direct"}:
@@ -938,6 +1046,7 @@ class ActionExecutor:
                 "timeout": metadata.get("timeout", request.get("timeout")),
                 "report_path": str(prepared.paths.report),
                 "log_path": str(prepared.paths.live_log),
+                "output_path": output_path_value,
             }
         )
         result_payload.update(metadata)
@@ -1017,6 +1126,12 @@ class ActionExecutor:
             timeout=metadata.get("timeout", request.get("timeout")),
             readonly_policy=metadata.get("readonly_policy"),
             mutation_guard=metadata.get("mutation_guard"),
+            process_status=process_status,
+            process_exit_code=process_exit_code,
+            embedded_report_id=embedded_report_id,
+            embedded_status=embedded_status,
+            embedded_verdict=embedded_verdict,
+            result_consistency=result_consistency_value,
             findings=safe_findings,
             verdict=verdict,
             diagnostic=redactor.redact(outcome.diagnostic),
@@ -1053,6 +1168,12 @@ class ActionExecutor:
             task_id=report_task_id,
             coordinator_run_id=coordinator_run_id,
             diagnostic=redactor.redact(outcome.diagnostic),
+            process_status=process_status,
+            process_exit_code=process_exit_code,
+            embedded_report_id=embedded_report_id,
+            embedded_status=embedded_status,
+            embedded_verdict=embedded_verdict,
+            result_consistency=result_consistency_value,
         )
 
 

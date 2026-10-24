@@ -59,6 +59,9 @@ class GotaApp(App[None]):
         padding: 1;
         overflow-y: auto;
     }
+    #report-view.result-conflict {
+        border: round $error;
+    }
     """
 
     BINDINGS = [
@@ -277,12 +280,28 @@ class GotaApp(App[None]):
         self._set_visible("report-view")
         self._set_hidden("action-list", "prompt-view", "live-log")
         self.query_one("#screen-title", Static).update("GOTA  ·  Final report")
-        self.query_one("#report-view", Static).update(Text(result.report))
+        report_view = self.query_one("#report-view", Static)
+        report_view.remove_class("result-conflict")
+        if result.result_consistency in {
+            "PROCESS_FAIL_REPORT_PASS",
+            "PROCESS_PASS_REPORT_FAIL",
+        }:
+            report_view.add_class("result-conflict")
+        report_view.update(Text(result.report))
         copy_status = result.clipboard_status
         if result.clipboard_error:
             copy_status += f" ({result.clipboard_error})"
+        conflict_status = (
+            "  RESULT CONFLICT — review required"
+            if result.result_consistency
+            in {"PROCESS_FAIL_REPORT_PASS", "PROCESS_PASS_REPORT_FAIL"}
+            else ""
+        )
         self._set_status(
-            f"VERDICT={result.verdict}  COORDINATOR_STATE={result.coordinator_state or 'UNKNOWN'}  "
+            f"VERDICT={result.verdict}  PROCESS_STATUS={result.process_status or 'UNKNOWN'}  "
+            f"PROCESS_EXIT_CODE={result.process_exit_code if result.process_exit_code is not None else 'UNKNOWN'}  "
+            f"RESULT_CONSISTENCY={result.result_consistency}{conflict_status}  "
+            f"COORDINATOR_STATE={result.coordinator_state or 'UNKNOWN'}  "
             f"CLIPBOARD_COPY={copy_status}  · R copy report · C Run clipboard prompt · H history · Enter menu · Q quit"
         )
 

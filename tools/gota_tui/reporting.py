@@ -60,6 +60,12 @@ class ReportData:
     timeout: float | None = None
     readonly_policy: str | None = None
     mutation_guard: str | None = None
+    process_status: str | None = None
+    process_exit_code: int | None = None
+    embedded_report_id: str | None = None
+    embedded_status: str | None = None
+    embedded_verdict: str | None = None
+    result_consistency: str = "NO_EMBEDDED_REPORT"
     clipboard_copy: str = "NOT_ATTEMPTED"
     findings: list[Mapping[str, Any]] = field(default_factory=list)
     verdict: str = "UNKNOWN"
@@ -93,6 +99,12 @@ def render_report(data: ReportData) -> str:
         f"TIMEOUT={_value(data.timeout)}",
         f"READONLY_POLICY={_value(data.readonly_policy)}",
         f"UNEXPECTED_MUTATION_GUARD={_value(data.mutation_guard)}",
+        f"PROCESS_STATUS={_value(data.process_status)}",
+        f"PROCESS_EXIT_CODE={_value(data.process_exit_code)}",
+        f"EMBEDDED_REPORT_ID={_value(data.embedded_report_id)}",
+        f"EMBEDDED_STATUS={_value(data.embedded_status)}",
+        f"EMBEDDED_VERDICT={_value(data.embedded_verdict)}",
+        f"RESULT_CONSISTENCY={_value(data.result_consistency)}",
         f"CLIPBOARD_COPY={_value(data.clipboard_copy)}",
         f"FINDINGS={_findings(data.findings)}",
         f"DIAGNOSTIC={_value(data.diagnostic)}",
@@ -163,6 +175,12 @@ class ReportManager:
             timeout=data.timeout,
             readonly_policy=data.readonly_policy,
             mutation_guard=data.mutation_guard,
+            process_status=data.process_status,
+            process_exit_code=data.process_exit_code,
+            embedded_report_id=data.embedded_report_id,
+            embedded_status=data.embedded_status,
+            embedded_verdict=data.embedded_verdict,
+            result_consistency=data.result_consistency,
             clipboard_copy=status,
             findings=list(data.findings),
             verdict=data.verdict,

@@ -156,9 +156,12 @@ The final report is compact and includes `RUN_ID`, `ACTION`, `TASK_ID`,
 Coordinator/Worker/Review state, tests, diff check, prompt SHA, report/log and
 associated-output paths, read-only policy, mutation guard, clipboard status,
 findings, and verdict. Complete observed output with local credential values
-redacted remains in `live.log` and, for the OpenCode audit, in
-`opencode-output.txt`. The report is persisted before copy
-is attempted, and a clipboard failure never removes it.
+redacted remains in `live.log` and, for both direct clipboard OpenCode and the
+OpenCode audit, in `opencode-output.txt`. Direct reports expose the process
+status/exit code, embedded-report fields, and `RESULT_CONSISTENCY`; a non-zero
+process remains a failure even when an embedded report says PASS. The report
+is persisted before copy is attempted, and a clipboard failure never removes
+it.
 
 ## Adding an action or template
 

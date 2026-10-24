@@ -197,6 +197,41 @@ credential values from live logs, associated output, reports, and result data,
 and never reads `.opencode/service.json` as audit input. The smoke path with
 unchanged Git state and no denied operation ends in `READ_ONLY_OK`.
 
+## GOTA-TUI-005 — Direct process and embedded report consistency
+
+The `clipboard-prompt` backend keeps two explicitly separate observations:
+the OpenCode process result and an optional embedded task report. The process
+status and exit code remain authoritative for the direct technical verdict;
+embedded report text is informational evidence only and never creates or
+changes Coordinator, TaskRun, lease, fencing, SQLite, FSM, Git, or Reviewer
+authority.
+
+The direct backend creates `opencode-output.txt` before child execution and
+persists the final captured stdout and stderr there before the compact report
+is copied. All observed channels and durable result/report data pass through
+the existing local credential redaction boundary. `GOTA_REPORT_V1` exposes the
+durable `OUTPUT_PATH` when it exists, plus `PROCESS_STATUS` and
+`PROCESS_EXIT_CODE`.
+
+Only complete, line-delimited stdout blocks with the exact shape
+`=== <ID>_REPORT_BEGIN ===` and `=== <ID>_REPORT_END ===` are parsed. A
+BEGIN without its matching END, an END without BEGIN, a loose `VERDICT` line,
+arbitrary PASS text, prompt/request content, and stderr-only markers do not
+become an embedded report. The parser preserves the original report values
+and text while conservatively normalizing only the explicit contract values
+`PASA`, `PASS`, `READ_ONLY_OK`, `SUCCEEDED`, `NO PASA`, `FAIL`, `FAILED`,
+`BLOCKED`, and `BLOQUEADO`.
+
+`RESULT_CONSISTENCY` distinguishes at least `NO_EMBEDDED_REPORT`,
+`PROCESS_AND_REPORT_PASS`, `PROCESS_AND_REPORT_FAIL`,
+`PROCESS_FAIL_REPORT_PASS`, `PROCESS_PASS_REPORT_FAIL`, and
+`INCOMPLETE_EMBEDDED_REPORT`. A non-zero process never becomes success because
+an embedded report says PASS. A zero-exit process with an explicit negative
+embedded verdict remains technically successful but is surfaced as a result
+conflict. Conflict reports show `RESULT CONFLICT — review required` and, for
+`PROCESS_FAIL_REPORT_PASS`, the diagnostic `Process failed, but the embedded
+task report declared PASS. Manual review required.`
+
 ## VIT-001R — Native OpenCode V2 permission guardrails
 
 The project configuration is `.opencode/opencode.jsonc`, resolved through the
@@ -223,10 +258,11 @@ execution, task state, leases, or persisted evidence.
 
 ## Traceability
 
-`TUI-001`–`TUI-009`, `GOTA-TUI-002`–`GOTA-TUI-004`, and `VIT-001R` map to the implementation modules and tests in
+`TUI-001`–`TUI-009`, `GOTA-TUI-002`–`GOTA-TUI-005`, and `VIT-001R` map to the implementation modules and tests in
 `tools/gota_tui/`, the `FLUJO-BHV-GOTA-TUI-001` and
 `FLUJO-BHV-GOTA-TUI-002`, `FLUJO-BHV-GOTA-TUI-003`, and
-`FLUJO-BHV-GOTA-TUI-004`, and `FLUJO-BHV-OPENCODE-PERMISSIONS-001`
+`FLUJO-BHV-GOTA-TUI-004`, `FLUJO-BHV-GOTA-TUI-005`, and
+`FLUJO-BHV-OPENCODE-PERMISSIONS-001`
 behavior-catalog entries, and the production-TUI delivery commits.
 Coordinator/Gota authority behavior remains covered by the existing
 `FLUJO-BHV-GOTA-*` and `FLUJO-BHV-OPENCODE-RUNNER-001` entries.

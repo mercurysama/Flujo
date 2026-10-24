@@ -253,6 +253,68 @@ class GotaTUIRuntimeTest(unittest.TestCase):
 
         asyncio.run(exercise())
 
+    def test_final_report_highlights_process_report_conflict(self) -> None:
+        from gota_tui.actions import ActionRegistry
+        from gota_tui.app import GotaApp
+        from gota_tui.clipboard import ClipboardReader, ClipboardWriter
+        from gota_tui.durable import DurableRunStore
+        from gota_tui.execution import ActionExecutionResult, TUIConfig
+        from gota_tui.prompt_library import PromptLibrary
+
+        async def exercise() -> None:
+            with tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                state = DurableRunStore(root / "state")
+                app = GotaApp(
+                    registry=ActionRegistry.default(),
+                    runs=state,
+                    prompts=PromptLibrary.default(),
+                    config=TUIConfig(
+                        repository=root,
+                        database=root / "coordinator.sqlite3",
+                    ),
+                    clipboard_reader=ClipboardReader(which=lambda _: None),
+                    clipboard_writer=ClipboardWriter(which=lambda _: None),
+                )
+                result = ActionExecutionResult(
+                    run_id="conflict",
+                    paths=state.paths("conflict"),
+                    report=(
+                        "GOTA_REPORT_V1\n"
+                        "PROCESS_STATUS=non_zero_exit\n"
+                        "PROCESS_EXIT_CODE=1\n"
+                        "RESULT_CONSISTENCY=PROCESS_FAIL_REPORT_PASS\n"
+                        "VERDICT=FAIL\n"
+                    ),
+                    report_path=str(state.paths("conflict").report),
+                    log_path=str(state.paths("conflict").live_log),
+                    clipboard_status="OK",
+                    clipboard_error=None,
+                    verdict="FAIL",
+                    coordinator_state="NOT_APPLICABLE",
+                    task_id="NOT_APPLICABLE",
+                    coordinator_run_id=None,
+                    diagnostic=(
+                        "Process failed, but the embedded task report declared PASS. "
+                        "Manual review required."
+                    ),
+                    process_status="non_zero_exit",
+                    process_exit_code=1,
+                    embedded_report_id="VIT_001R",
+                    embedded_status="PASA",
+                    embedded_verdict="PASA",
+                    result_consistency="PROCESS_FAIL_REPORT_PASS",
+                )
+                async with app.run_test(size=(100, 40)) as pilot:
+                    await pilot.pause()
+                    app._show_final(result)
+                    status = str(app.query_one("#status").render())
+                    self.assertIn("RESULT CONFLICT — review required", status)
+                    self.assertIn("PROCESS_FAIL_REPORT_PASS", status)
+                    self.assertTrue(app.query_one("#report-view").has_class("result-conflict"))
+
+        asyncio.run(exercise())
+
     def test_selected_audit_reads_clipboard_and_runs_with_one_enter(self) -> None:
         from flow_coordinator import OpenCodeRunResult, OpenCodeRunStatus
         from gota_tui.actions import ActionRegistry
