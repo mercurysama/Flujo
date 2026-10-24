@@ -14,6 +14,7 @@ PROCESS_FAIL_REPORT_PASS: Final[str] = "PROCESS_FAIL_REPORT_PASS"
 PROCESS_PASS_REPORT_FAIL: Final[str] = "PROCESS_PASS_REPORT_FAIL"
 INCOMPLETE_EMBEDDED_REPORT: Final[str] = "INCOMPLETE_EMBEDDED_REPORT"
 EMBEDDED_REPORT_UNCLASSIFIED: Final[str] = "EMBEDDED_REPORT_UNCLASSIFIED"
+AMBIGUOUS_EMBEDDED_REPORT: Final[str] = "AMBIGUOUS_EMBEDDED_REPORT"
 
 REPORT_PASS: Final[str] = "PASS"
 REPORT_FAIL: Final[str] = "FAIL"
@@ -48,6 +49,7 @@ class EmbeddedReport:
     status_classification: str | None
     verdict_classification: str | None
     classification: str | None
+    ambiguous: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +59,7 @@ class EmbeddedReportParse:
     report: EmbeddedReport | None
     marker_seen: bool
     incomplete: bool
+    ambiguous: bool = False
 
 
 def normalize_embedded_verdict(value: str | None) -> str | None:
@@ -72,25 +75,32 @@ def normalize_embedded_verdict(value: str | None) -> str | None:
     return None
 
 
-def _single_field(lines: list[str], pattern: re.Pattern[str]) -> str | None:
+def _single_field(
+    lines: list[str], pattern: re.Pattern[str]
+) -> tuple[str | None, bool]:
     values: list[str] = []
     for line in lines:
         match = pattern.fullmatch(line)
         if match is not None:
             values.append(match.group(1).strip())
+    if len(values) > 1:
+        return None, True
     if len(values) != 1 or not values[0]:
-        return None
-    return values[0]
+        return None, False
+    return values[0], False
 
 
 def _make_report(report_id: str, raw_text: str, body_text: str) -> EmbeddedReport:
     body_lines = body_text.splitlines()
-    status = _single_field(body_lines, _STATUS_RE)
-    verdict = _single_field(body_lines, _VERDICT_RE)
+    status, duplicate_status = _single_field(body_lines, _STATUS_RE)
+    verdict, duplicate_verdict = _single_field(body_lines, _VERDICT_RE)
+    ambiguous = duplicate_status or duplicate_verdict
     status_classification = normalize_embedded_verdict(status)
     verdict_classification = normalize_embedded_verdict(verdict)
     classification: str | None
-    if (
+    if ambiguous:
+        classification = None
+    elif (
         status_classification is not None
         and verdict_classification is not None
         and status_classification != verdict_classification
@@ -106,6 +116,7 @@ def _make_report(report_id: str, raw_text: str, body_text: str) -> EmbeddedRepor
         status_classification=status_classification,
         verdict_classification=verdict_classification,
         classification=classification,
+        ambiguous=ambiguous,
     )
 
 
@@ -153,11 +164,34 @@ def parse_embedded_report(stdout: str) -> EmbeddedReportParse:
 
     if open_id is not None:
         incomplete = True
+    ambiguous = len(complete) > 1 or any(report.ambiguous for report in complete)
     if incomplete:
-        return EmbeddedReportParse(report=None, marker_seen=marker_seen, incomplete=True)
+        return EmbeddedReportParse(
+            report=None,
+            marker_seen=marker_seen,
+            incomplete=True,
+            ambiguous=ambiguous,
+        )
     if not complete:
-        return EmbeddedReportParse(report=None, marker_seen=marker_seen, incomplete=False)
-    return EmbeddedReportParse(report=complete[-1], marker_seen=True, incomplete=False)
+        return EmbeddedReportParse(
+            report=None,
+            marker_seen=marker_seen,
+            incomplete=False,
+            ambiguous=False,
+        )
+    if len(complete) > 1:
+        return EmbeddedReportParse(
+            report=None,
+            marker_seen=True,
+            incomplete=False,
+            ambiguous=True,
+        )
+    return EmbeddedReportParse(
+        report=complete[0],
+        marker_seen=True,
+        incomplete=False,
+        ambiguous=complete[0].ambiguous,
+    )
 
 
 def result_consistency(
@@ -172,7 +206,11 @@ def result_consistency(
         return INCOMPLETE_EMBEDDED_REPORT
     report = parsed.report
     if report is None:
+        if parsed.ambiguous:
+            return AMBIGUOUS_EMBEDDED_REPORT
         return NO_EMBEDDED_REPORT
+    if parsed.ambiguous or report.ambiguous:
+        return AMBIGUOUS_EMBEDDED_REPORT
     if report.classification not in {REPORT_PASS, REPORT_FAIL}:
         return EMBEDDED_REPORT_UNCLASSIFIED
 
@@ -202,6 +240,7 @@ def conflict_diagnostic(consistency: str) -> str | None:
 
 
 __all__ = [
+    "AMBIGUOUS_EMBEDDED_REPORT",
     "EMBEDDED_REPORT_UNCLASSIFIED",
     "EmbeddedReport",
     "EmbeddedReportParse",

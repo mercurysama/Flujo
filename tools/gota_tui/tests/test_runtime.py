@@ -315,6 +315,65 @@ class GotaTUIRuntimeTest(unittest.TestCase):
 
         asyncio.run(exercise())
 
+    def test_historical_report_recalculates_result_conflict_in_both_directions(self) -> None:
+        from gota_tui.actions import ActionRegistry
+        from gota_tui.app import GotaApp
+        from gota_tui.clipboard import ClipboardReader, ClipboardWriter
+        from gota_tui.durable import DurableRunStore
+        from gota_tui.execution import TUIConfig
+        from gota_tui.prompt_library import PromptLibrary
+
+        async def exercise() -> None:
+            with tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                state = DurableRunStore(root / "state")
+                conflict_report = (
+                    "GOTA_REPORT_V1\n"
+                    "RESULT_CONSISTENCY=PROCESS_FAIL_REPORT_PASS\n"
+                )
+                normal_report = "GOTA_REPORT_V1\nRESULT_CONSISTENCY=NO_EMBEDDED_REPORT\n"
+                for run_id, report in (
+                    ("conflict", conflict_report),
+                    ("normal", normal_report),
+                ):
+                    state.paths(run_id).directory.mkdir(parents=True)
+                    state.persist_report(run_id, report)
+                app = GotaApp(
+                    registry=ActionRegistry.default(),
+                    runs=state,
+                    prompts=PromptLibrary.default(),
+                    config=TUIConfig(
+                        repository=root,
+                        database=root / "coordinator.sqlite3",
+                    ),
+                    clipboard_reader=ClipboardReader(which=lambda _: None),
+                    clipboard_writer=ClipboardWriter(which=lambda _: None),
+                )
+
+                async with app.run_test(size=(100, 40)) as pilot:
+                    await pilot.pause()
+                    report_view = app.query_one("#report-view")
+
+                    app._history = [{"run_id": "conflict"}]
+                    app._history_index = 0
+                    app._screen = "history"
+                    app.action_open_report()
+                    self.assertTrue(report_view.has_class("result-conflict"))
+
+                    app._history = [{"run_id": "normal"}]
+                    app._history_index = 0
+                    app._screen = "history"
+                    app.action_open_report()
+                    self.assertFalse(report_view.has_class("result-conflict"))
+
+                    app._history = [{"run_id": "conflict"}]
+                    app._history_index = 0
+                    app._screen = "history"
+                    app.action_open_report()
+                    self.assertTrue(report_view.has_class("result-conflict"))
+
+        asyncio.run(exercise())
+
     def test_selected_audit_reads_clipboard_and_runs_with_one_enter(self) -> None:
         from flow_coordinator import OpenCodeRunResult, OpenCodeRunStatus
         from gota_tui.actions import ActionRegistry

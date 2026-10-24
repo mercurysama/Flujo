@@ -213,14 +213,16 @@ the existing local credential redaction boundary. `GOTA_REPORT_V1` exposes the
 durable `OUTPUT_PATH` when it exists, plus `PROCESS_STATUS` and
 `PROCESS_EXIT_CODE`.
 
-Only complete, line-delimited stdout blocks with the exact shape
-`=== <ID>_REPORT_BEGIN ===` and `=== <ID>_REPORT_END ===` are parsed. A
-BEGIN without its matching END, an END without BEGIN, a loose `VERDICT` line,
-arbitrary PASS text, prompt/request content, and stderr-only markers do not
-become an embedded report. The parser preserves the original report values
-and text while conservatively normalizing only the explicit contract values
-`PASA`, `PASS`, `READ_ONLY_OK`, `SUCCEEDED`, `NO PASA`, `FAIL`, `FAILED`,
-`BLOCKED`, and `BLOQUEADO`.
+Only one complete, line-delimited stdout block with the exact shape
+`=== <ID>_REPORT_BEGIN ===` and `=== <ID>_REPORT_END ===` is parsed. More than
+one complete block is ambiguous, including repeated identical blocks. A
+duplicate `STATUS` or `VERDICT` line is also structurally ambiguous, even when
+the duplicate values are identical. A BEGIN without its matching END, an END
+without BEGIN, a loose `VERDICT` line, arbitrary PASS text, prompt/request
+content, and stderr-only markers do not become an embedded report. The parser
+preserves the original report values and text while conservatively normalizing
+only the explicit contract values `PASA`, `PASS`, `READ_ONLY_OK`, `SUCCEEDED`,
+`NO PASA`, `FAIL`, `FAILED`, `BLOCKED`, and `BLOQUEADO`.
 
 `RESULT_CONSISTENCY` distinguishes at least `NO_EMBEDDED_REPORT`,
 `PROCESS_AND_REPORT_PASS`, `PROCESS_AND_REPORT_FAIL`,
@@ -231,6 +233,10 @@ embedded verdict remains technically successful but is surfaced as a result
 conflict. Conflict reports show `RESULT CONFLICT — review required` and, for
 `PROCESS_FAIL_REPORT_PASS`, the diagnostic `Process failed, but the embedded
 task report declared PASS. Manual review required.`
+Ambiguous embedded evidence is classified as `AMBIGUOUS_EMBEDDED_REPORT` and
+never becomes `PROCESS_AND_REPORT_PASS`. Whenever the visible final or
+historical report changes, the `result-conflict` visual state is recalculated
+from the newly displayed report.
 
 ## VIT-001R — Native OpenCode V2 permission guardrails
 

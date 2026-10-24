@@ -11,6 +11,7 @@ from flow_coordinator import OpenCodeRunResult, OpenCodeRunStatus
 from gota_tui.actions import ActionRegistry
 from gota_tui.durable import DurableRunStore
 from gota_tui.embedded_report import (
+    AMBIGUOUS_EMBEDDED_REPORT,
     EMBEDDED_REPORT_UNCLASSIFIED,
     INCOMPLETE_EMBEDDED_REPORT,
     NO_EMBEDDED_REPORT,
@@ -186,6 +187,54 @@ class GotaTUIResultConsistencyTest(unittest.TestCase):
             ),
             NO_EMBEDDED_REPORT,
         )
+
+    def test_multiple_complete_reports_are_ambiguous_even_when_identical(self) -> None:
+        parsed = parse_embedded_report(
+            _report("DUPLICATE", "PASA", "PASA")
+            + _report("DUPLICATE", "PASA", "PASA")
+        )
+        self.assertTrue(parsed.ambiguous)
+        self.assertIsNone(parsed.report)
+        self.assertEqual(
+            result_consistency(
+                process_status="invalid_payload",
+                process_exit_code=0,
+                parsed=parsed,
+            ),
+            AMBIGUOUS_EMBEDDED_REPORT,
+        )
+
+    def test_duplicate_status_or_verdict_is_ambiguous_even_when_identical(self) -> None:
+        for duplicate_field in ("STATUS", "VERDICT"):
+            with self.subTest(duplicate_field=duplicate_field):
+                report = _report("DUPLICATE", "PASA", "PASA")
+                report = report.replace(
+                    f"{duplicate_field}=PASA\n",
+                    f"{duplicate_field}=PASA\n{duplicate_field}=PASA\n",
+                )
+                parsed = parse_embedded_report(report)
+                self.assertTrue(parsed.ambiguous)
+                self.assertIsNotNone(parsed.report)
+                self.assertEqual(
+                    result_consistency(
+                        process_status="invalid_payload",
+                        process_exit_code=0,
+                        parsed=parsed,
+                    ),
+                    AMBIGUOUS_EMBEDDED_REPORT,
+                )
+
+    def test_ambiguous_report_never_overrides_process_failure(self) -> None:
+        result, _state, _output_path, _copied = self._run_direct(
+            stdout=_report("DUPLICATE", "PASA", "PASA").replace(
+                "STATUS=PASA\n", "STATUS=PASA\nSTATUS=PASA\n"
+            ),
+            status=OpenCodeRunStatus.NON_ZERO_EXIT,
+            exit_code=1,
+            run_id="ambiguous-process-failure",
+        )
+        self.assertEqual(result.verdict, "FAIL")
+        self.assertEqual(result.result_consistency, AMBIGUOUS_EMBEDDED_REPORT)
 
     def test_prompt_only_fake_report_is_not_input_to_parser(self) -> None:
         prompt = _report("FAKE", "PASA", "PASA")

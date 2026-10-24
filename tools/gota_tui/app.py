@@ -21,6 +21,12 @@ from .prompt_library import PromptLibrary, PromptTemplateError
 from .reporting import ReportManager
 
 
+_RESULT_CONFLICT_CONSISTENCIES: frozenset[str] = frozenset(
+    {"PROCESS_FAIL_REPORT_PASS", "PROCESS_PASS_REPORT_FAIL"}
+)
+_RESULT_CONSISTENCY_PREFIX = "RESULT_CONSISTENCY="
+
+
 class GotaApp(App[None]):
     """The UI owns navigation only; Coordinator owns task truth."""
 
@@ -270,6 +276,24 @@ class GotaApp(App[None]):
         else:
             self._set_status("Coordinator state is authoritative; exit=0 is not DONE.")
 
+    def _update_report_view(
+        self, report: str, result_consistency: str | None = None
+    ) -> None:
+        report_view = self.query_one("#report-view", Static)
+        report_view.remove_class("result-conflict")
+        conflict = result_consistency in _RESULT_CONFLICT_CONSISTENCIES
+        if not conflict:
+            for line in report.splitlines():
+                if not line.startswith(_RESULT_CONSISTENCY_PREFIX):
+                    continue
+                visible_consistency = line[len(_RESULT_CONSISTENCY_PREFIX) :]
+                if visible_consistency in _RESULT_CONFLICT_CONSISTENCIES:
+                    conflict = True
+                    break
+        if conflict:
+            report_view.add_class("result-conflict")
+        report_view.update(Text(report))
+
     def _show_final(self, result: ActionExecutionResult) -> None:
         self._screen = "final"
         self._result = result
@@ -280,14 +304,7 @@ class GotaApp(App[None]):
         self._set_visible("report-view")
         self._set_hidden("action-list", "prompt-view", "live-log")
         self.query_one("#screen-title", Static).update("GOTA  ·  Final report")
-        report_view = self.query_one("#report-view", Static)
-        report_view.remove_class("result-conflict")
-        if result.result_consistency in {
-            "PROCESS_FAIL_REPORT_PASS",
-            "PROCESS_PASS_REPORT_FAIL",
-        }:
-            report_view.add_class("result-conflict")
-        report_view.update(Text(result.report))
+        self._update_report_view(result.report, result.result_consistency)
         copy_status = result.clipboard_status
         if result.clipboard_error:
             copy_status += f" ({result.clipboard_error})"
@@ -568,7 +585,7 @@ class GotaApp(App[None]):
         self._set_visible("report-view")
         self._set_hidden("action-list", "prompt-view", "live-log")
         self.query_one("#screen-title", Static).update("GOTA  ·  Historical report")
-        self.query_one("#report-view", Static).update(Text(report))
+        self._update_report_view(report)
         self._set_status("Historical report is durable. C copies; Escape returns to history.")
 
     def action_open_prompt(self) -> None:

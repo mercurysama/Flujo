@@ -644,12 +644,14 @@
       "area": "Direct OpenCode process and embedded task-report consistency",
       "precondition": "The clipboard-prompt backend has an injected or real OpenCode result with captured stdout/stderr and may contain a complete delimited task report.",
       "public_action": "Execute one direct clipboard prompt and inspect the durable output, result JSON, GOTA_REPORT_V1 report, and final TUI status.",
-      "expected_result": "The process status/exit code and optional stdout embedded report remain separate; complete reports are informational evidence, non-zero exit never becomes success, conflicts are explicit, and direct stdout is durably redacted before report copy.",
+      "expected_result": "The process status/exit code and optional stdout embedded report remain separate; exactly one complete report is informational evidence, ambiguous complete reports or duplicate STATUS/VERDICT lines are rejected as ambiguous, non-zero exit never becomes success, conflicts are explicit, and direct stdout is durably redacted before report copy.",
       "invariants": [
-        "Only complete stdout markers for one report ID are parsed; prompt/request text, stderr-only markers, loose verdict words, and incomplete marker pairs are not accepted as complete reports.",
+        "Only one complete stdout report is parsed; prompt/request text, stderr-only markers, loose verdict words, and incomplete marker pairs are not accepted as complete reports.",
+        "More than one complete report and duplicate STATUS or VERDICT lines are structurally ambiguous even when their values are identical; ambiguous evidence never becomes PROCESS_AND_REPORT_PASS.",
         "The process exit result remains the technical verdict authority and the Coordinator/Gota/SQLite authority is unchanged.",
         "Original embedded ID/status/verdict text is preserved alongside conservative classification, while unrecognized text cannot infer PASS or FAIL.",
-        "opencode-output.txt exists before report copy and local credentials are redacted in live.log, opencode-output.txt, report.txt, and result.json."
+        "opencode-output.txt exists before report copy and local credentials are redacted in live.log, opencode-output.txt, report.txt, and result.json.",
+        "The result-conflict visual state is recalculated whenever a final or historical visible report changes."
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
@@ -658,7 +660,7 @@
         "tools/gota_tui/tests/test_core.py",
         "tools/gota_tui/tests/test_runtime.py"
       ],
-      "notes": "Authorized behavior correction GOTA-TUI-005 for the VIT-001R ambiguity. The focal injected-runner suite covers process/report pass and fail combinations, incomplete and loose markers, prompt-only fake markers, stdout-versus-stderr selection, direct durable-output ordering, and redaction; the existing TUI suites protect clipboard, audit, history, report-copy, and Coordinator boundaries."
+      "notes": "Authorized behavior correction GOTA-TUI-005F for conservative embedded-report ambiguity and stale result-conflict UI state. The focal injected-runner suite covers process/report pass and fail combinations, incomplete and loose markers, prompt-only fake markers, stdout-versus-stderr selection, multiple reports, duplicate STATUS/VERDICT lines, direct durable-output ordering, and redaction; the runtime suite covers conflict/history recalculation; the existing TUI suites protect clipboard, audit, history, report-copy, and Coordinator boundaries."
     },
     {
       "id": "FLUJO-BHV-OPENCODE-PERMISSIONS-001",
