@@ -16,6 +16,12 @@ permissions:
   - action: grep
     resource: "*"
     effect: allow
+  - action: read
+    resource: ".opencode/service.json"
+    effect: deny
+  - action: read
+    resource: "**/.opencode/service.json"
+    effect: deny
 
 ---
 

@@ -5,7 +5,40 @@ steps: 80
 permissions:
   - action: shell
     resource: "*"
-    effect: ask
+    effect: allow
+  - action: shell
+    resource: "git *"
+    effect: deny
+  - action: shell
+    resource: "git push *"
+    effect: deny
+  - action: shell
+    resource: "git reset *"
+    effect: deny
+  - action: shell
+    resource: "git clean *"
+    effect: deny
+  - action: shell
+    resource: "git rebase *"
+    effect: deny
+  - action: shell
+    resource: "git merge *"
+    effect: deny
+  - action: shell
+    resource: "git checkout *"
+    effect: deny
+  - action: shell
+    resource: "git switch *"
+    effect: deny
+  - action: shell
+    resource: "git restore *"
+    effect: deny
+  - action: shell
+    resource: "git pull *"
+    effect: deny
+  - action: shell
+    resource: "git fetch *"
+    effect: deny
   - action: shell
     resource: "git status *"
     effect: allow
@@ -23,12 +56,21 @@ permissions:
     effect: allow
   - action: shell
     resource: "git add *"
-    effect: ask
+    effect: allow
   - action: shell
     resource: "git commit *"
-    effect: ask
+    effect: allow
   - action: shell
-    resource: "git push *"
+    resource: "git commit --amend *"
+    effect: deny
+  - action: external_directory
+    resource: "*"
+    effect: deny
+  - action: read
+    resource: ".opencode/service.json"
+    effect: deny
+  - action: read
+    resource: "**/.opencode/service.json"
     effect: deny
   - action: edit
     resource: "*"

@@ -197,14 +197,39 @@ credential values from live logs, associated output, reports, and result data,
 and never reads `.opencode/service.json` as audit input. The smoke path with
 unchanged Git state and no denied operation ends in `READ_ONLY_OK`.
 
+## VIT-001R — Native OpenCode V2 permission guardrails
+
+The project configuration is `.opencode/opencode.jsonc`, resolved through the
+same `OPENCODE_CONFIG_DIR=.opencode` boundary used by `OpenCodeRunner`. The
+effective OpenCode 2.0.32 configuration, rather than the JSON source alone, is
+the authority and is inspected with `opencode debug config` and
+`opencode debug agents`.
+
+The built-in `build` agent retains ordinary repository development capabilities:
+read, glob, grep, edit, test shell commands, Git status/diff/log inspection,
+`git add`, and authorized local `git commit`. Its effective policy denies
+external directories, `.opencode/service.json`, pushes, and destructive Git
+operations including reset, clean, rebase, merge, checkout, switch, restore,
+and commit amend. The `gota-worker` policy has no effective ASK barrier under
+`--auto`: normal test/edit/status/diff/add/commit operations are allowed, while
+destructive or remote Git operations, external directories, and the protected
+service path are explicitly denied.
+
+The existing `gota-auditor` and `gota-reviewer` policies remain read-only. The
+auditor retains its deny-by-default shell policy and protected service path; the
+reviewer retains read/glob/grep only and explicitly denies the protected service
+path. This change does not alter Coordinator or SQLite authority, runtime
+execution, task state, leases, or persisted evidence.
+
 ## Traceability
 
-`TUI-001`–`TUI-009` and `GOTA-TUI-002`–`GOTA-TUI-004` map to the implementation modules and tests in
+`TUI-001`–`TUI-009`, `GOTA-TUI-002`–`GOTA-TUI-004`, and `VIT-001R` map to the implementation modules and tests in
 `tools/gota_tui/`, the `FLUJO-BHV-GOTA-TUI-001` and
 `FLUJO-BHV-GOTA-TUI-002`, `FLUJO-BHV-GOTA-TUI-003`, and
-`FLUJO-BHV-GOTA-TUI-004` behavior-catalog entries, and the production-TUI
-delivery commits. Coordinator/Gota authority behavior remains covered by the
-existing `FLUJO-BHV-GOTA-*` and `FLUJO-BHV-OPENCODE-RUNNER-001` entries.
+`FLUJO-BHV-GOTA-TUI-004`, and `FLUJO-BHV-OPENCODE-PERMISSIONS-001`
+behavior-catalog entries, and the production-TUI delivery commits.
+Coordinator/Gota authority behavior remains covered by the existing
+`FLUJO-BHV-GOTA-*` and `FLUJO-BHV-OPENCODE-RUNNER-001` entries.
 
 ## Decisions and limitations
 

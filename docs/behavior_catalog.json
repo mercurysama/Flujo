@@ -638,6 +638,23 @@
       "baseline_status": "passing",
       "test_paths": ["tools/gota_tui/tests/test_core.py", "tools/gota_tui/tests/test_runtime.py"],
       "notes": "Authorized behavior correction GOTA-TUI-004. Focal injected-runner regressions cover allowed git status/log shapes, chained and piped read denials, unittest denial, commit/push/edit/write/patch mutation denials, real snapshot mutation, protected service.json policy, false-secret redaction, and unchanged smoke behavior."
+    },
+    {
+      "id": "FLUJO-BHV-OPENCODE-PERMISSIONS-001",
+      "area": "OpenCode V2 project permission guardrails",
+      "precondition": "OpenCode 2.0.32 resolves the repository's .opencode project configuration and canonical Gota agents.",
+      "public_action": "Inspect opencode debug config and opencode debug agents, then resolve an agent action against its effective ordered permissions.",
+      "expected_result": "Build and Worker retain authorized repository editing, test, status, diff, add, and commit operations while explicit remote or destructive Git operations, external directories, and service.json reads are denied; Auditor and Reviewer remain read-only.",
+      "invariants": [
+        "The project configuration is loaded from .opencode/opencode.jsonc through the same OPENCODE_CONFIG_DIR used by OpenCodeRunner.",
+        "No ASK rule is relied upon as a security boundary under --auto; denied Build and Worker operations resolve to deny.",
+        "Auditor and Reviewer retain their existing read-only effective permissions, including Auditor protection of .opencode/service.json.",
+        "Coordinator and SQLite remain the operational authority; this policy does not add task, lease, evidence, or database behavior."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tools/gota_tui/tests/test_opencode_permissions.py"],
+      "notes": "Authorized VIT-001R behavior correction. The focal uses OpenCode 2.0.32's resolved debug output rather than parsing temporary or synthetic configurations; final status is updated only after the effective-policy smoke passes."
     }
   ]
 }
