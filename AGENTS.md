@@ -1,113 +1,78 @@
-# Project
+# Flujo project authority
 
-- Flujo is a visual programming plugin for Godot.
-- Target version: Godot 4.7.2 stable.
-- License: MIT.
-- Public UI text is written in English.
-- User-facing tooltips will support localization separately.
+- Flujo is a visual programming plugin for Godot 4.7.2 stable, licensed MIT.
+- Public UI text is English; localization of user-facing tooltips is separate.
+- This file is a stable authority and index. Do not store HEAD, branch, commits,
+  current iteration state, temporary plans, or other volatile state here.
 
-# Architecture
+## Essential architecture
 
-- Runtime code belongs under `addons/vp_flujo/runtime/`.
-- Runtime code must never depend on editor-only APIs.
-- Editor code belongs under `addons/vp_flujo/editor/`.
-- Scripts executed by the editor must use `@tool`.
-- User-created packages must remain outside the plugin directory under `res://flow_packages/<package_id>/`.
-- At the start of every task, read `docs/constitution.md`, `docs/current_iteration.md`, and the applicable contract before changing files. Read `docs/model_contract.md` before changing the persistent model.
+- Runtime code belongs under `addons/vp_flujo/runtime/` and never depends on
+  editor-only APIs.
+- Editor code belongs under `addons/vp_flujo/editor/`; editor-executed scripts
+  use `@tool`.
+- User-created packages stay outside the plugin at
+  `res://flow_packages/<package_id>/`.
+- Coordinator owns operational orchestration. SQLite is the durable authority
+  for TaskRun, lease, fencing, attempt, checkpoint, evidence, and state.
+- The TUI is a facade over Coordinator/Gota boundaries, not a second task
+  state machine. It must not mirror or bypass Coordinator or SQLite authority.
 
-# Model Rules
+## Critical invariants
 
-- Use static typing.
-- Persistent model classes use the `Flow` prefix.
-- Avoid names that hide native Godot classes.
-- Stable internal IDs are generated through `FlowId`.
-- Internal IDs are serialized with `@export_storage` and hidden from the Inspector.
-- References use internal IDs, never display names or `Array` indexes.
-- Preserve `Array` order and deliberate null positions.
-- Duplication must create new IDs without modifying the original.
-- Duplication of related objects must use an old-ID to new-ID map.
-- Preserve `schema_version` compatibility.
-- Do not change `schema_version` without an implemented and tested migration.
+- Persistent model classes use the `Flow` prefix, static typing, and names that
+  do not hide native Godot classes.
+- Stable IDs come from `FlowId`; references use IDs, never display names or
+  array indexes. Preserve order and deliberate null positions.
+- Duplication creates independent new IDs and remaps related references through
+  an old-ID to new-ID map without modifying the source.
+- Preserve schema compatibility. A schema change requires an implemented,
+  tested migration. Runtime/editor and portable-runtime boundaries remain
+  separate.
+- Implement only the authorized step and smallest coherent scope. Do not
+  rename internal `VP`/`PV` paths or change F4, dock, runtime, schema, or
+  Inspector behavior without explicit authorization.
 
-# Task context
+## Authority, security, and Git safety
 
-- `docs/current_iteration.md` and the applicable contract are the mandatory sources for the current branch, supported schemas, implemented scope, deferred work, and next task.
-- Do not duplicate dynamic iteration state in this file.
+- The delivery path is native OpenCode Plan → explicit human approval →
+  Build/Worker → read-only Reviewer/Auditor; the gate and handoff rules live
+  in the canonical development workflow below.
+- Human maintainers authorize scope and integration. No agent, TUI, or local
+  report creates a parallel authority.
+- Never read, copy, log, expose, or commit credentials. `.opencode/service.json`
+  and equivalent credential paths are protected; redaction is required for
+  durable output. Do not use external directories or add secrets, telemetry,
+  or undisclosed network dependencies.
+- Preserve unrelated user changes. Never use `reset`, `clean`, `checkout`,
+  `switch`, `restore`, `rebase`, `merge`, commit amend, push, or ref mutation
+  as recovery. Stop on a protected-path conflict, unsafe Git state, or missing
+  authority; commits and integration require explicit authorization. Never
+  commit machine-specific absolute paths; tool paths belong in user config.
 
-# Scope Control
+## Canonical map
 
-- Every change begins by updating or confirming the applicable numbered specification. Follow the complete governance sequence in [`docs/development_workflow.md`](docs/development_workflow.md).
-- Inspect existing code before editing.
-- Implement only the explicitly requested step.
-- Prefer the smallest coherent change.
-- Do not refactor unrelated code.
-- Do not rename existing internal `VP` or `PV` paths/classes unless explicitly requested.
-- Do not modify F4 behavior, dock visibility, runtime execution, schema migration, or Inspector UI unless the task explicitly requests it.
-- Do not perform commits, pushes, merges, rebases, or pull requests unless explicitly requested.
+- Principles: [`docs/constitution.md`](docs/constitution.md).
+- Governance and delivery: [`docs/development_workflow.md`](docs/development_workflow.md).
+- Active human iteration handoff: [`docs/current_iteration.md`](docs/current_iteration.md).
+- Persistent model contract: [`docs/model_contract.md`](docs/model_contract.md).
+- Production Godot authority: [`docs/production_godot_contract.md`](docs/production_godot_contract.md).
+- Gota TUI contract: [`docs/gota_tui_contract.md`](docs/gota_tui_contract.md).
+- Behavior evidence catalog: [`docs/behavior_catalog.json`](docs/behavior_catalog.json).
+- Verification gates: invoke `$flujo-baseline` before implementation and
+  `$flujo-prove` before an authorized commit. These are verification gates,
+  not alternate authority or permission to mutate the repository.
 
-## Required technical justification and traceability
+## Critical validation
 
-- Every delivery records a verifiable justification: what changed, why it was chosen, relevant alternatives rejected, protected invariants, risks, limitations, and test or review evidence.
-- Maintain an explicit trace from requirement to task, code, test, and commit. Link or name each artifact precisely enough to audit it.
-- Record only externally reviewable decisions and evidence. Do not request, infer, or store an agent's private internal reasoning.
-- Each report includes only engineering-flow metrics available automatically from task evidence. Use `unknown` or `not measured` for unavailable values; never estimate, invent, or use metrics to classify individuals. See [`docs/engineering_metrics.md`](docs/engineering_metrics.md).
-
-## Behavior-preserving change protocol
-
-- Explicitly invoke `$flujo-baseline` before any functional correction, implementation on existing code, or refactor. Explicitly invoke `$flujo-prove` at completion before committing. Automatic skill discovery or merely reading these names does not satisfy either gate. Their versioned sources live under `tools/agent_skills/`; local discovery links do not authorize edits or Git mutations.
-- Before modifying an area, characterize its public behavior against the versioned [`docs/behavior_catalog.json`](docs/behavior_catalog.json). Add or correct a catalog entry when the area is absent or the recorded evidence is inaccurate.
-- Run the catalogued focal baseline before editing. A failing baseline is evidence, not permission to weaken a test or silently redefine behavior; record it and keep the failure separate from the proposed change.
-- Make the smallest reviewable change. After each meaningful extraction or behavior-preserving step, rerun the affected focal tests before continuing.
-- At completion, rerun the affected focal tests and the proportionate model, persistence, runtime, and editor regressions for the touched boundaries.
-- An intentional public-behavior change must update the catalog and its automated or manual evidence in a separate commit from a behavior-preserving refactor. The behavior-change commit must state the authorized contract change.
-- Catalog entries distinguish `automatic`, `manual`, and `missing` coverage. A test path proves only that an artifact exists; its recorded baseline status must not claim success when the test fails or has not been run.
-- Temporary outputs belong under ignored locations such as `.godot/flujo_tests/`. The catalog, its validator, and validator tests remain versioned outside `addons/vp_flujo/` so they are excluded from the installable plugin ZIP.
-
-# Verification
-
-- Run `git diff --check`.
-- For all authoritative Godot commands below, use the production resolver prefix `PYTHONDONTWRITEBYTECODE=1 python3 -B tools/godot/resolve_godot.py --` in place of `godot`.
-- Run the behavior catalog validator with that prefix followed by `--headless --path . --script tests/governance/behavior_catalog_validator_test.gd`.
-- Run the selected Godot command with `--headless --editor --path . --quit-after 5`.
-- Run the selected Godot command with `--headless --path . tests/model/flow_model_smoke_test.tscn`.
-- The mist test must print `[Flujo] Model mist test passed`. The existing `flow_model_smoke_test.tscn` scene loads `flow_model_mist_test.gd` and remains the compatible command entry point.
-- Report warnings separately from project errors.
-- Known baseline debt: the Godot diagnostic `ERROR: Index dragger_index = 2 is out of bounds` at `update_position (scene/gui/split_container.cpp:124)` is pre-existing BASELINE DEBT. When the command exits normally with code 0 and the relevant tests pass, record this diagnostic separately; do not attribute it to the current Gota and do not increment that Gota's failure counter. This exception does not authorize a repair and does not cover other errors, failed tests, abnormal termination, or demonstrated regressions. The existing `Scan thread aborted` rule remains unchanged.
-- Report every modified file and the final Git status.
-
-# Visual Review
-
-- Any change that alters the Inspector, dock, controls, visible ordering, focus, shortcuts, or editor interaction requires a manual check in Godot.
-- When applicable, the review includes the empty state, the result after an action, undo/redo, keyboard navigation, save/reopen, and selection changes.
-- Headless tests do not replace visual review.
-- An internal class does not require visual review unless it produces or changes a visible representation.
-
-# Fedora Flatpak Environment
-
-- Production authority on every host is governed by [GODOT-PIN-001–003](docs/production_godot_contract.md): `FLUJO_GODOT_BIN` when present, otherwise the canonical XDG/HOME pinned executable. `tools/godot/resolve_godot.py` validates the exact `4.7.2.stable.official.ed1daf0bf` version and fails closed. No PATH or Flatpak fallback is authorized for production. Baseline and prove must use this same resolver for every authoritative invocation, including focal tests.
-- SYSTEM is a separate, explicitly requested compatibility/diagnostic lane, not production authority. FUTURE versions such as 4.8 are tested in parallel before changing the supported minimum.
-- Only for opt-in SYSTEM compatibility on Fedora, select the executor in this order. Confirm every selected executor reports Godot 4.7.2 before using it; Fedora builds cannot satisfy production authority.
-  1. Use native `godot` when it is available in `PATH` and `godot --version` reports 4.7.2.
-  2. If Codex runs inside the VS Code Flatpak, use `flatpak-spawn --host flatpak run org.godotengine.Godot` when native Godot is unavailable or is not 4.7.2. VS Code uses `com.visualstudio.code` and Godot uses `org.godotengine.Godot`.
-  3. If Flatpak is available directly, use `flatpak run org.godotengine.Godot` when neither prior executor works.
-  4. If none of these executors works with Godot 4.7.2, stop and report the failure. Do not invent paths or reuse Windows paths.
-- Native Godot version: `godot --version`
-- Native headless editor load: `godot --headless --editor --path . --quit-after 5`
-- Native model mist test: `godot --headless --path . tests/model/flow_model_smoke_test.tscn`
-- Host Flatpak version: `flatpak-spawn --host flatpak run org.godotengine.Godot --version`
-- Host Flatpak headless editor load: `flatpak-spawn --host flatpak run org.godotengine.Godot --headless --editor --path . --quit-after 5`
-- Host Flatpak model mist test: `flatpak-spawn --host flatpak run org.godotengine.Godot --headless --path . tests/model/flow_model_smoke_test.tscn`
-- Direct Flatpak version: `flatpak run org.godotengine.Godot --version`
-- Direct Flatpak headless editor load: `flatpak run org.godotengine.Godot --headless --editor --path . --quit-after 5`
-- Direct Flatpak model mist test: `flatpak run org.godotengine.Godot --headless --path . tests/model/flow_model_smoke_test.tscn`
-- `WARNING: Scan thread aborted...` is acceptable only when the headless load exits with code 0 and the warning corresponds to the planned shutdown.
-
-# Portability and Safety
-
-- Runtime behavior must remain portable to Godot-supported export platforms.
-- Do not introduce platform-specific runtime dependencies.
-- Do not add secrets, credentials, telemetry, or external network dependencies.
-- Never commit machine-specific absolute paths in shared configuration.
-- Tool paths belong in user configuration.
-- Report every emerging error, read/write failure, denied permission, or fallback recovery in the final report.
-- If the same resource fails twice, stop and report it even if an alternative exists. Only actual failures attributable to the current Gota increment that Gota's failure counter; the known baseline debt exception above does not count as a resource failure when its conditions are met.
+- Before changing files, read the Constitution, active iteration handoff, and
+  applicable contract; read the model contract before persistent-model work.
+- Use the production resolver and exact-version rules in the canonical Godot
+  contract; never substitute PATH or Flatpak for production authority.
+- Run the applicable catalog validator, focal regressions, `git diff --check`,
+  and required editor/model checks. Headless checks do not replace applicable
+  visual review. Report warnings, project errors, baseline debt, modified
+  files, and final Git status separately.
+- Follow the complete canonical workflow, report externally reviewable evidence
+  only, and stop after two equivalent failures of the same resource under the
+  repository rules.
