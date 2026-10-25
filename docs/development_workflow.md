@@ -161,6 +161,87 @@ whether a change is accepted. Coordinator and SQLite remain the operational
 authority for formal Gota execution; Reviewer and Auditor do not edit or
 rewrite that authority.
 
+## VIT-003 — Native agent pool and delegation policy
+
+VIT-003 uses the effective OpenCode 2.0.32 project configuration through
+`OPENCODE_CONFIG_DIR=.opencode`. The native ordered permission form is
+`agents.<agent>.permissions`, with the last matching rule determining the
+effective result. No custom agent, agent manager, scheduler, daemon, worktree
+pool, or delegation-depth increase is introduced.
+
+### VIT003-01 — Delegation boundary
+
+Delegation is deny-by-default. The only allowed subagent edges are:
+
+- `Plan → Explore`;
+- `Build → Explore`.
+
+`Plan → General`, `Build → General`, and `Plan`/`Build` to any Gota agent
+(`gota-worker`, `gota-reviewer`, or `gota-auditor`) are denied. `Explore` and
+`General` cannot invoke any subagent. The three Gota agents cannot invoke any
+subagent and remain primary agents; their definitions are not replaced or
+converted into subagents. The native default nesting depth is unchanged.
+
+The native `Explore` agent is hardened in project configuration without a
+duplicate agent. Its effective capabilities are limited to `read`, `glob`, and
+`grep`; `edit`, `shell`, `external_directory`, `subagent`, browser/network
+inspection, and skill use remain denied. `.opencode/service.json` and nested
+copies of that protected path are explicitly denied. Existing environment-file
+guards remain in force. If a future OpenCode version cannot resolve this policy
+through the effective project configuration, the policy must fail closed rather
+than inventing a replacement Explore agent.
+
+`General` remains outside the initial pool and its native definition is not
+changed. It is not the Flujo investigator.
+
+### VIT003-02 — Pool, mutability, and authority
+
+The canonical worktree rule is:
+
+`ONE_MUTABLE_WRITER_PER_WORKTREE`
+
+Within one repository/worktree, only one `MUTABLE` agent may perform mutable
+work at a time. `MUTABLE` means `Build`, `gota-worker`, and `General` by native
+capability. `READ_ONLY / REVIEW` means `Plan`, `Explore`, `gota-reviewer`, and
+`gota-auditor`. Coordinator and SQLite remain operational authority and do not
+count as worktree writers.
+
+The operational pool has these ceilings and valid topologies:
+
+- **NORMAL:** ceiling `2`, ordinarily `1`. Valid forms are `Plan`,
+  `Plan → Explore`, `Build`, and `Build → Explore`. Formal Gota remains
+  sequential: `Coordinator → gota-worker → Coordinator verification →
+  gota-reviewer`.
+- **BURST:** ceiling `3`, only when two genuinely independent read-only
+  questions exist. For example, `Plan → Explore A` and `Explore B`, with Plan
+  consolidating the results. It never uses two mutable agents and never runs
+  Worker and Reviewer simultaneously.
+- **MAX:** ceiling `4`, only with explicit justification and a stable
+  snapshot: one principal plus up to three read-only agents. General is not in
+  the initial pool. MAX is exceptional, not a permanent pool, daemon, or
+  scheduler.
+
+On modest hardware, sequential work uses one agent. Explore is started only
+when it reduces real discovery work; agents are not launched for appearance,
+multiple heavy models are avoided, each unit ends when its work ends, BURST
+requires independent questions, and no new resident process is created. The
+Plan-only versus Plan-plus-Explore and Build-only versus Build-plus-Explore
+benchmark is deferred until this policy has been validated.
+
+Failure handling is explicit: an optional Explore failure uses
+`FALLBACK_TO_PRIMARY` or `IGNORE_AND_CONTINUE`; an Explore result required for
+scope or acceptance causes `REPLAN_REQUIRED`; a mutation attempt by a
+read-only agent causes `STOP`; a relevant contradiction causes
+`REPLAN_REQUIRED`; Worker recovery occurs only through Coordinator; Reviewer
+retry starts only from a valid Coordinator `REVIEW` boundary; and an Auditor
+mutation-guard failure causes `STOP` / manual review. No agent changes
+operational authority.
+
+The Agent Pool cannot accept `TaskRun`, create states, manage leases or
+fencing, modify attempts, write SQLite, decide `DONE`, fabricate evidence, or
+freely retry Worker. Coordinator and SQLite remain the authority for all of
+those operations.
+
 ## Urgent security corrections
 
 An urgent security correction follows the normal evidence and authorization requirements while prioritizing containment:
