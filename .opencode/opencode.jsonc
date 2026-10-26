@@ -1,5 +1,10 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "skills": {
+    "paths": [
+      ".opencode/skills"
+    ]
+  },
   "agents": {
     "build": {
       "permissions": [
@@ -132,9 +137,24 @@
           "action": "subagent",
           "resource": "explore",
           "effect": "allow"
+        },
+        {
+          "action": "skill",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "skill",
+          "resource": "flujo-baseline",
+          "effect": "allow"
+        },
+        {
+          "action": "skill",
+          "resource": "flujo-prove",
+          "effect": "allow"
         }
-      ]
-    },
+    ]
+  },
     "plan": {
       "permissions": [
         {
@@ -146,9 +166,14 @@
           "action": "subagent",
           "resource": "explore",
           "effect": "allow"
+        },
+        {
+          "action": "skill",
+          "resource": "*",
+          "effect": "deny"
         }
-      ]
-    },
+    ]
+  },
     "explore": {
       "permissions": [
         {
@@ -195,8 +220,49 @@
           "action": "read",
           "resource": "**/.opencode/service.json",
           "effect": "deny"
+        },
+        {
+          "action": "skill",
+          "resource": "*",
+          "effect": "deny"
         }
-      ]
-    }
+    ]
+  },
+  "general": {
+    "permissions": [
+      {
+        "action": "skill",
+        "resource": "*",
+        "effect": "deny"
+      }
+    ]
+  },
+  "gota-worker": {
+    "permissions": [
+      {
+        "action": "skill",
+        "resource": "*",
+        "effect": "deny"
+      }
+    ]
+  },
+  "gota-reviewer": {
+    "permissions": [
+      {
+        "action": "skill",
+        "resource": "*",
+        "effect": "deny"
+      }
+    ]
+  },
+  "gota-auditor": {
+    "permissions": [
+      {
+        "action": "skill",
+        "resource": "*",
+        "effect": "deny"
+      }
+    ]
   }
+}
 }
