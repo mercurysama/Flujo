@@ -48,22 +48,23 @@ ACCEPTANCE_CRITERIA
 ```
 
 Each field must be explicit enough to distinguish an observed requirement from
-an inference. Context, specifications, expected result, and acceptance criteria
-must be sufficient, unambiguous, and mutually consistent. Constraints must be
-preserved rather than relaxed to make a proposal easier to write.
+an inference. `CONTEXT`, `GOAL`, `SPECIFICATIONS`, `CONSTRAINTS`,
+`EXPECTED_RESULT`, and `ACCEPTANCE_CRITERIA` must each be sufficient,
+unambiguous, and mutually consistent. Constraints must be preserved rather than
+relaxed to make a proposal easier to write.
 
-If context, specifications, expected result, or acceptance criteria are
-insufficient, ambiguous, or contradictory, the gate result is:
+If any of the six fields is insufficient, ambiguous, or contradictory, the gate
+result is:
 
 ```text
 LESSON_CANDIDATE=NOT_READY
 ```
 
-The command must identify the missing or conflicting information and stop. It
-must not invent facts, turn an inference into a requirement, or compose a
-`PROPOSED` candidate from an incomplete context. `NOT_READY` is a gate result;
-it is distinct from the lifecycle field `STATUS=PROPOSED` used by a complete
-candidate.
+The command must identify only the missing or conflicting information and stop.
+It must not infer or complete `GOAL` or `CONSTRAINTS`, invent facts, turn an
+inference into a requirement, or compose a `PROPOSED` candidate from an
+incomplete context. `NOT_READY` is a gate result; it is distinct from the
+lifecycle field `STATUS=PROPOSED` used by a complete candidate.
 
 ## Evidence boundary
 

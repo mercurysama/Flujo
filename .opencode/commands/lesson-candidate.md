@@ -43,16 +43,17 @@ EXPECTED_RESULT
 ACCEPTANCE_CRITERIA
 ```
 
-If `CONTEXT`, `SPECIFICATIONS`, `EXPECTED_RESULT`, or
-`ACCEPTANCE_CRITERIA` is insufficient, ambiguous, or contradictory, stop and
-output:
+If any of `CONTEXT`, `GOAL`, `SPECIFICATIONS`, `CONSTRAINTS`,
+`EXPECTED_RESULT`, or `ACCEPTANCE_CRITERIA` is insufficient, ambiguous, or
+contradictory, stop and output:
 
 ```text
 LESSON_CANDIDATE=NOT_READY
 ```
 
-Then list only the missing or conflicting information. Do not infer a remedy
-or compose a candidate. Treat an absent request as an incomplete context.
+Then list only the missing or conflicting information. Do not infer or complete
+`GOAL` or `CONSTRAINTS`, infer a remedy, or compose a candidate. Treat an absent
+request as an incomplete context.
 
 ## Evidence probe and composition
 
