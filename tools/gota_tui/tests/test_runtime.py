@@ -169,8 +169,11 @@ class GotaTUIRuntimeTest(unittest.TestCase):
                 timeout: float,
                 output_callback: object,
                 cancel_event: object,
+                expect_gota_payload: bool,
             ) -> OpenCodeRunResult:
                 del timeout, cancel_event
+                if expect_gota_payload:
+                    raise AssertionError("direct facade must not require a Gota payload")
                 runner_calls.append(
                     {"agent": agent, "prompt": prompt, "cwd": cwd}
                 )
@@ -180,14 +183,14 @@ class GotaTUIRuntimeTest(unittest.TestCase):
                 release.wait(timeout=2.0)
                 output_callback("stderr", "direct stderr\n")  # type: ignore[operator]
                 return OpenCodeRunResult(
-                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                    status=OpenCodeRunStatus.SUCCEEDED,
                     argv=("opencode", "run", "--auto", prompt),
                     cwd=str(cwd),
                     stdout="direct stdout\n",
                     stderr="direct stderr\n",
                     exit_code=0,
                     timed_out=False,
-                    error="plain direct response",
+                    error=None,
                 )
 
         async def exercise() -> None:
@@ -424,8 +427,11 @@ class GotaTUIRuntimeTest(unittest.TestCase):
                 timeout: float,
                 output_callback: object,
                 cancel_event: object,
+                expect_gota_payload: bool,
             ) -> OpenCodeRunResult:
                 del timeout, cancel_event
+                if expect_gota_payload:
+                    raise AssertionError("OpenCode audit must not require a Gota payload")
                 runner_calls.append(
                     {"agent": agent, "prompt": prompt, "cwd": cwd}
                 )
@@ -434,7 +440,7 @@ class GotaTUIRuntimeTest(unittest.TestCase):
                 started.set()
                 release.wait(timeout=2.0)
                 return OpenCodeRunResult(
-                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                    status=OpenCodeRunStatus.SUCCEEDED,
                     argv=(
                         "opencode",
                         "run",
@@ -451,7 +457,7 @@ class GotaTUIRuntimeTest(unittest.TestCase):
                     stderr="",
                     exit_code=0,
                     timed_out=False,
-                    error="generic read-only response",
+                    error=None,
                 )
 
         async def exercise() -> None:
@@ -596,9 +602,11 @@ class GotaTUIRuntimeTest(unittest.TestCase):
                 runner_calls.append({"executable": executable, "model": model, "variant": variant})
 
             def run(self, **kwargs: object) -> OpenCodeRunResult:
+                if kwargs.get("expect_gota_payload") is not False:
+                    raise AssertionError("direct facade must not require a Gota payload")
                 runner_calls.append({"agent": kwargs["agent"], "prompt": kwargs["prompt"]})
                 return OpenCodeRunResult(
-                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                    status=OpenCodeRunStatus.SUCCEEDED,
                     argv=("opencode", "run"),
                     cwd=str(kwargs["cwd"]),
                     stdout="GOTA_CLIPBOARD_DIRECT_OK\n",

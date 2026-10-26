@@ -683,11 +683,31 @@ class OpenCodeRunnerTest(unittest.TestCase):
             prompt="no result",
             cwd=self.cwd,
             timeout=2,
+            expect_gota_payload=True,
         )
 
         self.assertEqual(result.status, OpenCodeRunStatus.INVALID_PAYLOAD)
         self.assertEqual(result.protocol_error_code, GotaProtocolErrorCode.START_DELIMITER_MISSING)
         self.assertIsNone(result.payload)
+
+    def test_free_text_succeeds_without_gota_payload_expectation(self) -> None:
+        executable, _ = self._fake_executable(stdout="ordinary OpenCode response\n")
+
+        with patch("flow_coordinator.opencode_runner.parse_gota_output") as parser:
+            result = OpenCodeRunner(executable=executable).run(
+                agent="build",
+                prompt="direct prompt",
+                cwd=self.cwd,
+                timeout=2,
+                expect_gota_payload=False,
+            )
+
+        self.assertEqual(result.status, OpenCodeRunStatus.SUCCEEDED)
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(result.stdout, "ordinary OpenCode response\n")
+        self.assertIsNone(result.payload)
+        self.assertIsNone(result.protocol_error_code)
+        parser.assert_not_called()
 
     def test_parser_accepts_free_text_around_a_valid_frame(self) -> None:
         stdout = self._frame(
@@ -726,6 +746,26 @@ class OpenCodeRunnerTest(unittest.TestCase):
         self.assertEqual(result.exit_code, 7)
         self.assertEqual(result.stdout, stdout)
         self.assertEqual(result.stderr, "OpenCode failed\n")
+        self.assertIsNone(result.payload)
+        self.assertFalse(result.timed_out)
+
+    def test_non_zero_exit_remains_failure_without_gota_payload_expectation(self) -> None:
+        executable, _ = self._fake_executable(
+            stdout="ordinary direct output\n",
+            exit_code=7,
+        )
+
+        result = OpenCodeRunner(executable=executable).run(
+            agent="build",
+            prompt="failed direct prompt",
+            cwd=self.cwd,
+            timeout=2,
+            expect_gota_payload=False,
+        )
+
+        self.assertEqual(result.status, OpenCodeRunStatus.NON_ZERO_EXIT)
+        self.assertEqual(result.exit_code, 7)
+        self.assertEqual(result.stdout, "ordinary direct output\n")
         self.assertIsNone(result.payload)
         self.assertFalse(result.timed_out)
 

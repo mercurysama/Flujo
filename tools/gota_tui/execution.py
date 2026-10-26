@@ -305,15 +305,10 @@ class ActionExecutor:
             embedded_verdict=metadata.get("embedded_verdict"),
         )
         diagnostic = redactor.redact(result.error or "Direct OpenCode prompt completed")
-        if result.status is OpenCodeRunStatus.INVALID_PAYLOAD and result.exit_code == 0:
-            diagnostic = (
-                "Direct OpenCode prompt completed without a Coordinator payload; "
-                "raw output is available in live.log and opencode-output.txt"
-            )
         consistency_diagnostic = metadata.get("result_conflict_diagnostic")
         if type(consistency_diagnostic) is str:
             diagnostic = f"{diagnostic} {consistency_diagnostic}"
-        if result.status in {OpenCodeRunStatus.SUCCEEDED, OpenCodeRunStatus.INVALID_PAYLOAD}:
+        if result.status is OpenCodeRunStatus.SUCCEEDED:
             verdict = "SUCCEEDED" if result.exit_code == 0 else "FAIL"
         elif result.status is OpenCodeRunStatus.TIMEOUT:
             verdict = "FAIL/TIMEOUT"
@@ -674,10 +669,7 @@ class ActionExecutor:
 
         failed = bool(runner_error or mutation_reasons or after is None)
         if not failed and result is not None:
-            accepted_status = result.status in {
-                OpenCodeRunStatus.SUCCEEDED,
-                OpenCodeRunStatus.INVALID_PAYLOAD,
-            }
+            accepted_status = result.status is OpenCodeRunStatus.SUCCEEDED
             failed = result.exit_code != 0 or not accepted_status
         if failed:
             if result is not None and result.status is OpenCodeRunStatus.TIMEOUT:
@@ -696,9 +688,7 @@ class ActionExecutor:
             diagnostic_parts.append(
                 f"OpenCode status={result.status.value} exit={result.exit_code}"
             )
-            if result.status is OpenCodeRunStatus.INVALID_PAYLOAD:
-                diagnostic_parts.append("generic raw output accepted; no Gota payload required")
-            elif result.error and failed:
+            if result.error and failed:
                 diagnostic_parts.append(redactor.redact(result.error))
         if mutation_reasons:
             diagnostic_parts.append("; ".join(mutation_reasons))

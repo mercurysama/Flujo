@@ -72,8 +72,23 @@ class _ObservingRunner:
         self._cancel_event = cancel_event
 
     def run(
-        self, *, agent: str, prompt: str, cwd: str | Path, timeout: float
+        self,
+        *,
+        agent: str,
+        prompt: str,
+        cwd: str | Path,
+        timeout: float,
+        expect_gota_payload: bool = True,
     ) -> OpenCodeRunResult:
+        if expect_gota_payload:
+            return self._runner.run(
+                agent=agent,
+                prompt=prompt,
+                cwd=cwd,
+                timeout=timeout,
+                output_callback=self._output,
+                cancel_event=self._cancel_event,
+            )
         return self._runner.run(
             agent=agent,
             prompt=prompt,
@@ -81,6 +96,7 @@ class _ObservingRunner:
             timeout=timeout,
             output_callback=self._output,
             cancel_event=self._cancel_event,
+            expect_gota_payload=False,
         )
 
 
@@ -111,7 +127,13 @@ class OpenCodePromptFacade:
             executable=self.opencode_executable,
             output=self.output,
             cancel_event=self.cancel_event,
-        ).run(agent=agent, prompt=prompt, cwd=cwd, timeout=self.timeout)
+        ).run(
+            agent=agent,
+            prompt=prompt,
+            cwd=cwd,
+            timeout=self.timeout,
+            expect_gota_payload=False,
+        )
 
 
 class CoordinatorGotaFacade:

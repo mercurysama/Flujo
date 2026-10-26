@@ -530,6 +530,7 @@ class OpenCodeRunner:
         timeout: float,
         output_callback: OutputCallback | None = None,
         cancel_event: threading.Event | None = None,
+        expect_gota_payload: bool = True,
     ) -> OpenCodeRunResult:
         """Execute OpenCode once and classify its captured result."""
 
@@ -537,6 +538,8 @@ class OpenCodeRunner:
             raise ValueError("agent must be a non-empty string")
         if not isinstance(prompt, str):
             raise TypeError("prompt must be a string")
+        if type(expect_gota_payload) is not bool:
+            raise TypeError("expect_gota_payload must be a bool")
         timeout_seconds = self._validate_timeout(timeout)
         cwd_path = Path(cwd)
         argv = self._build_argv(agent, prompt)
@@ -771,6 +774,17 @@ class OpenCodeRunner:
                     exit_code=process.returncode,
                     timed_out=False,
                     error=f"process exited with code {process.returncode}",
+                )
+
+            if not expect_gota_payload:
+                return OpenCodeRunResult(
+                    status=OpenCodeRunStatus.SUCCEEDED,
+                    argv=argv_tuple,
+                    cwd=str(cwd_path),
+                    stdout=stdout,
+                    stderr=stderr,
+                    exit_code=process.returncode,
+                    timed_out=False,
                 )
 
             try:

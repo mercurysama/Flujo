@@ -417,8 +417,11 @@ class GotaTUICoreTest(unittest.TestCase):
                 timeout: float,
                 output_callback: object,
                 cancel_event: object,
+                expect_gota_payload: bool,
             ) -> OpenCodeRunResult:
                 del timeout, cancel_event
+                if expect_gota_payload:
+                    raise AssertionError("OpenCode audit must not require a Gota payload")
                 assert callable(output_callback)
                 output_callback("stdout", "real finding\nFINDINGS_BEGIN\nimportant\nFINDINGS_END\n")  # type: ignore[operator]
                 output_callback("stderr", "read-only diagnostic\n")  # type: ignore[operator]
@@ -441,7 +444,7 @@ class GotaTUICoreTest(unittest.TestCase):
                     }
                 )
                 return OpenCodeRunResult(
-                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                    status=OpenCodeRunStatus.SUCCEEDED,
                     argv=(
                         "opencode",
                         "run",
@@ -553,8 +556,10 @@ class GotaTUICoreTest(unittest.TestCase):
                 del kwargs
 
             def run(self, **kwargs: object) -> OpenCodeRunResult:
+                if kwargs.get("expect_gota_payload") is not False:
+                    raise AssertionError("OpenCode audit must not require a Gota payload")
                 return OpenCodeRunResult(
-                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                    status=OpenCodeRunStatus.SUCCEEDED,
                     argv=("opencode", "run"),
                     cwd=str(kwargs["cwd"]),
                     stdout="GOTA_AUDITOR_POLICY_OK\n",
@@ -627,6 +632,8 @@ class GotaTUICoreTest(unittest.TestCase):
                 del executable, model, variant
 
             def run(self, **kwargs: object) -> OpenCodeRunResult:
+                if kwargs.get("expect_gota_payload") is not False:
+                    raise AssertionError("OpenCode audit must not require a Gota payload")
                 callback = kwargs["output_callback"]
                 assert callable(callback)
                 callback("stderr", "OpenCode failed\n")  # type: ignore[operator]
@@ -702,7 +709,7 @@ class GotaTUICoreTest(unittest.TestCase):
         )
         prepared = executor.prepare(action, PromptEnvelope.parse("mutation audit"), run_id="mutation-audit")
         Git.snapshots = [snapshot(repository, head), snapshot(repository, "c" * 40)]
-        Runner.status = OpenCodeRunStatus.INVALID_PAYLOAD
+        Runner.status = OpenCodeRunStatus.SUCCEEDED
         with patch("gota_tui.coordinator_facade.OpenCodeRunner", Runner), patch(
             "gota_tui.execution.ReadOnlyGitAdapter", Git
         ), patch.object(ActionExecutor, "_opencode_version", return_value="opencode v2.0.32"):
@@ -737,12 +744,14 @@ class GotaTUICoreTest(unittest.TestCase):
                 del kwargs
 
             def run(self, **kwargs: object) -> OpenCodeRunResult:
+                if kwargs.get("expect_gota_payload") is not False:
+                    raise AssertionError("OpenCode audit must not require a Gota payload")
                 callback = kwargs["output_callback"]
                 assert callable(callback)
                 callback("stdout", output)  # type: ignore[operator]
                 callback("stderr", error_output)  # type: ignore[operator]
                 return OpenCodeRunResult(
-                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                    status=OpenCodeRunStatus.SUCCEEDED,
                     argv=("opencode", "run"),
                     cwd=str(kwargs["cwd"]),
                     stdout=output,
@@ -916,8 +925,20 @@ class GotaTUICoreTest(unittest.TestCase):
                     {"executable": executable, "model": model, "variant": variant}
                 )
 
-            def run(self, *, agent: str, prompt: str, cwd: Path, timeout: float, output_callback: Any, cancel_event: Any) -> OpenCodeRunResult:
+            def run(
+                self,
+                *,
+                agent: str,
+                prompt: str,
+                cwd: Path,
+                timeout: float,
+                output_callback: Any,
+                cancel_event: Any,
+                expect_gota_payload: bool,
+            ) -> OpenCodeRunResult:
                 del timeout, cancel_event
+                if expect_gota_payload:
+                    raise AssertionError("direct facade must not require a Gota payload")
                 paths = prepared.paths
                 runner_observations.append(
                     {
@@ -933,14 +954,14 @@ class GotaTUICoreTest(unittest.TestCase):
                 output_callback("stdout", "stdout direct\n")
                 output_callback("stderr", "stderr direct\n")
                 return OpenCodeRunResult(
-                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                    status=OpenCodeRunStatus.SUCCEEDED,
                     argv=("opencode", "run", "--auto", prompt),
                     cwd=str(cwd),
                     stdout="stdout direct\n",
                     stderr="stderr direct\n",
                     exit_code=0,
                     timed_out=False,
-                    error="response was not Coordinator protocol",
+                    error=None,
                 )
 
         action = ActionRegistry.default().get("clipboard-prompt")
@@ -979,6 +1000,9 @@ class GotaTUICoreTest(unittest.TestCase):
             "MODEL=openai/gpt-5.6-luna",
             "VARIANT=max",
             "AGENT=build",
+            "PROCESS_STATUS=succeeded",
+            "PROCESS_EXIT_CODE=0",
+            "RESULT_CONSISTENCY=NO_EMBEDDED_REPORT",
             "VERDICT=SUCCEEDED",
         ):
             self.assertIn(line, report)
@@ -1016,6 +1040,8 @@ class GotaTUICoreTest(unittest.TestCase):
                 del executable, model, variant
 
             def run(self, **kwargs: Any) -> OpenCodeRunResult:
+                if kwargs.get("expect_gota_payload") is not False:
+                    raise AssertionError("direct facade must not require a Gota payload")
                 prompt = kwargs["prompt"]
                 cwd = kwargs["cwd"]
                 return OpenCodeRunResult(
@@ -1024,7 +1050,7 @@ class GotaTUICoreTest(unittest.TestCase):
                     cwd=str(cwd),
                     stdout="",
                     stderr="failed",
-                    exit_code=None,
+                    exit_code=7 if self.status is OpenCodeRunStatus.NON_ZERO_EXIT else None,
                     timed_out=self.status is OpenCodeRunStatus.TIMEOUT,
                     error="injected failure",
                 )
@@ -1032,6 +1058,7 @@ class GotaTUICoreTest(unittest.TestCase):
         for status, expected in (
             (OpenCodeRunStatus.START_FAILED, "FAIL"),
             (OpenCodeRunStatus.TIMEOUT, "FAIL/TIMEOUT"),
+            (OpenCodeRunStatus.NON_ZERO_EXIT, "FAIL"),
         ):
             with self.subTest(status=status):
                 Runner.status = status
@@ -1068,10 +1095,12 @@ class GotaTUICoreTest(unittest.TestCase):
                 del executable, model, variant
 
             def run(self, **kwargs: Any) -> OpenCodeRunResult:
+                if kwargs.get("expect_gota_payload") is not False:
+                    raise AssertionError("direct facade must not require a Gota payload")
                 callback = kwargs["output_callback"]
                 callback("stdout", "no commit\n")
                 return OpenCodeRunResult(
-                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                    status=OpenCodeRunStatus.SUCCEEDED,
                     argv=("opencode", "run"),
                     cwd=str(kwargs["cwd"]),
                     stdout="no commit\n",
@@ -1162,7 +1191,7 @@ class GotaTUICoreTest(unittest.TestCase):
                     }
                 )
                 return OpenCodeRunResult(
-                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                    status=OpenCodeRunStatus.SUCCEEDED,
                     argv=(
                         "opencode",
                         "run",

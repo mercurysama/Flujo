@@ -48,7 +48,7 @@ class GotaTUIResultConsistencyTest(unittest.TestCase):
         *,
         stdout: str,
         stderr: str = "",
-        status: OpenCodeRunStatus = OpenCodeRunStatus.INVALID_PAYLOAD,
+        status: OpenCodeRunStatus = OpenCodeRunStatus.SUCCEEDED,
         exit_code: int | None = 0,
         prompt: str = "direct prompt",
         run_id: str = "direct-run",
@@ -73,6 +73,8 @@ class GotaTUIResultConsistencyTest(unittest.TestCase):
                 del kwargs
 
             def run(self, **kwargs: object) -> OpenCodeRunResult:
+                if kwargs.get("expect_gota_payload") is not False:
+                    raise AssertionError("direct facade must not require a Gota payload")
                 callback = kwargs["output_callback"]
                 assert callable(callback)
                 callback("stdout", stdout)
@@ -119,7 +121,7 @@ class GotaTUIResultConsistencyTest(unittest.TestCase):
         )
         self.assertEqual(result.verdict, "SUCCEEDED")
         report = state.read_report(result.run_id)
-        self.assertIn("PROCESS_STATUS=invalid_payload", report)
+        self.assertIn("PROCESS_STATUS=succeeded", report)
         self.assertIn("PROCESS_EXIT_CODE=0", report)
         self.assertIn("EMBEDDED_REPORT_ID=VIT_001R", report)
         self.assertIn("EMBEDDED_STATUS=PASA", report)
@@ -309,7 +311,7 @@ class GotaTUIResultConsistencyTest(unittest.TestCase):
                 callback("stdout", stdout)
                 callback("stderr", stderr)
                 return OpenCodeRunResult(
-                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                    status=OpenCodeRunStatus.SUCCEEDED,
                     argv=("opencode", "run"),
                     cwd=str(kwargs["cwd"]),
                     stdout=stdout,
