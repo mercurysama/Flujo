@@ -416,14 +416,25 @@ func _test_process() -> void:
 		FlowGraphEditorCommands.Collection.PROCESSES,
 		process_id
 	)
-	_check(_fluo_property.navigate_process(1), "Ctrl+AvPag navigation advances to the next Process.")
+	_check(_fluo_property.navigate_process(1), "Plain AvPag navigation advances to the next Inspector Process.")
 	await _frames()
 	_check(
 		(_fluo_property.get("_selected_id") as String) == _controller.flow_graph.processes[1].get_internal_id(),
-		"Process navigation updates Fluo's process context by stable ID."
+		"Inspector-level Page navigation updates Fluo's container context by stable ID."
+	)
+	fluo_blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
+	_check(
+		fluo_blocks == null or fluo_blocks.has_focus(),
+		"After Inspector-level Page navigation, Flow receives focus when the next container has blocks."
+	)
+	_check(_fluo_property.navigate_process(-1), "Plain RePag navigation returns to the previous Inspector Process.")
+	await _frames()
+	_check(
+		(_fluo_property.get("_selected_id") as String) == process_id,
+		"Inspector-level Page navigation is reversible."
 	)
 	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
-	_check(fluo_options_panel != null and not fluo_options_panel.visible, "Changing Process closes stale block options.")
+	_check(fluo_options_panel != null and not fluo_options_panel.visible, "Changing Inspector Process closes stale Flusso options.")
 
 	for index: int in 3:
 		if not _press(_property, "Add State Machine"):
