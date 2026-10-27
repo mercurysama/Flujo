@@ -173,12 +173,6 @@ func _build_interface() -> void:
 	header.custom_minimum_size = Vector2(0.0, 48.0)
 	_content.add_child(header)
 
-	var title := Label.new()
-	title.text = "Fluo"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	header.add_child(title)
-
 	_side_switch = CheckButton.new()
 	_side_switch.name = &"FluoSideSwitch"
 	_side_switch.text = "Derecha"
@@ -187,6 +181,23 @@ func _build_interface() -> void:
 	_side_switch.button_pressed = false
 	_side_switch.toggled.connect(_on_side_switch_toggled)
 	header.add_child(_side_switch)
+
+	var title := Label.new()
+	title.name = &"FluoTitle"
+	title.text = "Fluo"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+
+	var close_button := Button.new()
+	close_button.name = &"CloseFluoButton"
+	close_button.text = "✕"
+	close_button.tooltip_text = "Cerrar Fluo"
+	close_button.focus_mode = Control.FOCUS_ALL
+	close_button.custom_minimum_size = Vector2(44.0, 44.0)
+	close_button.pressed.connect(close)
+	header.add_child(close_button)
 
 	_editor_scroll = ScrollContainer.new()
 	_editor_scroll.name = &"FluoEditorScroll"

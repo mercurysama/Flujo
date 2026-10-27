@@ -338,8 +338,10 @@ func _render_block() -> void:
 		header.add_child(options_title)
 		var close_button := Button.new()
 		close_button.name = &"CloseBlockOptions"
-		close_button.text = "Cerrar"
+		close_button.text = "✕"
+		close_button.tooltip_text = "Cerrar opciones del bloque"
 		close_button.focus_mode = Control.FOCUS_ALL
+		close_button.custom_minimum_size = Vector2(44.0, 44.0)
 		close_button.pressed.connect(_on_close_block_options)
 		header.add_child(close_button)
 

@@ -170,6 +170,16 @@ func _test_process() -> void:
 	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
 	_check(fluo_options_panel != null and fluo_options_panel.visible, "Activating a block opens Fluo's right options panel.")
 	_check(_node(fluo_options_panel, "ReadyBlockName") != null, "Fluo right panel contains the selected block options.")
+	var fluo_options_close: Button = _node(fluo_options_panel, "CloseBlockOptions") as Button
+	_check(fluo_options_close != null and fluo_options_close.text == "✕", "Fluo right panel exposes its own close X.")
+	_check(fluo_options_close != null and fluo_options_close.custom_minimum_size.x >= 44.0 and fluo_options_close.custom_minimum_size.y >= 44.0, "Block options close X keeps an Android-friendly touch target.")
+	if fluo_options_close != null:
+		fluo_options_close.pressed.emit()
+	_check(fluo_options_panel != null and not fluo_options_panel.visible, "The right-panel X closes only block options.")
+	fluo_blocks.item_activated.emit(0)
+	await _frames()
+	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
+	_check(fluo_options_panel != null and fluo_options_panel.visible, "Block options can reopen after using their close X.")
 	_check(input.has_focus() and input.tooltip_text.contains("Ctrl+Enter"), "Add Print focuses text and explains confirmation.")
 	var print_surface: StyleBoxFlat = input.get_theme_stylebox(&"normal") as StyleBoxFlat
 	_check(

@@ -44,6 +44,13 @@ func _run() -> void:
 	_check(_drawer.visible, "Opening Fluo makes the overlay visible.")
 	_check(_viewport.gui_get_focus_owner() == _sentinel, "Opening Fluo preserves the current focus owner.")
 	_check(_drawer.get_child_count() == 2, "Opening Fluo does not duplicate its nodes.")
+	var close_button: Button = _drawer.find_child("CloseFluoButton", true, false) as Button
+	_check(close_button != null and close_button.text == "✕", "Fluo exposes a top close button.")
+	_check(close_button != null and close_button.custom_minimum_size.x >= 44.0 and close_button.custom_minimum_size.y >= 44.0, "Fluo top close button keeps an Android-friendly touch target.")
+	if close_button != null:
+		close_button.pressed.emit()
+	_check(not _drawer_is_open(), "Fluo top close button closes the drawer.")
+	_open_drawer()
 	_open_drawer()
 	_check(_drawer.get_child_count() == 2, "Repeated opening does not duplicate nodes or callbacks.")
 
