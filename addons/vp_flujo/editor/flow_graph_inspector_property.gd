@@ -63,6 +63,7 @@ var _ready_block_id: String = ""
 var _ready_block_details_open: bool = false
 var _fluo_mode: bool = false
 var _flusso_snapshots: Dictionary = {}
+var _flow_entry_focus_pending: bool = false
 var _deleted_resource_id: String = ""
 var _deleted_resource_replacement_id: String = ""
 var _deleted_resource_collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.PROCESSES
@@ -349,6 +350,15 @@ func _render_dock_schema_3_variable_options(controller: PVController, generation
 		return
 	if _is_block_collection():
 		_render_ready_process_editor(_content)
+		if _flow_entry_focus_pending:
+			_flow_entry_focus_pending = false
+			var flow_editor: FlowReadyProcessEditor = _content.find_child(
+				"ReadyProcessEditor",
+				true,
+				false
+			) as FlowReadyProcessEditor
+			if flow_editor != null:
+				call_deferred(&"_focus_flow_entry_after_rebuild", flow_editor, generation)
 		_focus_requested_variable_control(_content, _selected_id, generation)
 		return
 	var variable: FlowVariableDefinition = _selected_variable(controller.flow_graph)
@@ -517,6 +527,19 @@ func _on_ready_block_revert_requested(block_id: String) -> void:
 		block_id,
 		_flusso_snapshots[block_id] as Dictionary
 	)
+
+
+func focus_flow_entry() -> void:
+	if not _fluo_mode:
+		return
+	_flow_entry_focus_pending = true
+	_request_rebuild()
+
+
+func _focus_flow_entry_after_rebuild(editor: FlowReadyProcessEditor, generation: int) -> void:
+	if generation != _rebuild_generation or not is_instance_valid(editor):
+		return
+	editor.focus_flow_entry()
 
 
 func navigate_ready_block(direction: int) -> bool:
