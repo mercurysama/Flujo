@@ -202,21 +202,37 @@ func _test_process() -> void:
 	_check(fluo_options_panel != null and fluo_options_panel.visible, "Block options can reopen after using their close X.")
 	var fluo_block_name: LineEdit = _node(fluo_options_panel, "ReadyBlockName") as LineEdit
 	var fluo_block_enabled: CheckBox = _node(fluo_options_panel, "ReadyBlockEnabled") as CheckBox
+	var fluo_print_text: TextEdit = _node(fluo_options_panel, "ReadyPrintText") as TextEdit
 	if fluo_block_name != null and fluo_block_enabled != null:
 		fluo_block_name.grab_focus()
 		_check(_fluo_property.cycle_ready_block_option_focus(1), "Alt+AvPag navigation can advance through block-option controls.")
 		_check(fluo_block_enabled.has_focus(), "Forward option navigation moves from Block Name to Block Enabled.")
 		_check(_fluo_property.cycle_ready_block_option_focus(-1), "Reverse option navigation can move backward through block-option controls.")
 		_check(fluo_block_name.has_focus(), "Reverse option navigation returns to Block Name.")
-	_check(_fluo_property.close_ready_block_details(), "First Escape-level action can close only Fluo block options.")
+	if fluo_block_name != null and fluo_print_text != null:
+		fluo_block_name.text = "Saved From Flusso"
+		fluo_print_text.text = "Saved Flusso text"
+	_check(_fluo_property.close_ready_block_details(), "First Escape-level action can close only Flusso.")
 	await _frames()
+	_check(
+		(process.blocks[0] as FlowPrintBlock).display_name == "Saved From Flusso" 			and (process.blocks[0] as FlowPrintBlock).text == "Saved Flusso text",
+		"Leaving Flusso persists pending Block Name and Print text."
+	)
+	_history.undo()
+	_history.undo()
+	await _frames()
+	_check(
+		(process.blocks[0] as FlowPrintBlock).display_name == "Print" 			and (process.blocks[0] as FlowPrintBlock).text.is_empty(),
+		"Undo restores the model after Flusso persistence."
+	)
 	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
 	_check(fluo_options_panel != null and not fluo_options_panel.visible, "Closing block details leaves the Fluo list surface available.")
 	_check(not _fluo_property.close_ready_block_details(), "A second Escape-level action finds no right panel and can fall through to closing Fluo.")
 	fluo_blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
 	fluo_blocks.item_activated.emit(0)
 	await _frames()
-	_check(input.has_focus() and input.tooltip_text.contains("Ctrl+Enter"), "Add Print focuses text and explains confirmation.")
+	input = _node(_dock, "ReadyPrintText") as TextEdit
+	_check(input != null and input.tooltip_text.contains("Ctrl+Enter"), "Dock Print input remains available after Flusso persistence.")
 	var print_surface: StyleBoxFlat = input.get_theme_stylebox(&"normal") as StyleBoxFlat
 	_check(
 		input.has_theme_stylebox_override(&"normal") and print_surface != null \
