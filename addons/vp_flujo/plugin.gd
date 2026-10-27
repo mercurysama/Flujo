@@ -42,6 +42,7 @@ func _enter_tree() -> void:
 	_dock.schema_3_delete_selection_recovery_requested.connect(_on_schema_3_delete_selection_recovery_requested)
 	_dock.interaction_toggle_requested.connect(_on_interaction_toggle_requested)
 	_dock.fluo_open_requested.connect(_on_fluo_open_requested)
+	_dock.fluo_block_open_requested.connect(_on_fluo_block_open_requested)
 	add_dock(_dock)
 	_mount_fluo_drawer()
 	var editor_settings: EditorSettings = EditorInterface.get_editor_settings()
@@ -121,6 +122,17 @@ func _dispose_fluo_drawer() -> void:
 func _on_fluo_open_requested() -> void:
 	if is_instance_valid(_fluo_drawer):
 		_fluo_drawer.open()
+
+
+func _on_fluo_block_open_requested(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	container_id: String,
+	block_id: String
+) -> void:
+	if not is_instance_valid(_fluo_drawer) or not is_instance_valid(controller):
+		return
+	_fluo_drawer.open_block(controller, collection, container_id, block_id)
 
 
 func _connect_editor_signals() -> void:

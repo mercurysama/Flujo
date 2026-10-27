@@ -14,6 +14,12 @@ signal schema_3_variable_selection_changed(
 )
 signal schema_3_variable_editor_focus_requested(controller: PVController, variable_id: String)
 signal schema_3_variable_list_focus_requested(controller: PVController, variable_id: String)
+signal ready_block_activated(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	container_id: String,
+	block_id: String
+)
 signal schema_3_delete_selection_recovery_requested(
 	controller: PVController,
 	collection: FlowGraphEditorCommands.Collection,
@@ -455,6 +461,7 @@ func _render_ready_process_editor(parent: Container) -> void:
 		_ready_block_details_open
 	)
 	editor.block_selected.connect(_on_ready_block_selected)
+	editor.block_activated.connect(_on_ready_block_activated)
 	editor.block_details_visibility_changed.connect(_on_ready_block_details_visibility_changed)
 	editor.block_delete_requested.connect(_on_ready_block_delete_requested)
 	editor.focus_requested.connect(_on_process_focus_requested)
@@ -466,6 +473,22 @@ func _render_ready_process_editor(parent: Container) -> void:
 func _on_ready_block_selected(block_id: String) -> void:
 	_clear_deleted_block_selection_state()
 	_ready_block_id = block_id
+
+
+func _on_ready_block_activated(block_id: String) -> void:
+	_clear_deleted_block_selection_state()
+	_ready_block_id = block_id
+	if _fluo_mode:
+		_ready_block_details_open = true
+		return
+	var controller: PVController = _active_controller()
+	if controller != null and not _selected_id.is_empty():
+		ready_block_activated.emit(
+			controller,
+			_selected_collection,
+			_selected_id,
+			block_id
+		)
 
 
 func _on_ready_block_details_visibility_changed(is_visible: bool) -> void:
@@ -481,8 +504,44 @@ func navigate_ready_block(direction: int) -> bool:
 	return editor.navigate_block(direction)
 
 
+func open_ready_block_details(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	container_id: String,
+	block_id: String
+) -> bool:
+	if not _fluo_mode or not is_instance_valid(controller) or block_id.is_empty():
+		return false
+	set_dock_variable_selection(controller, collection, container_id)
+	_ready_block_id = block_id
+	_ready_block_details_open = true
+	_request_rebuild()
+	return true
+
+
+func close_ready_block_details() -> bool:
+	if not _fluo_mode or not _ready_block_details_open:
+		return false
+	_ready_block_details_open = false
+	var editor: FlowReadyProcessEditor = _content.find_child("ReadyProcessEditor", true, false) as FlowReadyProcessEditor
+	if editor != null:
+		editor.close_block_details()
+	_request_rebuild()
+	return true
+
+
+func cycle_ready_block_option_focus(direction: int) -> bool:
+	if not _fluo_mode or direction == 0:
+		return false
+	var editor: FlowReadyProcessEditor = _content.find_child("ReadyProcessEditor", true, false) as FlowReadyProcessEditor
+	if editor == null:
+		return false
+	return editor.cycle_block_option_focus(direction)
+
+
 func navigate_process(direction: int) -> bool:
-	if not _fluo_mode or direction == 0 			or _selected_collection != FlowGraphEditorCommands.Collection.PROCESSES:
+	if not _fluo_mode or direction == 0 \
+			or _selected_collection != FlowGraphEditorCommands.Collection.PROCESSES:
 		return false
 	var controller: PVController = _active_controller()
 	if controller == null or controller.flow_graph == null:

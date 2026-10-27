@@ -15,6 +15,12 @@ signal schema_3_delete_selection_recovery_requested(
 )
 signal interaction_toggle_requested
 signal fluo_open_requested
+signal fluo_block_open_requested(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	container_id: String,
+	block_id: String
+)
 
 var _controller_present: bool
 var _controller_presence_initialized: bool = false
@@ -75,6 +81,7 @@ func configure(undo_redo: EditorUndoRedoManager) -> void:
 	_variable_editor.configure_for_dock()
 	_variable_editor.schema_3_variable_list_focus_requested.connect(_on_variable_editor_list_focus_requested)
 	_variable_editor.schema_3_delete_selection_recovery_requested.connect(_on_delete_selection_recovery_requested)
+	_variable_editor.ready_block_activated.connect(_on_ready_block_activated)
 	_variable_editor.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_variable_editor.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_editor_scroll_content.add_child(_variable_editor)
@@ -190,6 +197,15 @@ func _on_variable_editor_list_focus_requested(controller: PVController, variable
 	emit_signal(&"schema_3_variable_list_focus_requested", controller, variable_id)
 
 
+func _on_ready_block_activated(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	container_id: String,
+	block_id: String
+) -> void:
+	fluo_block_open_requested.emit(controller, collection, container_id, block_id)
+
+
 func _on_delete_selection_recovery_requested(
 		controller: PVController,
 		collection: FlowGraphEditorCommands.Collection,
@@ -232,7 +248,7 @@ func toggle_visibility() -> void:
 
 func _configure_dock() -> void:
 	name = "VPFlujoDock"
-	title = "Flujo"
+	title = "Flow"
 	default_slot = EditorDock.DOCK_SLOT_RIGHT_BR
 	available_layouts = EditorDock.DOCK_LAYOUT_VERTICAL | EditorDock.DOCK_LAYOUT_FLOATING
 	transient = true
@@ -250,7 +266,7 @@ func _build_interface() -> void:
 	add_child(_content)
 
 	var title_label := Label.new()
-	title_label.text = "Flujo"
+	title_label.text = "Flow"
 	title_label.add_theme_font_size_override("font_size", 18)
 	_content.add_child(title_label)
 
@@ -261,7 +277,7 @@ func _build_interface() -> void:
 	_interaction_state_label = Label.new()
 	_interaction_state_label.name = &"FlowInteractionState"
 	_interaction_state_label.text = "Interaction: Godot"
-	_interaction_state_label.tooltip_text = "Current Flujo interaction state."
+	_interaction_state_label.tooltip_text = "Current Flow interaction state."
 	_interaction_state_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	interaction_row.add_child(_interaction_state_label)
 	_interaction_button = Button.new()

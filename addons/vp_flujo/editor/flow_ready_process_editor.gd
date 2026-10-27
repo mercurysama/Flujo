@@ -4,6 +4,7 @@ extends VBoxContainer
 
 ## Dock configuration for a stable-ID-selected Ready process or Timer.
 signal block_selected(block_id: String)
+signal block_activated(block_id: String)
 signal block_delete_requested(block_id: String)
 signal focus_requested(control_name: StringName, select_all: bool)
 signal process_move_requested(direction: int)
@@ -246,6 +247,7 @@ func _on_selected(index: int) -> void:
 func _on_activated(index: int) -> void:
 	if not _select_block_index(index):
 		return
+	block_activated.emit(_block_id)
 	if _split_block_layout:
 		_block_details_open = true
 		block_details_visibility_changed.emit(true)
@@ -282,6 +284,57 @@ func navigate_block(direction: int) -> bool:
 
 func is_block_details_open() -> bool:
 	return _block_details_open
+
+
+func open_block_details(block_id: String) -> bool:
+	if not _split_block_layout or block_id.is_empty() or _list == null:
+		return false
+	for index: int in _list.item_count:
+		if (_list.get_item_metadata(index) as String) != block_id:
+			continue
+		_list.select(index)
+		if not _select_block_index(index):
+			return false
+		_block_details_open = true
+		block_details_visibility_changed.emit(true)
+		_render_block()
+		return true
+	return false
+
+
+func close_block_details() -> bool:
+	if not _split_block_layout or not _block_details_open:
+		return false
+	_on_close_block_options()
+	return true
+
+
+func cycle_block_option_focus(direction: int) -> bool:
+	if not _split_block_layout or not _block_details_open or _details == null or direction == 0:
+		return false
+	var focusable: Array[Control] = []
+	_collect_focusable_controls(_details, focusable)
+	if focusable.is_empty():
+		return false
+	var viewport: Viewport = get_viewport()
+	var owner: Control = viewport.gui_get_focus_owner() as Control if viewport != null else null
+	var current_index: int = focusable.find(owner)
+	var next_index: int
+	if current_index < 0:
+		next_index = 0 if direction > 0 else focusable.size() - 1
+	else:
+		next_index = posmod(current_index + (1 if direction > 0 else -1), focusable.size())
+	focusable[next_index].grab_focus()
+	return true
+
+
+func _collect_focusable_controls(root: Node, result: Array[Control]) -> void:
+	for child: Node in root.get_children():
+		if child is Control:
+			var control := child as Control
+			if control.is_visible_in_tree() and control.focus_mode != Control.FOCUS_NONE:
+				result.append(control)
+		_collect_focusable_controls(child, result)
 
 
 func _on_block_list_input(event: InputEvent) -> void:

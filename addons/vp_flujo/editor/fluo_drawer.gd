@@ -98,6 +98,18 @@ func refresh_controller() -> void:
 		_variable_editor.refresh_dock_controller()
 
 
+func open_block(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	container_id: String,
+	block_id: String
+) -> void:
+	set_controller(controller)
+	if _variable_editor != null:
+		_variable_editor.open_ready_block_details(controller, collection, container_id, block_id)
+	open()
+
+
 func open() -> void:
 	if _is_open:
 		return
@@ -245,25 +257,39 @@ func _input(event: InputEvent) -> void:
 		return
 
 	if key_event.keycode == KEY_ESCAPE:
+		if _variable_editor != null and _variable_editor.close_ready_block_details():
+			_mark_input_handled()
+			return
 		close()
-		var viewport: Viewport = get_viewport()
-		if viewport != null:
-			viewport.set_input_as_handled()
+		_mark_input_handled()
 		return
 
 	if key_event.keycode != KEY_PAGEUP and key_event.keycode != KEY_PAGEDOWN:
 		return
-	if not _focus_is_inside_drawer() or _focus_is_text_editing():
+	if not _focus_is_inside_drawer():
 		return
 
 	var direction: int = -1 if key_event.keycode == KEY_PAGEUP else 1
 	var handled: bool = false
-	if _variable_editor != null:
-		handled = _variable_editor.navigate_process(direction) 			if key_event.ctrl_pressed else _variable_editor.navigate_ready_block(direction)
+
+	if key_event.alt_pressed:
+		if key_event.shift_pressed:
+			direction *= -1
+		if _variable_editor != null:
+			handled = _variable_editor.cycle_ready_block_option_focus(direction)
+	elif not _focus_is_text_editing():
+		if _variable_editor != null:
+			handled = _variable_editor.navigate_process(direction) \
+				if key_event.ctrl_pressed else _variable_editor.navigate_ready_block(direction)
+
 	if handled:
-		var viewport: Viewport = get_viewport()
-		if viewport != null:
-			viewport.set_input_as_handled()
+		_mark_input_handled()
+
+
+func _mark_input_handled() -> void:
+	var viewport: Viewport = get_viewport()
+	if viewport != null:
+		viewport.set_input_as_handled()
 
 
 func _focus_is_inside_drawer() -> bool:
@@ -271,7 +297,8 @@ func _focus_is_inside_drawer() -> bool:
 	if viewport == null or _drawer_panel == null:
 		return false
 	var focus_owner: Control = viewport.gui_get_focus_owner() as Control
-	return is_instance_valid(focus_owner) 		and (focus_owner == _drawer_panel or _drawer_panel.is_ancestor_of(focus_owner))
+	return is_instance_valid(focus_owner) \
+		and (focus_owner == _drawer_panel or _drawer_panel.is_ancestor_of(focus_owner))
 
 
 func _focus_is_text_editing() -> bool:

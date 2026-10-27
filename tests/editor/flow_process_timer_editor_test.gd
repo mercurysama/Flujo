@@ -14,6 +14,7 @@ var _fluo_property: FlowGraphInspectorProperty
 var _controller: PVController
 var _history: UndoRedo
 var _ready_first_block_display_name: String = ""
+var _dock_activated_block_id: String = ""
 
 
 func _init() -> void:
@@ -67,6 +68,7 @@ func _run() -> void:
 	_host.add_child(_dock)
 	_dock.set("_controller_presence_initialized", true)
 	_dock.set("_controller_present", true)
+	_dock.fluo_block_open_requested.connect(_on_dock_fluo_block_open_requested)
 	_fluo_property = FlowGraphInspectorProperty.new()
 	_fluo_property.configure(undo_redo)
 	_fluo_property.configure_for_fluo()
@@ -223,6 +225,11 @@ func _test_process() -> void:
 	await _frames()
 	blocks = _node(_dock, "ReadyBlocksList") as ItemList
 	_check((process.blocks[0] as FlowPrintBlock).display_name == "Named Ready Print" and blocks != null and blocks.has_focus() and blocks.is_selected(0), "Block Name Escape discards only the draft and returns to the same block row.")
+	_dock_activated_block_id = ""
+	blocks.item_activated.emit(0)
+	await _frames()
+	_check(_dock_activated_block_id == block_id, "Double-click activation in Flow requests Fluo for the same block ID.")
+
 	blocks.gui_input.emit(_key(KEY_F2))
 	await _frames()
 	block_name = _node(_dock, "ReadyBlockName") as LineEdit
@@ -569,6 +576,15 @@ func _relay_context() -> String:
 		_controller.is_inside_tree(), _inspector.is_active_controller(_controller), _property.get("_selected_id"),
 		_plugin.get("_selected_schema_3_variable_id"), editor.get("_selected_id"), editor.get("_selected_collection"),
 		editor.get("_dock_controller") == _controller]
+
+
+func _on_dock_fluo_block_open_requested(
+	_controller_arg: PVController,
+	_collection: FlowGraphEditorCommands.Collection,
+	_container_id: String,
+	block_id: String
+) -> void:
+	_dock_activated_block_id = block_id
 
 
 func _key(code: Key, ctrl: bool = false) -> InputEventKey:
