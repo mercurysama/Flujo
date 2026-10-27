@@ -15,6 +15,7 @@ var _controller: PVController
 var _history: UndoRedo
 var _ready_first_block_display_name: String = ""
 var _dock_activated_block_id: String = ""
+var _inspector_activated_block_id: String = ""
 
 
 func _init() -> void:
@@ -80,6 +81,7 @@ func _run() -> void:
 	_plugin.set("_controller_inspector_plugin", _inspector)
 	_inspector.schema_3_variable_selection_changed.connect(Callable(_plugin, &"_on_schema_3_variable_selection_changed"))
 	_inspector.schema_3_variable_editor_focus_requested.connect(Callable(_plugin, &"_on_schema_3_variable_editor_focus_requested"))
+	_inspector.ready_block_activated.connect(_on_inspector_ready_block_activated)
 	_dock.schema_3_variable_list_focus_requested.connect(Callable(_plugin, &"_on_schema_3_variable_list_focus_requested"))
 	await _frames()
 	_check(
@@ -161,7 +163,15 @@ func _test_process() -> void:
 	if not _check(input != null and process.blocks.size() == 1, "Print creates its configurable editor."):
 		return
 	_fluo_property.refresh_dock_controller()
+	_property.call("_update_property")
 	await _frames()
+	var inspector_blocks: ItemList = _node(_property, "InspectorBlocksList") as ItemList
+	_check(inspector_blocks != null and inspector_blocks.item_count == 1, "Inspector shows blocks inside the selected container.")
+	_inspector_activated_block_id = ""
+	if inspector_blocks != null:
+		inspector_blocks.item_activated.emit(0)
+	await _frames()
+	_check(_inspector_activated_block_id == process.blocks[0].get_internal_id(), "Double-click activation from Inspector requests Fluo for the selected block.")
 	var fluo_blocks: ItemList = _node(_fluo_property, "ReadyBlocksList") as ItemList
 	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
 	if not _check(fluo_blocks != null and fluo_blocks.item_count == 1, "Fluo sees the same live block model as the dock."):
@@ -592,6 +602,15 @@ func _relay_context() -> String:
 		_controller.is_inside_tree(), _inspector.is_active_controller(_controller), _property.get("_selected_id"),
 		_plugin.get("_selected_schema_3_variable_id"), editor.get("_selected_id"), editor.get("_selected_collection"),
 		editor.get("_dock_controller") == _controller]
+
+
+func _on_inspector_ready_block_activated(
+	_controller_arg: PVController,
+	_collection: FlowGraphEditorCommands.Collection,
+	_container_id: String,
+	block_id: String
+) -> void:
+	_inspector_activated_block_id = block_id
 
 
 func _on_dock_fluo_block_open_requested(
