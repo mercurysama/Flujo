@@ -93,7 +93,17 @@ func _mount_fluo_drawer() -> void:
 	if not is_instance_valid(_fluo_drawer):
 		_fluo_drawer = null
 		return
+
+	_fluo_drawer.configure(get_undo_redo())
+	_fluo_drawer.schema_3_variable_list_focus_requested.connect(
+		_on_schema_3_variable_list_focus_requested
+	)
+	_fluo_drawer.schema_3_delete_selection_recovery_requested.connect(
+		_on_schema_3_delete_selection_recovery_requested
+	)
+
 	editor_base_control.add_child(_fluo_drawer)
+	_fluo_drawer.set_controller(_dock_controller_instance())
 
 
 func _dispose_fluo_drawer() -> void:
@@ -239,22 +249,32 @@ func _on_schema_3_variable_selection_changed(
 		return
 	_selected_schema_3_variable_id = variable_id
 	_dock.set_variable_selection(controller, collection, variable_id)
-
+	if is_instance_valid(_fluo_drawer):
+		_fluo_drawer.set_variable_selection(controller, collection, variable_id)
+	_dock.focus_variable_editor(controller, variable_id)
 
 func _on_schema_3_variable_editor_focus_requested(controller: PVController, variable_id: String) -> void:
 	if _activate_dock_controller(controller) and controller.flow_graph != null:
 		var collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.VARIABLES
+
 		for process: FlowProcess in controller.flow_graph.processes:
 			if process != null and process.get_internal_id() == variable_id:
 				collection = FlowGraphEditorCommands.Collection.PROCESSES
-		if controller.flow_graph.constructor != null and controller.flow_graph.constructor.get_internal_id() == variable_id:
+
+		if controller.flow_graph.constructor != null \
+				and controller.flow_graph.constructor.get_internal_id() == variable_id:
 			collection = FlowGraphEditorCommands.Collection.CONSTRUCTOR
+
 		for method: FlowMethodDefinition in controller.flow_graph.methods:
 			if method != null and method.get_internal_id() == variable_id:
 				collection = FlowGraphEditorCommands.Collection.METHODS
-		_dock.set_variable_selection(controller, collection, variable_id)
-		_dock.focus_variable_editor(controller, variable_id)
 
+		_dock.set_variable_selection(controller, collection, variable_id)
+
+		if is_instance_valid(_fluo_drawer):
+			_fluo_drawer.set_variable_selection(controller, collection, variable_id)
+
+		_dock.focus_variable_editor(controller, variable_id)
 
 func _on_schema_3_variable_list_focus_requested(controller: PVController, variable_id: String) -> void:
 	if is_instance_valid(controller) and controller == _dock_controller_instance() \
@@ -340,7 +360,15 @@ func _set_dock_controller(controller: PVController) -> bool:
 		_dock_controller_reference = weakref(next_controller) if next_controller != null else null
 		_selected_schema_3_variable_id = ""
 		_dock.set_controller(next_controller)
+	if is_instance_valid(_fluo_drawer):
+		_fluo_drawer.set_controller(next_controller)
 		_dock.set_variable_selection(next_controller, FlowGraphEditorCommands.Collection.VARIABLES, "")
+		if is_instance_valid(_fluo_drawer):
+			_fluo_drawer.set_variable_selection(
+				next_controller,
+				FlowGraphEditorCommands.Collection.VARIABLES,
+				""
+			)
 		return true
 	return false
 
