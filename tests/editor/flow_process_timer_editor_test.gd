@@ -242,6 +242,13 @@ func _test_process() -> void:
 		(process.blocks[0] as FlowPrintBlock).display_name == "Persistent From Flusso" 			and (process.blocks[0] as FlowPrintBlock).text == "Persistent Flusso text",
 		"Closing Flusso does not change or roll back already-live configuration."
 	)
+	_history.undo()
+	_history.undo()
+	await _frames()
+	_check(
+		(process.blocks[0] as FlowPrintBlock).display_name == "Print" 			and (process.blocks[0] as FlowPrintBlock).text.is_empty(),
+		"Undo cleanup restores the focal block after the persistence regression."
+	)
 	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
 	_check(fluo_options_panel != null and not fluo_options_panel.visible, "Closing block details leaves the Fluo list surface available.")
 	_check(not _fluo_property.close_ready_block_details(), "A second Escape-level action finds no right panel and can fall through to closing Fluo.")
