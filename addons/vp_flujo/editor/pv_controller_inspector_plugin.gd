@@ -13,11 +13,10 @@ signal schema_3_variable_selection_changed(
 	variable_id: String
 )
 signal schema_3_variable_editor_focus_requested(controller: PVController, variable_id: String)
-signal ready_block_activated(
+signal schema_3_container_activated(
 	controller: PVController,
 	collection: FlowGraphEditorCommands.Collection,
-	container_id: String,
-	block_id: String
+	container_id: String
 )
 
 var _undo_redo: EditorUndoRedoManager
@@ -56,7 +55,7 @@ func _parse_property(
 	property.configure(_undo_redo)
 	property.schema_3_variable_selection_changed.connect(_on_schema_3_variable_selection_changed)
 	property.schema_3_variable_editor_focus_requested.connect(_on_schema_3_variable_editor_focus_requested)
-	property.ready_block_activated.connect(_on_ready_block_activated)
+	property.schema_3_container_activated.connect(_on_schema_3_container_activated)
 	_active_flow_graph_property = property
 	property.tree_exited.connect(_on_flow_graph_property_tree_exited.bind(property.get_instance_id()))
 	add_property_editor(property_name, property, false, "Flow Graph")
@@ -77,13 +76,12 @@ func _on_schema_3_variable_editor_focus_requested(controller: PVController, vari
 	emit_signal(&"schema_3_variable_editor_focus_requested", controller, variable_id)
 
 
-func _on_ready_block_activated(
+func _on_schema_3_container_activated(
 	controller: PVController,
 	collection: FlowGraphEditorCommands.Collection,
-	container_id: String,
-	block_id: String
+	container_id: String
 ) -> void:
-	ready_block_activated.emit(controller, collection, container_id, block_id)
+	schema_3_container_activated.emit(controller, collection, container_id)
 
 
 func focus_schema_3_variable_list(controller: PVController, variable_id: String) -> void:
@@ -168,8 +166,10 @@ func invalidate_controller(controller: PVController) -> void:
 			_on_schema_3_variable_editor_focus_requested):
 		_active_flow_graph_property.schema_3_variable_editor_focus_requested.disconnect(
 			_on_schema_3_variable_editor_focus_requested)
-	if _active_flow_graph_property.ready_block_activated.is_connected(_on_ready_block_activated):
-		_active_flow_graph_property.ready_block_activated.disconnect(_on_ready_block_activated)
+	if _active_flow_graph_property.schema_3_container_activated.is_connected(
+			_on_schema_3_container_activated):
+		_active_flow_graph_property.schema_3_container_activated.disconnect(
+			_on_schema_3_container_activated)
 	_active_flow_graph_property = null
 
 
