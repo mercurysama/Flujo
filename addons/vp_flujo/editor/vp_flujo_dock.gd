@@ -248,7 +248,7 @@ func toggle_visibility() -> void:
 
 func _configure_dock() -> void:
 	name = "VPFlujoDock"
-	title = "Flow"
+	title = "Flujo"
 	default_slot = EditorDock.DOCK_SLOT_RIGHT_BR
 	available_layouts = EditorDock.DOCK_LAYOUT_VERTICAL | EditorDock.DOCK_LAYOUT_FLOATING
 	transient = true
@@ -266,7 +266,7 @@ func _build_interface() -> void:
 	add_child(_content)
 
 	var title_label := Label.new()
-	title_label.text = "Flow"
+	title_label.text = "Flujo"
 	title_label.add_theme_font_size_override("font_size", 18)
 	_content.add_child(title_label)
 
@@ -277,7 +277,7 @@ func _build_interface() -> void:
 	_interaction_state_label = Label.new()
 	_interaction_state_label.name = &"FlowInteractionState"
 	_interaction_state_label.text = "Interaction: Godot"
-	_interaction_state_label.tooltip_text = "Current Flow interaction state."
+	_interaction_state_label.tooltip_text = "Current Flujo interaction state."
 	_interaction_state_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	interaction_row.add_child(_interaction_state_label)
 	_interaction_button = Button.new()
