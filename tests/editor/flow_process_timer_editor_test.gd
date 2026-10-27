@@ -15,7 +15,7 @@ var _controller: PVController
 var _history: UndoRedo
 var _ready_first_block_display_name: String = ""
 var _dock_activated_block_id: String = ""
-var _inspector_activated_block_id: String = ""
+var _inspector_activated_container_id: String = ""
 
 
 func _init() -> void:
@@ -81,7 +81,7 @@ func _run() -> void:
 	_plugin.set("_controller_inspector_plugin", _inspector)
 	_inspector.schema_3_variable_selection_changed.connect(Callable(_plugin, &"_on_schema_3_variable_selection_changed"))
 	_inspector.schema_3_variable_editor_focus_requested.connect(Callable(_plugin, &"_on_schema_3_variable_editor_focus_requested"))
-	_inspector.ready_block_activated.connect(_on_inspector_ready_block_activated)
+	_inspector.schema_3_container_activated.connect(_on_inspector_container_activated)
 	_dock.schema_3_variable_list_focus_requested.connect(Callable(_plugin, &"_on_schema_3_variable_list_focus_requested"))
 	await _frames()
 	_check(
@@ -130,12 +130,23 @@ func _test_process() -> void:
 	list.item_selected.emit(0)
 	await _frames()
 	_check(_list("Processes").get_instance_id() == instance_id, "Selection keeps the Inspector list mounted.")
+	_inspector_activated_container_id = ""
 	list.item_activated.emit(0)
+	await _frames()
+	_check(
+		_inspector_activated_container_id == process_id,
+		"Double-click activation of the existing Process row requests the Fluo drawer."
+	)
+	_check(
+		_node(_property, "InspectorBlocksList") == null,
+		"Inspector does not add a duplicate Blocks section."
+	)
+	_dock.focus_variable_editor(_controller, process_id)
 	await _frames()
 	var name_input: LineEdit = _node(_dock, "ReadyProcessName") as LineEdit
 	if not _check(name_input != null, "Dock exposes process name."):
 		return
-	_check(name_input.has_focus(), "Enter explicitly focuses process Name through the relay.")
+	_check(name_input.has_focus(), "Explicit dock focus still reaches process Name during coexistence.")
 	name_input.text_submitted.emit("Startup")
 	await _frames()
 	_check(process.display_name == "Startup" and process.get_internal_id() == process_id, "Process Name uses its stable ID.")
@@ -163,15 +174,8 @@ func _test_process() -> void:
 	if not _check(input != null and process.blocks.size() == 1, "Print creates its configurable editor."):
 		return
 	_fluo_property.refresh_dock_controller()
-	_property.call("_update_property")
 	await _frames()
-	var inspector_blocks: ItemList = _node(_property, "InspectorBlocksList") as ItemList
-	_check(inspector_blocks != null and inspector_blocks.item_count == 1, "Inspector shows blocks inside the selected container.")
-	_inspector_activated_block_id = ""
-	if inspector_blocks != null:
-		inspector_blocks.item_activated.emit(0)
-	await _frames()
-	_check(_inspector_activated_block_id == process.blocks[0].get_internal_id(), "Double-click activation from Inspector requests Fluo for the selected block.")
+	_check(_node(_property, "InspectorBlocksList") == null, "Inspector remains limited to its existing container rows.")
 	var fluo_blocks: ItemList = _node(_fluo_property, "ReadyBlocksList") as ItemList
 	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
 	if not _check(fluo_blocks != null and fluo_blocks.item_count == 1, "Fluo sees the same live block model as the dock."):
@@ -604,13 +608,12 @@ func _relay_context() -> String:
 		editor.get("_dock_controller") == _controller]
 
 
-func _on_inspector_ready_block_activated(
+func _on_inspector_container_activated(
 	_controller_arg: PVController,
 	_collection: FlowGraphEditorCommands.Collection,
-	_container_id: String,
-	block_id: String
+	container_id: String
 ) -> void:
-	_inspector_activated_block_id = block_id
+	_inspector_activated_container_id = container_id
 
 
 func _on_dock_fluo_block_open_requested(
