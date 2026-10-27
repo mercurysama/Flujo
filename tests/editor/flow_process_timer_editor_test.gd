@@ -118,6 +118,16 @@ func _test_process() -> void:
 	var fluo_options_panel: PanelContainer = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
 	_check(fluo_list_panel != null, "Fluo renders the block list in its left internal panel.")
 	_check(fluo_options_panel != null and not fluo_options_panel.visible, "Fluo block options start hidden.")
+	_fluo_property.focus_flow_entry()
+	await _frames()
+	var empty_flow_adds: HBoxContainer = _node(_fluo_property, "AddBlockActions") as HBoxContainer
+	var empty_flow_first_add: Button = null
+	if empty_flow_adds != null and empty_flow_adds.get_child_count() > 0:
+		empty_flow_first_add = empty_flow_adds.get_child(0) as Button
+	_check(
+		empty_flow_first_add != null and empty_flow_first_add.has_focus(),
+		"Opening Flow without blocks focuses its first Add block button."
+	)
 	_check(list.has_focus() and list.is_selected(0), "Process Add focuses and selects its row.")
 	_check(_node(_property, "ReadyProcessEditor") == null and _button(_property, "Delete Process") == null, "Inspector has no process configuration or actions.")
 	var panel: Control = _node(_dock, "ReadyProcessEditor") as Control
@@ -175,11 +185,17 @@ func _test_process() -> void:
 		return
 	_fluo_property.refresh_dock_controller()
 	await _frames()
+	_fluo_property.focus_flow_entry()
+	await _frames()
 	_check(_node(_property, "InspectorBlocksList") == null, "Inspector remains limited to its existing container rows.")
 	var fluo_blocks: ItemList = _node(_fluo_property, "ReadyBlocksList") as ItemList
 	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
 	if not _check(fluo_blocks != null and fluo_blocks.item_count == 1, "Fluo sees the same live block model as the dock."):
 		return
+	_check(
+		fluo_blocks.has_focus() and fluo_blocks.is_selected(0),
+		"Opening Flow with blocks focuses and selects its first block."
+	)
 	_check(fluo_options_panel != null and not fluo_options_panel.visible, "Selecting a process does not open block options.")
 	fluo_blocks.item_activated.emit(0)
 	await _frames()
@@ -196,6 +212,10 @@ func _test_process() -> void:
 	if fluo_options_close != null:
 		fluo_options_close.pressed.emit()
 	_check(fluo_options_panel != null and not fluo_options_panel.visible, "The right-panel X closes only block options.")
+	_check(
+		fluo_blocks.has_focus() and fluo_blocks.is_selected(0),
+		"Closing Flusso returns focus to the selected Flow block."
+	)
 	fluo_blocks.item_activated.emit(0)
 	await _frames()
 	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
