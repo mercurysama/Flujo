@@ -284,6 +284,14 @@ func _input(event: InputEvent) -> void:
 	var direction: int = -1 if key_event.keycode == KEY_PAGEUP else 1
 	var handled: bool = false
 
+	# Ctrl+PageUp/PageDown belongs to Flow block navigation while Fluo is open.
+	# Consume it even from text fields so Godot cannot reuse the shortcut.
+	if key_event.ctrl_pressed and not key_event.alt_pressed:
+		if _variable_editor != null:
+			handled = _variable_editor.navigate_ready_block(direction)
+		_mark_input_handled()
+		return
+
 	if key_event.alt_pressed:
 		if key_event.shift_pressed:
 			direction *= -1
@@ -291,8 +299,7 @@ func _input(event: InputEvent) -> void:
 			handled = _variable_editor.cycle_ready_block_option_focus(direction)
 	elif not _focus_is_text_editing():
 		if _variable_editor != null:
-			handled = _variable_editor.navigate_process(direction) \
-				if key_event.ctrl_pressed else _variable_editor.navigate_ready_block(direction)
+			handled = _variable_editor.navigate_ready_block(direction)
 
 	if handled:
 		_mark_input_handled()
