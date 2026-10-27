@@ -96,6 +96,10 @@ Themes + Motion is required before the first stable release, after functional pr
 
 The Addon Preview intentionally omits `project.godot`, demo, tests and tools. The Fluo implementation file is `addons/vp_flujo/editor/fluo_drawer.gd`; there is no new standalone `flujo.gd`.
 
+## Custom block SDK research
+
+The recovered and audited BLOCK SDK research is documented in [Custom Block SDK and Block Builder Skill Research](custom_block_sdk_research.md). Future custom-block or `flujo-block-builder` work must read it before changing the SDK.
+
 ## Next maintenance sequence
 
 1. Complete Android interaction validation.

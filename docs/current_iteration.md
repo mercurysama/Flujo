@@ -19,6 +19,8 @@
 
 Read [Project memory / handoff](project_memory.md) and [Fluo Preview 1](fluo_preview_01.md) before continuing this branch.
 
+Custom-block SDK research and the recovered requirements for the future `flujo-block-builder` Skill are consolidated in [Custom Block SDK and Block Builder Skill Research](custom_block_sdk_research.md). The research confirms the external manifest/catalog/factory/hooks foundation is implemented, while normal Flow/Fluo external Add integration and generic Flusso configuration remain pending bridges.
+
 ## Iteration 7 planning — Typed Variables
 
 - **Latest completed iteration:** Iteration 6 — Constructor and Reusable Methods.
