@@ -107,6 +107,7 @@ func open_container(
 	if _variable_editor != null:
 		_variable_editor.close_ready_block_details()
 		_variable_editor.set_dock_variable_selection(controller, collection, container_id)
+		_variable_editor.focus_flow_entry()
 	open()
 
 
