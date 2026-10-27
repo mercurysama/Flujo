@@ -520,6 +520,15 @@ func open_ready_block_details(
 	return true
 
 
+func commit_ready_block_details() -> bool:
+	if not _fluo_mode:
+		return false
+	var editor: FlowReadyProcessEditor = _content.find_child("ReadyProcessEditor", true, false) as FlowReadyProcessEditor
+	if editor == null:
+		return false
+	return editor.commit_block_details_drafts()
+
+
 func close_ready_block_details() -> bool:
 	if not _fluo_mode or not _ready_block_details_open:
 		return false
