@@ -18,6 +18,11 @@ signal schema_3_container_activated(
 	collection: FlowGraphEditorCommands.Collection,
 	container_id: String
 )
+signal schema_3_container_navigation_changed(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	container_id: String
+)
 signal schema_3_variable_list_focus_requested(controller: PVController, variable_id: String)
 signal ready_block_activated(
 	controller: PVController,
@@ -206,6 +211,29 @@ func set_dock_variable_selection(
 	_restore_selected_list_focus = false
 	_clear_deleted_selection_state()
 	_close_delete_confirmation()
+	_request_rebuild()
+
+
+func sync_schema_3_container_selection(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	container_id: String
+) -> void:
+	if _dock_mode or controller != _active_controller() or controller.flow_graph == null 			or container_id.is_empty():
+		return
+	_selected_collection = collection
+	_selected_id = container_id
+	_selected_view_title = _view_title_for_selection(controller.flow_graph, collection, container_id)
+	_selected_view_index = _selected_view_index_for_id(
+		controller.flow_graph,
+		collection,
+		container_id,
+		_selected_view_title
+	)
+	_ready_block_id = ""
+	_rename_target_id = ""
+	_restore_selected_list_focus = false
+	_clear_deleted_selection_state()
 	_request_rebuild()
 
 
@@ -658,6 +686,11 @@ func navigate_process(direction: int) -> bool:
 	_restore_selected_list_focus = false
 	_clear_deleted_selection_state()
 	_close_delete_confirmation()
+	schema_3_container_navigation_changed.emit(
+		controller,
+		FlowGraphEditorCommands.Collection.PROCESSES,
+		_selected_id
+	)
 	_request_rebuild()
 	return true
 
