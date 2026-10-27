@@ -652,6 +652,8 @@ func navigate_process(direction: int) -> bool:
 	_selected_view_index = next_index
 	_ready_block_id = ""
 	_ready_block_details_open = false
+	_flusso_snapshots.clear()
+	_flow_entry_focus_pending = true
 	_rename_target_id = ""
 	_restore_selected_list_focus = false
 	_clear_deleted_selection_state()
