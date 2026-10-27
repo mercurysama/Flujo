@@ -6,6 +6,7 @@ extends EditorPlugin
 const PV_CONTROLLER_SCRIPT := preload("res://addons/vp_flujo/runtime/pv_controller.gd")
 const PV_SCENE_INSPECTOR_CLASS := preload("res://addons/vp_flujo/editor/pv_scene_inspector.gd")
 const VP_FLUJO_DOCK_CLASS := preload("res://addons/vp_flujo/editor/vp_flujo_dock.gd")
+const FLUO_DRAWER_CLASS := preload("res://addons/vp_flujo/editor/fluo_drawer.gd")
 const PV_CONTROLLER_INSPECTOR_PLUGIN_CLASS := preload("res://addons/vp_flujo/editor/pv_controller_inspector_plugin.gd")
 const FLOW_INTERACTION_COORDINATOR_CLASS := preload("res://addons/vp_flujo/editor/flow_interaction_coordinator.gd")
 const FLOW_CONTROLLER_PROVISIONER_CLASS := preload("res://addons/vp_flujo/editor/flow_controller_provisioner.gd")
@@ -21,6 +22,7 @@ var _selected_schema_3_variable_id: String = ""
 var _interaction_coordinator: FlowInteractionCoordinator
 var _interaction_shortcut: Shortcut
 var _controller_provisioner: FlowControllerProvisioner
+var _fluo_drawer: FluoDrawer
 
 
 func _enter_tree() -> void:
@@ -39,7 +41,9 @@ func _enter_tree() -> void:
 	_dock.schema_3_variable_list_focus_requested.connect(_on_schema_3_variable_list_focus_requested)
 	_dock.schema_3_delete_selection_recovery_requested.connect(_on_schema_3_delete_selection_recovery_requested)
 	_dock.interaction_toggle_requested.connect(_on_interaction_toggle_requested)
+	_dock.fluo_open_requested.connect(_on_fluo_open_requested)
 	add_dock(_dock)
+	_mount_fluo_drawer()
 	var editor_settings: EditorSettings = EditorInterface.get_editor_settings()
 	if editor_settings != null:
 		if not editor_settings.has_shortcut(INTERACTION_SHORTCUT_PATH):
@@ -64,6 +68,7 @@ func _exit_tree() -> void:
 	if _interaction_coordinator != null:
 		_interaction_coordinator.shutdown()
 	_interaction_coordinator = null
+	_dispose_fluo_drawer()
 	_controller_provisioner = null
 	_interaction_shortcut = null
 	if is_instance_valid(_controller_inspector_plugin):
@@ -76,6 +81,36 @@ func _exit_tree() -> void:
 
 	_dock = null
 	_scene_inspector = null
+
+
+func _mount_fluo_drawer() -> void:
+	if is_instance_valid(_fluo_drawer):
+		return
+	var editor_base_control: Control = EditorInterface.get_base_control()
+	if not is_instance_valid(editor_base_control):
+		return
+	_fluo_drawer = FLUO_DRAWER_CLASS.new() as FluoDrawer
+	if not is_instance_valid(_fluo_drawer):
+		_fluo_drawer = null
+		return
+	editor_base_control.add_child(_fluo_drawer)
+
+
+func _dispose_fluo_drawer() -> void:
+	var drawer: FluoDrawer = _fluo_drawer
+	_fluo_drawer = null
+	if not is_instance_valid(drawer):
+		return
+	drawer.close()
+	var parent: Node = drawer.get_parent()
+	if parent != null:
+		parent.remove_child(drawer)
+	drawer.free()
+
+
+func _on_fluo_open_requested() -> void:
+	if is_instance_valid(_fluo_drawer):
+		_fluo_drawer.open()
 
 
 func _connect_editor_signals() -> void:

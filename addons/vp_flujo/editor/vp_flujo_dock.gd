@@ -14,6 +14,7 @@ signal schema_3_delete_selection_recovery_requested(
 	restore_focus: bool
 )
 signal interaction_toggle_requested
+signal fluo_open_requested
 
 var _controller_present: bool
 var _controller_presence_initialized: bool = false
@@ -25,6 +26,7 @@ var _editor_scroll: ScrollContainer
 var _editor_scroll_content: VBoxContainer
 var _interaction_state_label: Label
 var _interaction_button: Button
+var _fluo_button: Button
 var _last_interaction_focus_reference: WeakRef
 
 
@@ -269,6 +271,20 @@ func _build_interface() -> void:
 	_interaction_button.tooltip_text = "Enter or leave Flow interaction using F4."
 	_interaction_button.pressed.connect(_on_interaction_button_pressed)
 	interaction_row.add_child(_interaction_button)
+	var fluo_button_host: Control = Control.new()
+	fluo_button_host.name = &"FluoDrawerButtonHost"
+	fluo_button_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fluo_button_host.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	interaction_row.add_child(fluo_button_host)
+	_fluo_button = Button.new()
+	_fluo_button.name = &"OpenFluoPOC"
+	_fluo_button.text = "Open Fluo (POC)"
+	_fluo_button.tooltip_text = "Open the Fluo overlay."
+	_fluo_button.focus_mode = Control.FOCUS_ALL
+	_fluo_button.clip_text = true
+	_fluo_button.pressed.connect(_on_fluo_button_pressed)
+	_fluo_button.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fluo_button_host.add_child(_fluo_button)
 
 	var description_label := Label.new()
 	description_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -295,6 +311,10 @@ func _build_interface() -> void:
 
 func _on_interaction_button_pressed() -> void:
 	emit_signal(&"interaction_toggle_requested")
+
+
+func _on_fluo_button_pressed() -> void:
+	emit_signal(&"fluo_open_requested")
 
 
 func _set_interaction_presentation(state_name: String, button_text: String, disabled: bool) -> void:
