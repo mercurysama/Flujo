@@ -62,6 +62,7 @@ var _color_preview_button_reference: WeakRef
 var _ready_block_id: String = ""
 var _ready_block_details_open: bool = false
 var _fluo_mode: bool = false
+var _flusso_snapshots: Dictionary = {}
 var _deleted_resource_id: String = ""
 var _deleted_resource_replacement_id: String = ""
 var _deleted_resource_collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.PROCESSES
@@ -129,6 +130,7 @@ func _reset_dock_context() -> void:
 	_selected_view_index = -1
 	_ready_block_id = ""
 	_ready_block_details_open = false
+	_flusso_snapshots.clear()
 	_rename_target_id = ""
 	_variable_advanced_open = false
 	_variable_focus_control = &""
@@ -194,6 +196,7 @@ func set_dock_variable_selection(
 	_selected_id = next_id
 	_ready_block_id = ""
 	_ready_block_details_open = false
+	_flusso_snapshots.clear()
 	_selected_view_title = _view_title_for_selection(graph, collection, next_id)
 	_selected_view_index = _selected_view_index_for_id(graph, collection, next_id, _selected_view_title)
 	_rename_target_id = ""
@@ -463,6 +466,7 @@ func _render_ready_process_editor(parent: Container) -> void:
 	)
 	editor.block_selected.connect(_on_ready_block_selected)
 	editor.block_activated.connect(_on_ready_block_activated)
+	editor.block_revert_requested.connect(_on_ready_block_revert_requested)
 	editor.block_details_visibility_changed.connect(_on_ready_block_details_visibility_changed)
 	editor.block_delete_requested.connect(_on_ready_block_delete_requested)
 	editor.focus_requested.connect(_on_process_focus_requested)
@@ -474,6 +478,8 @@ func _render_ready_process_editor(parent: Container) -> void:
 func _on_ready_block_selected(block_id: String) -> void:
 	_clear_deleted_block_selection_state()
 	_ready_block_id = block_id
+	if _fluo_mode and _ready_block_details_open:
+		_ensure_flusso_snapshot(block_id)
 
 
 func _on_ready_block_activated(block_id: String) -> void:
@@ -481,6 +487,7 @@ func _on_ready_block_activated(block_id: String) -> void:
 	_ready_block_id = block_id
 	if _fluo_mode:
 		_ready_block_details_open = true
+		_ensure_flusso_snapshot(block_id)
 		return
 	var controller: PVController = _active_controller()
 	if controller != null and not _selected_id.is_empty():
@@ -494,6 +501,22 @@ func _on_ready_block_activated(block_id: String) -> void:
 
 func _on_ready_block_details_visibility_changed(is_visible: bool) -> void:
 	_ready_block_details_open = is_visible
+	if not is_visible:
+		_flusso_snapshots.clear()
+
+
+func _on_ready_block_revert_requested(block_id: String) -> void:
+	if not _fluo_mode or block_id.is_empty() or not _flusso_snapshots.has(block_id):
+		return
+	var controller: PVController = _active_controller()
+	if controller == null or _commands == null:
+		return
+	_commands.restore_ready_block_snapshot(
+		controller,
+		_selected_id,
+		block_id,
+		_flusso_snapshots[block_id] as Dictionary
+	)
 
 
 func navigate_ready_block(direction: int) -> bool:
@@ -514,19 +537,12 @@ func open_ready_block_details(
 	if not _fluo_mode or not is_instance_valid(controller) or block_id.is_empty():
 		return false
 	set_dock_variable_selection(controller, collection, container_id)
+	_flusso_snapshots.clear()
 	_ready_block_id = block_id
 	_ready_block_details_open = true
+	_ensure_flusso_snapshot(block_id)
 	_request_rebuild()
 	return true
-
-
-func commit_ready_block_details() -> bool:
-	if not _fluo_mode:
-		return false
-	var editor: FlowReadyProcessEditor = _content.find_child("ReadyProcessEditor", true, false) as FlowReadyProcessEditor
-	if editor == null:
-		return false
-	return editor.commit_block_details_drafts()
 
 
 func close_ready_block_details() -> bool:
@@ -536,8 +552,39 @@ func close_ready_block_details() -> bool:
 	var editor: FlowReadyProcessEditor = _content.find_child("ReadyProcessEditor", true, false) as FlowReadyProcessEditor
 	if editor != null:
 		editor.close_block_details()
+	_flusso_snapshots.clear()
 	_request_rebuild()
 	return true
+
+
+func _ensure_flusso_snapshot(block_id: String) -> void:
+	if not _fluo_mode or block_id.is_empty() or _flusso_snapshots.has(block_id) or _commands == null:
+		return
+	var controller: PVController = _active_controller()
+	var container: FlowBlockContainer = _commands.find_block_container(controller, _selected_id)
+	if container == null:
+		return
+	for block: FlowBlock in container.blocks:
+		if block == null or block.get_internal_id() != block_id:
+			continue
+		_flusso_snapshots[block_id] = _snapshot_block_properties(block)
+		return
+
+
+func _snapshot_block_properties(block: FlowBlock) -> Dictionary:
+	var snapshot: Dictionary = {}
+	for property_info: Dictionary in block.get_property_list():
+		var property_name: StringName = property_info.get("name", &"") as StringName
+		var usage: int = property_info.get("usage", 0) as int
+		if property_name.is_empty() or String(property_name).begins_with("_") 				or property_name in [&"resource_local_to_scene", &"resource_name", &"script"] 				or (usage & PROPERTY_USAGE_STORAGE) == 0:
+			continue
+		var value: Variant = block.get(property_name)
+		if value is Array:
+			value = (value as Array).duplicate(true)
+		elif value is Dictionary:
+			value = (value as Dictionary).duplicate(true)
+		snapshot[property_name] = value
+	return snapshot
 
 
 func cycle_ready_block_option_focus(direction: int) -> bool:
