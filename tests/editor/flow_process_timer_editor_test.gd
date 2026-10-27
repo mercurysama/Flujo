@@ -209,6 +209,12 @@ func _test_process() -> void:
 		_check(fluo_block_enabled.has_focus(), "Forward option navigation moves from Block Name to Block Enabled.")
 		_check(_fluo_property.cycle_ready_block_option_focus(-1), "Reverse option navigation can move backward through block-option controls.")
 		_check(fluo_block_name.has_focus(), "Reverse option navigation returns to Block Name.")
+		fluo_block_enabled.toggled.emit(false)
+		await _frames()
+		_check(not process.blocks[0].enabled, "Flusso checkbox configuration applies immediately.")
+		fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
+		fluo_block_name = _node(fluo_options_panel, "ReadyBlockName") as LineEdit
+		fluo_print_text = _node(fluo_options_panel, "ReadyPrintText") as TextEdit
 	if fluo_block_name != null and fluo_print_text != null:
 		fluo_block_name.text = "Live From Flusso"
 		fluo_block_name.text_changed.emit(fluo_block_name.text)
@@ -224,8 +230,8 @@ func _test_process() -> void:
 		revert_button.pressed.emit()
 	await _frames()
 	_check(
-		(process.blocks[0] as FlowPrintBlock).display_name == "Print" 			and (process.blocks[0] as FlowPrintBlock).text.is_empty(),
-		"Revertir restores the block snapshot captured when Flusso opened."
+		(process.blocks[0] as FlowPrintBlock).display_name == "Print" 			and (process.blocks[0] as FlowPrintBlock).text.is_empty() 			and process.blocks[0].enabled,
+		"Revertir restores text and non-text configuration from the Flusso opening snapshot."
 	)
 	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
 	_check(fluo_options_panel != null and fluo_options_panel.visible, "Revertir keeps Flusso open.")
