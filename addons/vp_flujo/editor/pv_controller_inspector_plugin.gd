@@ -84,6 +84,22 @@ func _on_schema_3_container_activated(
 	schema_3_container_activated.emit(controller, collection, container_id)
 
 
+func sync_schema_3_container_selection(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	container_id: String
+) -> void:
+	if not is_instance_valid(_active_flow_graph_property):
+		return
+	if _active_flow_graph_property.get_edited_object() != controller:
+		return
+	_active_flow_graph_property.sync_schema_3_container_selection(
+		controller,
+		collection,
+		container_id
+	)
+
+
 func focus_schema_3_variable_list(controller: PVController, variable_id: String) -> void:
 	if not is_instance_valid(_active_flow_graph_property):
 		return
