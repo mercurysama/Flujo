@@ -182,6 +182,22 @@ func _test_process() -> void:
 	await _frames()
 	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
 	_check(fluo_options_panel != null and fluo_options_panel.visible, "Block options can reopen after using their close X.")
+	var fluo_block_name: LineEdit = _node(fluo_options_panel, "ReadyBlockName") as LineEdit
+	var fluo_block_enabled: CheckBox = _node(fluo_options_panel, "ReadyBlockEnabled") as CheckBox
+	if fluo_block_name != null and fluo_block_enabled != null:
+		fluo_block_name.grab_focus()
+		_check(_fluo_property.cycle_ready_block_option_focus(1), "Alt+AvPag navigation can advance through block-option controls.")
+		_check(fluo_block_enabled.has_focus(), "Forward option navigation moves from Block Name to Block Enabled.")
+		_check(_fluo_property.cycle_ready_block_option_focus(-1), "Reverse option navigation can move backward through block-option controls.")
+		_check(fluo_block_name.has_focus(), "Reverse option navigation returns to Block Name.")
+	_check(_fluo_property.close_ready_block_details(), "First Escape-level action can close only Fluo block options.")
+	await _frames()
+	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
+	_check(fluo_options_panel != null and not fluo_options_panel.visible, "Closing block details leaves the Fluo list surface available.")
+	_check(not _fluo_property.close_ready_block_details(), "A second Escape-level action finds no right panel and can fall through to closing Fluo.")
+	fluo_blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
+	fluo_blocks.item_activated.emit(0)
+	await _frames()
 	_check(input.has_focus() and input.tooltip_text.contains("Ctrl+Enter"), "Add Print focuses text and explains confirmation.")
 	var print_surface: StyleBoxFlat = input.get_theme_stylebox(&"normal") as StyleBoxFlat
 	_check(
