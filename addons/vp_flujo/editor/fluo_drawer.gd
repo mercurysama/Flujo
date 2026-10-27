@@ -301,7 +301,9 @@ func _input(event: InputEvent) -> void:
 			handled = _variable_editor.cycle_ready_block_option_focus(direction)
 	elif not _focus_is_text_editing():
 		if _variable_editor != null:
-			handled = _variable_editor.navigate_ready_block(direction)
+			# Plain PageUp/PageDown moves one level out: between the
+			# Inspector container rows represented by the current Fluo view.
+			handled = _variable_editor.navigate_process(direction)
 
 	if handled:
 		_mark_input_handled()
