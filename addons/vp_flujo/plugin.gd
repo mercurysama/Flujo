@@ -35,8 +35,8 @@ func _enter_tree() -> void:
 	_controller_inspector_plugin.schema_3_variable_editor_focus_requested.connect(
 		_on_schema_3_variable_editor_focus_requested
 	)
-	_controller_inspector_plugin.ready_block_activated.connect(
-		_on_fluo_block_open_requested
+	_controller_inspector_plugin.schema_3_container_activated.connect(
+		_on_fluo_container_open_requested
 	)
 	add_inspector_plugin(_controller_inspector_plugin)
 	_dock = VP_FLUJO_DOCK_CLASS.new()
@@ -125,6 +125,16 @@ func _dispose_fluo_drawer() -> void:
 func _on_fluo_open_requested() -> void:
 	if is_instance_valid(_fluo_drawer):
 		_fluo_drawer.open()
+
+
+func _on_fluo_container_open_requested(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	container_id: String
+) -> void:
+	if not is_instance_valid(_fluo_drawer) or not is_instance_valid(controller):
+		return
+	_fluo_drawer.open_container(controller, collection, container_id)
 
 
 func _on_fluo_block_open_requested(
