@@ -452,7 +452,10 @@ func _render_block() -> void:
 	name_input.name = &"ReadyBlockName"
 	name_input.focus_mode = Control.FOCUS_ALL
 	name_input.placeholder_text = "Block name"
-	name_input.tooltip_text = "Changes are saved when leaving Flusso. Enter also applies Block Name." 		if _split_block_layout else 		"Enter applies Block Name. Escape cancels the draft. F2 focuses this field from the block list."
+	if _split_block_layout:
+		name_input.tooltip_text = "Changes are saved when leaving Flusso. Enter also applies Block Name."
+	else:
+		name_input.tooltip_text = "Enter applies Block Name. Escape cancels the draft. F2 focuses this field from the block list."
 	name_input.text = _block_display_name(selected)
 	name_input.set_meta(&"flusso_original_text", name_input.text)
 	name_input.text_submitted.connect(_on_block_name_submitted.bind(_block_id))
@@ -481,7 +484,10 @@ func _render_block() -> void:
 		_details.add_child(label)
 		var input: TextEdit = TextEdit.new()
 		input.name = &"ReadyPrintText"
-		input.tooltip_text = "Changes are saved when leaving Flusso. Ctrl+Enter also applies Print." 			if _split_block_layout else 			"Enter inserts a new line. Ctrl+Enter confirms Print. Escape cancels the draft."
+		if _split_block_layout:
+			input.tooltip_text = "Changes are saved when leaving Flusso. Ctrl+Enter also applies Print."
+		else:
+			input.tooltip_text = "Enter inserts a new line. Ctrl+Enter confirms Print. Escape cancels the draft."
 		input.focus_mode = Control.FOCUS_ALL
 		input.text = (selected as FlowPrintBlock).text
 		input.set_meta(&"flusso_original_text", input.text)
