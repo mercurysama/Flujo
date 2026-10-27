@@ -576,7 +576,7 @@ func _snapshot_block_properties(block: FlowBlock) -> Dictionary:
 	for property_info: Dictionary in block.get_property_list():
 		var property_name: StringName = property_info.get("name", &"") as StringName
 		var usage: int = property_info.get("usage", 0) as int
-		if property_name.is_empty() or String(property_name).begins_with("_") 				or property_name in [&"resource_local_to_scene", &"resource_name", &"script"] 				or (usage & PROPERTY_USAGE_STORAGE) == 0:
+		if property_name.is_empty() 				or String(property_name).begins_with("_") 				or String(property_name).begins_with("resource_") 				or property_name == &"script" 				or (usage & PROPERTY_USAGE_STORAGE) == 0:
 			continue
 		var value: Variant = block.get(property_name)
 		if value is Array:
