@@ -245,12 +245,16 @@ func _on_repeat_changed(value: bool) -> void:
 
 
 func _on_selected(index: int) -> void:
+	if _split_block_layout:
+		commit_block_details_drafts()
 	if not _select_block_index(index):
 		return
 	_render_block()
 
 
 func _on_activated(index: int) -> void:
+	if _split_block_layout:
+		commit_block_details_drafts()
 	if not _select_block_index(index):
 		return
 	block_activated.emit(_block_id)
@@ -271,6 +275,8 @@ func _select_block_index(index: int) -> bool:
 func navigate_block(direction: int) -> bool:
 	if not _current() or _list == null or _list.item_count == 0 or direction == 0:
 		return false
+	if _split_block_layout:
+		commit_block_details_drafts()
 	var current_index: int = -1
 	for index: int in _list.item_count:
 		if (_list.get_item_metadata(index) as String) == _block_id:
@@ -313,6 +319,38 @@ func close_block_details() -> bool:
 		return false
 	_on_close_block_options()
 	return true
+
+
+func commit_block_details_drafts() -> bool:
+	if not _split_block_layout or not _block_details_open or not _current() 			or _details == null or _block_id.is_empty():
+		return false
+	var changed: bool = false
+
+	var name_input: LineEdit = _details.find_child("ReadyBlockName", true, false) as LineEdit
+	if name_input != null:
+		var original_name: String = name_input.get_meta(&"flusso_original_text", name_input.text) as String
+		if name_input.text != original_name:
+			changed = _commands.set_ready_property(
+				_controller,
+				_process_id,
+				_block_id,
+				&"display_name",
+				name_input.text
+			) or changed
+
+	var print_input: TextEdit = _details.find_child("ReadyPrintText", true, false) as TextEdit
+	if print_input != null:
+		var original_text: String = print_input.get_meta(&"flusso_original_text", print_input.text) as String
+		if print_input.text != original_text:
+			changed = _commands.set_ready_property(
+				_controller,
+				_process_id,
+				_block_id,
+				&"text",
+				print_input.text
+			) or changed
+
+	return changed
 
 
 func cycle_block_option_focus(direction: int) -> bool:
@@ -360,6 +398,8 @@ func _on_block_name_submitted(value: String, block_id: String) -> void:
 
 func _on_block_name_input(event: InputEvent, input: LineEdit, block_id: String, original: String) -> void:
 	if _is_escape(event) and _current() and block_id == _block_id:
+		if _split_block_layout:
+			return
 		input.text = original
 		input.accept_event()
 		focus_requested.emit(&"ReadyBlocksList", false)
@@ -414,6 +454,7 @@ func _render_block() -> void:
 	name_input.placeholder_text = "Block name"
 	name_input.tooltip_text = "Enter applies Block Name. Escape cancels the draft. F2 focuses this field from the block list."
 	name_input.text = _block_display_name(selected)
+	name_input.set_meta(&"flusso_original_text", name_input.text)
 	name_input.text_submitted.connect(_on_block_name_submitted.bind(_block_id))
 	name_input.gui_input.connect(_on_block_name_input.bind(name_input, _block_id, name_input.text))
 	_details.add_child(name_input)
@@ -443,6 +484,7 @@ func _render_block() -> void:
 		input.tooltip_text = "Enter inserts a new line. Ctrl+Enter confirms Print. Escape cancels the draft."
 		input.focus_mode = Control.FOCUS_ALL
 		input.text = (selected as FlowPrintBlock).text
+		input.set_meta(&"flusso_original_text", input.text)
 		input.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 		input.custom_minimum_size.y = input.get_theme_font(&"font").get_height(input.get_theme_font_size(&"font_size")) * 3.0 + input.get_theme_stylebox(&"normal").get_minimum_size().y
 		_apply_themed_print_text_surface(input)
@@ -453,6 +495,7 @@ func _render_block() -> void:
 func _on_close_block_options() -> void:
 	if not _split_block_layout:
 		return
+	commit_block_details_drafts()
 	_block_details_open = false
 	if _details_panel != null:
 		_details_panel.visible = false
@@ -483,6 +526,8 @@ func _render_method_target(call: FlowMethodCallBlock) -> void:
 
 func _on_method_target_input(event: InputEvent, target: OptionButton) -> void:
 	if _is_escape(event) and _current() and not target.get_popup().visible:
+		if _split_block_layout:
+			return
 		target.accept_event()
 		_list.grab_focus()
 
@@ -522,6 +567,8 @@ func _on_text_input(event: InputEvent, input: TextEdit, block_id: String, origin
 	if not key.pressed or key.echo:
 		return
 	if key.keycode == KEY_ESCAPE:
+		if _split_block_layout:
+			return
 		input.text = original
 		input.accept_event()
 		_list.grab_focus()
