@@ -371,6 +371,16 @@ func _test_process() -> void:
 	_check(_fluo_property.navigate_ready_block(1), "Ctrl+AvPag navigation advances to the next Flow block.")
 	_check(_selected_ready_block_id(fluo_blocks) == process.blocks[1].get_internal_id(), "Ctrl+AvPag selects the next block by stable ID.")
 	_check(fluo_blocks.has_focus(), "Flow regains keyboard focus after changing blocks.")
+	_check(_fluo_property.close_ready_block_details(), "Escape-level close can close Flusso while the second Flow block is selected.")
+	await _frames()
+	fluo_blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
+	_check(
+		fluo_blocks != null and fluo_blocks.has_focus() 			and _selected_ready_block_id(fluo_blocks) == process.blocks[1].get_internal_id(),
+		"Closing Flusso restores keyboard focus to the same selected Flow block after rebuild."
+	)
+	fluo_blocks.item_activated.emit(1)
+	await _frames()
+	fluo_blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
 	_check(_fluo_property.navigate_ready_block(1), "A second Ctrl+AvPag navigation still works without restoring focus manually.")
 	_check(_selected_ready_block_id(fluo_blocks) == process.blocks[0].get_internal_id(), "Block navigation is circular.")
 	_check(fluo_blocks.has_focus(), "Repeated Flow navigation keeps keyboard focus on the block list.")
