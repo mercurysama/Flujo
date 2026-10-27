@@ -1,0 +1,28 @@
+name: Package Fluo Preview 1
+
+on:
+  push:
+    branches:
+      - automation/package-fluo-preview-1
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout clean preview package
+        uses: actions/checkout@v4
+        with:
+          ref: preview/fluo-0.1.0-preview.1
+
+      - name: Build installable ZIP
+        run: zip -r Flujo-0.1.0-fluo-preview.1.zip addons README.md LICENSE
+
+      - name: Upload preview package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Flujo-0.1.0-fluo-preview.1
+          path: Flujo-0.1.0-fluo-preview.1.zip
+          compression-level: 0
