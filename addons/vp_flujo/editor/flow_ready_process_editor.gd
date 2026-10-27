@@ -65,6 +65,12 @@ func configure(
 		_list_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_list_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		list_panel.add_child(_list_content)
+
+		var flow_title := Label.new()
+		flow_title.name = &"FlowPanelTitle"
+		flow_title.text = "Flow"
+		flow_title.add_theme_font_size_override("font_size", 16)
+		_list_content.add_child(flow_title)
 		primary_parent = _list_content
 
 		_details_panel = PanelContainer.new()
@@ -386,7 +392,8 @@ func _render_block() -> void:
 		header.name = &"BlockOptionsHeader"
 		_details.add_child(header)
 		var options_title := Label.new()
-		options_title.text = "Block options"
+		options_title.name = &"FluoPanelTitle"
+		options_title.text = "Fluo"
 		options_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		header.add_child(options_title)
 		var close_button := Button.new()
