@@ -13,6 +13,11 @@ signal schema_3_variable_selection_changed(
 	variable_id: String
 )
 signal schema_3_variable_editor_focus_requested(controller: PVController, variable_id: String)
+signal schema_3_container_activated(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	container_id: String
+)
 signal schema_3_variable_list_focus_requested(controller: PVController, variable_id: String)
 signal ready_block_activated(
 	controller: PVController,
@@ -40,7 +45,6 @@ var _rename_target_id: String = ""
 var _rename_target_collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.PROCESSES
 var _restore_selected_list_focus: bool = false
 var _schema_3_structural_action_containers: Dictionary = {}
-var _schema_3_block_preview_containers: Dictionary = {}
 var _rebuild_queued: bool = false
 var _rebuild_generation: int = 0
 var _variable_advanced_open: bool = false
@@ -262,7 +266,6 @@ func _rebuild_interface(generation: int = -1) -> void:
 
 func _render(presentation: Dictionary, controller: PVController, generation: int) -> void:
 	_schema_3_structural_action_containers.clear()
-	_schema_3_block_preview_containers.clear()
 	for child: Node in _content.get_children():
 		_content.remove_child(child)
 		child.queue_free()
@@ -379,100 +382,6 @@ func _render_typed_sections(sections: Array, controller: PVController, generatio
 			"State Machines":
 				_add_button_to(category, "Add State Machine", _on_add_state_machine_pressed)
 		_render_section(section, category, generation)
-		if controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_3 				and collection in [
-					FlowGraphEditorCommands.Collection.PROCESSES,
-					FlowGraphEditorCommands.Collection.CONSTRUCTOR,
-					FlowGraphEditorCommands.Collection.METHODS,
-				]:
-			var block_preview := VBoxContainer.new()
-			block_preview.name = StringName("InspectorBlockPreview_%s" % section["title"])
-			block_preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			category.add_child(block_preview)
-			_schema_3_block_preview_containers[section["title"] as String] = block_preview
-		if _section_contains_selection(section) and controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_2:
-			_render_selected_actions(category, controller.flow_graph, generation)
-
-	if controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_3:
-		_update_schema_3_inspector_block_preview()
-
-
-func _update_schema_3_inspector_block_preview() -> void:
-	for view_title: String in _schema_3_block_preview_containers:
-		var host: VBoxContainer = _schema_3_block_preview_containers[view_title] as VBoxContainer
-		if not is_instance_valid(host):
-			continue
-		for child: Node in host.get_children():
-			host.remove_child(child)
-			child.queue_free()
-		if view_title != _selected_view_title 				or _section_collection(view_title) != _selected_collection:
-			continue
-		_render_inspector_block_preview(host)
-
-
-func _render_inspector_block_preview(parent: Container) -> void:
-	if _dock_mode or _commands == null or not _is_block_collection() or _selected_id.is_empty():
-		return
-	var controller: PVController = _active_controller()
-	var container: FlowBlockContainer = _commands.find_block_container(controller, _selected_id)
-	if container == null:
-		return
-
-	var title := Label.new()
-	title.text = "Blocks"
-	title.add_theme_font_size_override("font_size", 13)
-	parent.add_child(title)
-
-	var list := ItemList.new()
-	list.name = &"InspectorBlocksList"
-	list.select_mode = ItemList.SELECT_SINGLE
-	list.allow_reselect = true
-	list.focus_mode = Control.FOCUS_ALL
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for block: FlowBlock in container.blocks:
-		if block == null:
-			continue
-		var index: int = list.add_item(_block_display_name_for_inspector(block))
-		list.set_item_metadata(index, block.get_internal_id())
-		list.set_item_tooltip(index, "")
-		if block.get_internal_id() == _ready_block_id:
-			list.select(index)
-	list.item_selected.connect(_on_inspector_block_selected.bind(list))
-	list.item_activated.connect(_on_inspector_block_activated.bind(list))
-	parent.add_child(list)
-	call_deferred(&"_fit_list_to_first_row", list, _rebuild_generation)
-
-
-func _on_inspector_block_selected(index: int, list: ItemList) -> void:
-	if index < 0 or index >= list.item_count:
-		return
-	_ready_block_id = list.get_item_metadata(index) as String
-
-
-func _on_inspector_block_activated(index: int, list: ItemList) -> void:
-	if index < 0 or index >= list.item_count:
-		return
-	var block_id: String = list.get_item_metadata(index) as String
-	var controller: PVController = _active_controller()
-	if controller == null or block_id.is_empty() or _selected_id.is_empty():
-		return
-	_ready_block_id = block_id
-	ready_block_activated.emit(
-		controller,
-		_selected_collection,
-		_selected_id,
-		block_id
-	)
-
-
-func _block_display_name_for_inspector(block: FlowBlock) -> String:
-	if block == null:
-		return "Empty"
-	if not block.display_name.strip_edges().is_empty():
-		return block.display_name
-	var fallback: String = FlowBlockRegistry.default_display_name(block)
-	return fallback if not fallback.is_empty() else "Block"
-
-
 func _render_section(section: Dictionary, parent: Container, generation: int) -> void:
 	var title: Label = Label.new()
 	title.text = section["title"]
@@ -1339,7 +1248,6 @@ func _on_item_selected(item_index: int, list: ItemList, view_title: String) -> v
 	if _is_schema_3_graph():
 		_restore_selected_list_focus = false
 		_ready_block_id = ""
-		_update_schema_3_inspector_block_preview()
 		_publish_schema_3_variable_selection()
 		return
 	_restore_selected_list_focus = true
@@ -1372,6 +1280,14 @@ func _on_schema_3_variable_item_activated(item_index: int, list: ItemList) -> vo
 	var variable_id: String = entry.get("internal_id", "") as String
 	var controller: PVController = _active_controller()
 	if controller == null or variable_id.is_empty() or variable_id != _selected_id:
+		return
+	var collection: FlowGraphEditorCommands.Collection = _collection_for_type(entry["type"])
+	if collection in [
+			FlowGraphEditorCommands.Collection.PROCESSES,
+			FlowGraphEditorCommands.Collection.CONSTRUCTOR,
+			FlowGraphEditorCommands.Collection.METHODS,
+		]:
+		schema_3_container_activated.emit(controller, collection, variable_id)
 		return
 	emit_signal(&"schema_3_variable_editor_focus_requested", controller, variable_id)
 
