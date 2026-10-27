@@ -286,6 +286,9 @@ func navigate_block(direction: int) -> bool:
 	if not _select_block_index(next_index):
 		return false
 	_render_block()
+	# Rendering Flusso may destroy the control that previously owned focus.
+	# Keep keyboard navigation anchored on Flow so Ctrl+PageUp/PageDown can repeat.
+	_list.grab_focus()
 	return true
 
 
@@ -348,9 +351,18 @@ func _on_block_list_input(event: InputEvent) -> void:
 	if _block_id.is_empty() or not event is InputEventKey:
 		return
 	var key: InputEventKey = event as InputEventKey
-	if key.pressed and not key.echo and key.keycode == KEY_F2:
+	if not key.pressed or key.echo:
+		return
+	if key.keycode == KEY_F2:
 		_list.accept_event()
 		focus_requested.emit(&"ReadyBlockName", true)
+		return
+	if key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER:
+		var selected: PackedInt32Array = _list.get_selected_items()
+		if selected.size() != 1:
+			return
+		_list.accept_event()
+		_on_activated(selected[0])
 
 
 func _on_block_name_submitted(value: String, block_id: String) -> void:
