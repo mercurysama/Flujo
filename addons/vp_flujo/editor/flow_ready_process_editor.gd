@@ -5,6 +5,7 @@ extends VBoxContainer
 ## Dock configuration for a stable-ID-selected Ready process or Timer.
 signal block_selected(block_id: String)
 signal block_activated(block_id: String)
+signal block_revert_requested(block_id: String)
 signal block_delete_requested(block_id: String)
 signal focus_requested(control_name: StringName, select_all: bool)
 signal process_move_requested(direction: int)
@@ -245,16 +246,12 @@ func _on_repeat_changed(value: bool) -> void:
 
 
 func _on_selected(index: int) -> void:
-	if _split_block_layout:
-		commit_block_details_drafts()
 	if not _select_block_index(index):
 		return
 	_render_block()
 
 
 func _on_activated(index: int) -> void:
-	if _split_block_layout:
-		commit_block_details_drafts()
 	if not _select_block_index(index):
 		return
 	block_activated.emit(_block_id)
@@ -275,8 +272,6 @@ func _select_block_index(index: int) -> bool:
 func navigate_block(direction: int) -> bool:
 	if not _current() or _list == null or _list.item_count == 0 or direction == 0:
 		return false
-	if _split_block_layout:
-		commit_block_details_drafts()
 	var current_index: int = -1
 	for index: int in _list.item_count:
 		if (_list.get_item_metadata(index) as String) == _block_id:
@@ -319,38 +314,6 @@ func close_block_details() -> bool:
 		return false
 	_on_close_block_options()
 	return true
-
-
-func commit_block_details_drafts() -> bool:
-	if not _split_block_layout or not _block_details_open or not _current() 			or _details == null or _block_id.is_empty():
-		return false
-	var changed: bool = false
-
-	var name_input: LineEdit = _details.find_child("ReadyBlockName", true, false) as LineEdit
-	if name_input != null:
-		var original_name: String = name_input.get_meta(&"flusso_original_text", name_input.text) as String
-		if name_input.text != original_name:
-			changed = _commands.set_ready_property(
-				_controller,
-				_process_id,
-				_block_id,
-				&"display_name",
-				name_input.text
-			) or changed
-
-	var print_input: TextEdit = _details.find_child("ReadyPrintText", true, false) as TextEdit
-	if print_input != null:
-		var original_text: String = print_input.get_meta(&"flusso_original_text", print_input.text) as String
-		if print_input.text != original_text:
-			changed = _commands.set_ready_property(
-				_controller,
-				_process_id,
-				_block_id,
-				&"text",
-				print_input.text
-			) or changed
-
-	return changed
 
 
 func cycle_block_option_focus(direction: int) -> bool:
@@ -436,6 +399,16 @@ func _render_block() -> void:
 		options_title.text = "Flusso"
 		options_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		header.add_child(options_title)
+
+		var revert_button := Button.new()
+		revert_button.name = &"RevertFlussoButton"
+		revert_button.text = "Revertir"
+		revert_button.tooltip_text = "Restaurar la configuración que tenía este bloque al abrir Flusso."
+		revert_button.focus_mode = Control.FOCUS_ALL
+		revert_button.custom_minimum_size.y = 44.0
+		revert_button.pressed.connect(_on_revert_block)
+		header.add_child(revert_button)
+
 		var close_button := Button.new()
 		close_button.name = &"CloseBlockOptions"
 		close_button.text = "✕"
@@ -453,11 +426,12 @@ func _render_block() -> void:
 	name_input.focus_mode = Control.FOCUS_ALL
 	name_input.placeholder_text = "Block name"
 	if _split_block_layout:
-		name_input.tooltip_text = "Changes are saved when leaving Flusso. Enter also applies Block Name."
+		name_input.tooltip_text = "Changes are saved immediately. Escape only closes Flusso; Revertir restores the opening state."
 	else:
 		name_input.tooltip_text = "Enter applies Block Name. Escape cancels the draft. F2 focuses this field from the block list."
 	name_input.text = _block_display_name(selected)
-	name_input.set_meta(&"flusso_original_text", name_input.text)
+	if _split_block_layout:
+		name_input.text_changed.connect(_on_live_block_name_changed.bind(_block_id))
 	name_input.text_submitted.connect(_on_block_name_submitted.bind(_block_id))
 	name_input.gui_input.connect(_on_block_name_input.bind(name_input, _block_id, name_input.text))
 	_details.add_child(name_input)
@@ -485,23 +459,66 @@ func _render_block() -> void:
 		var input: TextEdit = TextEdit.new()
 		input.name = &"ReadyPrintText"
 		if _split_block_layout:
-			input.tooltip_text = "Changes are saved when leaving Flusso. Ctrl+Enter also applies Print."
+			input.tooltip_text = "Changes are saved immediately. Escape only closes Flusso; Revertir restores the opening state."
 		else:
 			input.tooltip_text = "Enter inserts a new line. Ctrl+Enter confirms Print. Escape cancels the draft."
 		input.focus_mode = Control.FOCUS_ALL
 		input.text = (selected as FlowPrintBlock).text
-		input.set_meta(&"flusso_original_text", input.text)
 		input.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 		input.custom_minimum_size.y = input.get_theme_font(&"font").get_height(input.get_theme_font_size(&"font_size")) * 3.0 + input.get_theme_stylebox(&"normal").get_minimum_size().y
 		_apply_themed_print_text_surface(input)
+		if _split_block_layout:
+			input.text_changed.connect(_on_live_print_text_changed.bind(input, _block_id))
 		input.gui_input.connect(_on_text_input.bind(input, _block_id, input.text))
 		_details.add_child(input)
+
+
+func _on_live_block_name_changed(value: String, block_id: String) -> void:
+	if not _split_block_layout or not _current() or block_id != _block_id:
+		return
+	if _commands.set_ready_property_live(
+		_controller,
+		_process_id,
+		block_id,
+		&"display_name",
+		value
+	):
+		_refresh_selected_block_label()
+
+
+func _on_live_print_text_changed(input: TextEdit, block_id: String) -> void:
+	if not _split_block_layout or not _current() or block_id != _block_id:
+		return
+	_commands.set_ready_property_live(
+		_controller,
+		_process_id,
+		block_id,
+		&"text",
+		input.text
+	)
+
+
+func _refresh_selected_block_label() -> void:
+	var process: FlowBlockContainer = _commands.find_block_container(_controller, _process_id)
+	if process == null or _list == null:
+		return
+	for block: FlowBlock in process.blocks:
+		if block == null or block.get_internal_id() != _block_id:
+			continue
+		for index: int in _list.item_count:
+			if (_list.get_item_metadata(index) as String) == _block_id:
+				_list.set_item_text(index, _block_display_name(block))
+				return
+
+
+func _on_revert_block() -> void:
+	if _split_block_layout and not _block_id.is_empty():
+		block_revert_requested.emit(_block_id)
 
 
 func _on_close_block_options() -> void:
 	if not _split_block_layout:
 		return
-	commit_block_details_drafts()
 	_block_details_open = false
 	if _details_panel != null:
 		_details_panel.visible = false
