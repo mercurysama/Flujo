@@ -388,7 +388,7 @@ func _render_typed_sections(sections: Array, controller: PVController, generatio
 			block_preview.name = StringName("InspectorBlockPreview_%s" % section["title"])
 			block_preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			category.add_child(block_preview)
-			_schema_3_block_preview_containers[collection] = block_preview
+			_schema_3_block_preview_containers[section["title"] as String] = block_preview
 		if _section_contains_selection(section) and controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_2:
 			_render_selected_actions(category, controller.flow_graph, generation)
 
@@ -397,14 +397,14 @@ func _render_typed_sections(sections: Array, controller: PVController, generatio
 
 
 func _update_schema_3_inspector_block_preview() -> void:
-	for collection: int in _schema_3_block_preview_containers:
-		var host: VBoxContainer = _schema_3_block_preview_containers[collection] as VBoxContainer
+	for view_title: String in _schema_3_block_preview_containers:
+		var host: VBoxContainer = _schema_3_block_preview_containers[view_title] as VBoxContainer
 		if not is_instance_valid(host):
 			continue
 		for child: Node in host.get_children():
 			host.remove_child(child)
 			child.queue_free()
-		if collection != _selected_collection:
+		if view_title != _selected_view_title 				or _section_collection(view_title) != _selected_collection:
 			continue
 		_render_inspector_block_preview(host)
 
