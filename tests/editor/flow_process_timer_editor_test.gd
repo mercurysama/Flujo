@@ -184,8 +184,12 @@ func _test_process() -> void:
 	fluo_blocks.item_activated.emit(0)
 	await _frames()
 	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
-	_check(fluo_options_panel != null and fluo_options_panel.visible, "Activating a block opens Fluo's right options panel.")
-	_check(_node(fluo_options_panel, "ReadyBlockName") != null, "Fluo right panel contains the selected block options.")
+	_check(fluo_options_panel != null and fluo_options_panel.visible, "Activating a block opens the right configuration panel.")
+	var flow_title: Label = _node(_fluo_property, "FlowPanelTitle") as Label
+	var flusso_title: Label = _node(_fluo_property, "FlussoPanelTitle") as Label
+	_check(flow_title != null and flow_title.text == "Flow", "Fluo left panel is titled Flow.")
+	_check(flusso_title != null and flusso_title.text == "Flusso", "Fluo right configuration panel is titled Flusso.")
+	_check(_node(fluo_options_panel, "ReadyBlockName") != null, "Flusso contains the selected block options.")
 	var fluo_options_close: Button = _node(fluo_options_panel, "CloseBlockOptions") as Button
 	_check(fluo_options_close != null and fluo_options_close.text == "✕", "Fluo right panel exposes its own close X.")
 	_check(fluo_options_close != null and fluo_options_close.custom_minimum_size.x >= 44.0 and fluo_options_close.custom_minimum_size.y >= 44.0, "Block options close X keeps an Android-friendly touch target.")
@@ -298,9 +302,9 @@ func _test_process() -> void:
 	await _frames()
 	fluo_blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
 	_check(fluo_blocks != null and fluo_blocks.item_count == 2, "Fluo refresh keeps both blocks visible.")
-	_check(_fluo_property.navigate_ready_block(1), "AvPag navigation advances to the next block in Fluo.")
-	_check(_selected_ready_block_id(fluo_blocks) == process.blocks[1].get_internal_id(), "AvPag selects the next block by stable ID.")
-	_check(_fluo_property.navigate_ready_block(1), "AvPag navigation wraps at the end.")
+	_check(_fluo_property.navigate_ready_block(1), "Ctrl+AvPag navigation advances to the next Flow block.")
+	_check(_selected_ready_block_id(fluo_blocks) == process.blocks[1].get_internal_id(), "Ctrl+AvPag selects the next block by stable ID.")
+	_check(_fluo_property.navigate_ready_block(1), "Ctrl+AvPag navigation wraps at the end.")
 	_check(_selected_ready_block_id(fluo_blocks) == process.blocks[0].get_internal_id(), "Block navigation is circular.")
 	_check(blocks.has_focus() and blocks.is_selected(1), "Everything Flows Add focuses its new row.")
 	var everything: FlowBlock = process.blocks[1]
