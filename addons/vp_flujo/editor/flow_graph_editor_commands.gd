@@ -291,17 +291,9 @@ func set_ready_property(controller: PVController, process_id: String, block_id: 
 	if process == null:
 		return false
 	var target: Resource = process if block_id.is_empty() else _ready_block(process, block_id)
-	if target == null:
+	if target == null or not _is_supported_ready_property(process, target, block_id, property, value):
 		return false
-	var allowed: bool = (property == &"enabled" and value is bool) \
-		or (block_id.is_empty() and property == &"display_name" and value is String) \
-		or (target is FlowBlock and property == &"display_name" and value is String) \
-		or (target is FlowTimerDefinition and property == &"repeat" and value is bool) \
-		or (target is FlowTimerDefinition and property == &"interval_seconds" and value is float and is_finite(value) and value > 0.0) \
-		or (target is FlowPrintBlock and property == &"text" and value is String)
-	if target is FlowMethodCallBlock and process is FlowProcess and property == &"method_id" and value is String:
-		allowed = true
-	if not allowed or target.get(property) == value:
+	if target.get(property) == value:
 		return false
 	if target is FlowMethodDefinition and property == &"display_name" and not _valid_method_name(controller.flow_graph, target, value):
 		return false
@@ -310,6 +302,102 @@ func set_ready_property(controller: PVController, process_id: String, block_id: 
 		else "Edit %s %s" % [_entry_point_action_name(process), property.capitalize()]
 	_commit_ready_property(action_name, controller, target, property, value)
 	return true
+
+
+## Applies continuously edited Flusso values without rebuilding its controls on every keystroke.
+## Undo entries are merged per property while the model itself changes immediately.
+func set_ready_property_live(
+	controller: PVController,
+	process_id: String,
+	block_id: String,
+	property: StringName,
+	value: Variant
+) -> bool:
+	var process: FlowBlockContainer = find_block_container(controller, process_id)
+	if process == null:
+		return false
+	var target: Resource = process if block_id.is_empty() else _ready_block(process, block_id)
+	if target == null or not _is_supported_ready_property(process, target, block_id, property, value):
+		return false
+	if target.get(property) == value:
+		return false
+	if target is FlowMethodDefinition and property == &"display_name" and not _valid_method_name(controller.flow_graph, target, value):
+		return false
+	var action_name: String = "Edit Flusso %s" % property.capitalize()
+	_undo_redo.create_action(
+		action_name,
+		UndoRedo.MERGE_ENDS,
+		controller,
+		false,
+		true
+	)
+	_undo_redo.add_do_method(self, &"_assign_ready_property_live", controller, target, property, value)
+	_undo_redo.add_undo_method(
+		self,
+		&"_assign_ready_property_live",
+		controller,
+		target,
+		property,
+		target.get(property)
+	)
+	_undo_redo.commit_action()
+	return true
+
+
+## Restores the persistent block properties captured when a Flusso session was opened.
+func restore_ready_block_snapshot(
+	controller: PVController,
+	process_id: String,
+	block_id: String,
+	snapshot: Dictionary
+) -> bool:
+	var process: FlowBlockContainer = find_block_container(controller, process_id)
+	if process == null or snapshot.is_empty():
+		return false
+	var block: FlowBlock = _ready_block(process, block_id)
+	if block == null:
+		return false
+
+	var current: Dictionary = {}
+	var changed_any: bool = false
+	for property_name: Variant in snapshot:
+		var key: StringName = StringName(property_name)
+		var current_value: Variant = block.get(key)
+		current[key] = current_value
+		if current_value != snapshot[property_name]:
+			changed_any = true
+	if not changed_any:
+		return false
+
+	_undo_redo.create_action(
+		"Revert Flusso Block",
+		UndoRedo.MERGE_DISABLE,
+		controller,
+		false,
+		true
+	)
+	_undo_redo.add_do_method(self, &"_assign_ready_snapshot", controller, block, snapshot)
+	_undo_redo.add_undo_method(self, &"_assign_ready_snapshot", controller, block, current)
+	_undo_redo.commit_action()
+	return true
+
+
+func _is_supported_ready_property(
+	process: FlowBlockContainer,
+	target: Resource,
+	block_id: String,
+	property: StringName,
+	value: Variant
+) -> bool:
+	var allowed: bool = (property == &"enabled" and value is bool) \
+		or (block_id.is_empty() and property == &"display_name" and value is String) \
+		or (target is FlowBlock and property == &"display_name" and value is String) \
+		or (target is FlowTimerDefinition and property == &"repeat" and value is bool) \
+		or (target is FlowTimerDefinition and property == &"interval_seconds" and value is float and is_finite(value) and value > 0.0) \
+		or (target is FlowPrintBlock and property == &"text" and value is String)
+	if target is FlowMethodCallBlock and process is FlowProcess and property == &"method_id" and value is String:
+		allowed = true
+	return allowed
 
 
 func add_ready_block(controller: PVController, process_id: String, block_type_id: StringName) -> String:
@@ -381,6 +469,26 @@ func _commit_ready_property(action: String, controller: PVController, resource: 
 	_undo_redo.add_do_method(self, &"_assign_ready_property", controller, resource, property, value)
 	_undo_redo.add_undo_method(self, &"_assign_ready_property", controller, resource, property, resource.get(property))
 	_undo_redo.commit_action()
+
+
+func _assign_ready_property_live(
+	controller: PVController,
+	resource: Resource,
+	property: StringName,
+	value: Variant
+) -> void:
+	resource.set(property, value)
+	resource.emit_changed()
+	_refresh_diagnostics(controller.flow_graph)
+
+
+func _assign_ready_snapshot(controller: PVController, resource: Resource, values: Dictionary) -> void:
+	for property_name: Variant in values:
+		resource.set(StringName(property_name), values[property_name])
+	resource.emit_changed()
+	controller.notify_property_list_changed()
+	_refresh_diagnostics(controller.flow_graph)
+	changed.emit()
 
 
 func _assign_ready_property(controller: PVController, resource: Resource, property: StringName, value: Variant) -> void:
