@@ -102,6 +102,9 @@ func _mount_fluo_drawer() -> void:
 	_fluo_drawer.schema_3_variable_list_focus_requested.connect(
 		_on_schema_3_variable_list_focus_requested
 	)
+	_fluo_drawer.schema_3_container_navigation_changed.connect(
+		_on_fluo_container_navigation_changed
+	)
 	_fluo_drawer.schema_3_delete_selection_recovery_requested.connect(
 		_on_schema_3_delete_selection_recovery_requested
 	)
@@ -300,6 +303,21 @@ func _on_schema_3_variable_editor_focus_requested(controller: PVController, vari
 			_fluo_drawer.set_variable_selection(controller, collection, variable_id)
 
 		_dock.focus_variable_editor(controller, variable_id)
+
+func _on_fluo_container_navigation_changed(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	container_id: String
+) -> void:
+	if not is_instance_valid(controller) or controller != _dock_controller_instance() 			or not is_instance_valid(_controller_inspector_plugin):
+		return
+	_selected_schema_3_variable_id = container_id
+	_controller_inspector_plugin.sync_schema_3_container_selection(
+		controller,
+		collection,
+		container_id
+	)
+
 
 func _on_schema_3_variable_list_focus_requested(controller: PVController, variable_id: String) -> void:
 	if is_instance_valid(controller) and controller == _dock_controller_instance() \
