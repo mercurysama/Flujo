@@ -98,6 +98,18 @@ func refresh_controller() -> void:
 		_variable_editor.refresh_dock_controller()
 
 
+func open_container(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	container_id: String
+) -> void:
+	set_controller(controller)
+	if _variable_editor != null:
+		_variable_editor.close_ready_block_details()
+		_variable_editor.set_dock_variable_selection(controller, collection, container_id)
+	open()
+
+
 func open_block(
 	controller: PVController,
 	collection: FlowGraphEditorCommands.Collection,
