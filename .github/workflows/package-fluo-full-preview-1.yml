@@ -1,0 +1,28 @@
+name: Package Fluo Full Project Preview 1
+
+on:
+  push:
+    branches:
+      - automation/package-fluo-preview-1
+
+permissions:
+  contents: read
+
+jobs:
+  package-full-project:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout validated Fluo commit
+        uses: actions/checkout@v4
+        with:
+          ref: cd7e969c38193d718c948262107d1f7a45ca8083
+
+      - name: Build full project ZIP
+        run: zip -r Flujo-0.1.0-fluo-preview.1-full-project.zip . -x '.git/*'
+
+      - name: Upload full project preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: Flujo-0.1.0-fluo-preview.1-full-project
+          path: Flujo-0.1.0-fluo-preview.1-full-project.zip
+          compression-level: 0
