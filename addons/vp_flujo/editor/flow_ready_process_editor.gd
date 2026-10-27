@@ -18,6 +18,7 @@ var _graph: FlowGraph
 var _process_id: String
 var _block_id: String
 var _list: ItemList
+var _first_add_block_button: Button
 var _details: VBoxContainer
 var _details_panel: PanelContainer
 var _split_host: HBoxContainer
@@ -139,9 +140,17 @@ func configure(
 	add_row.name = &"AddBlockActions"
 	primary_parent.add_child(add_row)
 	for type_id: StringName in FlowBlockRegistry.creatable_type_ids():
-		_add_button(add_row, "Add " + FlowBlockRegistry.display_name_for_type(type_id), _on_add.bind(type_id))
+		var add_button: Button = _add_button(
+			add_row,
+			"Add " + FlowBlockRegistry.display_name_for_type(type_id),
+			_on_add.bind(type_id)
+		)
+		if _first_add_block_button == null:
+			_first_add_block_button = add_button
 	if process is FlowProcess:
-		_add_button(add_row, "Add Call Method", _on_add_call)
+		var call_button: Button = _add_button(add_row, "Add Call Method", _on_add_call)
+		if _first_add_block_button == null:
+			_first_add_block_button = call_button
 
 	var process_actions: VBoxContainer = VBoxContainer.new()
 	process_actions.name = &"ProcessActions"
@@ -294,6 +303,20 @@ func navigate_block(direction: int) -> bool:
 
 func is_block_details_open() -> bool:
 	return _block_details_open
+
+
+func focus_flow_entry() -> bool:
+	if not _split_block_layout or not _current():
+		return false
+	if _list != null and _list.item_count > 0:
+		_list.select(0)
+		_select_block_index(0)
+		_list.grab_focus()
+		return true
+	if is_instance_valid(_first_add_block_button):
+		_first_add_block_button.grab_focus()
+		return true
+	return false
 
 
 func open_block_details(block_id: String) -> bool:
@@ -535,6 +558,8 @@ func _on_close_block_options() -> void:
 	if _details_panel != null:
 		_details_panel.visible = false
 	block_details_visibility_changed.emit(false)
+	if _list != null:
+		_list.grab_focus()
 
 
 func _render_method_target(call: FlowMethodCallBlock) -> void:
@@ -652,9 +677,10 @@ func _is_escape(event: InputEvent) -> bool:
 	return event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE
 
 
-func _add_button(parent: Control, title: String, action: Callable) -> void:
+func _add_button(parent: Control, title: String, action: Callable) -> Button:
 	var button: Button = Button.new()
 	button.text = title
 	button.focus_mode = Control.FOCUS_ALL
 	button.pressed.connect(action)
 	parent.add_child(button)
+	return button
