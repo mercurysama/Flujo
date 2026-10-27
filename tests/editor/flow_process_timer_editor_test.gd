@@ -76,6 +76,9 @@ func _run() -> void:
 	_fluo_property.custom_minimum_size.x = 620
 	_host.add_child(_fluo_property)
 	_fluo_property.set_dock_controller(_controller)
+	_fluo_property.schema_3_container_navigation_changed.connect(
+		_on_fluo_container_navigation_changed
+	)
 	_plugin = PLUGIN.new()
 	_plugin.set("_dock", _dock)
 	_plugin.set("_controller_inspector_plugin", _inspector)
@@ -422,6 +425,11 @@ func _test_process() -> void:
 		(_fluo_property.get("_selected_id") as String) == _controller.flow_graph.processes[1].get_internal_id(),
 		"Inspector-level Page navigation updates Fluo's container context by stable ID."
 	)
+	var inspector_processes: ItemList = _list("Processes")
+	_check(
+		inspector_processes != null and inspector_processes.is_selected(1),
+		"Inspector redraws its visible selection to the Process reached by Page navigation."
+	)
 	fluo_blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
 	_check(
 		fluo_blocks == null or fluo_blocks.has_focus(),
@@ -432,6 +440,11 @@ func _test_process() -> void:
 	_check(
 		(_fluo_property.get("_selected_id") as String) == process_id,
 		"Inspector-level Page navigation is reversible."
+	)
+	inspector_processes = _list("Processes")
+	_check(
+		inspector_processes != null and inspector_processes.is_selected(0),
+		"Inspector redraws back to the previous Process on reverse Page navigation."
 	)
 	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
 	_check(fluo_options_panel != null and not fluo_options_panel.visible, "Changing Inspector Process closes stale Flusso options.")
@@ -708,6 +721,18 @@ func _relay_context() -> String:
 		_controller.is_inside_tree(), _inspector.is_active_controller(_controller), _property.get("_selected_id"),
 		_plugin.get("_selected_schema_3_variable_id"), editor.get("_selected_id"), editor.get("_selected_collection"),
 		editor.get("_dock_controller") == _controller]
+
+
+func _on_fluo_container_navigation_changed(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	container_id: String
+) -> void:
+	_inspector.sync_schema_3_container_selection(
+		controller,
+		collection,
+		container_id
+	)
 
 
 func _on_inspector_container_activated(
