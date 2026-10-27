@@ -7,6 +7,11 @@ extends Control
 ## through its own FlowGraphInspectorProperty view.
 
 signal schema_3_variable_list_focus_requested(controller: PVController, variable_id: String)
+signal schema_3_container_navigation_changed(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	container_id: String
+)
 signal schema_3_delete_selection_recovery_requested(
 	controller: PVController,
 	collection: FlowGraphEditorCommands.Collection,
@@ -59,6 +64,9 @@ func configure(undo_redo: EditorUndoRedoManager) -> void:
 
 	_variable_editor.schema_3_variable_list_focus_requested.connect(
 		_on_variable_editor_list_focus_requested
+	)
+	_variable_editor.schema_3_container_navigation_changed.connect(
+		_on_variable_editor_container_navigation_changed
 	)
 	_variable_editor.schema_3_delete_selection_recovery_requested.connect(
 		_on_delete_selection_recovery_requested
@@ -346,6 +354,14 @@ func _on_backdrop_gui_input(event: InputEvent) -> void:
 func _on_side_switch_toggled(enabled: bool) -> void:
 	_right_side = enabled
 	_apply_side_layout()
+
+
+func _on_variable_editor_container_navigation_changed(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	container_id: String
+) -> void:
+	schema_3_container_navigation_changed.emit(controller, collection, container_id)
 
 
 func _on_variable_editor_list_focus_requested(
