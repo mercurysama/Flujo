@@ -355,22 +355,27 @@ func _activate_dock_controller(controller: PVController) -> bool:
 func _set_dock_controller(controller: PVController) -> bool:
 	var next_controller: PVController = controller if is_instance_valid(controller) else null
 	var current_controller: PVController = _dock_controller_instance()
-	if current_controller != next_controller \
-			or (next_controller == null and _dock_controller_reference != null):
-		_dock_controller_reference = weakref(next_controller) if next_controller != null else null
-		_selected_schema_3_variable_id = ""
-		_dock.set_controller(next_controller)
+	if current_controller == next_controller 			and not (next_controller == null and _dock_controller_reference != null):
+		return false
+
+	_dock_controller_reference = weakref(next_controller) if next_controller != null else null
+	_selected_schema_3_variable_id = ""
+	_dock.set_controller(next_controller)
+	_dock.set_variable_selection(
+		next_controller,
+		FlowGraphEditorCommands.Collection.VARIABLES,
+		""
+	)
+
 	if is_instance_valid(_fluo_drawer):
 		_fluo_drawer.set_controller(next_controller)
-		_dock.set_variable_selection(next_controller, FlowGraphEditorCommands.Collection.VARIABLES, "")
-		if is_instance_valid(_fluo_drawer):
-			_fluo_drawer.set_variable_selection(
-				next_controller,
-				FlowGraphEditorCommands.Collection.VARIABLES,
-				""
-			)
-		return true
-	return false
+		_fluo_drawer.set_variable_selection(
+			next_controller,
+			FlowGraphEditorCommands.Collection.VARIABLES,
+			""
+		)
+
+	return true
 
 
 func _dock_controller_instance() -> PVController:

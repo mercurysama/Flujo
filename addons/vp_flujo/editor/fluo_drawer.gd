@@ -53,7 +53,7 @@ func configure(undo_redo: EditorUndoRedoManager) -> void:
 	_variable_editor = FlowGraphInspectorProperty.new()
 	_variable_editor.name = &"FluoFlowEditor"
 	_variable_editor.configure(undo_redo)
-	_variable_editor.configure_for_dock()
+	_variable_editor.configure_for_fluo()
 	_variable_editor.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_variable_editor.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 
@@ -230,14 +230,45 @@ func _input(event: InputEvent) -> void:
 		return
 
 	var key_event: InputEventKey = event as InputEventKey
-	if not key_event.pressed or key_event.echo or key_event.keycode != KEY_ESCAPE:
+	if not key_event.pressed or key_event.echo:
 		return
 
-	close()
+	if key_event.keycode == KEY_ESCAPE:
+		close()
+		var viewport: Viewport = get_viewport()
+		if viewport != null:
+			viewport.set_input_as_handled()
+		return
 
+	if key_event.keycode != KEY_PAGEUP and key_event.keycode != KEY_PAGEDOWN:
+		return
+	if not _focus_is_inside_drawer() or _focus_is_text_editing():
+		return
+
+	var direction: int = -1 if key_event.keycode == KEY_PAGEUP else 1
+	var handled: bool = false
+	if _variable_editor != null:
+		handled = _variable_editor.navigate_process(direction) 			if key_event.ctrl_pressed else _variable_editor.navigate_ready_block(direction)
+	if handled:
+		var viewport: Viewport = get_viewport()
+		if viewport != null:
+			viewport.set_input_as_handled()
+
+
+func _focus_is_inside_drawer() -> bool:
 	var viewport: Viewport = get_viewport()
-	if viewport != null:
-		viewport.set_input_as_handled()
+	if viewport == null or _drawer_panel == null:
+		return false
+	var focus_owner: Control = viewport.gui_get_focus_owner() as Control
+	return is_instance_valid(focus_owner) 		and (focus_owner == _drawer_panel or _drawer_panel.is_ancestor_of(focus_owner))
+
+
+func _focus_is_text_editing() -> bool:
+	var viewport: Viewport = get_viewport()
+	if viewport == null:
+		return false
+	var focus_owner: Control = viewport.gui_get_focus_owner() as Control
+	return focus_owner is LineEdit or focus_owner is TextEdit
 
 
 func _on_backdrop_gui_input(event: InputEvent) -> void:

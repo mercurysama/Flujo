@@ -10,6 +10,7 @@ var _plugin: EditorPlugin
 var _inspector: PVControllerInspectorPlugin
 var _property: FlowGraphInspectorProperty
 var _dock: VPFlujoDock
+var _fluo_property: FlowGraphInspectorProperty
 var _controller: PVController
 var _history: UndoRedo
 var _ready_first_block_display_name: String = ""
@@ -48,7 +49,7 @@ func _run() -> void:
 	var undo_redo: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
 	_history = undo_redo.get_history_undo_redo(undo_redo.get_object_history_id(_controller))
 	_host = HBoxContainer.new()
-	_host.size = Vector2(1100, 900)
+	_host.size = Vector2(1700, 900)
 	get_root().add_child(_host)
 	_inspector = PVControllerInspectorPlugin.new()
 	_inspector.set_undo_redo(undo_redo)
@@ -66,6 +67,12 @@ func _run() -> void:
 	_host.add_child(_dock)
 	_dock.set("_controller_presence_initialized", true)
 	_dock.set("_controller_present", true)
+	_fluo_property = FlowGraphInspectorProperty.new()
+	_fluo_property.configure(undo_redo)
+	_fluo_property.configure_for_fluo()
+	_fluo_property.custom_minimum_size.x = 620
+	_host.add_child(_fluo_property)
+	_fluo_property.set_dock_controller(_controller)
 	_plugin = PLUGIN.new()
 	_plugin.set("_dock", _dock)
 	_plugin.set("_controller_inspector_plugin", _inspector)
@@ -97,6 +104,16 @@ func _test_process() -> void:
 	)
 	var process: FlowProcess = _controller.flow_graph.processes[0]
 	var process_id: String = process.get_internal_id()
+	_fluo_property.set_dock_variable_selection(
+		_controller,
+		FlowGraphEditorCommands.Collection.PROCESSES,
+		process_id
+	)
+	await _frames()
+	var fluo_list_panel: PanelContainer = _node(_fluo_property, "BlockListPanel") as PanelContainer
+	var fluo_options_panel: PanelContainer = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
+	_check(fluo_list_panel != null, "Fluo renders the block list in its left internal panel.")
+	_check(fluo_options_panel != null and not fluo_options_panel.visible, "Fluo block options start hidden.")
 	_check(list.has_focus() and list.is_selected(0), "Process Add focuses and selects its row.")
 	_check(_node(_property, "ReadyProcessEditor") == null and _button(_property, "Delete Process") == null, "Inspector has no process configuration or actions.")
 	var panel: Control = _node(_dock, "ReadyProcessEditor") as Control
@@ -141,6 +158,18 @@ func _test_process() -> void:
 	var input: TextEdit = _node(_dock, "ReadyPrintText") as TextEdit
 	if not _check(input != null and process.blocks.size() == 1, "Print creates its configurable editor."):
 		return
+	_fluo_property.refresh_dock_controller()
+	await _frames()
+	var fluo_blocks: ItemList = _node(_fluo_property, "ReadyBlocksList") as ItemList
+	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
+	if not _check(fluo_blocks != null and fluo_blocks.item_count == 1, "Fluo sees the same live block model as the dock."):
+		return
+	_check(fluo_options_panel != null and not fluo_options_panel.visible, "Selecting a process does not open block options.")
+	fluo_blocks.item_activated.emit(0)
+	await _frames()
+	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
+	_check(fluo_options_panel != null and fluo_options_panel.visible, "Activating a block opens Fluo's right options panel.")
+	_check(_node(fluo_options_panel, "ReadyBlockName") != null, "Fluo right panel contains the selected block options.")
 	_check(input.has_focus() and input.tooltip_text.contains("Ctrl+Enter"), "Add Print focuses text and explains confirmation.")
 	var print_surface: StyleBoxFlat = input.get_theme_stylebox(&"normal") as StyleBoxFlat
 	_check(
@@ -218,6 +247,14 @@ func _test_process() -> void:
 	blocks = _node(_dock, "ReadyBlocksList") as ItemList
 	if not _check(blocks != null and blocks.item_count == 2, "Everything Flows appends one row."):
 		return
+	_fluo_property.refresh_dock_controller()
+	await _frames()
+	fluo_blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
+	_check(fluo_blocks != null and fluo_blocks.item_count == 2, "Fluo refresh keeps both blocks visible.")
+	_check(_fluo_property.navigate_ready_block(1), "AvPag navigation advances to the next block in Fluo.")
+	_check(_selected_ready_block_id(fluo_blocks) == process.blocks[1].get_internal_id(), "AvPag selects the next block by stable ID.")
+	_check(_fluo_property.navigate_ready_block(1), "AvPag navigation wraps at the end.")
+	_check(_selected_ready_block_id(fluo_blocks) == process.blocks[0].get_internal_id(), "Block navigation is circular.")
 	_check(blocks.has_focus() and blocks.is_selected(1), "Everything Flows Add focuses its new row.")
 	var everything: FlowBlock = process.blocks[1]
 	_press(_dock, "Move Block Up")
@@ -236,6 +273,20 @@ func _test_process() -> void:
 	blocks = _node(_dock, "ReadyBlocksList") as ItemList
 	_check(blocks != null and blocks.is_selected(0) and process.blocks[0] == everything, "Delete Undo restores semantic selection.")
 	_check(_count(_dock, "ReadyBlocksList") == 1, "Rebuilds never duplicate block lists.")
+	_fluo_property.set_dock_variable_selection(
+		_controller,
+		FlowGraphEditorCommands.Collection.PROCESSES,
+		process_id
+	)
+	_check(_fluo_property.navigate_process(1), "Ctrl+AvPag navigation advances to the next Process.")
+	await _frames()
+	_check(
+		(_fluo_property.get("_selected_id") as String) == _controller.flow_graph.processes[1].get_internal_id(),
+		"Process navigation updates Fluo's process context by stable ID."
+	)
+	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
+	_check(fluo_options_panel != null and not fluo_options_panel.visible, "Changing Process closes stale block options.")
+
 	for index: int in 3:
 		if not _press(_property, "Add State Machine"):
 			return
@@ -564,6 +615,15 @@ func _schema_3_section_titles() -> Array[String]:
 				titles.append((child as Label).text)
 				break
 	return titles
+
+
+func _selected_ready_block_id(list: ItemList) -> String:
+	if list == null:
+		return ""
+	var selected: PackedInt32Array = list.get_selected_items()
+	if selected.size() != 1:
+		return ""
+	return list.get_item_metadata(selected[0]) as String
 
 
 func _selected_list_id(list: ItemList) -> String:

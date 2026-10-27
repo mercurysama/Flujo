@@ -8,6 +8,7 @@ signal block_delete_requested(block_id: String)
 signal focus_requested(control_name: StringName, select_all: bool)
 signal process_move_requested(direction: int)
 signal process_delete_requested
+signal block_details_visibility_changed(is_visible: bool)
 
 var _commands: FlowGraphEditorCommands
 var _controller: PVController
@@ -16,24 +17,76 @@ var _process_id: String
 var _block_id: String
 var _list: ItemList
 var _details: VBoxContainer
+var _details_panel: PanelContainer
+var _split_host: HBoxContainer
+var _list_content: VBoxContainer
+var _split_block_layout: bool = false
+var _block_details_open: bool = true
 var _confirmation: ConfirmationDialog
 
 
-func configure(commands: FlowGraphEditorCommands, controller: PVController, process: FlowBlockContainer, block_id: String) -> void:
+func configure(
+	commands: FlowGraphEditorCommands,
+	controller: PVController,
+	process: FlowBlockContainer,
+	block_id: String,
+	split_block_layout: bool = false,
+	block_details_open: bool = false
+) -> void:
 	auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	_commands = commands
 	_controller = controller
 	_graph = controller.flow_graph
 	_process_id = process.get_internal_id()
 	_block_id = block_id
+	_split_block_layout = split_block_layout
+	_block_details_open = block_details_open if split_block_layout else true
 	name = &"ReadyProcessEditor"
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var primary_parent: Container = self
+	if _split_block_layout:
+		_split_host = HBoxContainer.new()
+		_split_host.name = &"FluoBlockWorkspace"
+		_split_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_split_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		add_child(_split_host)
+
+		var list_panel := PanelContainer.new()
+		list_panel.name = &"BlockListPanel"
+		list_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		list_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		list_panel.size_flags_stretch_ratio = 1.0
+		_split_host.add_child(list_panel)
+
+		_list_content = VBoxContainer.new()
+		_list_content.name = &"BlockListContent"
+		_list_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_list_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		list_panel.add_child(_list_content)
+		primary_parent = _list_content
+
+		_details_panel = PanelContainer.new()
+		_details_panel.name = &"BlockOptionsPanel"
+		_details_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_details_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		_details_panel.size_flags_stretch_ratio = 1.0
+		_details_panel.visible = false
+		_split_host.add_child(_details_panel)
+
+		_details = VBoxContainer.new()
+		_details.name = &"BlockOptionsContent"
+		_details.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_details.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		_details_panel.add_child(_details)
+
 	var title: Label = Label.new()
 	var prefix: String = _container_label(process)
 	title.text = "Type: " + prefix
 	if process is FlowConstructorDefinition:
 		title.text += " — once before Ready (not native _init)"
-	add_child(title)
+	primary_parent.add_child(title)
+
 	var name_input: LineEdit = LineEdit.new()
 	name_input.name = &"ReadyProcessName"
 	name_input.text = process.display_name
@@ -41,18 +94,20 @@ func configure(commands: FlowGraphEditorCommands, controller: PVController, proc
 	name_input.focus_mode = Control.FOCUS_ALL
 	name_input.text_submitted.connect(_on_name_submitted)
 	name_input.gui_input.connect(_on_name_input.bind(name_input, process.display_name))
-	add_child(name_input)
+	primary_parent.add_child(name_input)
+
 	var enabled: CheckBox = CheckBox.new()
 	enabled.name = &"ReadyProcessEnabled"
 	enabled.text = prefix + " Enabled"
 	enabled.button_pressed = process.enabled
 	enabled.toggled.connect(_on_enabled.bind(""))
-	add_child(enabled)
+	primary_parent.add_child(enabled)
+
 	if process is FlowTimerDefinition:
 		var timer: FlowTimerDefinition = process as FlowTimerDefinition
 		var interval_label: Label = Label.new()
 		interval_label.text = "Interval (seconds)"
-		add_child(interval_label)
+		primary_parent.add_child(interval_label)
 		var interval: SpinBox = SpinBox.new()
 		interval.name = &"TimerInterval"
 		interval.min_value = 0.01
@@ -63,24 +118,26 @@ func configure(commands: FlowGraphEditorCommands, controller: PVController, proc
 		interval.value = timer.interval_seconds
 		interval.get_line_edit().text = "%.2f" % timer.interval_seconds
 		interval.value_changed.connect(_on_interval_changed)
-		add_child(interval)
+		primary_parent.add_child(interval)
 		call_deferred(&"_format_timer_interval", interval, timer.interval_seconds)
 		var repeat_input: CheckBox = CheckBox.new()
 		repeat_input.name = &"TimerRepeat"
 		repeat_input.text = "Repeat"
 		repeat_input.button_pressed = timer.repeat
 		repeat_input.toggled.connect(_on_repeat_changed)
-		add_child(repeat_input)
+		primary_parent.add_child(repeat_input)
+
 	var add_row: HBoxContainer = HBoxContainer.new()
 	add_row.name = &"AddBlockActions"
-	add_child(add_row)
+	primary_parent.add_child(add_row)
 	for type_id: StringName in FlowBlockRegistry.creatable_type_ids():
 		_add_button(add_row, "Add " + FlowBlockRegistry.display_name_for_type(type_id), _on_add.bind(type_id))
 	if process is FlowProcess:
 		_add_button(add_row, "Add Call Method", _on_add_call)
+
 	var process_actions: VBoxContainer = VBoxContainer.new()
 	process_actions.name = &"ProcessActions"
-	add_child(process_actions)
+	primary_parent.add_child(process_actions)
 	var action_title: Label = Label.new()
 	action_title.text = prefix + " actions"
 	process_actions.add_child(action_title)
@@ -88,6 +145,7 @@ func configure(commands: FlowGraphEditorCommands, controller: PVController, proc
 		_add_button(process_actions, "Move " + prefix + " Up", func() -> void: process_move_requested.emit(-1))
 		_add_button(process_actions, "Move " + prefix + " Down", func() -> void: process_move_requested.emit(1))
 		_add_button(process_actions, "Delete " + prefix, func() -> void: process_delete_requested.emit())
+
 	_list = ItemList.new()
 	_list.name = &"ReadyBlocksList"
 	_list.focus_mode = Control.FOCUS_ALL
@@ -100,13 +158,18 @@ func configure(commands: FlowGraphEditorCommands, controller: PVController, proc
 		if block != null and block.get_internal_id() == _block_id:
 			_list.select(index)
 	_list.item_selected.connect(_on_selected)
+	_list.item_activated.connect(_on_activated)
 	_list.gui_input.connect(_on_block_list_input)
-	add_child(_list)
+	primary_parent.add_child(_list)
+
 	var font: Font = _list.get_theme_font(&"font")
 	var line_height: float = font.get_height(_list.get_theme_font_size(&"font_size")) + _list.get_theme_constant(&"v_separation")
 	_list.custom_minimum_size.y = line_height * 5.0 + _list.get_theme_stylebox(&"panel").get_minimum_size().y
-	_details = VBoxContainer.new()
-	add_child(_details)
+
+	if not _split_block_layout:
+		_details = VBoxContainer.new()
+		add_child(_details)
+
 	_render_block()
 
 
@@ -175,11 +238,50 @@ func _on_repeat_changed(value: bool) -> void:
 
 
 func _on_selected(index: int) -> void:
-	if not _current() or index < 0 or index >= _list.item_count:
+	if not _select_block_index(index):
 		return
+	_render_block()
+
+
+func _on_activated(index: int) -> void:
+	if not _select_block_index(index):
+		return
+	if _split_block_layout:
+		_block_details_open = true
+		block_details_visibility_changed.emit(true)
+	_render_block()
+
+
+func _select_block_index(index: int) -> bool:
+	if not _current() or index < 0 or index >= _list.item_count:
+		return false
 	_block_id = _list.get_item_metadata(index) as String
 	block_selected.emit(_block_id)
+	return true
+
+
+func navigate_block(direction: int) -> bool:
+	if not _current() or _list == null or _list.item_count == 0 or direction == 0:
+		return false
+	var current_index: int = -1
+	for index: int in _list.item_count:
+		if (_list.get_item_metadata(index) as String) == _block_id:
+			current_index = index
+			break
+	var next_index: int
+	if current_index < 0:
+		next_index = 0 if direction > 0 else _list.item_count - 1
+	else:
+		next_index = posmod(current_index + (1 if direction > 0 else -1), _list.item_count)
+	_list.select(next_index)
+	if not _select_block_index(next_index):
+		return false
 	_render_block()
+	return true
+
+
+func is_block_details_open() -> bool:
+	return _block_details_open
 
 
 func _on_block_list_input(event: InputEvent) -> void:
@@ -208,15 +310,39 @@ func _render_block() -> void:
 	for child: Node in _details.get_children():
 		_details.remove_child(child)
 		child.queue_free()
+
 	var process: FlowBlockContainer = _commands.find_block_container(_controller, _process_id)
 	if process == null:
+		if _details_panel != null:
+			_details_panel.visible = false
 		return
+
 	var selected: FlowBlock = null
 	for block: FlowBlock in process.blocks:
 		if block != null and block.get_internal_id() == _block_id:
 			selected = block
+
+	if _details_panel != null:
+		_details_panel.visible = _block_details_open and selected != null
+
 	if selected == null:
 		return
+
+	if _split_block_layout:
+		var header := HBoxContainer.new()
+		header.name = &"BlockOptionsHeader"
+		_details.add_child(header)
+		var options_title := Label.new()
+		options_title.text = "Block options"
+		options_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		header.add_child(options_title)
+		var close_button := Button.new()
+		close_button.name = &"CloseBlockOptions"
+		close_button.text = "Cerrar"
+		close_button.focus_mode = Control.FOCUS_ALL
+		close_button.pressed.connect(_on_close_block_options)
+		header.add_child(close_button)
+
 	var name_label: Label = Label.new()
 	name_label.text = "Block Name"
 	_details.add_child(name_label)
@@ -229,19 +355,23 @@ func _render_block() -> void:
 	name_input.text_submitted.connect(_on_block_name_submitted.bind(_block_id))
 	name_input.gui_input.connect(_on_block_name_input.bind(name_input, _block_id, name_input.text))
 	_details.add_child(name_input)
+
 	var enabled: CheckBox = CheckBox.new()
 	enabled.name = &"ReadyBlockEnabled"
 	enabled.text = "Block Enabled"
 	enabled.button_pressed = selected.enabled
 	enabled.toggled.connect(_on_enabled.bind(_block_id))
 	_details.add_child(enabled)
+
 	var actions: HBoxContainer = HBoxContainer.new()
 	_details.add_child(actions)
 	_add_button(actions, "Move Block Up", _on_move.bind(-1))
 	_add_button(actions, "Move Block Down", _on_move.bind(1))
 	_add_button(actions, "Delete Block", _on_delete)
+
 	if selected is FlowMethodCallBlock:
 		_render_method_target(selected as FlowMethodCallBlock)
+
 	if selected is FlowPrintBlock:
 		var label: Label = Label.new()
 		label.text = "Print text (Ctrl+Enter to apply)"
@@ -256,6 +386,15 @@ func _render_block() -> void:
 		_apply_themed_print_text_surface(input)
 		input.gui_input.connect(_on_text_input.bind(input, _block_id, input.text))
 		_details.add_child(input)
+
+
+func _on_close_block_options() -> void:
+	if not _split_block_layout:
+		return
+	_block_details_open = false
+	if _details_panel != null:
+		_details_panel.visible = false
+	block_details_visibility_changed.emit(false)
 
 
 func _render_method_target(call: FlowMethodCallBlock) -> void:

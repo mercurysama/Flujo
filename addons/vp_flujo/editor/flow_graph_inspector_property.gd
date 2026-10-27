@@ -49,6 +49,8 @@ var _color_preview_original: Color = Color.WHITE
 var _color_preview_value: Color = Color.WHITE
 var _color_preview_button_reference: WeakRef
 var _ready_block_id: String = ""
+var _ready_block_details_open: bool = false
+var _fluo_mode: bool = false
 var _deleted_resource_id: String = ""
 var _deleted_resource_replacement_id: String = ""
 var _deleted_resource_collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.PROCESSES
@@ -87,6 +89,12 @@ func configure_for_dock() -> void:
 	_dock_mode = true
 
 
+## Configures this editor as the Fluo surface while preserving dock-style ownership semantics.
+func configure_for_fluo() -> void:
+	_dock_mode = true
+	_fluo_mode = true
+
+
 ## Updates the dock-owned controller without retaining selection state from another scene object.
 func set_dock_controller(controller: PVController) -> void:
 	var next_controller: PVController = controller if is_instance_valid(controller) else null
@@ -108,6 +116,8 @@ func _reset_dock_context() -> void:
 	_selected_id = ""
 	_selected_view_title = "Processes"
 	_selected_view_index = -1
+	_ready_block_id = ""
+	_ready_block_details_open = false
 	_rename_target_id = ""
 	_variable_advanced_open = false
 	_variable_focus_control = &""
@@ -171,6 +181,8 @@ func set_dock_variable_selection(
 		return
 	_selected_collection = collection
 	_selected_id = next_id
+	_ready_block_id = ""
+	_ready_block_details_open = false
 	_selected_view_title = _view_title_for_selection(graph, collection, next_id)
 	_selected_view_index = _selected_view_index_for_id(graph, collection, next_id, _selected_view_title)
 	_rename_target_id = ""
@@ -434,8 +446,16 @@ func _render_ready_process_editor(parent: Container) -> void:
 	if process == null:
 		return
 	var editor: FlowReadyProcessEditor = FlowReadyProcessEditor.new()
-	editor.configure(_commands, controller, process, _ready_block_id)
+	editor.configure(
+		_commands,
+		controller,
+		process,
+		_ready_block_id,
+		_fluo_mode,
+		_ready_block_details_open
+	)
 	editor.block_selected.connect(_on_ready_block_selected)
+	editor.block_details_visibility_changed.connect(_on_ready_block_details_visibility_changed)
 	editor.block_delete_requested.connect(_on_ready_block_delete_requested)
 	editor.focus_requested.connect(_on_process_focus_requested)
 	editor.process_move_requested.connect(_move_selected)
@@ -446,6 +466,58 @@ func _render_ready_process_editor(parent: Container) -> void:
 func _on_ready_block_selected(block_id: String) -> void:
 	_clear_deleted_block_selection_state()
 	_ready_block_id = block_id
+
+
+func _on_ready_block_details_visibility_changed(is_visible: bool) -> void:
+	_ready_block_details_open = is_visible
+
+
+func navigate_ready_block(direction: int) -> bool:
+	if not _fluo_mode or direction == 0:
+		return false
+	var editor: FlowReadyProcessEditor = _content.find_child("ReadyProcessEditor", true, false) as FlowReadyProcessEditor
+	if editor == null:
+		return false
+	return editor.navigate_block(direction)
+
+
+func navigate_process(direction: int) -> bool:
+	if not _fluo_mode or direction == 0 			or _selected_collection != FlowGraphEditorCommands.Collection.PROCESSES:
+		return false
+	var controller: PVController = _active_controller()
+	if controller == null or controller.flow_graph == null:
+		return false
+	var values: Array = _selection_values(
+		controller.flow_graph,
+		FlowGraphEditorCommands.Collection.PROCESSES,
+		_selected_view_title
+	)
+	if values.is_empty():
+		return false
+	var current_index: int = _selected_view_index_for_id(
+		controller.flow_graph,
+		FlowGraphEditorCommands.Collection.PROCESSES,
+		_selected_id,
+		_selected_view_title
+	)
+	var next_index: int
+	if current_index < 0:
+		next_index = 0 if direction > 0 else values.size() - 1
+	else:
+		next_index = posmod(current_index + (1 if direction > 0 else -1), values.size())
+	var next_process: FlowBlockContainer = values[next_index] as FlowBlockContainer
+	if next_process == null:
+		return false
+	_selected_id = next_process.get_internal_id()
+	_selected_view_index = next_index
+	_ready_block_id = ""
+	_ready_block_details_open = false
+	_rename_target_id = ""
+	_restore_selected_list_focus = false
+	_clear_deleted_selection_state()
+	_close_delete_confirmation()
+	_request_rebuild()
+	return true
 
 
 func _on_ready_block_delete_requested(block_id: String) -> void:
