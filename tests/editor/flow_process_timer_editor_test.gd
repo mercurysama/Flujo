@@ -350,8 +350,19 @@ func _test_process() -> void:
 	_check(fluo_blocks != null and fluo_blocks.item_count == 2, "Fluo refresh keeps both blocks visible.")
 	_check(_fluo_property.navigate_ready_block(1), "Ctrl+AvPag navigation advances to the next Flow block.")
 	_check(_selected_ready_block_id(fluo_blocks) == process.blocks[1].get_internal_id(), "Ctrl+AvPag selects the next block by stable ID.")
-	_check(_fluo_property.navigate_ready_block(1), "Ctrl+AvPag navigation wraps at the end.")
+	_check(fluo_blocks.has_focus(), "Flow regains keyboard focus after changing blocks.")
+	_check(_fluo_property.navigate_ready_block(1), "A second Ctrl+AvPag navigation still works without restoring focus manually.")
 	_check(_selected_ready_block_id(fluo_blocks) == process.blocks[0].get_internal_id(), "Block navigation is circular.")
+	_check(fluo_blocks.has_focus(), "Repeated Flow navigation keeps keyboard focus on the block list.")
+	_check(_fluo_property.close_ready_block_details(), "Close Flusso before testing keyboard activation from Flow.")
+	await _frames()
+	fluo_blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
+	fluo_blocks.select(0)
+	fluo_blocks.grab_focus()
+	fluo_blocks.gui_input.emit(_key(KEY_ENTER))
+	await _frames()
+	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
+	_check(fluo_options_panel != null and fluo_options_panel.visible, "Enter on the selected Flow block opens Flusso like double-click.")
 	_check(blocks.has_focus() and blocks.is_selected(1), "Everything Flows Add focuses its new row.")
 	var everything: FlowBlock = process.blocks[1]
 	_press(_dock, "Move Block Up")
