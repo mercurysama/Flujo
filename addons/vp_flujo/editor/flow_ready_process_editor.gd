@@ -309,8 +309,14 @@ func focus_flow_entry() -> bool:
 	if not _split_block_layout or not _current():
 		return false
 	if _list != null and _list.item_count > 0:
-		_list.select(0)
-		_select_block_index(0)
+		var target_index: int = 0
+		if not _block_id.is_empty():
+			for index: int in _list.item_count:
+				if (_list.get_item_metadata(index) as String) == _block_id:
+					target_index = index
+					break
+		_list.select(target_index)
+		_select_block_index(target_index)
 		_list.grab_focus()
 		return true
 	if is_instance_valid(_first_add_block_button):
