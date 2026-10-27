@@ -576,6 +576,7 @@ func close_ready_block_details() -> bool:
 	if editor != null:
 		editor.close_block_details()
 	_flusso_snapshots.clear()
+	_flow_entry_focus_pending = true
 	_request_rebuild()
 	return true
 
