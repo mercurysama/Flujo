@@ -392,8 +392,8 @@ func _render_block() -> void:
 		header.name = &"BlockOptionsHeader"
 		_details.add_child(header)
 		var options_title := Label.new()
-		options_title.name = &"FluoPanelTitle"
-		options_title.text = "Fluo"
+		options_title.name = &"FlussoPanelTitle"
+		options_title.text = "Flusso"
 		options_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		header.add_child(options_title)
 		var close_button := Button.new()
