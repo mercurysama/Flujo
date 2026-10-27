@@ -210,20 +210,37 @@ func _test_process() -> void:
 		_check(_fluo_property.cycle_ready_block_option_focus(-1), "Reverse option navigation can move backward through block-option controls.")
 		_check(fluo_block_name.has_focus(), "Reverse option navigation returns to Block Name.")
 	if fluo_block_name != null and fluo_print_text != null:
-		fluo_block_name.text = "Saved From Flusso"
-		fluo_print_text.text = "Saved Flusso text"
-	_check(_fluo_property.close_ready_block_details(), "First Escape-level action can close only Flusso.")
-	await _frames()
+		fluo_block_name.text = "Live From Flusso"
+		fluo_block_name.text_changed.emit(fluo_block_name.text)
+		fluo_print_text.text = "Live Flusso text"
+		fluo_print_text.text_changed.emit()
 	_check(
-		(process.blocks[0] as FlowPrintBlock).display_name == "Saved From Flusso" 			and (process.blocks[0] as FlowPrintBlock).text == "Saved Flusso text",
-		"Leaving Flusso persists pending Block Name and Print text."
+		(process.blocks[0] as FlowPrintBlock).display_name == "Live From Flusso" 			and (process.blocks[0] as FlowPrintBlock).text == "Live Flusso text",
+		"Flusso updates Block Name and Print text immediately before any close action."
 	)
-	_history.undo()
-	_history.undo()
+	var revert_button: Button = _button(fluo_options_panel, "Revertir")
+	_check(revert_button != null, "Flusso exposes a Revertir button.")
+	if revert_button != null:
+		revert_button.pressed.emit()
 	await _frames()
 	_check(
 		(process.blocks[0] as FlowPrintBlock).display_name == "Print" 			and (process.blocks[0] as FlowPrintBlock).text.is_empty(),
-		"Undo restores the model after Flusso persistence."
+		"Revertir restores the block snapshot captured when Flusso opened."
+	)
+	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
+	_check(fluo_options_panel != null and fluo_options_panel.visible, "Revertir keeps Flusso open.")
+	fluo_block_name = _node(fluo_options_panel, "ReadyBlockName") as LineEdit
+	fluo_print_text = _node(fluo_options_panel, "ReadyPrintText") as TextEdit
+	if fluo_block_name != null and fluo_print_text != null:
+		fluo_block_name.text = "Persistent From Flusso"
+		fluo_block_name.text_changed.emit(fluo_block_name.text)
+		fluo_print_text.text = "Persistent Flusso text"
+		fluo_print_text.text_changed.emit()
+	_check(_fluo_property.close_ready_block_details(), "Escape-level action closes Flusso without deciding whether edits persist.")
+	await _frames()
+	_check(
+		(process.blocks[0] as FlowPrintBlock).display_name == "Persistent From Flusso" 			and (process.blocks[0] as FlowPrintBlock).text == "Persistent Flusso text",
+		"Closing Flusso does not change or roll back already-live configuration."
 	)
 	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
 	_check(fluo_options_panel != null and not fluo_options_panel.visible, "Closing block details leaves the Fluo list surface available.")
