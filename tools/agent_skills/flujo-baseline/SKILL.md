@@ -22,3 +22,14 @@ Verification only. Do not edit production, tests, catalog or other tracked files
 - `BLOCKED`: invalid catalog, failed/incomplete required checks, missing existing-behavior coverage, ambiguous scope or execution outside authorization. Name the smallest next authorized step.
 
 Report scope → behavior IDs → evidence paths, exact commands and exit codes, unrun checks and reasons, project failures separately from environmental warnings, and final Git/process/owned-temporary status. Do not change catalog statuses. Remove only safe temporary outputs created by this verification, never user files.
+
+
+## Fluo UI scope
+
+When the requested scope touches Fluo, Flow, Flusso, Inspector container activation, drawer focus, Page-key navigation, or the temporary legacy dock:
+
+1. Read `docs/project_memory.md` and `docs/fluo_preview_01.md` in addition to the normal required context.
+2. Map the scope to the `FLUJO-BHV-FLUO-*` catalog entries. Keep Inspector selection, Flow keyboard focus, Flusso visibility, live model edits, and the session revert snapshot as separate state.
+3. Do not use the legacy visible `Flujo` dock as equivalent evidence for the Inspector → Fluo path. It is a temporary fallback surface.
+4. A headless baseline cannot approve visual selection, focus, drawer placement, touch targets, double-click/double-tap, or Android behavior. Record required manual evidence explicitly.
+5. Preserve the current vocabulary unless the maintainer explicitly changes it: Fluo = complete drawer, Flow = left block panel, Flusso = right configuration panel, Inspector = Godot Inspector.

@@ -16,6 +16,15 @@ Flujo is an MIT-licensed visual programming plugin for Godot. It is designed to 
 - A read-only and undoable Inspector workflow for the supported schema 2 collections.
 - Selection-based Flujo dock visibility and F4 controller support.
 - Model, editor, and PackedScene persistence regressions.
+- Experimental **Fluo** contextual drawer authoring: Inspector container activation opens **Flow** on the left, **Flusso** block configuration on the right, stable-ID keyboard navigation, immediate configuration persistence, session-scoped Revertir, focus restoration, and left/right drawer placement.
+
+### Preview milestone — Fluo Preview 1
+
+The validated UI checkpoint on `feature/fluo-drawer-poc` is commit `cd7e969c38193d718c948262107d1f7a45ca8083`. It introduces the contextual Fluo drawer while preserving the existing persistent model and runtime boundaries. The legacy visible `Flujo` dock remains temporarily available as a validation fallback and is not the intended final authoring surface.
+
+Desktop behavior has been manually exercised during development. On 2026-10-27 the full-project preview was also opened in Godot on Android and Fluo rendered with Flow and Flusso visible. Complete Android touch, scrolling, orientation, double-tap, and keyboard acceptance remains a preview-hardening task; no automated test pass is inferred from that visual evidence.
+
+See [Fluo Preview 1](docs/fluo_preview_01.md) and [Project memory / handoff](docs/project_memory.md).
 
 ### Completed iteration
 
@@ -23,7 +32,7 @@ Iteration 6 completed the schema 3 structural model, its atomic migration, const
 
 ### Planned
 
-Visual block authoring, a runtime executor, debugging, packages, inherited-scene customization, and per-instance runtime state remain future work.
+Next UI hardening is Android interaction validation, removal/hiding of the legacy visible dock after acceptance, panel-proportion tuning, and Themes + Motion before the first stable release. Broader runtime execution, debugging, packages, inherited-scene customization, and per-instance runtime-state work continue under their existing contracts.
 
 ## Requirements
 
@@ -74,6 +83,8 @@ The existing scene filename is retained as a compatibility entry point; its scri
 - [Iteration 5 postmortem](docs/iteration_05.md)
 - [Iteration 6 postmortem](docs/iteration_06.md)
 - [Roadmap](docs/roadmap.md)
+- [Project memory / handoff](docs/project_memory.md)
+- [Fluo Preview 1](docs/fluo_preview_01.md)
 
 ## AI-assisted development
 

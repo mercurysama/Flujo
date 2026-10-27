@@ -20,3 +20,16 @@ Verification only. Do not fix code, tests, documentation or catalog entries; do 
 Return `PASA` only when affected behaviors are preserved or their changes explicitly authorized, coverage is not weakened, and all required checks/reviews are complete and passing. Otherwise return `NO PASA` with blockers and the smallest next authorized step. Neither result authorizes a commit or publication.
 
 Report requirement/scope → behavior IDs → changed paths → evidence, exact commands and exit codes, baseline differences, unrun checks and reasons, environmental warnings separately from project failures, and final index/working-tree/process/temporary status. Report missing catalog entries or corrections without making them. Never fabricate manual approval or treat file existence as coverage proof.
+
+
+## Fluo UI completion checks
+
+When proving changes to Fluo/Flow/Flusso:
+
+1. Read `docs/project_memory.md` and `docs/fluo_preview_01.md`, then verify the affected `FLUJO-BHV-FLUO-*` entries.
+2. Confirm there is no duplicate Inspector Blocks list; activation begins from the existing Inspector container rows.
+3. Verify separately: Inspector container context, Flow block selection/focus, Flusso configuration visibility, and Fluo drawer visibility.
+4. Verify the current keyboard mapping. Rebuilds must not strand focus on detached controls, and Inspector-level Page navigation must visibly synchronize Inspector selection without stealing keyboard focus from Flow.
+5. Verify live editing and Revertir as distinct semantics: edits persist immediately, closing does not commit/cancel, and Revertir restores the opening snapshot for supported configuration.
+6. Treat desktop visual approval and Android approval as separate evidence. Android load/render alone is not complete touch/orientation/keyboard acceptance.
+7. Do not approve removal of the legacy dock or POC entry path until the maintainer explicitly accepts the preview path that replaces it.

@@ -1,5 +1,24 @@
 # Current Iteration
 
+## Active UI delivery — Fluo Preview 1
+
+- **Branch:** `feature/fluo-drawer-poc`.
+- **Validated functional checkpoint:** `cd7e969c38193d718c948262107d1f7a45ca8083`.
+- **Frozen code backup:** `backup/fluo-preview-1-2026-10-27` at the same checkpoint.
+- **Preview package:** `Flujo-0.1.0-fluo-preview.1`; `plugin.cfg` remains `0.1.0`.
+- **Naming:** Fluo = complete sliding drawer; Flow = left block panel; Flusso = right selected-block configuration panel; Inspector = Godot Inspector.
+- **Inspector rule:** no duplicate Blocks list belongs in the Inspector. Existing container rows such as `Processes → Flujo`, `Flujo 1`, Timers, Constructor, or Methods are the entry points.
+- **Open rule:** double-click or Enter on an existing Inspector container opens Fluo with Flow visible and Flusso initially closed. Flow focuses the first existing block, or the first Add-block button when empty.
+- **Block rule:** double-click or Enter on a Flow block opens Flusso. Closing Flusso returns real keyboard focus to the same selected Flow block after rebuild.
+- **Persistence rule:** Flusso configuration changes are live/immediate; Escape only closes. Revertir restores the persistent configuration snapshot captured when that Flusso session opened.
+- **Keyboard:** Up/Down uses native Flow list movement; Ctrl+PageUp/PageDown cycles Flow blocks; plain PageUp/PageDown cycles the current Inspector container view and synchronizes the Inspector's visible selection while keyboard focus stays in Flow; Alt+PageUp/PageDown cycles Flusso controls and Shift reverses that Alt direction.
+- **Drawer:** side switch moves the complete Fluo drawer left/right. First Escape closes Flusso when open; the next Escape closes Fluo.
+- **Legacy surface:** the visible `Flujo` dock and `Open Fluo (POC)` path remain temporarily for validation only.
+- **Manual evidence:** desktop interaction was repeatedly approved during implementation. On 2026-10-27 the full-project preview opened under Godot on Android and visibly rendered Fluo, Flow and Flusso. This is load/render evidence, not a claim that the full Android interaction matrix is complete.
+- **Automation evidence:** focal editor tests were extended for Fluo behaviors, but this handoff does not claim a fresh automated run after the final UI checkpoint.
+
+Read [Project memory / handoff](project_memory.md) and [Fluo Preview 1](fluo_preview_01.md) before continuing this branch.
+
 ## Iteration 7 planning — Typed Variables
 
 - **Latest completed iteration:** Iteration 6 — Constructor and Reusable Methods.
@@ -54,7 +73,9 @@ This iteration has not introduced argument bindings, return blocks or runtime re
 
 ### Next delivery
 
-Complete visual acceptance of the Constructor/Methods vertical delivery before publication. The Constructor and Methods contract continues to govern deferred argument bindings, return blocks, value sources, cycle validation and general method execution. The friendly user guide requires separate approval.
+For `feature/fluo-drawer-poc`, complete the Android preview acceptance matrix: portrait/landscape, touch targets, scrolling, double-tap activation, keyboard behavior, focus restoration, Page navigation and drawer side placement. After that approval, hide/remove the temporary legacy visible Flujo dock and obsolete POC entry surface, then tune panel proportions from device evidence. Themes + Motion using Godot 4.7 offset transforms is required before the first stable release and must not desynchronize visual position from Containers, focus, hitboxes, or mouse filtering.
+
+Constructor/Methods, Typed Variables, schema 4/5 and runtime work remain governed by their existing contracts; Fluo preview hardening must not silently expand those scopes. The friendly user guide remains a separately approved follow-up.
 
 Update this file after each approved Iteration 7 delivery so it remains a brief, factual handoff.
 

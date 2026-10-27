@@ -1,6 +1,6 @@
 {
   "schema": "flujo.behavior-catalog/v1",
-  "catalog_version": 1,
+  "catalog_version": 2,
   "behaviors": [
     {
       "id": "FLUJO-BHV-F4-001",
@@ -15,7 +15,9 @@
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
-      "test_paths": ["tests/editor/flow_f4_create_controller_test.gd"]
+      "test_paths": [
+        "tests/editor/flow_f4_create_controller_test.gd"
+      ]
     },
     {
       "id": "FLUJO-BHV-SCROLL-001",
@@ -30,7 +32,9 @@
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
-      "test_paths": ["tests/editor/flow_dock_scroll_layout_test.gd"]
+      "test_paths": [
+        "tests/editor/flow_dock_scroll_layout_test.gd"
+      ]
     },
     {
       "id": "FLUJO-BHV-FOCUS-001",
@@ -45,7 +49,9 @@
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
-      "test_paths": ["tests/editor/flow_graph_editor_commands_test.gd"]
+      "test_paths": [
+        "tests/editor/flow_graph_editor_commands_test.gd"
+      ]
     },
     {
       "id": "FLUJO-BHV-FOCUS-002",
@@ -74,7 +80,9 @@
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
-      "test_paths": ["tests/editor/flow_delete_selection_lifecycle_test.gd"],
+      "test_paths": [
+        "tests/editor/flow_delete_selection_lifecycle_test.gd"
+      ],
       "notes": "The focal verifies stable-ID row and dock recovery across Inspector-property replacement for Delete, Undo, and Redo, including focus ownership and teardown."
     },
     {
@@ -145,7 +153,9 @@
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
-      "test_paths": ["tests/runtime/flow_inherited_attribute_store_test.gd"]
+      "test_paths": [
+        "tests/runtime/flow_inherited_attribute_store_test.gd"
+      ]
     },
     {
       "id": "FLUJO-BHV-RUNTIME-READY-001",
@@ -160,7 +170,9 @@
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
-      "test_paths": ["tests/runtime/flow_ready_runtime_test.tscn"]
+      "test_paths": [
+        "tests/runtime/flow_ready_runtime_test.tscn"
+      ]
     },
     {
       "id": "FLUJO-BHV-RUNTIME-NAVIGATION-001",
@@ -175,7 +187,9 @@
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
-      "test_paths": ["tests/runtime/flow_navigation_runtime_test.tscn"]
+      "test_paths": [
+        "tests/runtime/flow_navigation_runtime_test.tscn"
+      ]
     },
     {
       "id": "FLUJO-BHV-BLOCKSDK-CUSTOM-001",
@@ -208,7 +222,9 @@
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
-      "test_paths": ["tests/runtime/flow_ready_runtime_test.gd"]
+      "test_paths": [
+        "tests/runtime/flow_ready_runtime_test.gd"
+      ]
     },
     {
       "id": "FLUJO-BHV-RUNTIME-CONSTRUCTOR-001",
@@ -223,7 +239,9 @@
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
-      "test_paths": ["tests/runtime/flow_constructor_methods_test.gd"]
+      "test_paths": [
+        "tests/runtime/flow_constructor_methods_test.gd"
+      ]
     },
     {
       "id": "FLUJO-BHV-RUNTIME-METHOD-001",
@@ -238,7 +256,9 @@
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
-      "test_paths": ["tests/runtime/flow_constructor_methods_test.gd"]
+      "test_paths": [
+        "tests/runtime/flow_constructor_methods_test.gd"
+      ]
     },
     {
       "id": "FLUJO-BHV-BLOCKSDK-MANIFEST-DATA-001",
@@ -253,7 +273,9 @@
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
-      "test_paths": ["tests/model/flow_external_manifest_descriptor_test.tscn"]
+      "test_paths": [
+        "tests/model/flow_external_manifest_descriptor_test.tscn"
+      ]
     },
     {
       "id": "FLUJO-BHV-BLOCKSDK-MANIFEST-LOADER-001",
@@ -268,7 +290,9 @@
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
-      "test_paths": ["tests/model/flow_package_manifest_loader_test.tscn"]
+      "test_paths": [
+        "tests/model/flow_package_manifest_loader_test.tscn"
+      ]
     },
     {
       "id": "FLUJO-BHV-BLOCKSDK-MANIFEST-SCRIPT-001",
@@ -283,7 +307,9 @@
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
-      "test_paths": ["tests/model/flow_external_block_script_validator_test.tscn"]
+      "test_paths": [
+        "tests/model/flow_external_block_script_validator_test.tscn"
+      ]
     },
     {
       "id": "FLUJO-BHV-BLOCKSDK-CATALOG-001",
@@ -298,7 +324,9 @@
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
-      "test_paths": ["tests/model/flow_editor_block_catalog_test.tscn"]
+      "test_paths": [
+        "tests/model/flow_editor_block_catalog_test.tscn"
+      ]
     },
     {
       "id": "FLUJO-BHV-BLOCKSDK-FACTORY-001",
@@ -313,22 +341,113 @@
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
-      "test_paths": ["tests/model/flow_external_block_factory_test.tscn"]
-	    },
-	    {
-	      "id": "FLUJO-BHV-BLOCKSDK-HOOKS-001",
-	      "area": "Generic external block validation and duplication hooks",
-	      "precondition": "A FlowGraph contains a FlowBlock subclass with optional structure checks or ID-addressed internal references.",
-	      "public_action": "Validate the graph or duplicate it through the existing FlowGraph model API.",
-	      "expected_result": "FlowBlock receives a validation context during graph validation and the complete old-ID → new-ID map during duplication; the base hooks remain no-op.",
-	      "invariants": [
-		"Existing built-in blocks retain their validation, persistence, and duplication behavior.",
-		"External hooks do not add schema fields, package registration, executor knowledge, or FlowIfBlock-specific behavior.",
-		"Stable IDs, ordering, null positions, and the source graph remain protected during duplication."
-	      ],
-	      "coverage": "automatic",
-	      "baseline_status": "passing",
-	      "test_paths": ["tests/model/flow_external_block_hooks_test.tscn"]
-	    }
+      "test_paths": [
+        "tests/model/flow_external_block_factory_test.tscn"
+      ]
+    },
+    {
+      "id": "FLUJO-BHV-BLOCKSDK-HOOKS-001",
+      "area": "Generic external block validation and duplication hooks",
+      "precondition": "A FlowGraph contains a FlowBlock subclass with optional structure checks or ID-addressed internal references.",
+      "public_action": "Validate the graph or duplicate it through the existing FlowGraph model API.",
+      "expected_result": "FlowBlock receives a validation context during graph validation and the complete old-ID → new-ID map during duplication; the base hooks remain no-op.",
+      "invariants": [
+        "Existing built-in blocks retain their validation, persistence, and duplication behavior.",
+        "External hooks do not add schema fields, package registration, executor knowledge, or FlowIfBlock-specific behavior.",
+        "Stable IDs, ordering, null positions, and the source graph remain protected during duplication."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/model/flow_external_block_hooks_test.tscn"
+      ]
+    },
+    {
+      "id": "FLUJO-BHV-FLUO-OPEN-001",
+      "area": "Fluo opening from Inspector containers",
+      "precondition": "A schema 3 supported container row is visible in the Godot Inspector and Fluo is configured for the same PVController.",
+      "public_action": "Activate the existing container row by double-click or Enter.",
+      "expected_result": "Fluo opens for that stable container ID with Flow visible, Flusso closed, and Flow focused on its first block or first Add-block button when empty.",
+      "invariants": [
+        "The Inspector never creates a duplicate Blocks list.",
+        "The drawer reuses the live FlowGraph model instead of duplicating state.",
+        "Internal VP/PV class names are not renamed by the presentation change."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/editor/flow_process_timer_editor_test.gd"
+      ],
+      "notes": "Manually exercised during Fluo Preview 1. No fresh final automated pass is claimed."
+    },
+    {
+      "id": "FLUJO-BHV-FLUO-EDIT-001",
+      "area": "Flusso live configuration and session revert",
+      "precondition": "A Flow block is selected and Flusso is open for that stable block ID.",
+      "public_action": "Modify supported configuration fields, press Revertir, or close Flusso with Escape/X.",
+      "expected_result": "Supported edits update the model immediately; Escape/X only closes; Revertir restores the persistent block configuration captured when the current Flusso session opened and keeps the panel open.",
+      "invariants": [
+        "Closing Flusso does not decide whether an edit persists.",
+        "Revertir applies to configuration, not destructive structural deletion.",
+        "Closing Flusso restores keyboard focus to the same selected Flow block after any rebuild."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/editor/flow_process_timer_editor_test.gd"
+      ]
+    },
+    {
+      "id": "FLUJO-BHV-FLUO-NAV-001",
+      "area": "Hierarchical Fluo keyboard navigation",
+      "precondition": "Fluo is open and keyboard focus is inside the drawer.",
+      "public_action": "Use Up/Down, PageUp/PageDown, Ctrl+PageUp/PageDown, Alt+PageUp/PageDown, or Alt+Shift+PageUp/PageDown.",
+      "expected_result": "Up/Down follows the Flow list; Ctrl+Page keys cycle Flow blocks; plain Page keys cycle the current Inspector container view and synchronize its visible selection without moving keyboard focus out of Flow; Alt+Page keys cycle Flusso controls with Shift reversing direction.",
+      "invariants": [
+        "Flow block navigation is circular by stable ID.",
+        "Inspector-level Page navigation closes stale Flusso options for the old container.",
+        "Repeated navigation remains usable after UI rebuilds because focus returns to Flow."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/editor/flow_process_timer_editor_test.gd"
+      ]
+    },
+    {
+      "id": "FLUJO-BHV-FLUO-DRAWER-001",
+      "area": "Fluo drawer shell, close hierarchy and side placement",
+      "precondition": "The editor plugin has mounted one FluoDrawer on the Godot editor base.",
+      "public_action": "Open Fluo, toggle its side switch, close Flusso, close Fluo, or click outside the drawer.",
+      "expected_result": "One overlay drawer is reused, side placement changes immediately, first Escape closes Flusso when present, subsequent Escape/top X/exterior click closes Fluo, and valid prior focus can be restored.",
+      "invariants": [
+        "The drawer does not permanently resize the legacy dock.",
+        "Backdrop input is consumed rather than leaked to editor controls underneath.",
+        "Touch-oriented close buttons keep their intended minimum target size."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/editor/fluo_drawer_test.gd",
+        "tests/editor/fluo_drawer_integration_test.gd"
+      ]
+    },
+    {
+      "id": "FLUJO-BHV-FLUO-ANDROID-001",
+      "area": "Fluo Preview 1 Android load and render",
+      "precondition": "The full-project preview for commit cd7e969c38193d718c948262107d1f7a45ca8083 is opened in Godot on Android.",
+      "public_action": "Open a supported container and display Fluo.",
+      "expected_result": "Godot loads the project and renders the Fluo drawer with Flow and Flusso visible without a project-load failure.",
+      "invariants": [
+        "This evidence does not imply complete Android touch, orientation, scrolling, double-tap, or keyboard acceptance.",
+        "The tested code checkpoint remains traceable to the frozen preview backup branch."
+      ],
+      "coverage": "manual",
+      "baseline_status": "manual_approved",
+      "test_paths": [
+        "docs/fluo_preview_01.md"
+      ],
+      "notes": "Manual evidence recorded 2026-10-27 from the Android Godot preview screenshot supplied by the maintainer."
+    }
   ]
 }

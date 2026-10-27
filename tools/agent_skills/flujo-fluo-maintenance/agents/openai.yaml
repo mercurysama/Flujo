@@ -1,0 +1,6 @@
+interface:
+  display_name: "Flujo Fluo Maintenance"
+  short_description: "Maintain Fluo, Flow, Flusso and Inspector coordination"
+  default_prompt: "Use $flujo-fluo-maintenance to maintain the Fluo contextual authoring UI while preserving its focus, navigation, persistence and preview contracts."
+policy:
+  allow_implicit_invocation: false
