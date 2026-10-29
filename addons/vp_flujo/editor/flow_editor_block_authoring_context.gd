@@ -52,6 +52,30 @@ func get_diagnostics() -> Array[FlowDiagnostic]:
 	return _diagnostics.duplicate()
 
 
+## Resolves the runtime-safe property descriptors for one live block.
+##
+## The catalog entry is used only to locate optional presentation metadata. The
+## descriptor layer remains the authority for eligibility, types, hints and
+## diagnostics; this editor context does not parse the sidecar itself.
+func describe_block_properties(block: FlowBlock) -> FlowBlockPropertyCatalogResult:
+	var package_directory: String = ""
+	var block_type_id: String = ""
+	var script: Script = block.get_script() as Script if block != null else null
+	var script_path: String = script.resource_path if script != null else ""
+	if not script_path.is_empty() and _catalog != null:
+		for entry: FlowEditorBlockCatalogEntry in _catalog.entries():
+			if not entry.is_external() or entry.external_descriptor == null:
+				continue
+			var external: FlowExternalBlockDescriptor = entry.external_descriptor
+			var candidate_path: String = package_root.path_join(external.package_id).path_join(external.script_path)
+			if candidate_path != script_path:
+				continue
+			package_directory = package_root.path_join(external.package_id)
+			block_type_id = external.type_id
+			break
+	return FlowBlockPropertyCatalog.describe(block, package_directory, block_type_id)
+
+
 ## Creates only after resolving the stable authoring key in this snapshot.
 func create_block(authoring_id: String):
 	var result = FLOW_EDITOR_BLOCK_CREATION_RESULT_SCRIPT.new()

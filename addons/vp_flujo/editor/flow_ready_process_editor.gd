@@ -549,6 +549,226 @@ func _render_block() -> void:
 		_details.add_child(input)
 		_register_flusso_owned_property(&"text")
 
+	if _split_block_layout:
+		_render_generic_properties(selected)
+
+
+func _render_generic_properties(selected: FlowBlock) -> void:
+	if selected == null or _authoring_context == null \
+			or not _authoring_context.has_method(&"describe_block_properties"):
+		return
+	var raw_result: Variant = _authoring_context.call(&"describe_block_properties", selected)
+	var descriptor_result: FlowBlockPropertyCatalogResult = raw_result as FlowBlockPropertyCatalogResult
+	if descriptor_result == null:
+		return
+
+	var generic_section: VBoxContainer = VBoxContainer.new()
+	generic_section.name = &"GenericBlockProperties"
+	generic_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_details.add_child(generic_section)
+	var last_group: String = ""
+	var rendered_any: bool = false
+	for descriptor: FlowBlockPropertyDescriptor in descriptor_result.descriptors:
+		if not descriptor.is_generic_candidate() or not descriptor.editable:
+			continue
+		if descriptor.group != last_group:
+			if not descriptor.group.is_empty():
+				var group_label: Label = Label.new()
+				group_label.name = _generic_node_name("Group", descriptor.group)
+				group_label.text = descriptor.group
+				group_label.add_theme_font_size_override("font_size", 14)
+				generic_section.add_child(group_label)
+			last_group = descriptor.group
+		elif last_group.is_empty() and descriptor.group.is_empty():
+			last_group = ""
+		if _render_generic_descriptor(generic_section, descriptor):
+			rendered_any = true
+
+	if not descriptor_result.diagnostics.is_empty():
+		var diagnostics: VBoxContainer = VBoxContainer.new()
+		diagnostics.name = &"GenericPropertyDiagnostics"
+		for diagnostic: FlowDiagnostic in descriptor_result.diagnostics:
+			var diagnostic_label: Label = Label.new()
+			diagnostic_label.text = "%s: %s" % [String(diagnostic.code), diagnostic.message]
+			diagnostic_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			diagnostics.add_child(diagnostic_label)
+		generic_section.add_child(diagnostics)
+
+	if not rendered_any and descriptor_result.diagnostics.is_empty():
+		generic_section.queue_free()
+
+
+func _render_generic_descriptor(
+		parent: Container,
+		descriptor: FlowBlockPropertyDescriptor
+) -> bool:
+	var label: Label = Label.new()
+	label.name = _generic_node_name("Label", descriptor.property_name)
+	label.text = descriptor.label
+	_apply_generic_tooltip(label, descriptor)
+	parent.add_child(label)
+
+	var control: Control = null
+	match descriptor.presentation_kind:
+		FlowBlockPropertyDescriptor.PRESENTATION_BOOLEAN:
+			var boolean_input: CheckBox = CheckBox.new()
+			boolean_input.name = _generic_node_name("Boolean", descriptor.property_name)
+			boolean_input.focus_mode = Control.FOCUS_ALL
+			boolean_input.text = descriptor.label
+			boolean_input.button_pressed = bool(descriptor.current_value)
+			boolean_input.toggled.connect(_on_generic_boolean_changed.bind(descriptor))
+			control = boolean_input
+		FlowBlockPropertyDescriptor.PRESENTATION_INTEGER, \
+		FlowBlockPropertyDescriptor.PRESENTATION_FLOAT, \
+		FlowBlockPropertyDescriptor.PRESENTATION_RANGE:
+			var numeric_input: SpinBox = SpinBox.new()
+			numeric_input.name = _generic_node_name("Numeric", descriptor.property_name)
+			numeric_input.focus_mode = Control.FOCUS_ALL
+			_configure_generic_numeric_input(numeric_input, descriptor)
+			numeric_input.value_changed.connect(_on_generic_numeric_changed.bind(descriptor))
+			control = numeric_input
+		FlowBlockPropertyDescriptor.PRESENTATION_TEXT, \
+		FlowBlockPropertyDescriptor.PRESENTATION_STRING_NAME:
+			var text_input: LineEdit = LineEdit.new()
+			text_input.name = _generic_node_name("Text", descriptor.property_name)
+			text_input.focus_mode = Control.FOCUS_ALL
+			text_input.text = String(descriptor.current_value)
+			_apply_generic_tooltip(text_input, descriptor)
+			text_input.text_changed.connect(_on_generic_text_changed.bind(descriptor))
+			control = text_input
+		FlowBlockPropertyDescriptor.PRESENTATION_MULTILINE:
+			var multiline_input: TextEdit = TextEdit.new()
+			multiline_input.name = _generic_node_name("Multiline", descriptor.property_name)
+			multiline_input.focus_mode = Control.FOCUS_ALL
+			multiline_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			multiline_input.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+			multiline_input.custom_minimum_size.y = _generic_text_edit_height(multiline_input, 3)
+			multiline_input.text = String(descriptor.current_value)
+			_apply_themed_print_text_surface(multiline_input)
+			_apply_generic_tooltip(multiline_input, descriptor)
+			multiline_input.text_changed.connect(_on_generic_multiline_changed.bind(multiline_input, descriptor))
+			control = multiline_input
+		FlowBlockPropertyDescriptor.PRESENTATION_ENUM:
+			var enum_input: OptionButton = _create_generic_enum_input(descriptor)
+			if enum_input != null:
+				enum_input.item_selected.connect(_on_generic_enum_selected.bind(enum_input, descriptor))
+				control = enum_input
+
+	if control == null:
+		label.queue_free()
+		return false
+	_apply_generic_tooltip(control, descriptor)
+	parent.add_child(control)
+	_register_flusso_owned_property(descriptor.property_name)
+	return true
+
+
+func _configure_generic_numeric_input(input: SpinBox, descriptor: FlowBlockPropertyDescriptor) -> void:
+	input.rounded = descriptor.model_type == TYPE_INT
+	input.allow_greater = true
+	input.allow_lesser = true
+	input.min_value = -1000000000000000000.0
+	input.max_value = 1000000000000000000.0
+	input.step = 1.0 if descriptor.model_type == TYPE_INT else 0.01
+	if descriptor.presentation_kind == FlowBlockPropertyDescriptor.PRESENTATION_RANGE:
+		var parts: PackedStringArray = descriptor.hint_string.split(",", false)
+		if parts.size() >= 2 and parts[0].strip_edges().is_valid_float() and parts[1].strip_edges().is_valid_float():
+			input.min_value = parts[0].strip_edges().to_float()
+			input.max_value = parts[1].strip_edges().to_float()
+			input.allow_lesser = false
+			input.allow_greater = false
+			if parts.size() >= 3 and parts[2].strip_edges().is_valid_float():
+				var step: float = parts[2].strip_edges().to_float()
+				if step > 0.0 and is_finite(step):
+					input.step = 1.0 if descriptor.model_type == TYPE_INT else step
+			for raw_option: String in parts.slice(3):
+				match raw_option.strip_edges():
+					"or_greater":
+						input.allow_greater = true
+					"or_less":
+						input.allow_lesser = true
+	var numeric_value: float = float(descriptor.current_value)
+	input.value = clampf(numeric_value, input.min_value, input.max_value)
+
+
+func _create_generic_enum_input(descriptor: FlowBlockPropertyDescriptor) -> OptionButton:
+	var option: OptionButton = OptionButton.new()
+	option.name = _generic_node_name("Enum", descriptor.property_name)
+	option.focus_mode = Control.FOCUS_ALL
+	var selected_index: int = -1
+	var parts: PackedStringArray = descriptor.hint_string.split(",", false)
+	for raw_part: String in parts:
+		var part: String = raw_part.strip_edges()
+		var label_text: String = part
+		var item_value: Variant = part
+		var colon_index: int = part.rfind(":")
+		if colon_index >= 0:
+			label_text = part.substr(0, colon_index).strip_edges()
+			item_value = part.substr(colon_index + 1).strip_edges().to_int()
+		var item_index: int = option.item_count
+		if colon_index < 0 and descriptor.model_type == TYPE_INT:
+			item_value = item_index
+		option.add_item(label_text, item_index)
+		option.set_item_metadata(item_index, item_value)
+		if item_value == descriptor.current_value:
+			selected_index = item_index
+	if selected_index < 0:
+		return null
+	option.select(selected_index)
+	return option
+
+
+func _on_generic_boolean_changed(value: bool, descriptor: FlowBlockPropertyDescriptor) -> void:
+	_apply_generic_value(descriptor, value)
+
+
+func _on_generic_numeric_changed(value: float, descriptor: FlowBlockPropertyDescriptor) -> void:
+	_apply_generic_value(descriptor, int(value) if descriptor.model_type == TYPE_INT else value)
+
+
+func _on_generic_text_changed(value: String, descriptor: FlowBlockPropertyDescriptor) -> void:
+	_apply_generic_value(descriptor, StringName(value) if descriptor.model_type == TYPE_STRING_NAME else value)
+
+
+func _on_generic_multiline_changed(input: TextEdit, descriptor: FlowBlockPropertyDescriptor) -> void:
+	_apply_generic_value(descriptor, input.text)
+
+
+func _on_generic_enum_selected(
+		index: int,
+		option: OptionButton,
+		descriptor: FlowBlockPropertyDescriptor
+) -> void:
+	if index < 0 or index >= option.item_count or option.is_item_disabled(index):
+		return
+	var value: Variant = option.get_item_metadata(index)
+	_apply_generic_value(descriptor, value)
+
+
+func _apply_generic_value(descriptor: FlowBlockPropertyDescriptor, value: Variant) -> void:
+	if _current():
+		_commands.set_ready_property_descriptor_live(_controller, _process_id, _block_id, descriptor, value)
+
+
+func _apply_generic_tooltip(control: Control, descriptor: FlowBlockPropertyDescriptor) -> void:
+	if not descriptor.tooltip.is_empty():
+		control.tooltip_text = descriptor.tooltip
+
+
+func _generic_node_name(prefix: String, property_name: StringName) -> StringName:
+	return StringName("GenericProperty%s_%s" % [prefix, String(property_name)])
+
+
+func _generic_text_edit_height(input: TextEdit, lines: int) -> float:
+	var font: Font = input.get_theme_font(&"font")
+	var font_size: int = input.get_theme_font_size(&"font_size")
+	var normal: StyleBox = input.get_theme_stylebox(&"normal")
+	return font.get_height(font_size) * float(lines) + normal.get_margin(SIDE_TOP) + normal.get_margin(SIDE_BOTTOM)
+
+
+func _register_flusso_owned_property(property_name: StringName) -> void:
+	if _split_block_layout and not _block_id.is_empty():
+		flusso_owned_property_registered.emit(_block_id, property_name)
 
 
 func _on_live_block_name_changed(value: String, block_id: String) -> void:

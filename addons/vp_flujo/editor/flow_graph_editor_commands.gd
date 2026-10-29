@@ -356,6 +356,114 @@ func set_ready_property_live(
 	return true
 
 
+## Applies a D4 descriptor-backed live edit through the existing undo boundary.
+## The descriptor is the accepted property contract; no arbitrary property name
+## is allowed to reach the live assignment path.
+func set_ready_property_descriptor_live(
+		controller: PVController,
+		process_id: String,
+		block_id: String,
+		descriptor: FlowBlockPropertyDescriptor,
+		value: Variant
+) -> bool:
+	var process: FlowBlockContainer = find_block_container(controller, process_id)
+	if process == null or descriptor == null or block_id.is_empty() \
+			or not descriptor.editable or not descriptor.is_generic_candidate():
+		return false
+	var target: FlowBlock = _ready_block(process, block_id)
+	if target == null or not _descriptor_matches_target(target, descriptor, value):
+		return false
+	if target.get(descriptor.property_name) == value:
+		return false
+	var action_name: String = "Edit Flusso %s" % descriptor.property_name
+	_undo_redo.create_action(
+		action_name,
+		UndoRedo.MERGE_ENDS,
+		controller,
+		false,
+		true
+	)
+	_undo_redo.add_do_method(
+		self,
+		&"_assign_ready_property_live",
+		controller,
+		target,
+		descriptor.property_name,
+		value
+	)
+	_undo_redo.add_undo_method(
+		self,
+		&"_assign_ready_property_live",
+		controller,
+		target,
+		descriptor.property_name,
+		target.get(descriptor.property_name)
+	)
+	_undo_redo.commit_action()
+	return true
+
+
+func _descriptor_matches_target(
+		target: FlowBlock,
+		descriptor: FlowBlockPropertyDescriptor,
+		value: Variant
+) -> bool:
+	if descriptor.property_name.is_empty() or typeof(value) != descriptor.model_type:
+		return false
+	for raw_property: Variant in target.get_property_list():
+		if not raw_property is Dictionary:
+			continue
+		var property: Dictionary = raw_property as Dictionary
+		if StringName(String(property.get("name", ""))) != descriptor.property_name:
+			continue
+		if int(property.get("type", TYPE_NIL)) != descriptor.model_type:
+			return false
+		var usage: int = int(property.get("usage", 0))
+		return bool(usage & PROPERTY_USAGE_SCRIPT_VARIABLE) \
+			and bool(usage & PROPERTY_USAGE_STORAGE) \
+			and bool(usage & PROPERTY_USAGE_EDITOR) \
+			and not bool(usage & PROPERTY_USAGE_READ_ONLY)
+	return false
+
+
+## Restores the persistent block properties captured when a Flusso session was opened.
+func restore_ready_block_snapshot(
+	controller: PVController,
+	process_id: String,
+	block_id: String,
+	snapshot: Dictionary
+) -> bool:
+	var process: FlowBlockContainer = find_block_container(controller, process_id)
+	if process == null or snapshot.is_empty():
+		return false
+	var block: FlowBlock = _ready_block(process, block_id)
+	if block == null:
+		return false
+
+	var current: Dictionary = {}
+	var changed_any: bool = false
+	for property_name: Variant in snapshot:
+		var key: StringName = StringName(property_name)
+		var current_value: Variant = block.get(key)
+		current[key] = current_value
+		if current_value != snapshot[property_name]:
+			changed_any = true
+	if not changed_any:
+		return false
+
+	_undo_redo.create_action(
+		"Revert Flusso Block",
+		UndoRedo.MERGE_DISABLE,
+		controller,
+		false,
+		true
+	)
+	_undo_redo.add_do_method(self, &"_assign_ready_snapshot", controller, block, snapshot)
+	_undo_redo.add_undo_method(self, &"_assign_ready_snapshot", controller, block, current)
+	_undo_redo.commit_action()
+	return true
+
+
 func _is_supported_ready_property(
 	process: FlowBlockContainer,
 	target: Resource,
