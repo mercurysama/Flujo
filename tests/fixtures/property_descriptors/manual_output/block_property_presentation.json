@@ -1,0 +1,29 @@
+{
+  "format_version": 1,
+  "block_type_id": "output",
+  "properties": [
+    {
+      "property": "boolean_value",
+      "order": 10,
+      "group": "Options"
+    },
+    {
+      "property": "message",
+      "label": "Output Message",
+      "order": 20,
+      "group": "Output",
+      "tooltip": "Text emitted by this block.",
+      "presentation": "multiline"
+    },
+    {
+      "property": "enum_value",
+      "order": 30,
+      "presentation": "enum"
+    },
+    {
+      "property": "ranged_int",
+      "order": 40,
+      "presentation": "range"
+    }
+  ]
+}

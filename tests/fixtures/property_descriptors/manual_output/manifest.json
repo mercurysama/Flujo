@@ -1,0 +1,11 @@
+{
+  "manifest_version": 1,
+  "package_id": "manual_output",
+  "blocks": [
+    {
+      "type_id": "output",
+      "script": "block.gd",
+      "display_name": "Descriptor Output"
+    }
+  ]
+}

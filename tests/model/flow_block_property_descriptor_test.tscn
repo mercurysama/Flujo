@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/model/flow_block_property_descriptor_test.gd" id="1_descriptor"]
+
+[node name="FlowBlockPropertyDescriptorTest" type="Node"]
+script = ExtResource("1_descriptor")
