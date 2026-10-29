@@ -11,8 +11,14 @@ signal focus_requested(control_name: StringName, select_all: bool)
 signal process_move_requested(direction: int)
 signal process_delete_requested
 signal block_details_visibility_changed(is_visible: bool)
+signal flusso_owned_property_registered(block_id: String, property_name: StringName)
+
+const FLOW_EDITOR_BLOCK_AUTHORING_CONTEXT_SCRIPT: Script = preload(
+	"res://addons/vp_flujo/editor/flow_editor_block_authoring_context.gd"
+)
 
 var _commands: FlowGraphEditorCommands
+var _authoring_context: RefCounted
 var _controller: PVController
 var _graph: FlowGraph
 var _process_id: String
@@ -34,10 +40,14 @@ func configure(
 	process: FlowBlockContainer,
 	block_id: String,
 	split_block_layout: bool = false,
-	block_details_open: bool = false
+	block_details_open: bool = false,
+	authoring_context: RefCounted = null
 ) -> void:
 	auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	_commands = commands
+	_authoring_context = authoring_context
+	if _authoring_context == null:
+		_authoring_context = FLOW_EDITOR_BLOCK_AUTHORING_CONTEXT_SCRIPT.new() as RefCounted
 	_controller = controller
 	_graph = controller.flow_graph
 	_process_id = process.get_internal_id()
@@ -139,12 +149,13 @@ func configure(
 	var add_row: HBoxContainer = HBoxContainer.new()
 	add_row.name = &"AddBlockActions"
 	primary_parent.add_child(add_row)
-	for type_id: StringName in FlowBlockRegistry.creatable_type_ids():
+	for entry: FlowEditorBlockCatalogEntry in _authoring_entries():
 		var add_button: Button = _add_button(
 			add_row,
-			"Add " + FlowBlockRegistry.display_name_for_type(type_id),
-			_on_add.bind(type_id)
+			"Add " + entry.display_name,
+			_on_add_by_authoring_id.bind(entry.authoring_id)
 		)
+		add_button.set_meta(&"authoring_id", entry.authoring_id)
 		if _first_add_block_button == null:
 			_first_add_block_button = add_button
 	if process is FlowProcess:
@@ -220,13 +231,35 @@ func _on_enabled(value: bool, block_id: String) -> void:
 		_commands.set_ready_property(_controller, _process_id, block_id, &"enabled", value)
 
 
-func _on_add(type_id: StringName) -> void:
+func _authoring_entries() -> Array[FlowEditorBlockCatalogEntry]:
+	if _authoring_context == null:
+		return []
+	var raw_entries: Variant = _authoring_context.call(&"get_entries")
+	if not raw_entries is Array:
+		return []
+	var entries: Array[FlowEditorBlockCatalogEntry] = []
+	for raw_entry: Variant in raw_entries as Array:
+		var entry: FlowEditorBlockCatalogEntry = raw_entry as FlowEditorBlockCatalogEntry
+		if entry != null and not entry.authoring_id.is_empty():
+			entries.append(entry)
+	return entries
+
+
+func _on_add_by_authoring_id(authoring_id: String) -> void:
 	if _current():
-		_block_id = _commands.add_ready_block(_controller, _process_id, type_id)
-		if _block_id.is_empty():
+		var new_block_id: String = _commands.add_ready_block_by_authoring_id(
+			_controller,
+			_process_id,
+			authoring_id
+		)
+		if new_block_id.is_empty():
 			return
+		_block_id = new_block_id
 		block_selected.emit(_block_id)
-		focus_requested.emit(&"ReadyPrintText" if type_id == FlowBlockRegistry.PRINT else &"ReadyBlocksList", false)
+		focus_requested.emit(
+			&"ReadyPrintText" if authoring_id == String(FlowBlockRegistry.PRINT) else &"ReadyBlocksList",
+			false
+		)
 
 
 func _on_add_call() -> void:
@@ -476,6 +509,7 @@ func _render_block() -> void:
 	name_input.text_submitted.connect(_on_block_name_submitted.bind(_block_id))
 	name_input.gui_input.connect(_on_block_name_input.bind(name_input, _block_id, name_input.text))
 	_details.add_child(name_input)
+	_register_flusso_owned_property(&"display_name")
 
 	var enabled: CheckBox = CheckBox.new()
 	enabled.name = &"ReadyBlockEnabled"
@@ -483,6 +517,7 @@ func _render_block() -> void:
 	enabled.button_pressed = selected.enabled
 	enabled.toggled.connect(_on_enabled.bind(_block_id))
 	_details.add_child(enabled)
+	_register_flusso_owned_property(&"enabled")
 
 	var actions: HBoxContainer = HBoxContainer.new()
 	_details.add_child(actions)
@@ -512,6 +547,8 @@ func _render_block() -> void:
 			input.text_changed.connect(_on_live_print_text_changed.bind(input, _block_id))
 		input.gui_input.connect(_on_text_input.bind(input, _block_id, input.text))
 		_details.add_child(input)
+		_register_flusso_owned_property(&"text")
+
 
 
 func _on_live_block_name_changed(value: String, block_id: String) -> void:
@@ -588,6 +625,7 @@ func _render_method_target(call: FlowMethodCallBlock) -> void:
 	target.item_selected.connect(_on_method_target_selected.bind(target, call.get_internal_id()))
 	target.gui_input.connect(_on_method_target_input.bind(target))
 	_details.add_child(target)
+	_register_flusso_owned_property(&"method_id")
 
 
 func _on_method_target_input(event: InputEvent, target: OptionButton) -> void:

@@ -8,6 +8,11 @@ signal changed
 
 
 const DEFAULT_DISPLAY_NAME: String = "Flujo"
+const FLOW_EDITOR_BLOCK_AUTHORING_CONTEXT_SCRIPT: Script = preload(
+	"res://addons/vp_flujo/editor/flow_editor_block_authoring_context.gd"
+)
+const AUTHORING_CONTEXT_RESULT_MISSING: StringName = &"editor_authoring_result_missing"
+const AUTHORING_CONTEXT_BLOCK_MISSING: StringName = &"editor_authoring_block_missing"
 
 
 enum Collection {
@@ -31,12 +36,19 @@ enum SemanticCollection {
 
 
 var _undo_redo: EditorUndoRedoManager
+var _authoring_context: RefCounted
 var _last_diagnostics: Array[FlowDiagnostic] = []
 
 
 ## Creates an editor-only command adapter around Godot's undo/redo manager.
-func _init(undo_redo: EditorUndoRedoManager) -> void:
+func _init(undo_redo: EditorUndoRedoManager, authoring_context: RefCounted = null) -> void:
 	_undo_redo = undo_redo
+	_authoring_context = authoring_context
+
+
+## Injects the editor-only authoring snapshot used by generic Add.
+func configure_block_authoring_context(authoring_context: RefCounted) -> void:
+	_authoring_context = authoring_context
 
 
 ## Returns the diagnostics from the latest rejected command or completed action.
@@ -307,8 +319,8 @@ func set_ready_property(controller: PVController, process_id: String, block_id: 
 ## Applies continuously edited Flusso values without rebuilding its controls on every keystroke.
 ## Undo entries are merged per property while the model itself changes immediately.
 func set_ready_property_live(
-	controller: PVController,
-	process_id: String,
+		controller: PVController,
+		process_id: String,
 	block_id: String,
 	property: StringName,
 	value: Variant
@@ -344,44 +356,6 @@ func set_ready_property_live(
 	return true
 
 
-## Restores the persistent block properties captured when a Flusso session was opened.
-func restore_ready_block_snapshot(
-	controller: PVController,
-	process_id: String,
-	block_id: String,
-	snapshot: Dictionary
-) -> bool:
-	var process: FlowBlockContainer = find_block_container(controller, process_id)
-	if process == null or snapshot.is_empty():
-		return false
-	var block: FlowBlock = _ready_block(process, block_id)
-	if block == null:
-		return false
-
-	var current: Dictionary = {}
-	var changed_any: bool = false
-	for property_name: Variant in snapshot:
-		var key: StringName = StringName(property_name)
-		var current_value: Variant = block.get(key)
-		current[key] = current_value
-		if current_value != snapshot[property_name]:
-			changed_any = true
-	if not changed_any:
-		return false
-
-	_undo_redo.create_action(
-		"Revert Flusso Block",
-		UndoRedo.MERGE_DISABLE,
-		controller,
-		false,
-		true
-	)
-	_undo_redo.add_do_method(self, &"_assign_ready_snapshot", controller, block, snapshot)
-	_undo_redo.add_undo_method(self, &"_assign_ready_snapshot", controller, block, current)
-	_undo_redo.commit_action()
-	return true
-
-
 func _is_supported_ready_property(
 	process: FlowBlockContainer,
 	target: Resource,
@@ -400,11 +374,51 @@ func _is_supported_ready_property(
 	return allowed
 
 
-func add_ready_block(controller: PVController, process_id: String, block_type_id: StringName) -> String:
+## Adds a block through the legacy built-in type ID or a stable authoring ID.
+## Existing StringName callers remain registry-backed. A String caller is an
+## authoring ID, and the optional fourth argument supports an explicit
+## authoring ID without requiring a legacy type ID.
+func add_ready_block(
+		controller: PVController,
+		process_id: String,
+		block_type_or_authoring_id: Variant,
+		authoring_id: String = ""
+) -> String:
+	var legacy_type_id: StringName = &""
+	var resolved_authoring_id: String = authoring_id
+	if resolved_authoring_id.is_empty():
+		if block_type_or_authoring_id is String:
+			resolved_authoring_id = block_type_or_authoring_id as String
+		elif block_type_or_authoring_id is StringName:
+			var candidate: String = String(block_type_or_authoring_id)
+			if candidate.contains(":"):
+				resolved_authoring_id = candidate
+			else:
+				legacy_type_id = block_type_or_authoring_id as StringName
+	else:
+		legacy_type_id = block_type_or_authoring_id as StringName
+	return _add_ready_block(controller, process_id, legacy_type_id, resolved_authoring_id)
+
+
+## Future authoring controls can supply only the stable catalog identity.
+func add_ready_block_by_authoring_id(
+		controller: PVController,
+		process_id: String,
+		authoring_id: String
+) -> String:
+	return _add_ready_block(controller, process_id, &"", authoring_id)
+
+
+func _add_ready_block(
+		controller: PVController,
+		process_id: String,
+		legacy_type_id: StringName,
+		authoring_id: String
+) -> String:
 	var process: FlowBlockContainer = find_block_container(controller, process_id)
 	if process == null:
 		return ""
-	var block: FlowBlock = FlowBlockRegistry.create(block_type_id)
+	var block: FlowBlock = _create_ready_block(legacy_type_id, authoring_id)
 	if block == null:
 		return ""
 	block.display_name = _first_available_block_display_name(process.blocks, block)
@@ -412,6 +426,57 @@ func add_ready_block(controller: PVController, process_id: String, block_type_id
 	updated.append(block)
 	_commit_ready_property("Add %s %s Block" % [_entry_point_action_name(process), block.display_name], controller, process, &"blocks", updated)
 	return block.get_internal_id()
+
+
+func _create_ready_block(legacy_type_id: StringName, authoring_id: String) -> FlowBlock:
+	if not authoring_id.is_empty():
+		return _create_authoring_block(authoring_id)
+	return FlowBlockRegistry.create(legacy_type_id)
+
+
+func _create_authoring_block(authoring_id: String) -> FlowBlock:
+	if _authoring_context == null:
+		_authoring_context = FLOW_EDITOR_BLOCK_AUTHORING_CONTEXT_SCRIPT.new() as RefCounted
+	var creation_result: Object = _authoring_context.call(&"create_block", authoring_id) as Object
+	if creation_result == null:
+		_last_diagnostics = [_authoring_diagnostic(
+			AUTHORING_CONTEXT_RESULT_MISSING,
+			"The authoring context did not return a creation result.",
+			authoring_id
+		)]
+		return null
+	_last_diagnostics = _creation_diagnostics(creation_result)
+	if not bool(creation_result.call(&"is_successful")):
+		return null
+	var block: FlowBlock = creation_result.get(&"block") as FlowBlock
+	if block == null:
+		_last_diagnostics.append(_authoring_diagnostic(
+			AUTHORING_CONTEXT_BLOCK_MISSING,
+			"The authoring context returned no block.",
+			authoring_id
+		))
+		return null
+	return block
+
+
+func _creation_diagnostics(creation_result: Object) -> Array[FlowDiagnostic]:
+	var diagnostics: Array[FlowDiagnostic] = []
+	var raw_diagnostics: Variant = creation_result.get(&"diagnostics")
+	if raw_diagnostics is Array:
+		for diagnostic: Variant in raw_diagnostics:
+			if diagnostic is FlowDiagnostic:
+				diagnostics.append(diagnostic as FlowDiagnostic)
+	return diagnostics
+
+
+func _authoring_diagnostic(code: StringName, message: String, authoring_id: String) -> FlowDiagnostic:
+	return FlowDiagnostic.new(
+		code,
+		FlowDiagnostic.Severity.ERROR,
+		message,
+		"authoring_id",
+		authoring_id
+	)
 
 
 func add_method_call(controller: PVController, process_id: String) -> String:

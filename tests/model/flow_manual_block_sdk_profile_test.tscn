@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource path="res://tests/model/flow_manual_block_sdk_profile_test.gd" type="Script" id="1"]
+
+[node name="FlowManualBlockSdkProfileTest" type="Node"]
+script = ExtResource("1")

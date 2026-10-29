@@ -4,6 +4,9 @@ extends EditorProperty
 
 
 const VISIBLE_LIST_ROWS: int = 5
+const FLOW_EDITOR_BLOCK_AUTHORING_CONTEXT_SCRIPT: Script = preload(
+	"res://addons/vp_flujo/editor/flow_editor_block_authoring_context.gd"
+)
 
 
 ## Reports the structural schema 3 variable selection to the editor coordinator.
@@ -41,6 +44,7 @@ signal schema_3_delete_selection_recovery_requested(
 
 var _content: VBoxContainer
 var _commands: FlowGraphEditorCommands
+var _authoring_context: RefCounted
 var _selected_collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.PROCESSES
 var _selected_id: String = ""
 var _selected_view_title: String = "Processes"
@@ -68,6 +72,7 @@ var _ready_block_id: String = ""
 var _ready_block_details_open: bool = false
 var _fluo_mode: bool = false
 var _flusso_snapshots: Dictionary = {}
+var _flusso_owned_properties: Dictionary = {}
 var _flow_entry_focus_pending: bool = false
 var _deleted_resource_id: String = ""
 var _deleted_resource_replacement_id: String = ""
@@ -79,8 +84,11 @@ var _deleted_block_container_id: String = ""
 
 
 ## Supplies the editor undo/redo manager used by all model-changing controls.
-func configure(undo_redo: EditorUndoRedoManager) -> void:
-	_commands = FlowGraphEditorCommands.new(undo_redo)
+func configure(undo_redo: EditorUndoRedoManager, authoring_context: RefCounted = null) -> void:
+	_authoring_context = authoring_context
+	if _authoring_context == null:
+		_authoring_context = FLOW_EDITOR_BLOCK_AUTHORING_CONTEXT_SCRIPT.new() as RefCounted
+	_commands = FlowGraphEditorCommands.new(undo_redo, _authoring_context)
 	_commands.changed.connect(_on_commands_changed)
 
 
@@ -137,6 +145,7 @@ func _reset_dock_context() -> void:
 	_ready_block_id = ""
 	_ready_block_details_open = false
 	_flusso_snapshots.clear()
+	_flusso_owned_properties.clear()
 	_rename_target_id = ""
 	_variable_advanced_open = false
 	_variable_focus_control = &""
@@ -203,6 +212,7 @@ func set_dock_variable_selection(
 	_ready_block_id = ""
 	_ready_block_details_open = false
 	_flusso_snapshots.clear()
+	_flusso_owned_properties.clear()
 	_selected_view_title = _view_title_for_selection(graph, collection, next_id)
 	_selected_view_index = _selected_view_index_for_id(graph, collection, next_id, _selected_view_title)
 	_rename_target_id = ""
@@ -423,6 +433,9 @@ func _render_typed_sections(sections: Array, controller: PVController, generatio
 			"State Machines":
 				_add_button_to(category, "Add State Machine", _on_add_state_machine_pressed)
 		_render_section(section, category, generation)
+		if _section_contains_selection(section) \
+				and controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_2:
+			_render_selected_actions(category, controller.flow_graph, generation)
 func _render_section(section: Dictionary, parent: Container, generation: int) -> void:
 	var title: Label = Label.new()
 	title.text = section["title"]
@@ -493,14 +506,18 @@ func _render_ready_process_editor(parent: Container) -> void:
 	var process: FlowBlockContainer = _commands.find_block_container(controller, _selected_id)
 	if process == null:
 		return
+	if _fluo_mode and not _ready_block_id.is_empty():
+		_flusso_owned_properties.erase(_ready_block_id)
 	var editor: FlowReadyProcessEditor = FlowReadyProcessEditor.new()
+	editor.flusso_owned_property_registered.connect(_on_flusso_owned_property_registered)
 	editor.configure(
 		_commands,
 		controller,
 		process,
 		_ready_block_id,
 		_fluo_mode,
-		_ready_block_details_open
+		_ready_block_details_open,
+		_authoring_context
 	)
 	editor.block_selected.connect(_on_ready_block_selected)
 	editor.block_activated.connect(_on_ready_block_activated)
@@ -612,6 +629,25 @@ func close_ready_block_details() -> bool:
 func _ensure_flusso_snapshot(block_id: String) -> void:
 	if not _fluo_mode or block_id.is_empty() or _flusso_snapshots.has(block_id) or _commands == null:
 		return
+	var owned_properties: Dictionary = _flusso_owned_properties.get(block_id, {}) as Dictionary
+	if owned_properties.is_empty():
+		call_deferred(&"_capture_flusso_snapshot_after_controls", block_id)
+		return
+	_capture_flusso_snapshot(block_id, owned_properties)
+
+
+func _capture_flusso_snapshot_after_controls(block_id: String) -> void:
+	if not _fluo_mode or block_id.is_empty() or _flusso_snapshots.has(block_id):
+		return
+	var owned_properties: Dictionary = _flusso_owned_properties.get(block_id, {}) as Dictionary
+	if owned_properties.is_empty():
+		return
+	_capture_flusso_snapshot(block_id, owned_properties)
+
+
+func _capture_flusso_snapshot(block_id: String, owned_properties: Dictionary) -> void:
+	if _flusso_snapshots.has(block_id) or _commands == null:
+		return
 	var controller: PVController = _active_controller()
 	var container: FlowBlockContainer = _commands.find_block_container(controller, _selected_id)
 	if container == null:
@@ -619,16 +655,23 @@ func _ensure_flusso_snapshot(block_id: String) -> void:
 	for block: FlowBlock in container.blocks:
 		if block == null or block.get_internal_id() != block_id:
 			continue
-		_flusso_snapshots[block_id] = _snapshot_block_properties(block)
+		_flusso_snapshots[block_id] = _snapshot_block_properties(block, owned_properties)
 		return
 
 
-func _snapshot_block_properties(block: FlowBlock) -> Dictionary:
+func _on_flusso_owned_property_registered(block_id: String, property_name: StringName) -> void:
+	if not _fluo_mode or block_id.is_empty() or property_name.is_empty():
+		return
+	var owned_properties: Dictionary = _flusso_owned_properties.get(block_id, {}) as Dictionary
+	owned_properties[property_name] = true
+	_flusso_owned_properties[block_id] = owned_properties
+
+
+func _snapshot_block_properties(block: FlowBlock, owned_properties: Dictionary) -> Dictionary:
 	var snapshot: Dictionary = {}
-	for property_info: Dictionary in block.get_property_list():
-		var property_name: StringName = property_info.get("name", &"") as StringName
-		var usage: int = property_info.get("usage", 0) as int
-		if property_name.is_empty() 				or String(property_name).begins_with("_") 				or String(property_name).begins_with("resource_") 				or property_name == &"script" 				or (usage & PROPERTY_USAGE_STORAGE) == 0:
+	for property_key: Variant in owned_properties:
+		var property_name: StringName = StringName(property_key)
+		if property_name.is_empty():
 			continue
 		var value: Variant = block.get(property_name)
 		if value is Array:

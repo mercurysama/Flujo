@@ -111,6 +111,12 @@ func _test_process() -> void:
 	)
 	var process: FlowProcess = _controller.flow_graph.processes[0]
 	var process_id: String = process.get_internal_id()
+	var auto_focused_process_name: LineEdit = _node(_dock, "ReadyProcessName") as LineEdit
+	_check(list.is_selected(0), "Process Add selects its new Inspector row by stable ID.")
+	_check(
+		auto_focused_process_name != null and auto_focused_process_name.has_focus(),
+		"Process Add deliberately relays keyboard focus to the selected Process editor."
+	)
 	_fluo_property.set_dock_variable_selection(
 		_controller,
 		FlowGraphEditorCommands.Collection.PROCESSES,
@@ -131,7 +137,7 @@ func _test_process() -> void:
 		empty_flow_first_add != null and empty_flow_first_add.has_focus(),
 		"Opening Flow without blocks focuses its first Add block button."
 	)
-	_check(list.has_focus() and list.is_selected(0), "Process Add focuses and selects its row.")
+	_check(list.is_selected(0), "Opening Fluo preserves the Inspector Process selection while keyboard focus moves into Flow.")
 	_check(_node(_property, "ReadyProcessEditor") == null and _button(_property, "Delete Process") == null, "Inspector has no process configuration or actions.")
 	var panel: Control = _node(_dock, "ReadyProcessEditor") as Control
 	if not _check(panel != null, "Public Add relays through Inspector plugin and main plugin to dock. " + _relay_context()):
@@ -367,6 +373,7 @@ func _test_process() -> void:
 	blocks = _node(_dock, "ReadyBlocksList") as ItemList
 	if not _check(blocks != null and blocks.item_count == 2, "Everything Flows appends one row."):
 		return
+	_check(blocks.has_focus() and blocks.is_selected(1), "Everything Flows Add focuses its new row.")
 	_fluo_property.refresh_dock_controller()
 	await _frames()
 	fluo_blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
@@ -396,7 +403,6 @@ func _test_process() -> void:
 	await _frames()
 	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
 	_check(fluo_options_panel != null and fluo_options_panel.visible, "Enter on the selected Flow block opens Flusso like double-click.")
-	_check(blocks.has_focus() and blocks.is_selected(1), "Everything Flows Add focuses its new row.")
 	var everything: FlowBlock = process.blocks[1]
 	_press(_dock, "Move Block Up")
 	await _frames()
@@ -431,9 +437,15 @@ func _test_process() -> void:
 		"Inspector redraws its visible selection to the Process reached by Page navigation."
 	)
 	fluo_blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
+	var navigated_flow_adds: HBoxContainer = _node(_fluo_property, "AddBlockActions") as HBoxContainer
+	var navigated_first_add: Button = null
+	if navigated_flow_adds != null and navigated_flow_adds.get_child_count() > 0:
+		navigated_first_add = navigated_flow_adds.get_child(0) as Button
 	_check(
-		fluo_blocks == null or fluo_blocks.has_focus(),
-		"After Inspector-level Page navigation, Flow receives focus when the next container has blocks."
+		(fluo_blocks != null and fluo_blocks.item_count > 0 and fluo_blocks.has_focus()) \
+			or (fluo_blocks != null and fluo_blocks.item_count == 0 \
+				and navigated_first_add != null and navigated_first_add.has_focus()),
+		"After Inspector-level Page navigation, Flow focuses its first block or first Add button according to container contents."
 	)
 	_check(_fluo_property.navigate_process(-1), "Plain RePag navigation returns to the previous Inspector Process.")
 	await _frames()
