@@ -15,6 +15,15 @@ Flujo is a visual programming plugin for Godot that keeps persistent program def
 
 **Fluo Preview 1 hardening** is the current UI focus on `feature/fluo-drawer-poc`. The preview is functionally usable and has been manually exercised on desktop; Android has confirmed project load and drawer rendering. Before the first stable release, complete the Android interaction matrix, hide/remove the temporary legacy visible dock and obsolete POC entry surface after acceptance, tune panel proportions from device evidence, and complete Themes + Motion validation using Godot 4.7 offset transforms without breaking Containers, focus, hitboxes, or mouse filtering.
 
+The block ecosystem has reached the D4-C Major Increment Checkpoint on this
+branch. The canonical ecosystem contract defines D0 through D4-A/B/C and then D5;
+the `D4-D` label found in older handoffs has no separate technical scope or
+acceptance gate. It is recorded as a deferred placeholder, not an implementation
+task. D5 remains future work: its functional completion requires the
+planning-gated Builder to generate and validate an ordinary package through the
+public SDK. The planned first dogfood block is `FPrint`, distinct from legacy
+`Print`, with an intentionally unfrozen specification.
+
 **Iteration 7 — Typed Variables** is in contract planning. Its [Typed Variables contract](typed_variables_contract.md) preserves the existing seven-type variable taxonomy, defines compatibility-preserving validation and persistence/duplication coverage, and plans schema 3 variable Inspector authoring with keyboard accessibility. It does not introduce a runtime executor or schema 4.
 
 The remaining planned work is:

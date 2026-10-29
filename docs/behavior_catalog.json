@@ -374,28 +374,31 @@
         "Internal VP/PV class names are not renamed by the presentation change."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/editor/flow_process_timer_editor_test.gd"
       ],
-      "notes": "Manually exercised during Fluo Preview 1. No fresh final automated pass is claimed."
+      "notes": "Manual desktop review is recorded separately. Final focal Process/Timer editor run on 2026-10-28 passed."
     },
     {
       "id": "FLUJO-BHV-FLUO-EDIT-001",
       "area": "Flusso live configuration and session revert",
       "precondition": "A Flow block is selected and Flusso is open for that stable block ID.",
       "public_action": "Modify supported configuration fields, press Revertir, or close Flusso with Escape/X.",
-      "expected_result": "Supported edits update the model immediately; Escape/X only closes; Revertir restores the persistent block configuration captured when the current Flusso session opened and keeps the panel open.",
+      "expected_result": "Supported edits update the model immediately; Escape/X only closes; Revertir restores the persistent snapshot captured when the current Flusso session opened, but only for properties owned by rendered Flusso controls, and keeps the panel open.",
       "invariants": [
         "Closing Flusso does not decide whether an edit persists.",
         "Revertir applies to configuration, not destructive structural deletion.",
-        "Closing Flusso restores keyboard focus to the same selected Flow block after any rebuild."
+        "Closing Flusso restores keyboard focus to the same selected Flow block after any rebuild.",
+        "A property existing on FlowBlock is not automatically owned by Flusso; unknown external exported properties remain untouched."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
-        "tests/editor/flow_process_timer_editor_test.gd"
-      ]
+        "tests/editor/flow_process_timer_editor_test.gd",
+        "tests/editor/flow_revert_owned_properties_editor_test.gd"
+      ],
+      "notes": "D3 extends the existing Flusso/Revertir boundary with owned-property snapshots. Explicit owned properties are display_name, enabled, text, and method_id; D4-A/D4-B provide generic reflection and D4-C provides the generic renderer. Final focal Process/Timer and owned-property runs on 2026-10-28 passed."
     },
     {
       "id": "FLUJO-BHV-FLUO-NAV-001",
@@ -409,10 +412,11 @@
         "Repeated navigation remains usable after UI rebuilds because focus returns to Flow."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/editor/flow_process_timer_editor_test.gd"
-      ]
+      ],
+      "notes": "Final focal Process/Timer editor run on 2026-10-28 passed."
     },
     {
       "id": "FLUJO-BHV-FLUO-DRAWER-001",
@@ -426,11 +430,186 @@
         "Touch-oriented close buttons keep their intended minimum target size."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/editor/fluo_drawer_test.gd",
         "tests/editor/fluo_drawer_integration_test.gd"
       ]
+    },
+    {
+      "id": "FLUJO-BHV-FLUO-OFFSET-001",
+      "area": "Godot 4.7 Fluo offset-transform characterization",
+      "precondition": "A Godot 4.7 Control fixture exercises the offset-transform properties used by the Fluo MotionShell boundary.",
+      "public_action": "Run the focused offset-transform characterization fixture with disabled/enabled position offsets, both visual-only modes, focus, mouse filtering, Container layout, and ScrollContainer layout.",
+      "expected_result": "Disabled transforms do not apply the offset; enabled transforms apply position; visual_only=true preserves the logical input region; visual_only=false moves input with the presentation; focus remains assigned; IGNORE → STOP dispatch works; Container layout stays logical; and ScrollContainer keeps its logical layout and native range.",
+      "invariants": [
+        "The characterization does not infer touch or Android behavior from desktop input evidence.",
+        "Presentation offset does not rewrite Container-managed child geometry.",
+        "The interactive Fluo shell uses visual_only=false and verifies transformed hit reception separately from transform geometry."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/editor/fluo_offset_transform_characterization_test.gd"
+      ],
+      "notes": "Automatic marker: [Flujo] Fluo offset transform characterization test passed. Touch/Android behavior is not claimed by this automatic evidence."
+    },
+    {
+      "id": "FLUJO-BHV-FLUO-THEME-001",
+      "area": "Fluo host-owned Theme boundary",
+      "precondition": "The editor-side Fluo host mounts DrawerPanel and its host-owned semantic presentation helper.",
+      "public_action": "Run the Theme ownership focal and inspect the mounted DrawerPanel presentation boundary.",
+      "expected_result": "Theme ownership belongs to the host/editor; FluoTheme owns the semantic style roles; DrawerPanel preserves its pre-existing appearance; no global Theme is installed; and external packages do not own Fluo Theme presentation.",
+      "invariants": [
+        "FluoTheme remains editor-side and has no dependency on external package presentation code.",
+        "The active editor Theme remains inherited rather than being replaced by a global Fluo Theme.",
+        "DrawerPanel style ownership moves to FluoTheme without changing the accepted preview appearance."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/editor/fluo_theme_ownership_test.gd"
+      ],
+      "notes": "Automatic marker: [Flujo] Fluo theme ownership test passed. Manual: equivalent appearance confirmed by maintainer desktop review on 2026-10-27."
+    },
+    {
+      "id": "FLUJO-BHV-FLUO-MOTION-001",
+      "area": "Fluo Theme + Motion foundation boundary",
+      "precondition": "The editor-side Fluo host is mounted with its backdrop, DrawerMotionShell, and DrawerPanel hierarchy.",
+      "public_action": "Open, close, switch drawer side, exercise the close hierarchy and focus boundary, and run the focused drawer and integration tests.",
+      "expected_result": "DrawerMotionShell is the single Motion wrapper; Backdrop remains its sibling input barrier; DrawerPanel lives inside the shell; the shell owns offset transforms; the ephemeral states are CLOSED, OPENING, OPEN, SWITCHING_SIDE, and CLOSING; current transitions are synchronous; neutral reset is centralized; a reduced-motion policy boundary exists; and no Tween or animation path is present.",
+      "invariants": [
+        "The hierarchy is FluoDrawer with sibling Backdrop and DrawerMotionShell, with DrawerPanel under DrawerMotionShell.",
+        "Backdrop is not transformed, and Flow, Flusso, and ScrollContainer content do not receive direct Motion transforms.",
+        "Motion state remains editor-only and ephemeral; it does not alter model, selection, focus semantics, or native scrolling.",
+        "Desktop manual evidence covers left/right, focus, Escape hierarchy, exterior click, long scroll, equivalent appearance, and absence of visible animation; Android is not approved."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/editor/fluo_drawer_test.gd",
+        "tests/editor/fluo_drawer_integration_test.gd"
+      ],
+      "notes": "Automatic markers: [Flujo] Fluo drawer test passed and [Flujo] Fluo drawer integration test passed on the final focal run 2026-10-28. Manual: Desktop manual review PASS — maintainer approval 🙆‍♀️ — 2026-10-27. No visible Motion is approved for D2; final polish remains D8."
+    },
+    {
+      "id": "FLUJO-BHV-BLOCK-ADD-CATALOG-001",
+      "area": "Catalog-driven Flow Add authoring UI",
+      "precondition": "A supported Process or Timer is open through the normal Inspector → Fluo → Flow path and its authoring context exposes integrated and valid external entries.",
+      "public_action": "Inspect the real Add row and activate an integrated or external catalog entry.",
+      "expected_result": "Built-ins and external packages are represented by generic authoring entries; buttons use authoring_id identity, share one authoring context with commands, and Add Call Method remains separate.",
+      "invariants": [
+        "Flow does not enumerate concrete external types or add package-specific editor branches.",
+        "The production package root is canonical while tests may inject a fixture root.",
+        "The Inspector does not gain a duplicate block list."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/editor/flow_ready_process_authoring_editor_test.gd",
+        "tests/editor/flow_editor_block_authoring_context_test.gd"
+      ],
+      "notes": "D3 automated evidence: catalog-driven Process/Timer Add and shared authoring-context focales passed. Manual desktop review recorded separately; no visual FlowId inspection is claimed."
+    },
+    {
+      "id": "FLUJO-BHV-BLOCK-ADD-EXTERNAL-001",
+      "area": "External Flow Add creation boundary",
+      "precondition": "A valid external catalog entry has a metadata- and script-validated descriptor and the selected Process or Timer is editable.",
+      "public_action": "Activate the external Add entry identified by authoring_id.",
+      "expected_result": "The authoring_id resolves through the shared context and external factory into one FlowBlock inserted by the generic editor command, selected by its new FlowId.",
+      "invariants": [
+        "Integrated blocks remain registry-backed and external blocks use the external factory.",
+        "A failed or stale authoring entry produces diagnostics without a partial block or undo action.",
+        "No external package or concrete block type is hard-coded into Flow/Flusso/runtime."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/editor/flow_external_block_command_add_test.gd",
+        "tests/editor/flow_ready_process_authoring_editor_test.gd"
+      ],
+      "notes": "D3 automated evidence covers Process authoring, stale-entry atomic failure, built-in compatibility, external script identity and selection."
+    },
+    {
+      "id": "FLUJO-BHV-BLOCK-ADD-UNDO-001",
+      "area": "Undo/Redo of external Flow Add",
+      "precondition": "An external block was added through the generic authoring command and the owning PVController history is available.",
+      "public_action": "Undo and Redo the external Add, including repeated external instances.",
+      "expected_result": "Undo removes the added instance and Redo restores the same block object and FlowId without recreating it through the factory.",
+      "invariants": [
+        "Redo does not reinvoke authoring-context or factory creation.",
+        "Two external Adds remain independent and retain distinct FlowIds and unique display names.",
+        "A failed Add records no undo action and leaves the graph unchanged."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/editor/flow_external_block_command_add_test.gd"
+      ],
+      "notes": "D3 automated evidence verifies same-instance/same-FlowId redo and one creation call per successful Add."
+    },
+    {
+      "id": "FLUJO-BHV-BLOCK-EXTERNAL-PERSIST-001",
+      "area": "External block persistence and generic runtime",
+      "precondition": "A Process or Timer contains an external FlowOutputBlock created through D3 and the scene is saved through the supported PackedScene boundary.",
+      "public_action": "Save/reload the scene and execute the persisted graph through the generic runtime.",
+      "expected_result": "The external script path, exported data, FlowId, order, process identity and enabled state survive reload; runtime executes the persisted FlowBlock without editor authoring infrastructure, fallback, or substitution.",
+      "invariants": [
+        "Runtime does not require editor authoring context, catalog, manifest discovery or external factory.",
+        "The external block remains a FlowOutputBlock and is not replaced by a built-in block.",
+        "PackedScene persistence preserves deliberate null positions and stable identities."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/editor/flow_external_block_persistence_runtime_test.gd",
+        "tests/runtime/flow_external_block_persistence_runtime_helper.gd",
+        "tests/model/flow_manual_block_sdk_profile_test.gd"
+      ],
+      "notes": "D3 Phase E automated evidence covers editor creation/save/reload plus the runtime helper. FlowId persistence/identity is automated evidence, not a visual manual claim."
+    },
+    {
+      "id": "FLUJO-BHV-BLOCK-PROPERTY-DESCRIPTOR-001",
+      "area": "Runtime-safe FlowBlock property descriptors",
+      "precondition": "A FlowBlock instance exposes reflected properties and may have an optional package-relative block_property_presentation.json sidecar.",
+      "public_action": "Build FlowBlockPropertyCatalog.describe() for the supplied block and optional package metadata.",
+      "expected_result": "The catalog returns deterministic UI-independent descriptors for eligible supported scalar properties, applies only compatible reflected hints and metadata presentation, and reports invalid or unsupported input without mutating the block.",
+      "invariants": [
+        "Reflection remains authoritative for property existence, type, usage, current value, and persistence eligibility.",
+        "Private, runtime-only, storage-only, editor-only non-storage, unsupported, and unknown properties do not become generic descriptors.",
+        "The descriptor path has no editor API, executable metadata callback, package-specific branch, or container-specific property behavior.",
+        "Explicit built-in properties retain host classification and order without establishing Flusso ownership.",
+        "Invalid metadata falls back deterministically to reflection and never mutates the FlowBlock."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/model/flow_block_property_descriptor_test.tscn"
+      ],
+      "notes": "D4-B focal evidence covers supported scalar types, range/enum/multiline hints, deterministic ordering, metadata fallback, eligibility, container independence, package-relative loading, and runtime-boundary audit. D4-C generic Flusso rendering has separate automatic focal evidence and approved manual review."
+    },
+    {
+      "id": "FLUJO-BHV-FLUO-GENERIC-PROPERTY-001",
+      "area": "Generic Flusso property renderer",
+      "precondition": "A selected FlowBlock has D4-B descriptors for eligible supported scalar properties and Flusso is open for the active block session.",
+      "public_action": "Inspect or edit a generic bool, int, float, String, StringName, range, enum, or multiline control, then close or press Revertir.",
+      "expected_result": "Flusso consumes resolved descriptors, renders supported controls deterministically, applies edits live through the existing command boundary, registers only rendered editable properties, and Revertir restores the opening values for the active session.",
+      "invariants": [
+        "Generic rendering does not identify a package, external class, fixture property, or control-flow block.",
+        "Existing explicit Block Name, Enabled, Print text, and Method controls are not duplicated.",
+        "Unsupported, read-only, invalid, hidden, unrendered, and diagnostic-only properties are not owned.",
+        "The same block and descriptor set render equivalently in Process and Timer containers, and separate instances retain independent values and snapshots.",
+        "Closing Flusso remains neither Save nor Cancel; Revertir remains the existing session action."
+      ],
+      "coverage": "manual",
+      "baseline_status": "manual_approved",
+      "test_paths": [
+        "tests/editor/flow_generic_flusso_property_editor_test.gd",
+        "tests/editor/flow_revert_owned_properties_editor_test.gd",
+        "tests/editor/flow_process_timer_editor_test.gd",
+        "docs/current_iteration.md"
+      ],
+      "notes": "D4-C COMPLETE — MANUAL FLUSSO REVIEW PASS in Godot 4.7.2 stable Flathub with human approval 🙆‍♀️. Process PASS; Timer PASS; generic property controls PASS; live editing PASS; Revertir PASS; multiple instances PASS; no duplicate built-ins PASS; container independence PASS. Automatic focal evidence also passes for external message dogfood, scalar controls, approved hints, descriptor presentation, deterministic order, diagnostics, ownership/Revertir, built-in collision boundaries, and Process/Timer equivalence. The known dragger_index diagnostic was the only visible engine diagnostic; unsupported_property_type is intentional fixture/contract behavior for the D4 v1 scalar boundary."
     },
     {
       "id": "FLUJO-BHV-FLUO-ANDROID-001",

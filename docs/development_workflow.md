@@ -16,6 +16,21 @@ Every change follows this sequence. A step may be brief when its scope is small,
 10. **Documentation and postmortem:** update current state and contracts, record verified lessons when a milestone closes, and include the applicable engineering-flow metrics and corrective actions.
 11. **Change control:** integrate only after an authorized human accepts the evidence and the Git state is verified.
 
+## Major Increment Checkpoint
+
+After a major increment, the project **SHOULD** create a continuity checkpoint
+before beginning the next major increment. Major increments include a completed
+numbered phase, a major architecture contract, a new development Skill, a
+significant editor/runtime capability, a successful formal prove milestone, or a
+substantial model/schema milestone.
+
+When applicable, the checkpoint updates `docs/current_iteration.md`,
+`docs/project_memory.md`, roadmap or contract status, the behavior catalog when
+behavior changed, relevant Skill knowledge when reusable lessons changed, and the
+next-step/handoff information. This is a continuity aid, not a hard functional
+gate: forgetting it does not invalidate completed work. If it is missed, create
+it at the next safe opportunity. Minor fixes do not require a full checkpoint.
+
 ## Specification and traceability
 
 Every change begins by updating the corresponding specification or explicitly confirming that it already describes the intended behavior. Keep a reviewable relationship:

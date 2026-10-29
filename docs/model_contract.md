@@ -340,6 +340,30 @@ The approved external-package manifest v1 is JSON at `res://flow_packages/<packa
 `FlowEditorBlockCatalog` is the next ephemeral authoring projection. It prepends the existing integrated Registry order and then accepts only the `valid_descriptors` returned by script validation, preserving sorted package order and each manifest's internal order. `FlowEditorBlockCatalogEntry` exposes an authoring key, display name, origin, and either the integrated type ID or the external descriptor needed by a future creation boundary. It does not alter `FlowBlockRegistry` or connect to popup/editor/runtime code. `FlowExternalBlockFactory` is the narrow programmatic creation boundary: it accepts only an external catalog entry, revalidates its descriptor and script in the declared package, calls the validated `Script.new()`, checks the result against the `FlowBlock` contract, preserves the descriptor display name, and returns a newly identified block or ordered diagnostics. The inherited `FlowBlock` initializer supplies each instance's fresh stable ID; two requests never share an instance or ID. Creation does not register, execute, persist, or scan packages, and it has no knowledge of IF or any other external concrete type.
 `FlowBlock` also exposes the generic `validate_structure(context)` and `remap_internal_references(id_map)` extension hooks. Their base implementations are empty; graph validation forwards the current result and block path to the first hook, and graph duplication forwards the complete old-ID → new-ID map to the second hook after copied block IDs are assigned. This protocol does not add a schema, registration, package discovery, executor branch, or `FlowIfBlock`.
 
+## Generic FlowBlock property descriptors and Flusso boundary
+
+D4-A/B/C add a reusable property-description boundary without changing graph
+schemas, manifest v1, or persistent block identity. `FlowBlockPropertyCatalog`
+uses Godot reflection as the authority for property existence, type, usage,
+hints, current value and persistence eligibility. The optional package-relative
+`block_property_presentation.json` sidecar is data-only presentation metadata;
+it cannot invent, retype, default, persist or execute a property.
+
+The D4 v1 generic scalar set is `bool`, `int`, `float`, `String`, and
+`StringName`. Compatible reflected `range`, `enum`, and multiline hints are
+supported. The descriptor layer is UI-independent, does not retain a block,
+create controls, use editor APIs, or register Flusso ownership. It is safe to
+reuse from runtime code, but it is not a runtime-debug authorization or write-back
+contract.
+
+The editor-side Flusso adapter renders eligible descriptors with host-owned
+controls. A property becomes Flusso-owned only after its editable control is
+actually rendered; Revertir restores the active session snapshot of that owned
+set. Unsupported, read-only, hidden, diagnostic-only and unrendered properties
+remain untouched. Process and Timer use the same block-independent descriptor
+path. This delivery does not implement a Game Debug Panel, arbitrary package
+widgets, complex property types, or a schema/migration.
+
 ## Process and Timer authoring delivery
 
 The following approved requirements are implemented and covered by automated tests; manual visual review remains pending.

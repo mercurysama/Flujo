@@ -1,6 +1,6 @@
 # Custom Block SDK and Block Builder Skill Research
 
-Updated: 2026-10-27  
+Updated: 2026-10-28
 Scope: research and documentation only; no functional block-SDK code changed by this document.
 
 ## Executive conclusion
@@ -9,7 +9,15 @@ Flujo already has enough architectural foundation to design a first-party `flujo
 
 The Skill must be an accelerator over the public/code-level block contract. It must never become a technical dependency: a developer must be able to create the same block manually in GDScript by following the documented SDK contract.
 
-The current implementation is **not yet a complete end-to-end external authoring path**. External packages can be represented, discovered, validated, combined into an authoring catalog, and instantiated programmatically, and external block subclasses can participate in generic validation, duplication/remapping, persistence and runtime navigation. However, the normal Flow/Fluo Add path still calls the built-in `FlowBlockRegistry`, and Flusso still renders only a small set of block-specific configuration controls. This gap must be known by the Skill and by any first dogfooding block.
+The current implementation is **D4-C-complete for external Add, generic
+descriptor-driven Flusso configuration, structure and persistence/runtime**.
+External packages can be represented, discovered, validated, combined into an
+authoring catalog, added through the normal Flow/Fluo path, selected,
+undone/redone, configured through the approved D4 v1 scalar surface, persisted
+and executed generically. Integrated blocks remain registry-backed for
+compatibility. The remaining limitations are deliberate: complex/custom
+widgets, package lifecycle recovery, provenance persistence and the runtime Game
+Debug Panel are not part of D4.
 
 ## Canonical terminology
 
@@ -311,34 +319,41 @@ This editor was not implemented.
 
 ## Important gaps before a fully useful external Block Builder
 
-### Gap A — normal Flow/Fluo Add path does not use the external catalog
+### Gap A — resolved by D3: normal Flow/Fluo Add path uses the external catalog
 
-Current `FlowReadyProcessEditor` still builds Add buttons with:
+The research snapshot originally found that `FlowReadyProcessEditor` built Add
+buttons with:
 
 `FlowBlockRegistry.creatable_type_ids()`
 
-and `FlowGraphEditorCommands.add_ready_block()` still calls:
+and that `FlowGraphEditorCommands.add_ready_block()` still called:
 
 `FlowBlockRegistry.create(type_id)`
 
-Therefore external blocks are not yet selectable through the normal Flow/Fluo authoring UI even though the external catalog/factory exist.
+Therefore external blocks were not yet selectable through the normal Flow/Fluo
+authoring UI even though the external catalog/factory existed. D3 resolved this
+gap with the generic authoring context, authoring-ID Add command and catalog-driven
+Add row; the historical comparison remains useful for the architecture audit.
 
 This is the most important missing bridge.
 
-### Gap B — Flusso has no generic external-property renderer
+### Gap B — resolved by D4-B/D4-C: generic external-property rendering
 
-Current Flusso rendering has special handling for known types such as:
+The research snapshot found special Flusso handling for known types such as:
 
 - `FlowPrintBlock`;
 - `FlowMethodCallBlock`.
 
-A new external block with exported configuration fields does not automatically receive a purpose-built Flusso editor.
+A new external block with exported configuration fields did not automatically
+receive a purpose-built Flusso editor.
 
-The future SDK/Skill therefore needs one of these explicit strategies:
+The approved D4-A/D4-B/D4-C path now provides the first explicit strategy:
 
-1. a generic metadata/property UI contract for common field types; or
-2. a declared editor-extension contract for custom block configuration; or
-3. a deliberately limited first Skill that only produces zero-config/simple blocks until the editor contract exists.
+1. a generic metadata/property UI contract for common field types, implemented by
+   the runtime-safe descriptors and host-owned generic renderer; or
+2. a separately approved editor-extension contract for future custom configuration;
+3. a deliberately limited first Skill that only produces zero-config/simple blocks
+   for capabilities outside the approved common field set.
 
 Do not hide this limitation inside the Skill.
 
@@ -356,9 +371,11 @@ Godot persistence keeps the concrete script resource. If a saved scene reference
 
 The project wants the external folder to act as an incubator and later promote proven blocks into an official Flujo library without rewriting implementation. The exact promotion packaging/API remains a follow-up.
 
-## What the future `flujo-block-builder` Skill must do
+## What `flujo-block-builder` must do
 
-The Skill should encode the existing SDK instead of inventing a second API.
+The initial planning-gated Skill encodes the existing SDK instead of inventing a
+second API. Its workflow must remain valid for manual authors and must not be
+treated as a runtime dependency or as permission to generate a block immediately.
 
 ### Required preflight
 
@@ -393,10 +410,10 @@ Default target:
 
 `res://flow_packages/<package_id>/`
 
-with at least:
+with the canonical one-block profile:
 
 - `manifest.json`;
-- one or more block scripts;
+- one block script;
 - package-level README/license/compatibility metadata when the package is meant for distribution;
 - focused tests/fixtures appropriate to the block behavior.
 
@@ -448,7 +465,10 @@ A staged dogfood can distinguish:
 1. **builder smoke block** — simple external `FlowOutputBlock` with no custom editor fields, proving package generation/manifest/script/tests;
 2. **IF/control block** — exercises navigation, two stable references, validation/remapping and editor requirements.
 
-However, normal Flow/Fluo creation still requires Gap A to be bridged for either block to be added through the user-facing editor. A zero-config block only reduces the separate Flusso configuration problem.
+The D3 bridge provides normal Flow/Fluo external Add, selection, persistence and
+generic runtime execution. D4-B/D4-C now provide generic exported-property
+description and editor configuration for the approved scalar field set; complex
+values and the manual visual Flusso review remain separate limitations.
 
 ## Research status
 
@@ -466,23 +486,33 @@ However, normal Flow/Fluo creation still requires Gap A to be bridged for either
 - generic block validation hook;
 - generic stable-ID remapping hook;
 - persistence-compatible polymorphic block model;
+- normal Flow/Fluo external Add, external Undo/Redo, persistence/runtime and the
+  container-independent creation path;
 - automated focal coverage for those foundations.
+- runtime-safe generic property descriptors with validated presentation metadata;
+- automatic generic Flusso controls, live editing, ownership and Revertir for the
+  approved scalar field set.
 
 ### Designed, not implemented
 
 - real external IF block;
 - IF editor controls;
 - real project-owned dogfood package;
-- normal Flow/Fluo external Add integration;
-- generic Flusso property/editor extension contract;
+- package-owned arbitrary/custom Flusso widgets beyond the approved generic field set;
 - package-missing recovery UX;
 - promotion workflow from incubator to official library;
-- final `flujo-block-builder` Skill.
+- functional end-to-end `flujo-block-builder v1` generation and its output tests;
+- the initial planning-gated `flujo-block-builder` Skill itself is now present.
 
 ## Next step after this research
 
 Do **not** start by inventing another block API.
 
-The next design task is to write the first-party `flujo-block-builder` Skill against this documented contract, with an explicit capability-detection gate for the current authoring gaps. Its first practical mission should also serve as dogfooding evidence for the external SDK.
+At the time of the original research, the next ecosystem task was D4: approve
+the generic Flusso property/reflection boundary. D4-A, D4-B and D4-C now implement
+and manually validate that approved path. The first practical block mission
+remains future dogfooding evidence and must not begin before the Builder gates
+are satisfied. The current next-stage decision names FPrint as that future first
+D5 dogfood block; its specification is still unfrozen.
 
 Todo es Flujo; todo fluye. 🌊
