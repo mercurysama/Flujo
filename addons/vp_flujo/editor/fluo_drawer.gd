@@ -23,7 +23,16 @@ signal schema_3_delete_selection_recovery_requested(
 
 const DRAWER_WIDTH_RATIO: float = 0.46
 
+enum MotionState {
+	CLOSED,
+	OPENING,
+	OPEN,
+	SWITCHING_SIDE,
+	CLOSING,
+}
+
 var _backdrop: Control
+var _drawer_motion_shell: Control
 var _drawer_panel: PanelContainer
 var _content: VBoxContainer
 var _side_switch: CheckButton
@@ -35,6 +44,11 @@ var _focus_reference: WeakRef
 var _controller_reference: WeakRef
 var _is_open: bool = false
 var _right_side: bool = false
+var _motion_state: MotionState = MotionState.CLOSED
+
+# D2-B2 keeps both policy branches immediate. This is deliberately editor-only
+# and non-persistent; future motion policy must remain at this host boundary.
+var _reduced_motion: bool = false
 
 
 func _init() -> void:
@@ -49,6 +63,12 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_apply_side_layout()
+	_reset_motion_state()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		_reset_motion_state()
 
 
 func configure(undo_redo: EditorUndoRedoManager) -> void:
@@ -84,6 +104,7 @@ func set_controller(controller: PVController) -> void:
 			and (next_controller != null or _controller_reference == null):
 		return
 
+	_reset_motion_state()
 	_disconnect_controller(current_controller)
 	_controller_reference = weakref(next_controller) if next_controller != null else null
 	_connect_controller(next_controller)
@@ -134,13 +155,22 @@ func open_block(
 func open() -> void:
 	if _is_open:
 		return
+	_motion_state = MotionState.OPENING
 	_remember_focus()
 	_is_open = true
+	_reset_motion_state()
 	show()
 	move_to_front()
+	_motion_state = MotionState.OPEN
 
 
 func close() -> void:
+	if not _is_open:
+		_reset_motion_state()
+		_motion_state = MotionState.CLOSED
+		return
+
+	_motion_state = MotionState.CLOSING
 	var focus_target: Control = _control_from_reference(_focus_reference)
 	_focus_reference = null
 	_is_open = false
@@ -149,10 +179,12 @@ func close() -> void:
 		_variable_editor.close_ready_block_details()
 		_variable_editor.close_transient_interfaces()
 
+	_reset_motion_state()
 	hide()
 
 	if _can_restore_focus(focus_target):
 		focus_target.grab_focus()
+	_motion_state = MotionState.CLOSED
 
 
 func is_open() -> bool:
@@ -164,10 +196,20 @@ func is_right_side() -> bool:
 
 
 func set_right_side(enabled: bool) -> void:
+	if _right_side == enabled:
+		if _side_switch != null and _side_switch.button_pressed != enabled:
+			_side_switch.set_pressed_no_signal(enabled)
+		return
+
+	var was_open: bool = _is_open
+	if was_open:
+		_motion_state = MotionState.SWITCHING_SIDE
+	_reset_motion_state()
 	_right_side = enabled
 	if _side_switch != null and _side_switch.button_pressed != enabled:
 		_side_switch.set_pressed_no_signal(enabled)
 	_apply_side_layout()
+	_motion_state = MotionState.OPEN if was_open else MotionState.CLOSED
 
 
 func _build_interface() -> void:
@@ -181,20 +223,28 @@ func _build_interface() -> void:
 	_backdrop.gui_input.connect(_on_backdrop_gui_input)
 	add_child(_backdrop)
 
+	_drawer_motion_shell = Control.new()
+	_drawer_motion_shell.name = "DrawerMotionShell"
+	_drawer_motion_shell.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_drawer_motion_shell.focus_mode = Control.FOCUS_NONE
+	_drawer_motion_shell.z_index = 1
+
 	_drawer_panel = PanelContainer.new()
 	_drawer_panel.name = "DrawerPanel"
+	_drawer_panel.anchor_left = 0.0
+	_drawer_panel.anchor_right = 1.0
 	_drawer_panel.anchor_top = 0.0
 	_drawer_panel.anchor_bottom = 1.0
+	_drawer_panel.offset_left = 0.0
 	_drawer_panel.offset_top = 0.0
+	_drawer_panel.offset_right = 0.0
 	_drawer_panel.offset_bottom = 0.0
 	_drawer_panel.custom_minimum_size = Vector2.ZERO
 	_drawer_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_drawer_panel.focus_mode = Control.FOCUS_NONE
 	_drawer_panel.z_index = 1
-
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.08, 0.08, 0.10, 0.94)
-	_drawer_panel.add_theme_stylebox_override("panel", panel_style)
+	FluoTheme.apply_drawer_panel_style(_drawer_panel)
+	_drawer_motion_shell.add_child(_drawer_panel)
 
 	_content = VBoxContainer.new()
 	_content.name = &"FluoContent"
@@ -247,27 +297,56 @@ func _build_interface() -> void:
 	_editor_scroll_content.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_editor_scroll.add_child(_editor_scroll_content)
 
-	add_child(_drawer_panel)
+	add_child(_drawer_motion_shell)
+	_reset_motion_state()
 	_apply_side_layout()
 
 
 func _apply_side_layout() -> void:
-	if _drawer_panel == null:
+	if _drawer_motion_shell == null:
 		return
 
 	if _right_side:
-		_drawer_panel.anchor_left = 1.0 - DRAWER_WIDTH_RATIO
-		_drawer_panel.anchor_right = 1.0
+		_drawer_motion_shell.anchor_left = 1.0 - DRAWER_WIDTH_RATIO
+		_drawer_motion_shell.anchor_right = 1.0
 	else:
-		_drawer_panel.anchor_left = 0.0
-		_drawer_panel.anchor_right = DRAWER_WIDTH_RATIO
+		_drawer_motion_shell.anchor_left = 0.0
+		_drawer_motion_shell.anchor_right = DRAWER_WIDTH_RATIO
 
-	_drawer_panel.anchor_top = 0.0
-	_drawer_panel.anchor_bottom = 1.0
-	_drawer_panel.offset_left = 0.0
-	_drawer_panel.offset_top = 0.0
-	_drawer_panel.offset_right = 0.0
-	_drawer_panel.offset_bottom = 0.0
+	_drawer_motion_shell.anchor_top = 0.0
+	_drawer_motion_shell.anchor_bottom = 1.0
+	_drawer_motion_shell.offset_left = 0.0
+	_drawer_motion_shell.offset_top = 0.0
+	_drawer_motion_shell.offset_right = 0.0
+	_drawer_motion_shell.offset_bottom = 0.0
+
+
+## Single reset boundary for all future presentation motion.
+func _reset_motion_state() -> void:
+	if _drawer_motion_shell == null:
+		return
+	_drawer_motion_shell.offset_transform_enabled = true
+	_drawer_motion_shell.offset_transform_position = Vector2.ZERO
+	_drawer_motion_shell.offset_transform_rotation = 0.0
+	_drawer_motion_shell.offset_transform_scale = Vector2.ONE
+	_drawer_motion_shell.offset_transform_visual_only = false
+
+
+## Private state diagnostic used by the focused editor test without making the
+## ephemeral state part of Fluo's public integration API.
+func _motion_state_name() -> StringName:
+	match _motion_state:
+		MotionState.CLOSED:
+			return &"CLOSED"
+		MotionState.OPENING:
+			return &"OPENING"
+		MotionState.OPEN:
+			return &"OPEN"
+		MotionState.SWITCHING_SIDE:
+			return &"SWITCHING_SIDE"
+		MotionState.CLOSING:
+			return &"CLOSING"
+	return &"CLOSED"
 
 
 func _input(event: InputEvent) -> void:
@@ -352,8 +431,7 @@ func _on_backdrop_gui_input(event: InputEvent) -> void:
 
 
 func _on_side_switch_toggled(enabled: bool) -> void:
-	_right_side = enabled
-	_apply_side_layout()
+	set_right_side(enabled)
 
 
 func _on_variable_editor_container_navigation_changed(
@@ -421,6 +499,7 @@ func _on_controller_tree_exited() -> void:
 	if controller != null:
 		_disconnect_controller(controller)
 
+	_reset_motion_state()
 	_controller_reference = null
 
 	if _variable_editor != null:
