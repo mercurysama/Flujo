@@ -1640,6 +1640,29 @@ func _on_text_control_changed(segment_id: String, input: TextEdit) -> void:
 			condition_before_text_states
 		)
 		return
+	var operation_start: int = _find_unescaped_trigger(
+		normalized_text,
+		int(change.get("start", 0)),
+		int(change.get("end", normalized_text.length())),
+		normalized.get("escaped_positions", []) as Array[int],
+		"~"
+	)
+	if operation_start >= 0:
+		var operation_before_segments: Array[FlowDocumentSegment] = _copy_segments(_document.segments)
+		var operation_before_text_states: Array[Dictionary] = _text_states_for_segments(
+			operation_before_segments
+		)
+		_set_text_control_value(input, normalized_text, normalized_caret)
+		_begin_operation_trigger(
+			segment,
+			input,
+			normalized_text,
+			operation_start,
+			normalized_caret,
+			operation_before_segments,
+			operation_before_text_states
+		)
+		return
 	if normalized_text != input.text:
 		var before_segments: Array[FlowDocumentSegment] = _copy_segments(_document.segments)
 		var before_text_states: Array[Dictionary] = _text_states_for_segments(before_segments)
@@ -1678,7 +1701,7 @@ func _changed_text_span(before: String, after: String) -> Dictionary:
 
 ## Normalizes only active escape pairs that intersect the current native edit.
 ## Future trigger characters can be added to this small scanner without making
-## the document parser aware of them. # and $ are intentionally not active.
+## the document parser aware of them. $ is intentionally not active.
 func _normalize_active_escapes(
 		text: String,
 		changed_start: int,
@@ -1692,7 +1715,8 @@ func _normalize_active_escapes(
 	while index < text.length():
 		var pair_is_active: bool = index + 1 < text.length() \
 			and text[index] == "\\" \
-		and (text[index + 1] == "@" or text[index + 1] == "#" or text[index + 1] == "\\")
+		and (text[index + 1] == "@" or text[index + 1] == "#" \
+			or text[index + 1] == "~" or text[index + 1] == "\\")
 		var pair_intersects_change: bool = pair_is_active \
 			and index < changed_end \
 			and index + 2 > changed_start
@@ -1701,7 +1725,8 @@ func _normalize_active_escapes(
 				normalized_caret += 1
 			var output_index: int = normalized.length()
 			normalized += text[index + 1]
-			if text[index + 1] == "@" or text[index + 1] == "#":
+			if text[index + 1] == "@" or text[index + 1] == "#" \
+					or text[index + 1] == "~":
 				escaped_positions.append(output_index)
 			index += 2
 			continue
@@ -3575,9 +3600,12 @@ func _can_insert_source(source: FlowValueSource) -> bool:
 				or not _schema.accepts_source_kind(source.get_source_kind()) \
 				or not fixed_slot.accepts_value_type(source.get_value_type()) \
 				or not fixed_slot.accepts_source_kind(source.get_source_kind()):
-			_reject(FEEDBACK_NO_COMPATIBLE_VARIABLE if source is FlowVariableRefValueSource \
-				else FEEDBACK_NO_COMPATIBLE_EXPRESSION if source is FlowExpressionValueSource \
-				else "No compatible Condition source is available here.")
+			_reject(
+				FEEDBACK_NO_COMPATIBLE_VARIABLE if source is FlowVariableRefValueSource
+				else FEEDBACK_NO_COMPATIBLE_EXPRESSION if source is FlowExpressionValueSource
+				else FEEDBACK_NO_COMPATIBLE_OPERATION if source is FlowOperationValueSource
+				else "No compatible Condition source is available here."
+			)
 			return false
 		var fixed_chip: FlowChipSegment = _segment_at(fixed_index) as FlowChipSegment
 		if fixed_chip == null:
