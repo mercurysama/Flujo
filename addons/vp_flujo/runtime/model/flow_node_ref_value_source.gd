@@ -47,10 +47,12 @@ func get_preview() -> String:
 	return "$" + label
 
 
+func has_locator() -> bool:
+	return not requirement_id.is_empty() or not node_path.is_empty()
+
+
 func is_valid() -> bool:
 	if not FlowId.is_valid(_source_id):
-		return false
-	if requirement_id.is_empty() and node_path.is_empty():
 		return false
 	if not requirement_id.is_empty() and not FlowId.is_valid(requirement_id):
 		return false
@@ -63,14 +65,14 @@ func validate_structure(result: FlowValidationResult, element_path: String) -> v
 	super.validate_structure(result, element_path)
 	if result == null:
 		return
-	if requirement_id.is_empty() and node_path.is_empty():
-		_add_error(
-			result,
+	if not has_locator():
+		result.add_diagnostic(FlowDiagnostic.new(
 			FlowDiagnostic.CODE_NODE_REF_LOCATOR_MISSING,
-			"NodeRef requires a requirement_id or a relative node_path.",
+			FlowDiagnostic.Severity.WARNING,
+			"NodeRef is structurally valid but not bound to a scene Node yet.",
 			element_path,
 			_source_id
-		)
+		))
 	elif not requirement_id.is_empty() and not FlowId.is_valid(requirement_id):
 		_add_error(
 			result,
@@ -121,6 +123,11 @@ func validate_against_graph(
 
 
 func resolve(context: Variant = null) -> FlowValueResult:
+	if not has_locator():
+		return _failure(
+			FlowDiagnostic.CODE_NODE_REF_LOCATOR_MISSING,
+			"NodeRef is not bound to a scene Node."
+		)
 	var resolution_context: FlowValueResolutionContext = context as FlowValueResolutionContext
 	if resolution_context == null:
 		return _failure(
@@ -139,6 +146,15 @@ func resolve(context: Variant = null) -> FlowValueResult:
 			"Resolved Node class does not match the authored class hint."
 		)
 	return FlowValueResult.ok(node, PRODUCED_TYPE)
+
+
+static func placeholder(expected_class_name: StringName = &"Node") -> FlowNodeRefValueSource:
+	return FlowNodeRefValueSource.new(
+		"",
+		NodePath(),
+		&"Node",
+		expected_class_name
+	)
 
 
 func duplicate_with_new_id() -> FlowValueSource:
