@@ -118,6 +118,39 @@ static func validate(
 						variable_graph
 					)
 			continue
+		if segment is FlowArraySegment:
+			var array_segment: FlowArraySegment = segment as FlowArraySegment
+			array_segment.validate_structure(result, segment_path)
+			if variable_graph != null:
+				var array_source: FlowArrayValueSource = 					array_segment.get_value_source() as FlowArrayValueSource
+				if array_source != null:
+					array_source.validate_against_graph(
+						result,
+						segment_path + ".value_source",
+						variable_graph
+					)
+			continue
+		if segment is FlowDictionarySegment:
+			var dictionary_segment: FlowDictionarySegment = segment as FlowDictionarySegment
+			dictionary_segment.validate_structure(result, segment_path)
+			if variable_graph != null:
+				var dictionary_source: FlowDictionaryValueSource = 					dictionary_segment.get_value_source() as FlowDictionaryValueSource
+				if dictionary_source != null:
+					dictionary_source.validate_against_graph(
+						result,
+						segment_path + ".value_source",
+						variable_graph
+					)
+			continue
+		if segment is FlowResourceRefSegment:
+			(segment as FlowResourceRefSegment).validate_structure(result, segment_path)
+			continue
+		if segment is FlowEnumSegment:
+			(segment as FlowEnumSegment).validate_structure(result, segment_path)
+			continue
+		if segment is FlowBitfieldSegment:
+			(segment as FlowBitfieldSegment).validate_structure(result, segment_path)
+			continue
 		if segment is FlowConditionSegment:
 			var condition_segment: FlowConditionSegment = segment as FlowConditionSegment
 			condition_segment.validate_structure(result, segment_path)
