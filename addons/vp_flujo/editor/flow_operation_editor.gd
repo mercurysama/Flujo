@@ -504,9 +504,13 @@ func _refresh_operator_compatibility() -> void:
 		return
 	for index: int in range(1, _operator_menu.item_count):
 		var operator_id: StringName = StringName(_operator_menu.get_item_metadata(index))
+		var operand_types: Array[Variant.Type] = [
+			left.get_value_type(),
+			right.get_value_type(),
+		]
 		var signature: Dictionary = FlowOperationOperatorCatalog.find_signature(
 			operator_id,
-			[left.get_value_type(), right.get_value_type()]
+			operand_types
 		)
 		_operator_menu.set_item_disabled(index, signature.is_empty())
 
