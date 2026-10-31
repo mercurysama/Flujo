@@ -209,6 +209,14 @@ static func _validate_literal(
 			value_path,
 			literal.get_segment_id()
 		)
+	elif not FlowLiteralValueSource.is_valid_literal(literal.value_type, literal.value):
+		_add_error(
+			result,
+			FlowDiagnostic.CODE_LITERAL_COMPONENT_NOT_FINITE,
+			"LiteralValue components must be finite.",
+			value_path,
+			literal.get_segment_id()
+		)
 
 
 static func _add_error(
