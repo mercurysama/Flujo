@@ -2602,8 +2602,8 @@ func _begin_node_property_trigger(
 		before_segments: Array[FlowDocumentSegment],
 		before_text_states: Array[Dictionary]
 ) -> void:
-	if not _node_property_insertion_allowed():
-		_reject(get_node_property_insertion_feedback())
+	if not _scene_reference_insertion_allowed():
+		_reject("No compatible Node or Node Property source is available here.")
 		return
 	_node_property_trigger_active = true
 	_node_property_trigger_segment_id = segment.get_segment_id()
@@ -2627,7 +2627,7 @@ func _begin_node_property_trigger(
 	if _scene_root == null:
 		_scene_root = EditorInterface.get_edited_scene_root()
 	panel.begin_request(self)
-	_feedback_text = "Select or drag a scene node for $ Node Property."
+	_feedback_text = "Select or drag a scene node for $."
 	_feedback_label.text = _feedback_text
 	_feedback_label.visible = true
 	operation_feedback.emit(_feedback_text)
@@ -2659,6 +2659,40 @@ func _node_property_insertion_allowed() -> bool:
 	return slot == null 		or slot.accepts_source_kind(FlowValueSource.SOURCE_KIND_NODE_PROPERTY_REF)
 
 
+func _node_ref_insertion_allowed() -> bool:
+	if _schema == null:
+		return true
+	if not _schema.accepts_source_kind(FlowValueSource.SOURCE_KIND_NODE_REF) 			or not _schema.accepts_value_type(Variant.Type.TYPE_OBJECT):
+		return false
+	var slot: FlowChipSlotDefinition = _insertion_slot_definition()
+	if slot == null and _schema.mode == FlowChipFieldSchema.Mode.FIXED:
+		slot = _slot_definition_for(_segment_at(_fixed_replacement_index()) as FlowChipSegment)
+	if _schema.mode == FlowChipFieldSchema.Mode.HYBRID 			and slot == null and _fixed_replacement_index() < 0:
+		return false
+	return slot == null or (
+		slot.accepts_source_kind(FlowValueSource.SOURCE_KIND_NODE_REF)
+		and slot.accepts_value_type(Variant.Type.TYPE_OBJECT)
+	)
+
+
+func _scene_reference_insertion_allowed() -> bool:
+	return _node_ref_insertion_allowed() or _node_property_insertion_allowed()
+
+
+func _scene_reference_anchor_rect() -> Rect2:
+	var anchor_rect: Rect2 = get_global_rect()
+	if _node_property_trigger_active:
+		var input: TextEdit = get_text_control(_node_property_trigger_segment_id)
+		if input != null:
+			var caret_local: Vector2 = input.get_caret_draw_pos()
+			var caret_global: Vector2 = input.get_global_transform_with_canvas() * caret_local
+			anchor_rect = Rect2(
+				caret_global,
+				Vector2(1.0, maxf(input.get_line_height(), 24.0))
+			)
+	return anchor_rect
+
+
 func get_node_property_insertion_feedback() -> String:
 	if _document == null:
 		return FEEDBACK_INVALID_CHIP_POSITION
@@ -2673,9 +2707,6 @@ func get_node_property_insertion_feedback() -> String:
 func accept_scene_node_payload(payload: Dictionary) -> bool:
 	if String(payload.get("type", "")) != "flujo_scene_node":
 		return false
-	if not _node_property_insertion_allowed():
-		_reject(get_node_property_insertion_feedback())
-		return false
 	var scene_root: Node = _scene_root
 	if not is_instance_valid(scene_root):
 		scene_root = EditorInterface.get_edited_scene_root()
@@ -2686,39 +2717,113 @@ func accept_scene_node_payload(payload: Dictionary) -> bool:
 	var node_path: NodePath = payload.get("node_path", NodePath())
 	var node: Node = scene_root.get_node_or_null(node_path)
 	if not is_instance_valid(node):
-		_reject("The dropped scene node is no longer available.")
+		_reject("The selected scene node is no longer available.")
 		return false
 	var panel: FlowSceneNodePanel = _scene_node_panel()
 	if _scene_controller == null and panel != null:
 		_scene_controller = panel.get_controller()
 	_pending_node_payload = payload.duplicate(true)
+
+	if _node_ref_edit_active:
+		return _commit_node_ref_payload(node, payload)
+	if _node_property_edit_active:
+		_open_property_selector_for_payload(node, payload)
+		return true
+
+	var allow_node: bool = _node_ref_insertion_allowed()
+	var allow_property: bool = _node_property_insertion_allowed()
+	if not allow_node and not allow_property:
+		_reject("No compatible Node or Node Property source is available here.")
+		return false
+	if allow_node and allow_property:
+		_scene_reference_choice.open_for_node(
+			String(payload.get("node_name", node.name)),
+			_scene_reference_anchor_rect()
+		)
+		return true
+	if allow_node:
+		return _commit_node_ref_payload(node, payload)
+	_open_property_selector_for_payload(node, payload)
+	return true
+
+
+func _open_property_selector_for_payload(node: Node, payload: Dictionary) -> void:
 	var insertion: Dictionary = _node_property_insertion_context()
 	var slot: FlowChipSlotDefinition = insertion.get("slot", null) as FlowChipSlotDefinition
 	var accepted_types: Array[Variant.Type] = _accepted_value_types_for_slot(slot)
-	var anchor_rect: Rect2 = get_global_rect()
-	if _node_property_trigger_active:
-		var input: TextEdit = get_text_control(_node_property_trigger_segment_id)
-		if input != null:
-			var caret_local: Vector2 = input.get_caret_draw_pos()
-			var caret_global: Vector2 = input.get_global_transform_with_canvas() * caret_local
-			anchor_rect = Rect2(
-				caret_global,
-				Vector2(1.0, maxf(input.get_line_height(), 24.0))
-			)
 	_node_property_selector.open_for_node(
 		node,
 		String(payload.get("requirement_id", "")),
-		node_path,
+		payload.get("node_path", NodePath()),
 		accepted_types,
-		anchor_rect
+		_scene_reference_anchor_rect()
 	)
-	return true
 
+
+func _on_scene_node_requested() -> void:
+	if _pending_node_payload.is_empty():
+		return
+	var scene_root: Node = _scene_root
+	if not is_instance_valid(scene_root):
+		return
+	var node: Node = scene_root.get_node_or_null(
+		_pending_node_payload.get("node_path", NodePath())
+	)
+	if is_instance_valid(node):
+		_commit_node_ref_payload(node, _pending_node_payload)
+
+
+func _on_scene_property_requested() -> void:
+	if _pending_node_payload.is_empty():
+		return
+	var scene_root: Node = _scene_root
+	if not is_instance_valid(scene_root):
+		return
+	var node: Node = scene_root.get_node_or_null(
+		_pending_node_payload.get("node_path", NodePath())
+	)
+	if is_instance_valid(node):
+		_open_property_selector_for_payload(node, _pending_node_payload)
+
+
+func _on_scene_reference_choice_cancelled() -> void:
+	_pending_node_payload.clear()
+	var panel: FlowSceneNodePanel = _scene_node_panel()
+	if panel != null:
+		panel.clear_request_target()
+	if _node_property_trigger_active:
+		_cancel_node_property_trigger(true)
+
+
+func _commit_node_ref_payload(node: Node, payload: Dictionary) -> bool:
+	if not is_instance_valid(node):
+		return false
+	var source: FlowNodeRefValueSource = FlowNodeRefValueSource.new(
+		String(payload.get("requirement_id", "")),
+		payload.get("node_path", NodePath()),
+		node.name,
+		StringName(node.get_class())
+	)
+	if not _node_ref_edit_active and not _can_insert_source(source):
+		return false
+	_bind_node_ref_requirement_if_possible(source)
+	var panel: FlowSceneNodePanel = _scene_node_panel()
+	if panel != null:
+		panel.clear_request_target()
+	var success: bool = false
+	if _node_property_trigger_active:
+		success = not _insert_node_ref_source_at_caret(source).is_empty()
+	elif _node_ref_edit_active:
+		success = _replace_node_ref_segment(_node_ref_edit_segment_id, source)
+	else:
+		success = not insert_source_at_caret(source).is_empty()
+	_pending_node_payload.clear()
+	return success
 
 func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
 	if not data is Dictionary:
 		return false
-	return String((data as Dictionary).get("type", "")) == "flujo_scene_node" 		and _node_property_insertion_allowed()
+	return String((data as Dictionary).get("type", "")) == "flujo_scene_node" 		and _scene_reference_insertion_allowed()
 
 
 func _drop_data(_at_position: Vector2, data: Variant) -> void:
