@@ -2665,7 +2665,15 @@ func _node_property_insertion_allowed() -> bool:
 		slot = _slot_definition_for(_segment_at(_fixed_replacement_index()) as FlowChipSegment)
 	if _schema.mode == FlowChipFieldSchema.Mode.HYBRID 			and slot == null and _fixed_replacement_index() < 0:
 		return false
-	return slot == null 		or slot.accepts_source_kind(FlowValueSource.SOURCE_KIND_NODE_PROPERTY_REF)
+	if slot != null 			and not slot.accepts_source_kind(FlowValueSource.SOURCE_KIND_NODE_PROPERTY_REF):
+		return false
+	var accepted_types: Array[Variant.Type] = _accepted_value_types_for_slot(slot)
+	if accepted_types.is_empty():
+		return true
+	for candidate: Variant.Type in accepted_types:
+		if FlowLiteralValueSource.is_allowed_type(candidate):
+			return true
+	return false
 
 
 func _node_ref_insertion_allowed() -> bool:
