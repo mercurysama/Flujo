@@ -22,7 +22,11 @@ D0, D1, D2, D3 and D4-A/B/C are complete. D3 closure is
 runtime-safe descriptor layer, and D4-C is the host-owned generic renderer.
 The initial planning-gated `flujo-block-builder` Skill exists at
 `tools/agent_skills/flujo-block-builder/SKILL.md`, but this is not D5 functional
-acceptance and it has generated no custom block.
+acceptance by itself. The approved FPrint Guardería slice now provides the first
+real package dogfood, automatic D5 evidence, and an approved manual pass. The
+functional Builder v1 remains incomplete. FPrint Kínder K3 now provides the
+approved reusable runtime descriptor boundary; its visual chip and K4 work are
+not included.
 
 The current roadmap and contract contain no technical D4-D delivery, requirement
 set, dependency, or acceptance matrix. The later `D4-D NEXT` wording was a
@@ -31,6 +35,11 @@ already proceeds from D4-C to D5. D4 is therefore complete at the defined D4-A,
 D4-B and D4-C boundary. This checkpoint does not implement, delete, or silently
 rename a D4-D feature; any future D4-D must first receive its own numbered
 specification and approval.
+
+The separately numbered FPrint Kínder K3/K4/K5 dogfood contracts exercise
+reusable SDK capabilities around that boundary; they do not redefine D4-D or
+complete functional D5. K5's structured-document Flusso presentation is a
+bounded public extension recorded in its own contract and behavior entries.
 
 ### Functional D5 boundary
 
@@ -52,9 +61,18 @@ Its acceptance is explicit:
 - **E — maintenance:** removing the Skill does not prevent loading, editing,
   testing, maintaining or distributing the generated package.
 
-The current Skill is planning-ready only, so D5 remains future work. `FPrint` is
-the planned first future dogfood block, distinct from legacy `Print`; its package
-identity and specification remain unfrozen and no FPrint package exists.
+The current Skill remains the planning/authoring workflow boundary. The approved
+FPrint slice is implemented as an ordinary package under
+`res://flow_packages/mercury.fprint/`, distinct from legacy `Print`, and uses the
+public SDK without a core or registry change. Its automatic discovery, Add,
+generic Flusso, persistence, duplication and Process runtime evidence passes;
+the manual Godot review is approved and the Guardería slice is closed. Timer,
+State Machine and future-container behavior is not claimed.
+
+Closure records:
+
+- `FPRINT GUARDERÍA MANUAL PASS`
+- `FPRINT GUARDERÍA CLOSED — EDITOR CLEANUP READY FOR MANUAL REVIEW`
 
 ## Current implemented baseline
 
@@ -71,9 +89,8 @@ The following are already implemented and must be reused rather than rebuilt:
 
 The following are **not** end-to-end implemented yet:
 
-- a real project package used for dogfooding;
 - package-lifecycle recovery for missing scripts/packages;
-- functional D5 `flujo-block-builder v1` package generation (the initial planning Skill exists);
+- the remaining functional D5 Builder v1 acceptance beyond the approved FPrint Guardería slice;
 - the future `IF` block.
 
 D4-C generic Flusso property rendering is implemented, automatically covered and
@@ -93,9 +110,13 @@ layout and standard interaction remain owned by the Fluo host/editor.
 - Legacy `Print`, `Custom Hello`, and `Everything Flows` remain available for
   compatibility/reference. `Add Call Method` keeps its current editorial
   category and route. `FlowBlockRegistry` is unchanged by this checkpoint.
-- The first D5 dogfood block is planned as `FPrint`, distinct from legacy `Print`.
-  Its specification is not frozen; the Builder must classify its proposed
-  capabilities A/B/C/D before any implementation. No FPrint package exists.
+- The first D5 dogfood slice is the approved `FPrint` package, distinct from
+  legacy `Print`; its Guardería scope is frozen and manually approved. This
+  bounded slice does not declare functional Builder v1 or FPrint v1 complete.
+- The visible legacy Flujo dock and `Open Fluo (POC)` route are retired from
+  production mounting/registration. `vp_flujo_dock.gd` remains only for
+  isolated compatibility coverage, while Fluo is the primary F4, menu, and
+  Inspector surface.
 
 ## Approved ecosystem requirements
 
@@ -284,11 +305,15 @@ The following are **not** decided by this D0 contract and require later maintain
 2. localization rules and runtime export/access policy for the future Debug Panel,
    which are not covered by the D4-A property-presentation contract;
 3. the persistent representation used when a package disappears: per-block origin, graph-side map, placeholder/envelope, or an approved combination;
-4. the exact package ID, type ID, visible name and message for the first dogfooding block;
+4. the exact package ID, type ID, visible name and message for any future dogfooding block beyond the approved FPrint Guardería slice;
 5. touch target thresholds, reduced-motion defaults and the Android device matrix for final visual acceptance;
 6. the promotion/install API for moving an incubated block into an official Mercury distribution;
-7. any graph schema migration needed for package origin/recovery;
-8. removal of the legacy Flujo dock or `Open Fluo (POC)` surface.
+7. any graph schema migration needed for package origin/recovery.
+
+The former legacy-surface decision is resolved by the Guardería editor cleanup:
+the plugin does not production-mount the visible Flujo dock or register `Open
+Fluo (POC)`, while `vp_flujo_dock.gd` remains available for isolated
+compatibility coverage.
 
 ## Planned deliveries
 
@@ -299,7 +324,7 @@ The following are **not** decided by this D0 contract and require later maintain
 5. **D4-A — Generic property/presentation contract — COMPLETE:** freeze the reusable reflection, eligibility, metadata, type, ordering, ownership, Revertir, and runtime-safe boundary in [FlowBlock Property Presentation Contract](flow_block_property_presentation_contract.md).
 6. **D4-B — Runtime-safe generic property descriptors — COMPLETE:** implement and prove the reflection, sidecar validation, deterministic ordering, supported-type classification and runtime-safe boundary.
 7. **D4-C — Generic Flusso renderer — COMPLETE — MANUAL PASS:** render the initial compatible field set from D4-B descriptors without changing ownership boundaries.
-8. **D5 — `flujo-block-builder v1` — FUTURE:** generate only capabilities already proven manually and through D2–D4; the initial planning Skill does not complete D5. The first planned dogfood block is FPrint, whose specification remains unfrozen.
+8. **D5 — `flujo-block-builder v1` — INCOMPLETE:** generate only capabilities already proven manually and through D2–D4; the initial planning Skill does not complete D5. The bounded FPrint Guardería dogfood slice is implemented and manually approved, but Builder v1 and FPrint v1 remain incomplete.
 9. **D6 — First standard external block:** prove the complete standard path with one simple class-A package.
 10. **D7 — Package lifecycle:** provenance persistence, missing-package recovery, independent removal/restoration and promotion.
 11. **D8 — Theme + Motion polish:** complete visual/touch polish without changing package contracts.

@@ -1816,7 +1816,7 @@ func _inspector_scroll_for(property: FlowGraphInspectorProperty) -> ScrollContai
 	return column.get_parent() as ScrollContainer if column != null else null
 
 
-## Exercises the production Inspector-plugin-main-plugin-dock selection relay.
+## Exercises the production Inspector-plugin-main-plugin-Fluo selection relay.
 func _test_plugin_variable_selection_relay(undo_redo: EditorUndoRedoManager) -> void:
 	var controller: PVController = PVController.new()
 	controller.flow_graph = _schema_3_variable_fixture()
@@ -1843,18 +1843,13 @@ func _test_plugin_variable_selection_relay(undo_redo: EditorUndoRedoManager) -> 
 		return
 	get_root().add_child(inspector_property)
 	inspector_property.set_object_and_property(controller, &"flow_graph")
-	var dock: Node = VP_FLUJO_DOCK_SCRIPT.new()
-	dock.call(&"configure", undo_redo)
-	get_root().add_child(dock)
-	dock.set("_controller_presence_initialized", true)
-	dock.set("_controller_present", true)
-	var dock_control: Control = dock as Control
-	_expect(dock_control != null and is_zero_approx(dock_control.custom_minimum_size.x), "The production relay dock retains native resize freedom.")
-	if dock_control != null:
-		dock_control.size.x = 160.0
+	var fluo_drawer: FluoDrawer = FluoDrawer.new()
+	fluo_drawer.configure(undo_redo)
+	get_root().add_child(fluo_drawer)
+	fluo_drawer.set_controller(controller)
+	fluo_drawer.open()
 	var main_plugin: EditorPlugin = VP_FLUJO_PLUGIN_SCRIPT.new()
-	main_plugin.set(&"_dock", dock)
-	main_plugin.set(&"_dock_controller", null)
+	main_plugin.set(&"_fluo_drawer", fluo_drawer)
 	main_plugin.set(&"_controller_inspector_plugin", relay_inspector)
 	relay_inspector.schema_3_variable_selection_changed.connect(
 		Callable(main_plugin, &"_on_schema_3_variable_selection_changed")
@@ -1865,6 +1860,23 @@ func _test_plugin_variable_selection_relay(undo_redo: EditorUndoRedoManager) -> 
 	inspector_property.call(&"_rebuild_interface")
 	await process_frame
 	await process_frame
+	var fluo_property: FlowGraphInspectorProperty = fluo_drawer.find_child(
+		"FluoFlowEditor",
+		true,
+		false
+	) as FlowGraphInspectorProperty
+	_expect(
+		fluo_property != null and fluo_drawer.is_open(),
+		"The production relay exposes the mounted Fluo editor surface."
+	)
+	if fluo_property == null:
+		inspector_property.queue_free()
+		fluo_drawer.queue_free()
+		controller.queue_free()
+		main_plugin.free()
+		await process_frame
+		await process_frame
+		return
 	var variable_list: ItemList = _section_list(inspector_property, "Variables")
 	_expect(variable_list != null and variable_list.item_count > 0, "The production relay property exposes a schema 3 Variables row.")
 	if variable_list != null:
@@ -1872,23 +1884,20 @@ func _test_plugin_variable_selection_relay(undo_redo: EditorUndoRedoManager) -> 
 		variable_list.emit_signal(&"item_selected", 0)
 		await process_frame
 		await process_frame
-	var dock_property: FlowGraphInspectorProperty = dock.call(&"get_variable_editor") as FlowGraphInspectorProperty
 	_expect(
-		dock_property != null \
-			and _find_node_by_name(dock_property, &"VariableNameInput") != null \
-			and _find_node_by_name(dock_property, &"VariableTypeOption") != null \
-			and _find_node_by_name(dock_property, &"VariableBoolValue") != null,
-		"A public schema 3 selection crosses Inspector, plugin, and dock to render Name, Type, and Value."
+		_find_node_by_name(fluo_property, &"VariableNameInput") != null \
+			and _find_node_by_name(fluo_property, &"VariableTypeOption") != null \
+			and _find_node_by_name(fluo_property, &"VariableBoolValue") != null,
+		"A public schema 3 selection crosses Inspector, plugin, and Fluo to render Name, Type, and Value."
 	)
 	if variable_list != null:
 		variable_list.emit_signal(&"item_activated", 0)
 		await process_frame
 		await process_frame
-	var name_input: LineEdit = _find_node_by_name(dock_property, &"VariableNameInput") as LineEdit
-	_expect(name_input != null and name_input.has_focus(), "A public schema 3 activation crosses the production relay to focus Name.")
-	_expect(dock_control != null and dock_control.size.x < 320.0, "The production dock can reduce below the retired 320-pixel initial width.")
+	var name_input: LineEdit = _find_node_by_name(fluo_property, &"VariableNameInput") as LineEdit
+	_expect(name_input != null and name_input.has_focus(), "A public schema 3 activation crosses the production relay to focus Name in Fluo.")
 	inspector_property.queue_free()
-	dock.queue_free()
+	fluo_drawer.queue_free()
 	controller.queue_free()
 	main_plugin.free()
 	await process_frame

@@ -16,6 +16,9 @@ signal flusso_owned_property_registered(block_id: String, property_name: StringN
 const FLOW_EDITOR_BLOCK_AUTHORING_CONTEXT_SCRIPT: Script = preload(
 	"res://addons/vp_flujo/editor/flow_editor_block_authoring_context.gd"
 )
+const FLOW_STRUCTURED_DOCUMENT_EDITOR_SCRIPT: Script = preload(
+	"res://addons/vp_flujo/editor/flow_structured_document_editor.gd"
+)
 
 var _commands: FlowGraphEditorCommands
 var _authoring_context: RefCounted
@@ -648,6 +651,23 @@ func _render_generic_descriptor(
 			_apply_generic_tooltip(multiline_input, descriptor)
 			multiline_input.text_changed.connect(_on_generic_multiline_changed.bind(multiline_input, descriptor))
 			control = multiline_input
+		FlowBlockPropertyDescriptor.PRESENTATION_STRUCTURED_DOCUMENT:
+			var document: FlowStructuredDocument = descriptor.current_value as FlowStructuredDocument
+			if document == null:
+				var enable_document: Button = Button.new()
+				enable_document.name = _generic_node_name("StructuredDocument", descriptor.property_name)
+				enable_document.text = "Enable Structured Document"
+				enable_document.focus_mode = Control.FOCUS_ALL
+				enable_document.tooltip_text = "Create the structured document used as this block's central output."
+				enable_document.pressed.connect(_on_enable_structured_document.bind(descriptor))
+				control = enable_document
+			else:
+				var document_editor: FlowStructuredDocumentEditor = FLOW_STRUCTURED_DOCUMENT_EDITOR_SCRIPT.new() as FlowStructuredDocumentEditor
+				document_editor.name = _generic_node_name("StructuredDocument", descriptor.property_name)
+				document_editor.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				document_editor.size_flags_vertical = Control.SIZE_EXPAND_FILL
+				document_editor.configure(document, _commands.get_undo_redo(), _controller)
+				control = document_editor
 		FlowBlockPropertyDescriptor.PRESENTATION_ENUM:
 			var enum_input: OptionButton = _create_generic_enum_input(descriptor)
 			if enum_input != null:
@@ -748,6 +768,20 @@ func _on_generic_enum_selected(
 func _apply_generic_value(descriptor: FlowBlockPropertyDescriptor, value: Variant) -> void:
 	if _current():
 		_commands.set_ready_property_descriptor_live(_controller, _process_id, _block_id, descriptor, value)
+
+
+func _on_enable_structured_document(descriptor: FlowBlockPropertyDescriptor) -> void:
+	if not _current() or descriptor == null:
+		return
+	var document: FlowStructuredDocument = FlowStructuredDocument.new()
+	if _commands.set_ready_property_descriptor_live(
+			_controller,
+			_process_id,
+			_block_id,
+			descriptor,
+			document
+	):
+		_render_block()
 
 
 func _apply_generic_tooltip(control: Control, descriptor: FlowBlockPropertyDescriptor) -> void:

@@ -5,24 +5,27 @@ extends EditorPlugin
 
 const PV_CONTROLLER_SCRIPT := preload("res://addons/vp_flujo/runtime/pv_controller.gd")
 const PV_SCENE_INSPECTOR_CLASS := preload("res://addons/vp_flujo/editor/pv_scene_inspector.gd")
-const VP_FLUJO_DOCK_CLASS := preload("res://addons/vp_flujo/editor/vp_flujo_dock.gd")
 const FLUO_DRAWER_CLASS := preload("res://addons/vp_flujo/editor/fluo_drawer.gd")
 const PV_CONTROLLER_INSPECTOR_PLUGIN_CLASS := preload("res://addons/vp_flujo/editor/pv_controller_inspector_plugin.gd")
 const FLOW_INTERACTION_COORDINATOR_CLASS := preload("res://addons/vp_flujo/editor/flow_interaction_coordinator.gd")
 const FLOW_CONTROLLER_PROVISIONER_CLASS := preload("res://addons/vp_flujo/editor/flow_controller_provisioner.gd")
+const STRUCTURED_DOCUMENT_HARNESS_CLASS := preload(
+	"res://addons/vp_flujo/editor/flow_structured_document_editor_harness.gd"
+)
 const INTERACTION_SHORTCUT_PATH: String = "flujo/toggle_interaction"
+const STRUCTURED_DOCUMENT_HARNESS_MENU_ITEM: String = "Open Structured Document Harness"
 
-var _dock
 var _scene_inspector
 var _controller_inspector_plugin: EditorInspectorPlugin
 var _editor_selection: EditorSelection
-var _dock_refresh_queued: bool = false
-var _dock_controller_reference: WeakRef
+var _context_refresh_queued: bool = false
+var _controller_reference: WeakRef
 var _selected_schema_3_variable_id: String = ""
 var _interaction_coordinator: FlowInteractionCoordinator
 var _interaction_shortcut: Shortcut
 var _controller_provisioner: FlowControllerProvisioner
 var _fluo_drawer: FluoDrawer
+var _structured_document_harness: FlowStructuredDocumentEditorHarness
 
 
 func _enter_tree() -> void:
@@ -39,15 +42,12 @@ func _enter_tree() -> void:
 		_on_fluo_container_open_requested
 	)
 	add_inspector_plugin(_controller_inspector_plugin)
-	_dock = VP_FLUJO_DOCK_CLASS.new()
-	_dock.configure(get_undo_redo())
-	_dock.schema_3_variable_list_focus_requested.connect(_on_schema_3_variable_list_focus_requested)
-	_dock.schema_3_delete_selection_recovery_requested.connect(_on_schema_3_delete_selection_recovery_requested)
-	_dock.interaction_toggle_requested.connect(_on_interaction_toggle_requested)
-	_dock.fluo_open_requested.connect(_on_fluo_open_requested)
-	_dock.fluo_block_open_requested.connect(_on_fluo_block_open_requested)
-	add_dock(_dock)
 	_mount_fluo_drawer()
+	add_tool_menu_item("Open Fluo", Callable(self, &"_on_fluo_open_requested"))
+	add_tool_menu_item(
+		STRUCTURED_DOCUMENT_HARNESS_MENU_ITEM,
+		Callable(self, &"_on_structured_document_harness_requested")
+	)
 	var editor_settings: EditorSettings = EditorInterface.get_editor_settings()
 	if editor_settings != null:
 		if not editor_settings.has_shortcut(INTERACTION_SHORTCUT_PATH):
@@ -56,7 +56,7 @@ func _enter_tree() -> void:
 				FlowInteractionCoordinator.create_default_shortcut()
 			)
 		_interaction_shortcut = editor_settings.get_shortcut(INTERACTION_SHORTCUT_PATH)
-	_interaction_coordinator = FLOW_INTERACTION_COORDINATOR_CLASS.new(_dock)
+	_interaction_coordinator = FLOW_INTERACTION_COORDINATOR_CLASS.new(_fluo_drawer)
 	_controller_provisioner = FLOW_CONTROLLER_PROVISIONER_CLASS.new(
 		get_undo_redo(),
 		EditorInterface.get_selection(),
@@ -64,7 +64,7 @@ func _enter_tree() -> void:
 	)
 	_controller_provisioner.diagnostic_reported.connect(_on_controller_provisioning_diagnostic)
 	_connect_editor_signals()
-	_request_dock_refresh()
+	_request_context_refresh()
 
 
 func _exit_tree() -> void:
@@ -72,18 +72,15 @@ func _exit_tree() -> void:
 	if _interaction_coordinator != null:
 		_interaction_coordinator.shutdown()
 	_interaction_coordinator = null
+	_dispose_structured_document_harness()
 	_dispose_fluo_drawer()
 	_controller_provisioner = null
 	_interaction_shortcut = null
 	if is_instance_valid(_controller_inspector_plugin):
 		remove_inspector_plugin(_controller_inspector_plugin)
 	_controller_inspector_plugin = null
-
-	if is_instance_valid(_dock):
-		remove_dock(_dock)
-		_dock.queue_free()
-
-	_dock = null
+	remove_tool_menu_item("Open Fluo")
+	remove_tool_menu_item(STRUCTURED_DOCUMENT_HARNESS_MENU_ITEM)
 	_scene_inspector = null
 
 
@@ -110,7 +107,7 @@ func _mount_fluo_drawer() -> void:
 	)
 
 	editor_base_control.add_child(_fluo_drawer)
-	_fluo_drawer.set_controller(_dock_controller_instance())
+	_fluo_drawer.set_controller(_controller_instance())
 
 
 func _dispose_fluo_drawer() -> void:
@@ -127,7 +124,32 @@ func _dispose_fluo_drawer() -> void:
 
 func _on_fluo_open_requested() -> void:
 	if is_instance_valid(_fluo_drawer):
+		_update_controller_context()
 		_fluo_drawer.open()
+
+
+func _on_structured_document_harness_requested() -> void:
+	if is_instance_valid(_structured_document_harness):
+		_structured_document_harness.popup_centered()
+		return
+	_structured_document_harness = STRUCTURED_DOCUMENT_HARNESS_CLASS.new() as FlowStructuredDocumentEditorHarness
+	var editor_base_control: Control = EditorInterface.get_base_control()
+	if not is_instance_valid(editor_base_control) or _structured_document_harness == null:
+		_structured_document_harness = null
+		return
+	editor_base_control.add_child(_structured_document_harness)
+	_structured_document_harness.configure(get_undo_redo())
+	_structured_document_harness.popup_centered()
+
+
+func _dispose_structured_document_harness() -> void:
+	var harness: FlowStructuredDocumentEditorHarness = _structured_document_harness
+	_structured_document_harness = null
+	if not is_instance_valid(harness):
+		return
+	if harness.get_parent() != null:
+		harness.get_parent().remove_child(harness)
+	harness.free()
 
 
 func _on_fluo_container_open_requested(
@@ -180,14 +202,14 @@ func _disconnect_editor_signals() -> void:
 		_editor_selection.selection_changed.disconnect(_on_selection_changed)
 
 	_editor_selection = null
-	_dock_controller_reference = null
+	_controller_reference = null
 	_selected_schema_3_variable_id = ""
-	_dock_refresh_queued = false
+	_context_refresh_queued = false
 
 
 func _on_selection_changed() -> void:
 	_update_interaction_selected_controller()
-	_request_dock_refresh()
+	_request_context_refresh()
 
 
 func _shortcut_input(event: InputEvent) -> void:
@@ -198,7 +220,7 @@ func _shortcut_input(event: InputEvent) -> void:
 		var controller: PVController = _ensure_controller_for_flow()
 		if controller == null:
 			return
-		_set_dock_controller(controller)
+		_set_controller(controller)
 		_set_interaction_selected_controller(controller)
 	if _interaction_coordinator.handle_shortcut(event, _interaction_shortcut, get_viewport()):
 		get_viewport().set_input_as_handled()
@@ -206,30 +228,28 @@ func _shortcut_input(event: InputEvent) -> void:
 
 func _on_scene_changed(_scene_root: Node) -> void:
 	_update_interaction_selected_controller()
-	_request_dock_refresh()
+	_request_context_refresh()
 
 
 func _on_scene_tree_node_added(node: Node) -> void:
 	if not _is_relevant_scene_tree_change(node, _scene_inspector):
 		return
 	_update_interaction_selected_controller()
-	_request_dock_refresh()
+	_request_context_refresh()
 
 
 func _on_scene_tree_node_removed(node: Node) -> void:
 	if not _is_relevant_scene_tree_change(node, _scene_inspector):
 		return
 	var removed_controller: PVController = _scene_inspector.find_controller(node)
-	var current_controller: PVController = _dock_controller_instance()
+	var current_controller: PVController = _controller_instance()
 	if is_instance_valid(_controller_inspector_plugin) and removed_controller != null:
 		_controller_inspector_plugin.invalidate_controller(removed_controller)
 	if current_controller != null and current_controller == removed_controller:
-		_set_dock_controller(null)
+		_set_controller(null)
 		_set_interaction_selected_controller(null)
-		if is_instance_valid(_dock):
-			_dock.set_controller_present(false)
 	_update_interaction_selected_controller()
-	_request_dock_refresh()
+	_request_context_refresh()
 
 
 func _process(_delta: float) -> void:
@@ -237,20 +257,20 @@ func _process(_delta: float) -> void:
 		_interaction_coordinator.update_playing_scene(EditorInterface.is_playing_scene(), get_viewport())
 
 
-func _request_dock_refresh() -> void:
-	if _dock_refresh_queued:
+func _request_context_refresh() -> void:
+	if _context_refresh_queued:
 		return
-	_dock_refresh_queued = true
+	_context_refresh_queued = true
 	_refresh_current_scene.call_deferred()
 
 
 func _refresh_current_scene() -> void:
-	_dock_refresh_queued = false
-	_update_dock_visibility()
+	_context_refresh_queued = false
+	_update_controller_context()
 
 
-func _update_dock_visibility() -> void:
-	if not is_instance_valid(_dock) or _scene_inspector == null:
+func _update_controller_context() -> void:
+	if _scene_inspector == null:
 		return
 
 	var selected_nodes: Array[Node] = []
@@ -258,10 +278,8 @@ func _update_dock_visibility() -> void:
 		selected_nodes = _editor_selection.get_selected_nodes()
 	var scene_root: Node = EditorInterface.get_edited_scene_root()
 	var controller: PVController = _controller_for_selection(selected_nodes, scene_root)
-	var should_show: bool = controller != null
 	_set_interaction_selected_controller(_interaction_controller_for_selection(selected_nodes))
-	_set_dock_controller(controller)
-	_dock.set_controller_present(should_show)
+	_set_controller(controller)
 
 
 func _on_schema_3_variable_selection_changed(
@@ -271,18 +289,18 @@ func _on_schema_3_variable_selection_changed(
 ) -> void:
 	if not is_instance_valid(controller):
 		return
-	if not _activate_dock_controller(controller):
+	if not _activate_controller(controller):
 		return
 	if _selected_schema_3_variable_id == variable_id:
 		return
 	_selected_schema_3_variable_id = variable_id
-	_dock.set_variable_selection(controller, collection, variable_id)
 	if is_instance_valid(_fluo_drawer):
 		_fluo_drawer.set_variable_selection(controller, collection, variable_id)
-	_dock.focus_variable_editor(controller, variable_id)
+		if _selection_context_owns_focus(controller):
+			_fluo_drawer.focus_variable_editor(controller, variable_id)
 
 func _on_schema_3_variable_editor_focus_requested(controller: PVController, variable_id: String) -> void:
-	if _activate_dock_controller(controller) and controller.flow_graph != null:
+	if _activate_controller(controller) and controller.flow_graph != null:
 		var collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.VARIABLES
 
 		for process: FlowProcess in controller.flow_graph.processes:
@@ -297,19 +315,16 @@ func _on_schema_3_variable_editor_focus_requested(controller: PVController, vari
 			if method != null and method.get_internal_id() == variable_id:
 				collection = FlowGraphEditorCommands.Collection.METHODS
 
-		_dock.set_variable_selection(controller, collection, variable_id)
-
 		if is_instance_valid(_fluo_drawer):
 			_fluo_drawer.set_variable_selection(controller, collection, variable_id)
-
-		_dock.focus_variable_editor(controller, variable_id)
+			_fluo_drawer.focus_variable_editor(controller, variable_id)
 
 func _on_fluo_container_navigation_changed(
 	controller: PVController,
 	collection: FlowGraphEditorCommands.Collection,
 	container_id: String
 ) -> void:
-	if not is_instance_valid(controller) or controller != _dock_controller_instance() 			or not is_instance_valid(_controller_inspector_plugin):
+	if not is_instance_valid(controller) or controller != _controller_instance() 			or not is_instance_valid(_controller_inspector_plugin):
 		return
 	_selected_schema_3_variable_id = container_id
 	_controller_inspector_plugin.sync_schema_3_container_selection(
@@ -320,7 +335,7 @@ func _on_fluo_container_navigation_changed(
 
 
 func _on_schema_3_variable_list_focus_requested(controller: PVController, variable_id: String) -> void:
-	if is_instance_valid(controller) and controller == _dock_controller_instance() \
+	if is_instance_valid(controller) and controller == _controller_instance() \
 			and is_instance_valid(_controller_inspector_plugin):
 		_controller_inspector_plugin.focus_schema_3_variable_list(controller, variable_id)
 
@@ -333,7 +348,7 @@ func _on_schema_3_delete_selection_recovery_requested(
 		view_title: String,
 		restore_focus: bool
 ) -> void:
-	if is_instance_valid(controller) and controller == _dock_controller_instance() \
+	if is_instance_valid(controller) and controller == _controller_instance() \
 			and is_instance_valid(_controller_inspector_plugin):
 		_controller_inspector_plugin.apply_schema_3_delete_selection_recovery(
 			controller,
@@ -352,7 +367,7 @@ func _on_interaction_toggle_requested() -> void:
 		var controller: PVController = _ensure_controller_for_flow()
 		if controller == null:
 			return
-		_set_dock_controller(controller)
+		_set_controller(controller)
 		_set_interaction_selected_controller(controller)
 	_interaction_coordinator.toggle_flow_interaction(get_viewport())
 
@@ -383,33 +398,38 @@ func _on_controller_provisioning_diagnostic(message: String) -> void:
 
 
 ## Synchronizes a valid Inspector source before applying its schema 3 selection.
-func _activate_dock_controller(controller: PVController) -> bool:
-	if not is_instance_valid(_dock) or not is_instance_valid(controller):
+func _activate_controller(controller: PVController) -> bool:
+	if not is_instance_valid(_fluo_drawer) or not is_instance_valid(controller):
 		return false
 	var inspector_plugin: PVControllerInspectorPlugin = _controller_inspector_plugin as PVControllerInspectorPlugin
 	if inspector_plugin != null and not inspector_plugin.is_active_controller(controller):
 		return false
-	if _set_dock_controller(controller):
-		_dock.set_controller_present(true)
+	_set_controller(controller)
 	return true
 
 
-## Applies the single editor-owned controller context shared by the dock and relay.
-func _set_dock_controller(controller: PVController) -> bool:
+## Avoids stealing an unrelated editor control's focus during Undo/Redo recovery.
+func _selection_context_owns_focus(controller: PVController) -> bool:
+	var inspector_plugin: PVControllerInspectorPlugin = _controller_inspector_plugin as PVControllerInspectorPlugin
+	if inspector_plugin != null and inspector_plugin.owns_focus(controller):
+		return true
+	var viewport: Viewport = get_viewport()
+	var focus_owner: Control = viewport.gui_get_focus_owner() as Control if viewport != null else null
+	if not is_instance_valid(focus_owner):
+		return true
+	return is_instance_valid(_fluo_drawer) \
+		and (focus_owner == _fluo_drawer or _fluo_drawer.is_ancestor_of(focus_owner))
+
+
+## Applies the single editor-owned controller context shared by Inspector and Fluo.
+func _set_controller(controller: PVController) -> bool:
 	var next_controller: PVController = controller if is_instance_valid(controller) else null
-	var current_controller: PVController = _dock_controller_instance()
-	if current_controller == next_controller 			and not (next_controller == null and _dock_controller_reference != null):
+	var current_controller: PVController = _controller_instance()
+	if current_controller == next_controller 			and not (next_controller == null and _controller_reference != null):
 		return false
 
-	_dock_controller_reference = weakref(next_controller) if next_controller != null else null
+	_controller_reference = weakref(next_controller) if next_controller != null else null
 	_selected_schema_3_variable_id = ""
-	_dock.set_controller(next_controller)
-	_dock.set_variable_selection(
-		next_controller,
-		FlowGraphEditorCommands.Collection.VARIABLES,
-		""
-	)
-
 	if is_instance_valid(_fluo_drawer):
 		_fluo_drawer.set_controller(next_controller)
 		_fluo_drawer.set_variable_selection(
@@ -421,10 +441,10 @@ func _set_dock_controller(controller: PVController) -> bool:
 	return true
 
 
-func _dock_controller_instance() -> PVController:
-	if _dock_controller_reference == null:
+func _controller_instance() -> PVController:
+	if _controller_reference == null:
 		return null
-	var controller: PVController = _dock_controller_reference.get_ref() as PVController
+	var controller: PVController = _controller_reference.get_ref() as PVController
 	return controller if is_instance_valid(controller) else null
 
 

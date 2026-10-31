@@ -35,11 +35,13 @@ func _run() -> void:
 func _test_integrated_snapshot_without_packages() -> void:
 	var context = AUTHORING_CONTEXT_SCRIPT.new()
 	var entries: Array[FlowEditorBlockCatalogEntry] = context.get_entries()
-	_check(entries.size() == 3, "The canonical package root still exposes built-ins when it is absent.")
-	if entries.size() == 3:
+	_check(entries.size() == 4, "The canonical package root exposes the three built-ins and FPrint.")
+	if entries.size() >= 3:
 		_check(entries[0].authoring_id == "print", "Print remains first in the editor snapshot.")
 		_check(entries[1].authoring_id == "everything_flows", "Everything Flows remains second in the editor snapshot.")
 		_check(entries[2].authoring_id == "custom_hello", "Custom Hello remains third in the editor snapshot.")
+	if entries.size() == 4:
+		_check(entries[3].authoring_id == "mercury.fprint:fprint", "FPrint follows the integrated entries in the editor snapshot.")
 	var print_result = context.create_block("print")
 	_check(print_result.is_successful() and print_result.block is FlowPrintBlock,
 		"Integrated creation uses the registry through the common result.")

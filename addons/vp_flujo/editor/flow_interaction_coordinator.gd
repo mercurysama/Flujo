@@ -10,7 +10,7 @@ enum State {
 	GAME,
 }
 
-var _dock: VPFlujoDock
+var _surface: Node
 var _state: State = State.GODOT
 var _selected_controller_reference: WeakRef
 var _flow_controller_reference: WeakRef
@@ -21,8 +21,8 @@ var _playing_scene: bool = false
 var _transition_generation: int = 0
 
 
-func _init(dock: VPFlujoDock) -> void:
-	_dock = dock
+func _init(surface: Node) -> void:
+	_surface = surface
 
 
 ## Creates the configurable editor shortcut with F4 as Flujo's default interaction key.
@@ -63,7 +63,7 @@ func handle_shortcut(event: InputEvent, shortcut: Shortcut, viewport: Viewport) 
 	return toggle_flow_interaction(viewport)
 
 
-## Shares the exact F4 transition path with the dock's accessible interaction button.
+## Shares the exact F4 transition path with any host-provided interaction button.
 func toggle_flow_interaction(viewport: Viewport) -> bool:
 	if _state == State.GAME:
 		return false
@@ -90,7 +90,7 @@ func update_playing_scene(is_playing_scene: bool, viewport: Viewport) -> void:
 		_leave_game()
 
 
-## Releases editor-local interaction state before the owning plugin removes its dock and shortcut.
+## Releases editor-local interaction state before the owning plugin removes its surface and shortcut.
 func shutdown() -> void:
 	_transition_generation += 1
 	_resume_flow_after_game = false
@@ -99,23 +99,22 @@ func shutdown() -> void:
 	_selected_controller_reference = null
 	_playing_scene = false
 	_state = State.GODOT
-	if is_instance_valid(_dock):
-		_dock.close_flow_transient_interfaces()
-		_dock.set_editing_visible(false)
-		_dock.deactivate_flow_interaction()
-	_dock = null
+	_surface_call(&"close_flow_transient_interfaces")
+	_surface_call(&"set_editing_visible", [false])
+	_surface_call(&"deactivate_flow_interaction")
+	_surface = null
 
 
 func _enter_flow(controller: PVController, viewport: Viewport) -> void:
-	if not is_instance_valid(controller) or not is_instance_valid(_dock):
+	if not is_instance_valid(controller) or not _surface_has_method(&"activate_flow_interaction"):
 		return
 	_transition_generation += 1
 	_flow_controller_reference = weakref(controller)
 	_focus_before_flow_reference = _weak_focus_owner(viewport)
 	_state = State.FLOW
-	_dock.set_editing_visible(true)
-	_dock.activate_flow_interaction()
-	var target: Control = _dock.get_preferred_interaction_focus_target()
+	_surface_call(&"set_editing_visible", [true])
+	_surface_call(&"activate_flow_interaction")
+	var target: Control = _surface_call(&"get_preferred_interaction_focus_target") as Control
 	_schedule_flow_focus(target, controller, _transition_generation)
 
 
@@ -125,9 +124,8 @@ func _leave_flow(restore_focus: bool, viewport: Viewport) -> void:
 	_focus_before_flow_reference = null
 	_flow_controller_reference = null
 	_state = State.GODOT
-	if is_instance_valid(_dock):
-		_dock.close_flow_transient_interfaces()
-		_dock.deactivate_flow_interaction()
+	_surface_call(&"close_flow_transient_interfaces")
+	_surface_call(&"deactivate_flow_interaction")
 	if restore_focus:
 		_schedule_focus_restore(focus_before_flow, _transition_generation)
 
@@ -140,10 +138,9 @@ func _enter_game(viewport: Viewport) -> void:
 	_flow_controller_reference = null
 	_state = State.GAME
 	_release_focus(viewport)
-	if is_instance_valid(_dock):
-		_dock.close_flow_transient_interfaces()
-		_dock.set_editing_visible(false)
-		_dock.suspend_for_game()
+	_surface_call(&"close_flow_transient_interfaces")
+	_surface_call(&"set_editing_visible", [false])
+	_surface_call(&"suspend_for_game")
 
 
 func _leave_game() -> void:
@@ -154,17 +151,16 @@ func _leave_game() -> void:
 		and resume_controller == _selected_controller()
 	_resume_flow_after_game = false
 	_flow_controller_before_game_reference = null
-	if may_resume and is_instance_valid(_dock):
+	if may_resume and _surface_has_method(&"activate_flow_interaction"):
 		_flow_controller_reference = weakref(resume_controller)
 		_state = State.FLOW
-		_dock.set_editing_visible(true)
-		_dock.activate_flow_interaction()
+		_surface_call(&"set_editing_visible", [true])
+		_surface_call(&"activate_flow_interaction")
 		return
 	_flow_controller_reference = null
 	_state = State.GODOT
-	if is_instance_valid(_dock):
-		_dock.set_editing_visible(false)
-		_dock.deactivate_flow_interaction()
+	_surface_call(&"set_editing_visible", [false])
+	_surface_call(&"deactivate_flow_interaction")
 
 
 func _schedule_flow_focus(target: Control, controller: PVController, generation: int) -> void:
@@ -244,3 +240,13 @@ func _can_focus(control: Control) -> bool:
 		and control.is_inside_tree() \
 		and control.is_visible_in_tree() \
 		and control.focus_mode != Control.FOCUS_NONE
+
+
+func _surface_has_method(method_name: StringName) -> bool:
+	return is_instance_valid(_surface) and _surface.has_method(method_name)
+
+
+func _surface_call(method_name: StringName, arguments: Array = []) -> Variant:
+	if not _surface_has_method(method_name):
+		return null
+	return _surface.callv(method_name, arguments)

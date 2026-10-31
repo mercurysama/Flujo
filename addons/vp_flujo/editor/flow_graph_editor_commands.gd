@@ -51,6 +51,10 @@ func configure_block_authoring_context(authoring_context: RefCounted) -> void:
 	_authoring_context = authoring_context
 
 
+func get_undo_redo() -> EditorUndoRedoManager:
+	return _undo_redo
+
+
 ## Returns the diagnostics from the latest rejected command or completed action.
 func get_last_diagnostics() -> Array[FlowDiagnostic]:
 	return _last_diagnostics.duplicate()
@@ -408,7 +412,12 @@ func _descriptor_matches_target(
 		descriptor: FlowBlockPropertyDescriptor,
 		value: Variant
 ) -> bool:
-	if descriptor.property_name.is_empty() or typeof(value) != descriptor.model_type:
+	if descriptor.property_name.is_empty():
+		return false
+	var value_matches: bool = typeof(value) == descriptor.model_type
+	if descriptor.is_structured_document_candidate():
+		value_matches = value is FlowStructuredDocument
+	if not value_matches:
 		return false
 	for raw_property: Variant in target.get_property_list():
 		if not raw_property is Dictionary:

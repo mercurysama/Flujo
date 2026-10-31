@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/model/flow_chip_core_step_1a_test.gd" id="1_chip_core_1a"]
+
+[node name="FlowChipCoreStep1ATest" type="Node"]
+script = ExtResource("1_chip_core_1a")

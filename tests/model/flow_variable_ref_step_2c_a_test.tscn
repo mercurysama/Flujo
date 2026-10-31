@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/model/flow_variable_ref_step_2c_a_test.gd" id="1_variable_ref"]
+
+[node name="FlowVariableRefStep2CATest" type="Node"]
+script = ExtResource("1_variable_ref")

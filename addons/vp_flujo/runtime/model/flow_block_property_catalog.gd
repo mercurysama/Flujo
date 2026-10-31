@@ -80,21 +80,23 @@ static func describe(
 		if not _is_eligible(property, property_name):
 			continue
 		var model_type: Variant.Type = int(property.get("type", TYPE_NIL)) as Variant.Type
-		if not _is_supported_type(model_type):
+		var reflected_hint: int = int(property.get("hint", PROPERTY_HINT_NONE))
+		var reflected_hint_string: String = String(property.get("hint_string", ""))
+		if not _is_supported_type(model_type, reflected_hint, reflected_hint_string):
 			_issue(result, CODE_UNSUPPORTED_TYPE, String(property_name), str(block.get_instance_id()),
-				"Property type is outside the generic D4 v1 scalar set.", FlowDiagnostic.Severity.WARNING)
+				"Property type is outside the generic v1 property set.", FlowDiagnostic.Severity.WARNING)
 			continue
 
 		var current_value: Variant = block.get(property_name)
-		if not _value_matches_type(current_value, model_type):
+		if not _value_matches_type(current_value, model_type, reflected_hint, reflected_hint_string):
 			_issue(result, CODE_VALUE_TYPE_INVALID, String(property_name), str(block.get_instance_id()),
 				"Current property value does not match the reflected model type.", FlowDiagnostic.Severity.WARNING)
 			continue
 
-		var reflected_hint: int = int(property.get("hint", PROPERTY_HINT_NONE))
-		var reflected_hint_string: String = String(property.get("hint_string", ""))
 		var hint_kind: StringName = _base_presentation_kind(model_type)
-		if reflected_hint != PROPERTY_HINT_NONE:
+		if _is_structured_document_property(model_type, reflected_hint, reflected_hint_string):
+			hint_kind = FlowBlockPropertyDescriptor.PRESENTATION_STRUCTURED_DOCUMENT
+		elif reflected_hint != PROPERTY_HINT_NONE:
 			var hint_result: Dictionary = _validate_reflected_hint(
 				model_type, reflected_hint, reflected_hint_string, property_name, result
 			)
@@ -118,6 +120,7 @@ static func describe(
 		descriptor.usage = int(property.get("usage", 0))
 		descriptor.hint = reflected_hint
 		descriptor.hint_string = reflected_hint_string
+		descriptor.resource_type_name = reflected_hint_string if model_type == TYPE_OBJECT else ""
 		descriptor.editable = not bool(descriptor.usage & PROPERTY_USAGE_READ_ONLY)
 		descriptor.current_value = current_value
 		descriptor.label = _default_label(property_name)
@@ -165,13 +168,35 @@ static func _is_eligible(property: Dictionary, property_name: StringName) -> boo
 		and bool(usage & PROPERTY_USAGE_STORAGE)
 
 
-static func _is_supported_type(model_type: Variant.Type) -> bool:
+static func _is_supported_type(
+		model_type: Variant.Type,
+		hint: int = PROPERTY_HINT_NONE,
+		hint_string: String = ""
+) -> bool:
 	return model_type == TYPE_BOOL or model_type == TYPE_INT or model_type == TYPE_FLOAT \
-		or model_type == TYPE_STRING or model_type == TYPE_STRING_NAME
+		or model_type == TYPE_STRING or model_type == TYPE_STRING_NAME \
+		or _is_structured_document_property(model_type, hint, hint_string)
 
 
-static func _value_matches_type(value: Variant, model_type: Variant.Type) -> bool:
+static func _value_matches_type(
+		value: Variant,
+		model_type: Variant.Type,
+		hint: int = PROPERTY_HINT_NONE,
+		hint_string: String = ""
+) -> bool:
+	if _is_structured_document_property(model_type, hint, hint_string):
+		return value == null or value is FlowStructuredDocument
 	return typeof(value) == model_type
+
+
+static func _is_structured_document_property(
+		model_type: Variant.Type,
+		hint: int,
+		hint_string: String
+) -> bool:
+	return model_type == TYPE_OBJECT \
+		and hint == PROPERTY_HINT_RESOURCE_TYPE \
+		and hint_string.strip_edges() == "FlowStructuredDocument"
 
 
 static func _base_presentation_kind(model_type: Variant.Type) -> StringName:
@@ -186,6 +211,8 @@ static func _base_presentation_kind(model_type: Variant.Type) -> StringName:
 			return FlowBlockPropertyDescriptor.PRESENTATION_TEXT
 		TYPE_STRING_NAME:
 			return FlowBlockPropertyDescriptor.PRESENTATION_STRING_NAME
+		TYPE_OBJECT:
+			return FlowBlockPropertyDescriptor.PRESENTATION_STRUCTURED_DOCUMENT
 	return &""
 
 

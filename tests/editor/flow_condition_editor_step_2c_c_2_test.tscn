@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource path="res://tests/editor/flow_condition_editor_step_2c_c_2_test.gd" type="Script" id="1_condition_c2"]
+
+[node name="FlowConditionEditorStep2CCC2Test" type="Node"]
+script = ExtResource("1_condition_c2")

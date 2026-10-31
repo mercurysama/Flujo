@@ -7,7 +7,7 @@ This is the durable repository handoff for future chats and maintainers.
 ## Current validated preview checkpoint
 
 - Repository: `mercurysama/Flujo`.
-- Active UI branch: `feature/fluo-drawer-poc`.
+- Active UI branch: `feature/block-builder-fprint-dogfood`.
 - Validated functional checkpoint: `cd7e969c38193d718c948262107d1f7a45ca8083`.
 - Frozen code backup: `backup/fluo-preview-1-2026-10-27`.
 - Preview package: `Flujo-0.1.0-fluo-preview.1`.
@@ -20,9 +20,16 @@ This is the durable repository handoff for future chats and maintainers.
 - **Fluo**: complete contextual sliding drawer.
 - **Flow**: left internal panel containing blocks of the selected container.
 - **Flusso**: right selected-block configuration panel.
-- **Legacy Flujo dock**: older visible fallback retained temporarily.
+- **Legacy Flujo dock**: production mounting is retired; `vp_flujo_dock.gd` remains only for isolated compatibility coverage.
+- **Akis (candidate glossary term)**: the complete structured field/document
+  formed by text plus embedded elements.
+- **Tok (candidate glossary term)**: one embedded structured unit inside an
+  Akis, such as a Literal Tok or Variable Tok; Expression Tok and
+  Node/Property Tok remain future concepts.
 
 Do not rename internal VP/PV classes merely to match presentation terminology.
+The Akis/Tok terms are conceptual only in this phase; internal APIs such as
+`FlowChipFieldEditor`, `FlowChipSegment`, and `FlowChipControl` remain unchanged.
 
 ## Inspector → Fluo contract
 
@@ -81,9 +88,12 @@ On 2026-10-27 the full-project preview opened under Godot on Android. The mainta
 - drawer left/right placement;
 - final panel proportions and readability.
 
-## Temporary legacy UI
+## Legacy UI compatibility boundary
 
-The visible `Flujo` dock and `Open Fluo (POC)` route remain intentionally available until explicit preview acceptance. After acceptance, hide/remove the visible fallback while preserving reusable editor/model code that is still needed.
+The plugin no longer mounts the visible `Flujo` dock or registers the `Open Fluo
+(POC)` route. Fluo is the primary F4, menu, and Inspector surface. The shared
+`vp_flujo_dock.gd` implementation remains in the repository only for isolated
+compatibility coverage; it is not a production-mounted editor surface.
 
 ## Themes + Motion
 
@@ -116,7 +126,7 @@ Durable decisions:
 - the current integrated registry is transitional for distributable official blocks; migration to Mercury packages is gradual and compatibility-first;
 - The standard external-block path is proven by D3, but IF remains unimplemented and deferred to its own specification, plan, explicit approval and test cycle.
 
-Implementation order is D0 contract → D1 manual SDK profile → D2 minimum Theme + Motion contract → D3 external Flow Add → D4-A property/presentation contract → D4-B runtime-safe property descriptors → D4-C generic Flusso renderer → D5 `flujo-block-builder v1` → D6 first standard external block → D7 package lifecycle → D8 Theme + Motion polish → D9 gradual official-block migration. D4-A, D4-B and D4-C are complete with approved D4-C manual Flusso evidence. The canonical contract has no technical D4-D delivery or D4-D A–E acceptance matrix; the historical label is not a pending task. The initial Builder Skill is a planning/memory artifact only and does not make D5 complete.
+Implementation order is D0 contract → D1 manual SDK profile → D2 minimum Theme + Motion contract → D3 external Flow Add → D4-A property/presentation contract → D4-B runtime-safe property descriptors → D4-C generic Flusso renderer → D5 `flujo-block-builder v1` → D6 first standard external block → D7 package lifecycle → D8 Theme + Motion polish → D9 gradual official-block migration. D4-A, D4-B and D4-C are complete with approved D4-C manual Flusso evidence. The canonical contract has no technical D4-D delivery or D4-D A–E acceptance matrix; the historical label is not a pending task. The FPrint Guardería slice is closed after its manual pass, while the functional Builder v1 remains incomplete. The initial Builder Skill does not make D5 complete.
 
 ### D1 manual SDK profile
 
@@ -341,23 +351,142 @@ continuity placeholder, not treated as a pending delivery. D4 is complete at
 D4-C. Any future D4-D requires a new numbered specification, plan, acceptance
 matrix and explicit maintainer approval.
 
-### D5 definition and FPrint boundary
+### D5 definition and FPrint Guardería status
 
 D5 is the **functional `flujo-block-builder v1`** delivery. The planning Skill
-alone is not D5. Functional D5 must generate and validate an ordinary,
-one-block package through the public SDK; produce deterministic, manually
-reproducible files; enforce the A/B/C/D capability gate; and prove the package
-through Flow Add, Flusso, persistence and runtime without a Builder runtime
-dependency, absolute paths or a silent core patch. D5 is not complete in this
-checkpoint: the existing Skill is planning-ready only and no generated package
-exists.
+alone is not D5. The approved FPrint Guardería slice generated and validated
+the ordinary one-block package through the public SDK, with deterministic
+readable files, no Builder runtime dependency, no absolute paths, and no silent
+core patch. Its manual Godot review is approved and the slice is closed; this
+does not declare functional Builder v1 or FPrint v1 complete.
 
-`FPrint` is the planned first future dogfood block and is distinct from legacy
-`Print`. Its package ID, type ID, visible behavior and configuration remain
-unfrozen. No FPrint package or implementation is authorized here. Before any
-FPrint generation, the request must complete the Builder planning gate and
-classify runtime, persistence, Flow Add and Flusso as A, B, C or D; a C/D
-classification stops for an approved public extension/core plan.
+`FPrint` is distinct from legacy `Print` and is frozen for this slice as
+package `mercury.fprint`, type `fprint`, authoring ID `mercury.fprint:fprint`,
+with `prefix`, multiline `message`, and `suffix`; runtime output is the exact
+composition `prefix + message + suffix`. The package is proven through public
+catalog Add, generic Flusso, persistence, duplication and one compatible
+`Process` host. Timer, State Machine, and future container behavior is not
+claimed by this delivery.
+
+The closure records are:
+
+- `FPRINT GUARDERÍA MANUAL PASS`
+- `FPRINT GUARDERÍA CLOSED — EDITOR CLEANUP READY FOR MANUAL REVIEW`
+
+The approved manual review covered visible Add, Prefix/Message/Suffix editing,
+live updates, Revertir, independent instances, exact Process execution,
+Inspector → Fluo entry, Fluo-primary F4/menu behavior, and active-block
+deletion with Flow retained and Flusso closed. The observed FPrint output was
+the configured literal `hola mundo!!!\nyo soy FPrint!!!`. The separate Kínder
+K3 descriptor delivery is recorded below and does not change this Guardería
+boundary.
+
+The Builder planning gate was completed and explicitly approved with `🙆‍♀️`.
+
+### FPrint Kínder — K3 Generic Chip Descriptor — READY
+
+K3 provides reusable runtime semantic projections for structured chip segments:
+`FlowChipTypeDescriptor`, `FlowChipTooltipData`, and the common
+`FlowChipSegment` descriptor/label/tooltip contract. `FlowLiteralValueSegment`
+is the first consumer and keeps `literal_value` identity separate from its
+`Literal` display name, with deterministic labels and ordered Type/Value/Variant
+tooltip fields for bool, int, float, String, and StringName.
+
+K3 does not add a visual chip, editor controls, colors, events, selection,
+FPrint migration, or VariableRef/Expression/NodePropertyRef classes. Its focal
+test is `tests/model/flow_chip_descriptor_test.tscn`; K1/K2 structured-document
+and Guardería regressions remain independent evidence.
+
+> **Builder Lesson Candidate:** Los bloques que necesiten contenido mixto de
+> texto + valores estructurados no deben construir chips privados. Deben
+> consumir el Generic Typed Chip System público.
+
+### FPrint Kínder — K4 Generic Chip Visual + FlowStructuredDocumentEditor — MANUAL REVIEW PENDING
+
+K4 adds the editor-only `FlowChipControl`, Theme adapter, and
+`FlowStructuredDocumentEditor`. The surface renders ordered text and real
+Control chip units, uses `segment_id` selection, exposes `+ Value`, and records
+insert/delete/type/value/text operations in the owning
+`EditorUndoRedoManager`. The generic runtime contract supplies supported
+Variant.Type values and defaults; no FPrint-specific widget, parser, package
+migration, or runtime/editor dependency was introduced.
+
+The automatic focal is `tests/editor/flow_structured_document_editor_test.tscn`.
+The manual review surface is the editor menu **Project → Tools → Open
+Structured Document Harness** or
+`tests/editor/flow_structured_document_editor_harness.tscn`. K4 remains open
+until the visual/manual checklist is approved.
+
+> **Builder Lesson Candidate:** Los bloques que necesiten edición de contenido
+> estructurado deben reutilizar `FlowStructuredDocumentEditor` y el Generic
+> Typed Chip Control; no deben crear widgets privados por tipo de bloque.
+
+### FPrint Kínder — K5 Structured Document Package Integration — AUTOMATIC PASS — MANUAL REVIEW PENDING
+
+K5 is bounded by [FPrint Kínder K5 Contract](fprint_kinder_k5_contract.md).
+The ordinary `mercury.fprint` package now retains `prefix`, multiline `message`,
+and `suffix`, and adds optional `document: FlowStructuredDocument`. A null
+document preserves the closed Guardería output; a present document replaces
+`message` through `FlowStructuredDocumentRenderer`.
+
+The package uses the public generic descriptor/catalog and host-owned Flusso
+renderer. A null value shows the generic **Enable Structured Document** control;
+there is no automatic legacy conversion. A present value uses the reusable
+`FlowStructuredDocumentEditor` and public `FlowChipControl`/Typed Chip System.
+Structured edits are live, owner-scoped to the `PVController` undo history, and
+Revertir uses a deep ID-preserving snapshot. Persistent duplication gives nested
+segments new IDs; ResourceSaver/PackedScene and the generic Process runtime are
+covered separately from the editor surface.
+
+The capability gate records package/runtime/persistence as A, the reusable
+structured-document Flusso presentation as the smallest C extension, and
+FPrint-specific widgets/parsers/core control-flow as D/out of scope. K5 does
+not declare functional `flujo-block-builder v1` or FPrint v1 complete, does not
+change graph schema or manifest v1, and does not update the Builder Skill.
+
+Fresh 2026-10-29 focal and proportionate regression evidence passes and is
+recorded in the K5 behavior-catalog entries. A visual smoke review observed the
+real Inspector → Fluo → Flow → Flusso enable, `+ Value`, typed edit, Undo/Redo,
+Revertir, and close path without saving the protected demo scene. Manual
+integrated Flusso approval remains pending for the full text/chip
+tooltip/selection, keyboard focus, Unicode/multiline/@/#/$, save/reopen, and
+independent-instance checklist.
+
+> **Builder Lesson Candidate:** Optional structured content should consume the
+> public generic document/renderer/editor path and preserve its legacy scalar
+> compatibility field; it should not create a private parser, chip, or editor.
+
+> **Builder Lesson Candidate:** Revert snapshots preserve segment IDs while
+> persistent duplication creates new IDs; both semantics must be tested
+> explicitly rather than inferred from a shallow resource copy.
+
+### Flujo Chips Core Step 1B — schema, slots, and value sources
+
+Step 1B is a reusable runtime/model boundary, not an FPrint feature. A
+`FlowChipFieldSchema` declares FIXED, FLEXIBLE, or HYBRID shape, text policy,
+semantic slot definitions, accepted exact types/source kinds, and runtime-safe
+initial sources. `FlowChipFieldValidator` compares the schema with an ordered
+`FlowStructuredDocument` without repair. `FlowLiteralValueSource` is the only
+concrete source in this step; K1/K2 `FlowLiteralValueSegment` remains the
+persisted compatibility path through `get_value_source()`.
+
+The neutral focal is `tests/model/flow_chip_core_step_1b_test.tscn`, including
+ResourceSaver and deep-duplication evidence. No inline editor, parser, trigger,
+block runtime, For/If/Process block, or FPrint integration belongs to Step 1B.
+
+> **Builder Lesson Candidate:** Each block that uses chips declares a reusable
+> `FlowChipFieldSchema` rather than private count, order, type, or requiredness
+> rules.
+
+> **Builder Lesson Candidate:** Executable chip values use `FlowValueSource`,
+> not widgets or visible text.
+
+The implementation worktree is `feature/block-builder-fprint-dogfood` at
+`ddbf272cf5d4a38aaf38a18917596e168afd870a` before delivery changes. The
+protected `demo/main.tscn` was not edited by this delivery. Its observed
+working-tree checksum is `41f9e2ec5d60a869f2232c14c0bcda5213d145f4b1a7fcc508dfc17cd56e4540`,
+which differs from the historical declared `83fca704524af87eacf7a85a39335c3b26ac7c051451bb4d6818fd9161304210`;
+the discrepancy remains preserved and unresolved.
 
 ### Compatibility decisions protected by this checkpoint
 
@@ -366,6 +495,9 @@ classification stops for an approved public extension/core plan.
 - Legacy `Print`, `Custom Hello` and `Everything Flows` remain available and
   unchanged for compatibility/reference. `Add Call Method` remains a separate
   editorial category and route. `FlowBlockRegistry` remains unchanged.
+- The visible legacy dock and `Open Fluo (POC)` route are no longer production
+  mounted or registered. `vp_flujo_dock.gd` remains only for isolated
+  compatibility coverage; Fluo is the primary F4, menu, and Inspector surface.
 - One block per package is the canonical future distribution profile, while the
   manifest v1 loader remains compatible with historical multi-descriptor
   manifests. This checkpoint adds no graph schema or manifest v1 field.
@@ -375,20 +507,25 @@ classification stops for an approved public extension/core plan.
 
 ### Checkpoint state
 
-- Branch: `feature/fluo-drawer-poc`; current repository HEAD remains
-  `58ca3ae50226351804e32234713e0b3e37f68767`.
-- Protected `demo/main.tscn` checksum remains
-  `83fca704524af87eacf7a85a39335c3b26ac7c051451bb4d6818fd9161304210`.
+- Branch: `feature/block-builder-fprint-dogfood`; repository HEAD remains
+  `ddbf272cf5d4a38aaf38a18917596e168afd870a` and delivery changes are
+  uncommitted.
+- The protected `demo/main.tscn` was not edited by this delivery. The observed
+  working-tree checksum is
+  `41f9e2ec5d60a869f2232c14c0bcda5213d145f4b1a7fcc508dfc17cd56e4540`,
+  differing from the historical declared
+  `83fca704524af87eacf7a85a39335c3b26ac7c051451bb4d6818fd9161304210`; both
+  the file and discrepancy remain preserved.
 - No commit, push, merge, rebase or pull request is part of this checkpoint.
 
 ## Next maintenance sequence
 
-1. Treat D5 functional Builder work as the next eligible ecosystem delivery; do
-   not generate FPrint until its specification and A/B/C/D gate are approved.
-2. Complete Android interaction validation.
-3. Fix preview issues in small batches.
-4. Run affected focal tests and manual checks; never infer passes.
-5. After explicit acceptance, hide/remove the legacy dock/POC surface.
+1. Keep the closed FPrint Guardería slice bounded; do not claim Builder v1 or
+   FPrint v1 complete.
+2. K4 is implemented and awaiting manual visual approval; K5 automatic evidence passes but its integrated manual approval remains pending.
+3. Complete Android interaction validation.
+4. Fix preview issues in small batches.
+5. Run affected focal tests and manual checks; never infer passes.
 6. Tune panel proportions from device evidence.
 7. Implement and validate Themes + Motion polish.
 8. Define first stable release criteria.

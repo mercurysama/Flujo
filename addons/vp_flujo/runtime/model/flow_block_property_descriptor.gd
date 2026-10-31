@@ -20,6 +20,7 @@ const PRESENTATION_STRING_NAME: StringName = &"string_name"
 const PRESENTATION_RANGE: StringName = &"range"
 const PRESENTATION_ENUM: StringName = &"enum"
 const PRESENTATION_MULTILINE: StringName = &"multiline"
+const PRESENTATION_STRUCTURED_DOCUMENT: StringName = &"structured_document"
 
 const SOURCE_REFLECTION: StringName = &"reflection"
 const SOURCE_METADATA: StringName = &"metadata"
@@ -38,6 +39,7 @@ var order: int = 0
 var group: String = ""
 var tooltip: String = ""
 var presentation_kind: StringName = &""
+var resource_type_name: String = ""
 var presentation_source: StringName = SOURCE_REFLECTION
 var classification: Classification = Classification.GENERIC
 
@@ -48,3 +50,7 @@ func is_explicit_built_in() -> bool:
 
 func is_generic_candidate() -> bool:
 	return classification == Classification.GENERIC
+
+
+func is_structured_document_candidate() -> bool:
+	return presentation_kind == PRESENTATION_STRUCTURED_DOCUMENT

@@ -122,6 +122,11 @@ func set_variable_selection(
 		_variable_editor.set_dock_variable_selection(controller, collection, variable_id)
 
 
+func focus_variable_editor(controller: PVController, variable_id: String) -> void:
+	if _variable_editor != null:
+		_variable_editor.focus_selected_variable_editor(controller, variable_id)
+
+
 func refresh_controller() -> void:
 	if _variable_editor != null:
 		_variable_editor.refresh_dock_controller()
@@ -189,6 +194,37 @@ func close() -> void:
 
 func is_open() -> bool:
 	return _is_open
+
+
+## Lets the interaction coordinator use Fluo as the primary Flow surface.
+func activate_flow_interaction() -> void:
+	set_editing_visible(true)
+	open()
+
+
+func deactivate_flow_interaction() -> void:
+	close()
+
+
+func set_editing_visible(is_visible: bool) -> void:
+	if _variable_editor != null:
+		_variable_editor.visible = is_visible
+
+
+func close_flow_transient_interfaces() -> void:
+	if _variable_editor != null:
+		_variable_editor.close_transient_interfaces()
+
+
+func suspend_for_game() -> void:
+	close_flow_transient_interfaces()
+	set_editing_visible(false)
+
+
+func get_preferred_interaction_focus_target() -> Control:
+	if _variable_editor == null:
+		return null
+	return _variable_editor.get_preferred_interaction_focus_target()
 
 
 func is_right_side() -> bool:
@@ -287,6 +323,9 @@ func _build_interface() -> void:
 	_editor_scroll.name = &"FluoEditorScroll"
 	_editor_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_editor_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	_editor_scroll.follow_focus = true
+	_editor_scroll.focus_mode = Control.FOCUS_ALL
+	_editor_scroll.clip_contents = true
 	_editor_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_editor_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_content.add_child(_editor_scroll)

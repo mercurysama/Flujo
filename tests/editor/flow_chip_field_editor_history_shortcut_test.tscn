@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/editor/flow_chip_field_editor_history_shortcut_test.gd" id="1_history_shortcut"]
+
+[node name="FlowChipFieldEditorHistoryShortcutTest" type="Node"]
+script = ExtResource("1_history_shortcut")

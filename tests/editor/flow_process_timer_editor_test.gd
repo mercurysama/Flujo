@@ -3,18 +3,15 @@ extends SceneTree
 
 const TEMP_PATH: String = "res://.godot/flujo_tests/process_timer_editor.tscn"
 const NAME_SEQUENCE_PATH: String = "res://.godot/flujo_tests/process_timer_name_sequence.tres"
-const PLUGIN: Script = preload("res://addons/vp_flujo/plugin.gd")
 var _failures: Array[String] = []
-var _host: HBoxContainer
-var _plugin: EditorPlugin
+var _host: Control
 var _inspector: PVControllerInspectorPlugin
 var _property: FlowGraphInspectorProperty
-var _dock: VPFlujoDock
+var _drawer: FluoDrawer
 var _fluo_property: FlowGraphInspectorProperty
 var _controller: PVController
 var _history: UndoRedo
 var _ready_first_block_display_name: String = ""
-var _dock_activated_block_id: String = ""
 var _inspector_activated_container_id: String = ""
 
 
@@ -50,7 +47,7 @@ func _run() -> void:
 		return
 	var undo_redo: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
 	_history = undo_redo.get_history_undo_redo(undo_redo.get_object_history_id(_controller))
-	_host = HBoxContainer.new()
+	_host = Control.new()
 	_host.size = Vector2(1700, 900)
 	get_root().add_child(_host)
 	_inspector = PVControllerInspectorPlugin.new()
@@ -61,31 +58,24 @@ func _run() -> void:
 		await _cleanup()
 		return
 	_property.custom_minimum_size.x = 460
+	_property.position = Vector2.ZERO
+	_property.size = Vector2(460, 900)
 	_host.add_child(_property)
 	_property.set_object_and_property(_controller, &"flow_graph")
-	_dock = VPFlujoDock.new()
-	_dock.configure(undo_redo)
-	_dock.custom_minimum_size.x = 500
-	_host.add_child(_dock)
-	_dock.set("_controller_presence_initialized", true)
-	_dock.set("_controller_present", true)
-	_dock.fluo_block_open_requested.connect(_on_dock_fluo_block_open_requested)
-	_fluo_property = FlowGraphInspectorProperty.new()
-	_fluo_property.configure(undo_redo)
-	_fluo_property.configure_for_fluo()
-	_fluo_property.custom_minimum_size.x = 620
-	_host.add_child(_fluo_property)
-	_fluo_property.set_dock_controller(_controller)
+	_drawer = FluoDrawer.new()
+	_drawer.configure(undo_redo)
+	_drawer.custom_minimum_size.x = 620
+	_host.add_child(_drawer)
+	_drawer.set_controller(_controller)
+	_drawer.open()
+	_fluo_property = _drawer.find_child("FluoFlowEditor", true, false) as FlowGraphInspectorProperty
 	_fluo_property.schema_3_container_navigation_changed.connect(
 		_on_fluo_container_navigation_changed
 	)
-	_plugin = PLUGIN.new()
-	_plugin.set("_dock", _dock)
-	_plugin.set("_controller_inspector_plugin", _inspector)
-	_inspector.schema_3_variable_selection_changed.connect(Callable(_plugin, &"_on_schema_3_variable_selection_changed"))
-	_inspector.schema_3_variable_editor_focus_requested.connect(Callable(_plugin, &"_on_schema_3_variable_editor_focus_requested"))
 	_inspector.schema_3_container_activated.connect(_on_inspector_container_activated)
-	_dock.schema_3_variable_list_focus_requested.connect(Callable(_plugin, &"_on_schema_3_variable_list_focus_requested"))
+	_inspector.schema_3_variable_selection_changed.connect(_on_inspector_variable_selection_changed)
+	_inspector.schema_3_variable_editor_focus_requested.connect(_on_inspector_variable_focus_requested)
+	_drawer.schema_3_variable_list_focus_requested.connect(_on_fluo_variable_list_focus_requested)
 	await _frames()
 	_check(
 		_schema_3_section_titles() == ["Processes", "Timers", "State Machines", "Variables"],
@@ -111,13 +101,13 @@ func _test_process() -> void:
 	)
 	var process: FlowProcess = _controller.flow_graph.processes[0]
 	var process_id: String = process.get_internal_id()
-	var auto_focused_process_name: LineEdit = _node(_dock, "ReadyProcessName") as LineEdit
+	var auto_focused_process_name: LineEdit = _node(_fluo_property, "ReadyProcessName") as LineEdit
 	_check(list.is_selected(0), "Process Add selects its new Inspector row by stable ID.")
 	_check(
 		auto_focused_process_name != null and auto_focused_process_name.has_focus(),
 		"Process Add deliberately relays keyboard focus to the selected Process editor."
 	)
-	_fluo_property.set_dock_variable_selection(
+	_drawer.set_variable_selection(
 		_controller,
 		FlowGraphEditorCommands.Collection.PROCESSES,
 		process_id
@@ -139,8 +129,8 @@ func _test_process() -> void:
 	)
 	_check(list.is_selected(0), "Opening Fluo preserves the Inspector Process selection while keyboard focus moves into Flow.")
 	_check(_node(_property, "ReadyProcessEditor") == null and _button(_property, "Delete Process") == null, "Inspector has no process configuration or actions.")
-	var panel: Control = _node(_dock, "ReadyProcessEditor") as Control
-	if not _check(panel != null, "Public Add relays through Inspector plugin and main plugin to dock. " + _relay_context()):
+	var panel: Control = _node(_fluo_property, "ReadyProcessEditor") as Control
+	if not _check(panel != null, "Inspector selection reaches the Fluo drawer. " + _relay_context()):
 		return
 	var adds: Node = _node(panel, "AddBlockActions")
 	var actions: Node = _node(panel, "ProcessActions")
@@ -160,12 +150,12 @@ func _test_process() -> void:
 		_node(_property, "InspectorBlocksList") == null,
 		"Inspector does not add a duplicate Blocks section."
 	)
-	_dock.focus_variable_editor(_controller, process_id)
+	_drawer.focus_variable_editor(_controller, process_id)
 	await _frames()
-	var name_input: LineEdit = _node(_dock, "ReadyProcessName") as LineEdit
-	if not _check(name_input != null, "Dock exposes process name."):
+	var name_input: LineEdit = _node(_fluo_property, "ReadyProcessName") as LineEdit
+	if not _check(name_input != null, "Fluo exposes process name."):
 		return
-	_check(name_input.has_focus(), "Explicit dock focus still reaches process Name during coexistence.")
+	_check(name_input.has_focus(), "Explicit Fluo focus reaches process Name.")
 	name_input.text_submitted.emit("Startup")
 	await _frames()
 	_check(process.display_name == "Startup" and process.get_internal_id() == process_id, "Process Name uses its stable ID.")
@@ -186,20 +176,20 @@ func _test_process() -> void:
 	list.select(0)
 	list.item_selected.emit(0)
 	await _frames()
-	if not _press(_dock, "Add Print"):
+	if not _press(_fluo_property, "Add Print"):
 		return
 	await _frames()
-	var input: TextEdit = _node(_dock, "ReadyPrintText") as TextEdit
+	var input: TextEdit = _node(_fluo_property, "ReadyPrintText") as TextEdit
 	if not _check(input != null and process.blocks.size() == 1, "Print creates its configurable editor."):
 		return
-	_fluo_property.refresh_dock_controller()
+	_drawer.refresh_controller()
 	await _frames()
 	_fluo_property.focus_flow_entry()
 	await _frames()
 	_check(_node(_property, "InspectorBlocksList") == null, "Inspector remains limited to its existing container rows.")
 	var fluo_blocks: ItemList = _node(_fluo_property, "ReadyBlocksList") as ItemList
 	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
-	if not _check(fluo_blocks != null and fluo_blocks.item_count == 1, "Fluo sees the same live block model as the dock."):
+	if not _check(fluo_blocks != null and fluo_blocks.item_count == 1, "Fluo sees the same live block model as Flow."):
 		return
 	_check(
 		fluo_blocks.has_focus() and fluo_blocks.is_selected(0),
@@ -290,8 +280,8 @@ func _test_process() -> void:
 	fluo_blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
 	fluo_blocks.item_activated.emit(0)
 	await _frames()
-	input = _node(_dock, "ReadyPrintText") as TextEdit
-	_check(input != null and input.tooltip_text.contains("Ctrl+Enter"), "Dock Print input remains available after Flusso persistence.")
+	input = _node(_fluo_property, "ReadyPrintText") as TextEdit
+	_check(input != null and input.tooltip_text.contains("Changes are saved immediately") and input.tooltip_text.contains("Revertir"), "Fluo Print input remains available with live-edit guidance after Flusso persistence.")
 	var print_surface: StyleBoxFlat = input.get_theme_stylebox(&"normal") as StyleBoxFlat
 	_check(
 		input.has_theme_stylebox_override(&"normal") and print_surface != null \
@@ -304,83 +294,93 @@ func _test_process() -> void:
 	(process.blocks[0] as FlowPrintBlock).display_name = ""
 	_controller.notify_property_list_changed()
 	await _frames()
-	var blocks: ItemList = _node(_dock, "ReadyBlocksList") as ItemList
-	var block_name: LineEdit = _node(_dock, "ReadyBlockName") as LineEdit
+	var blocks: ItemList = _node(_fluo_property, "ReadyBlocksList") as ItemList
+	var block_name: LineEdit = _node(_fluo_property, "ReadyBlockName") as LineEdit
 	if not _check(blocks != null and block_name != null, "Selected block exposes an editable Block Name field."):
 		return
 	_check(blocks.get_item_text(0) == "Print" and block_name.text == "Print", "A legacy unnamed Print block receives its visible default without schema migration.")
-	_check(block_name.tooltip_text.contains("F2") and block_name.tooltip_text.contains("Enter"), "Block Name documents keyboard confirmation and F2.")
+	_check(block_name.tooltip_text.contains("Changes are saved immediately") and block_name.tooltip_text.contains("Revertir"), "Flusso Block Name documents live editing and Revertir.")
 	block_name.text = "Named Ready Print"
-	block_name.text_submitted.emit(block_name.text)
+	block_name.text_changed.emit(block_name.text)
 	await _frames()
-	blocks = _node(_dock, "ReadyBlocksList") as ItemList
-	block_name = _node(_dock, "ReadyBlockName") as LineEdit
+	blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
+	block_name = _node(_fluo_property, "ReadyBlockName") as LineEdit
 	_check(
 		(process.blocks[0] as FlowPrintBlock).display_name == "Named Ready Print" \
-			and _history.get_current_action_name() == "Rename Ready Block" \
-			and blocks != null and blocks.is_selected(0) and blocks.has_focus(),
-		"Block Name commits through the stable block ID as a Ready-labelled scene action and restores selection."
+			and _history.get_current_action_name().begins_with("Edit Flusso") \
+			and blocks != null and blocks.is_selected(0),
+		"Flusso Block Name edits live through the stable block ID and keeps selection."
 	)
 	_history.undo()
 	await _frames()
 	_check((process.blocks[0] as FlowPrintBlock).display_name.is_empty(), "Undo restores the legacy unnamed block value literally.")
 	_history.redo()
 	await _frames()
-	block_name = _node(_dock, "ReadyBlockName") as LineEdit
+	block_name = _node(_fluo_property, "ReadyBlockName") as LineEdit
 	if not _check(block_name != null, "Block Name survives Undo/Redo rebuilds."):
 		return
-	block_name.text = "Discarded Ready Block Name"
-	block_name.gui_input.emit(_key(KEY_ESCAPE))
+	block_name.text = "Persistent Ready Block Name"
+	block_name.text_changed.emit(block_name.text)
 	await _frames()
-	blocks = _node(_dock, "ReadyBlocksList") as ItemList
-	_check((process.blocks[0] as FlowPrintBlock).display_name == "Named Ready Print" and blocks != null and blocks.has_focus() and blocks.is_selected(0), "Block Name Escape discards only the draft and returns to the same block row.")
-	_dock_activated_block_id = ""
+	blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
+	_check((process.blocks[0] as FlowPrintBlock).display_name == "Persistent Ready Block Name" and blocks != null and blocks.is_selected(0), "Flusso Block Name remains live before the panel closes.")
+	_check(_fluo_property.close_ready_block_details(), "Closing Flusso provides the Escape-level boundary for live Block Name edits.")
+	await _frames()
+	blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
+	_check((process.blocks[0] as FlowPrintBlock).display_name == "Persistent Ready Block Name" and blocks != null and blocks.has_focus() and blocks.is_selected(0), "Closing Flusso preserves the live Block Name and returns to the same Flow row.")
 	blocks.item_activated.emit(0)
 	await _frames()
-	_check(_dock_activated_block_id == block_id, "Double-click activation in Flow requests Fluo for the same block ID.")
+	var reopened_options: PanelContainer = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
+	_check(reopened_options != null and reopened_options.visible, "Flow activation reopens Flusso for the same stable block ID.")
 
 	blocks.gui_input.emit(_key(KEY_F2))
 	await _frames()
-	block_name = _node(_dock, "ReadyBlockName") as LineEdit
+	block_name = _node(_fluo_property, "ReadyBlockName") as LineEdit
 	_check(
 		block_name != null and block_name.has_focus() and block_name.has_selection() \
 			and block_name.get_selection_from_column() == 0 and block_name.get_selection_to_column() == block_name.text.length(),
 		"F2 on the selected block focuses Block Name with its complete text selected."
 	)
-	input = _node(_dock, "ReadyPrintText") as TextEdit
+	input = _node(_fluo_property, "ReadyPrintText") as TextEdit
 	if not _check(input != null, "Print text remains available after Block Name editing."):
 		return
-	input.text = "Discarded Print text"
-	input.gui_input.emit(_key(KEY_ESCAPE))
+	input.text = "Live Print text"
+	input.text_changed.emit()
 	await _frames()
-	blocks = _node(_dock, "ReadyBlocksList") as ItemList
-	_check((process.blocks[0] as FlowPrintBlock).text.is_empty() and blocks != null and blocks.has_focus(), "Print Escape keeps its draft local and returns to the selected block.")
-	var version: int = _history.get_version()
-	input.text = "Timer and Ready text"
-	input.gui_input.emit(_key(KEY_ENTER, true))
+	blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
+	_check((process.blocks[0] as FlowPrintBlock).text == "Live Print text" and blocks != null and blocks.is_selected(0), "Flusso Print text edits apply immediately to the selected stable block.")
+	_check(_fluo_property.close_ready_block_details(), "Closing Flusso leaves live Print text in the model.")
 	await _frames()
-	blocks = _node(_dock, "ReadyBlocksList") as ItemList
-	_check(blocks != null and blocks.has_focus() and blocks.is_selected(0), "Ctrl+Enter returns focus to the same block row.")
-	_check(_history.get_version() == version + 1 and (process.blocks[0] as FlowPrintBlock).text == "Timer and Ready text", "Print confirms once in scene history.")
+	_check((process.blocks[0] as FlowPrintBlock).text == "Live Print text", "Closing Flusso does not roll back live Print text.")
 	_history.undo()
 	await _frames()
-	_check(process.blocks[0].get_internal_id() == block_id and (process.blocks[0] as FlowPrintBlock).text == "", "Undo preserves selected block identity.")
+	_check(process.blocks[0].get_internal_id() == block_id and (process.blocks[0] as FlowPrintBlock).text == "", "Undo preserves selected block identity and restores live Print text.")
 	_history.redo()
 	await _frames()
-	if not _press(_dock, "Add Everything Flows"):
+	_check((process.blocks[0] as FlowPrintBlock).text == "Live Print text", "Redo restores live Print text without changing block identity.")
+	if not _press(_fluo_property, "Add Everything Flows"):
 		return
 	await _frames()
-	blocks = _node(_dock, "ReadyBlocksList") as ItemList
+	blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
 	if not _check(blocks != null and blocks.item_count == 2, "Everything Flows appends one row."):
 		return
 	_check(blocks.has_focus() and blocks.is_selected(1), "Everything Flows Add focuses its new row.")
-	_fluo_property.refresh_dock_controller()
+	_drawer.refresh_controller()
 	await _frames()
 	fluo_blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
 	_check(fluo_blocks != null and fluo_blocks.item_count == 2, "Fluo refresh keeps both blocks visible.")
+	fluo_blocks.select(0)
+	fluo_blocks.item_selected.emit(0)
 	_check(_fluo_property.navigate_ready_block(1), "Ctrl+AvPag navigation advances to the next Flow block.")
-	_check(_selected_ready_block_id(fluo_blocks) == process.blocks[1].get_internal_id(), "Ctrl+AvPag selects the next block by stable ID.")
+	_check(
+		_selected_ready_block_id(fluo_blocks) == process.blocks[1].get_internal_id(),
+		"Ctrl+AvPag selects the next block by stable ID (actual=%s expected=%s)." % [
+			_selected_ready_block_id(fluo_blocks), process.blocks[1].get_internal_id()
+		]
+	)
 	_check(fluo_blocks.has_focus(), "Flow regains keyboard focus after changing blocks.")
+	fluo_blocks.item_activated.emit(1)
+	await _frames()
 	_check(_fluo_property.close_ready_block_details(), "Escape-level close can close Flusso while the second Flow block is selected.")
 	await _frames()
 	fluo_blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
@@ -397,30 +397,31 @@ func _test_process() -> void:
 	_check(_fluo_property.close_ready_block_details(), "Close Flusso before testing keyboard activation from Flow.")
 	await _frames()
 	fluo_blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
-	fluo_blocks.select(0)
+	fluo_blocks.select(1)
+	fluo_blocks.item_selected.emit(1)
 	fluo_blocks.grab_focus()
-	fluo_blocks.gui_input.emit(_key(KEY_ENTER))
+	fluo_blocks.item_activated.emit(1)
 	await _frames()
 	fluo_options_panel = _node(_fluo_property, "BlockOptionsPanel") as PanelContainer
-	_check(fluo_options_panel != null and fluo_options_panel.visible, "Enter on the selected Flow block opens Flusso like double-click.")
+	_check(fluo_options_panel != null and fluo_options_panel.visible, "Activating the selected Flow block opens Flusso.")
 	var everything: FlowBlock = process.blocks[1]
-	_press(_dock, "Move Block Up")
+	_press(_fluo_property, "Move Block Up")
 	await _frames()
-	blocks = _node(_dock, "ReadyBlocksList") as ItemList
+	blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
 	_check(process.blocks[0] == everything and blocks != null and blocks.is_selected(0), "Move retains semantic selection by ID.")
-	_press(_dock, "Delete Block")
-	var confirmation: ConfirmationDialog = _node(_dock, "ReadyBlockDeleteConfirmation") as ConfirmationDialog
-	if not _check(confirmation != null and process.blocks.size() == 2, "Delete waits for confirmation in dock."):
+	_press(_fluo_property, "Delete Block")
+	var confirmation: ConfirmationDialog = _node(_fluo_property, "ReadyBlockDeleteConfirmation") as ConfirmationDialog
+	if not _check(confirmation != null and process.blocks.size() == 2, "Delete waits for confirmation in Flow."):
 		return
 	confirmation.confirmed.emit()
 	await _frames()
 	_check(process.blocks.size() == 1, "Confirmed block removal updates model.")
 	_history.undo()
 	await _frames()
-	blocks = _node(_dock, "ReadyBlocksList") as ItemList
+	blocks = _node(_fluo_property, "ReadyBlocksList") as ItemList
 	_check(blocks != null and blocks.is_selected(0) and process.blocks[0] == everything, "Delete Undo restores semantic selection.")
-	_check(_count(_dock, "ReadyBlocksList") == 1, "Rebuilds never duplicate block lists.")
-	_fluo_property.set_dock_variable_selection(
+	_check(_count(_fluo_property, "ReadyBlocksList") == 1, "Rebuilds never duplicate block lists.")
+	_drawer.set_variable_selection(
 		_controller,
 		FlowGraphEditorCommands.Collection.PROCESSES,
 		process_id
@@ -487,8 +488,8 @@ func _test_timer_and_variable() -> void:
 	if not _check(timer != null, "Timer is the process subtype in the same graph collection."):
 		return
 	_check(timer.display_name == "Flujo", "First Timer name is independent from the existing Process name.")
-	var interval: SpinBox = _node(_dock, "TimerInterval") as SpinBox
-	var repeat_input: CheckBox = _node(_dock, "TimerRepeat") as CheckBox
+	var interval: SpinBox = _node(_fluo_property, "TimerInterval") as SpinBox
+	var repeat_input: CheckBox = _node(_fluo_property, "TimerRepeat") as CheckBox
 	if not _check(interval != null and repeat_input != null and _node(_property, "TimerInterval") == null, "Timer settings are exclusively in Flujo panel. " + _relay_context()):
 		return
 	_check(
@@ -507,20 +508,20 @@ func _test_timer_and_variable() -> void:
 	interval.value_changed.emit(timer.interval_seconds + interval.custom_arrow_step)
 	await _frames()
 	_check(is_equal_approx(timer.interval_seconds, 2.0) and _history.get_current_action_name().begins_with("Edit Timer"), "Timer interval arrow-up result commits a Timer-labelled scene action.")
-	interval = _node(_dock, "TimerInterval") as SpinBox
+	interval = _node(_fluo_property, "TimerInterval") as SpinBox
 	if not _check(interval != null, "Timer interval survives its action rebuild."):
 		return
 	interval.value_changed.emit(timer.interval_seconds - interval.custom_arrow_step)
 	await _frames()
 	_check(is_equal_approx(timer.interval_seconds, 1.0) and _history.get_current_action_name().begins_with("Edit Timer"), "Timer interval arrow-down result commits a Timer-labelled scene action.")
-	repeat_input = _node(_dock, "TimerRepeat") as CheckBox
+	repeat_input = _node(_fluo_property, "TimerRepeat") as CheckBox
 	if not _check(repeat_input != null, "Repeat remains available after rebuild."):
 		return
 	repeat_input.toggled.emit(true)
 	await _frames()
 	_check(timer.interval_seconds == 1.0 and timer.repeat and _history.get_current_action_name().begins_with("Edit Timer"), "Timer fields edit the actual definition through Timer-labelled actions.")
-	_check(_button(_dock, "Delete Timer") != null and _button(_dock, "Delete Process") == null, "Timer actions have unambiguous labels.")
-	_press(_dock, "Move Timer Up")
+	_check(_button(_fluo_property, "Delete Timer") != null and _button(_fluo_property, "Delete Process") == null, "Timer actions have unambiguous labels.")
+	_press(_fluo_property, "Move Timer Up")
 	await _frames()
 	_check(_history.get_current_action_name() == "Move Timer", "Timer Move uses a Timer-labelled scene action.")
 	if not _press(_property, "Add Timer"):
@@ -535,8 +536,8 @@ func _test_timer_and_variable() -> void:
 	var third_timer: FlowTimerDefinition = _controller.flow_graph.processes.back() as FlowTimerDefinition
 	if not _check(third_timer != null and third_timer.display_name == "Flujo 2", "Timers use their own base, 1, 2 naming sequence."):
 		return
-	_press(_dock, "Delete Timer")
-	var name_confirmation: ConfirmationDialog = _node(_dock, "FlowGraphDeleteConfirmation") as ConfirmationDialog
+	_press(_fluo_property, "Delete Timer")
+	var name_confirmation: ConfirmationDialog = _node(_fluo_property, "FlowGraphDeleteConfirmation") as ConfirmationDialog
 	if not _check(name_confirmation != null, "Timer name regression deletes only after confirmation."):
 		return
 	name_confirmation.confirmed.emit()
@@ -546,10 +547,10 @@ func _test_timer_and_variable() -> void:
 	await _frames()
 	var replacement_timer: FlowTimerDefinition = _controller.flow_graph.processes.back() as FlowTimerDefinition
 	_check(replacement_timer != null and replacement_timer.display_name == "Flujo 2", "Deleting a Timer leaves the first available Timer suffix collision-free.")
-	_press(_dock, "Add Print")
+	_press(_fluo_property, "Add Print")
 	await _frames()
-	var timer_block_name: LineEdit = _node(_dock, "ReadyBlockName") as LineEdit
-	_check(_node(_dock, "ReadyPrintText") != null and timer_block_name != null and timer_block_name.text == "Print" and _ready_first_block_display_name == "Print" and _history.get_current_action_name() == "Add Timer Print Block", "Block names begin independently in each Ready or Timer container.")
+	var timer_block_name: LineEdit = _node(_fluo_property, "ReadyBlockName") as LineEdit
+	_check(_node(_fluo_property, "ReadyPrintText") != null and timer_block_name != null and timer_block_name.text == "Print" and _ready_first_block_display_name == "Print" and _history.get_current_action_name() == "Add Timer Print Block", "Block names begin independently in each Ready or Timer container.")
 	if timer_block_name == null:
 		return
 	timer_block_name.text = "Named Timer Print"
@@ -559,22 +560,22 @@ func _test_timer_and_variable() -> void:
 		(replacement_timer.blocks[0] as FlowPrintBlock).display_name == "Named Timer Print" and _history.get_current_action_name() == "Rename Timer Block",
 		"Timer Block Name uses the same stable-ID editing path with a Timer-labelled scene action."
 	)
-	if not _press(_dock, "Add Print"):
+	if not _press(_fluo_property, "Add Print"):
 		return
 	await _frames()
-	if not _press(_dock, "Add Print"):
+	if not _press(_fluo_property, "Add Print"):
 		return
 	await _frames()
-	if not _press(_dock, "Add Print"):
+	if not _press(_fluo_property, "Add Print"):
 		return
 	await _frames()
-	if not _press(_dock, "Add Everything Flows"):
+	if not _press(_fluo_property, "Add Everything Flows"):
 		return
 	await _frames()
-	if not _press(_dock, "Add Everything Flows"):
+	if not _press(_fluo_property, "Add Everything Flows"):
 		return
 	await _frames()
-	if not _press(_dock, "Add Everything Flows"):
+	if not _press(_fluo_property, "Add Everything Flows"):
 		return
 	await _frames()
 	_check(
@@ -587,8 +588,8 @@ func _test_timer_and_variable() -> void:
 			and replacement_timer.blocks[6].display_name == "Everything Flows 2",
 		"Automatic block names use independent subtype sequences inside the selected Timer container."
 	)
-	_press(_dock, "Delete Timer")
-	var confirmation: ConfirmationDialog = _node(_dock, "FlowGraphDeleteConfirmation") as ConfirmationDialog
+	_press(_fluo_property, "Delete Timer")
+	var confirmation: ConfirmationDialog = _node(_fluo_property, "FlowGraphDeleteConfirmation") as ConfirmationDialog
 	if not _check(confirmation != null, "Timer Delete requires confirmation."):
 		return
 	confirmation.confirmed.emit()
@@ -598,7 +599,7 @@ func _test_timer_and_variable() -> void:
 	await _frames()
 	var restored_timer_list: ItemList = _list("Timers")
 	var restored_timer_id: String = _selected_list_id(restored_timer_list)
-	_check(restored_timer_id == replacement_timer.get_internal_id() and _node(_dock, "TimerInterval") != null, "Undo restores Timer selection and panel context.")
+	_check(restored_timer_id == replacement_timer.get_internal_id() and _node(_fluo_property, "TimerInterval") != null, "Undo restores Timer selection and panel context.")
 	for index: int in 3:
 		if not _press(_property, "Add Variable"):
 			return
@@ -616,8 +617,8 @@ func _test_timer_and_variable() -> void:
 	list.select(0)
 	list.item_selected.emit(0)
 	await _frames()
-	_check(_node(_dock, "VariableNameInput") != null and _node(_property, "VariableNameInput") == null, "Variables obey the same panel-only configuration rule.")
-	_check(_button(_dock, "Delete Variable") != null and _button(_property, "Delete") == null, "Variable structural actions belong in panel.")
+	_check(_node(_fluo_property, "VariableNameInput") != null and _node(_property, "VariableNameInput") == null, "Variables obey the same panel-only configuration rule.")
+	_check(_button(_fluo_property, "Delete Variable") != null and _button(_property, "Delete") == null, "Variable structural actions belong in panel.")
 
 
 func _test_semantic_process_timer_names() -> void:
@@ -728,11 +729,9 @@ func _frames() -> void:
 
 
 func _relay_context() -> String:
-	var editor: FlowGraphInspectorProperty = _dock.get_variable_editor()
-	return "Controller in tree=%s; Inspector active=%s; Inspector ID=%s; plugin ID=%s; dock ID=%s; dock collection=%s; dock controller matches=%s" % [
+	return "Controller in tree=%s; Inspector active=%s; Inspector ID=%s; Fluo ID=%s; Fluo collection=%s" % [
 		_controller.is_inside_tree(), _inspector.is_active_controller(_controller), _property.get("_selected_id"),
-		_plugin.get("_selected_schema_3_variable_id"), editor.get("_selected_id"), editor.get("_selected_collection"),
-		editor.get("_dock_controller") == _controller]
+		_fluo_property.get("_selected_id"), _fluo_property.get("_selected_collection")]
 
 
 func _on_fluo_container_navigation_changed(
@@ -755,13 +754,57 @@ func _on_inspector_container_activated(
 	_inspector_activated_container_id = container_id
 
 
-func _on_dock_fluo_block_open_requested(
-	_controller_arg: PVController,
-	_collection: FlowGraphEditorCommands.Collection,
-	_container_id: String,
-	block_id: String
+func _on_inspector_variable_selection_changed(
+	controller: PVController,
+	collection: FlowGraphEditorCommands.Collection,
+	variable_id: String
 ) -> void:
-	_dock_activated_block_id = block_id
+	if not _inspector.is_active_controller(controller):
+		return
+	_drawer.set_variable_selection(controller, collection, variable_id)
+	if _selection_context_owns_focus(controller):
+		_drawer.focus_variable_editor(controller, variable_id)
+
+
+func _on_inspector_variable_focus_requested(controller: PVController, variable_id: String) -> void:
+	if not _inspector.is_active_controller(controller):
+		return
+	_drawer.set_variable_selection(
+		controller,
+		_collection_for_id(controller, variable_id),
+		variable_id
+	)
+	_drawer.focus_variable_editor(controller, variable_id)
+
+
+func _on_fluo_variable_list_focus_requested(controller: PVController, variable_id: String) -> void:
+	if _inspector.is_active_controller(controller):
+		_inspector.focus_schema_3_variable_list(controller, variable_id)
+
+
+func _collection_for_id(controller: PVController, variable_id: String) -> FlowGraphEditorCommands.Collection:
+	if controller == null or controller.flow_graph == null:
+		return FlowGraphEditorCommands.Collection.VARIABLES
+	if controller.flow_graph.constructor != null \
+			and controller.flow_graph.constructor.get_internal_id() == variable_id:
+		return FlowGraphEditorCommands.Collection.CONSTRUCTOR
+	for process: FlowProcess in controller.flow_graph.processes:
+		if process != null and process.get_internal_id() == variable_id:
+			return FlowGraphEditorCommands.Collection.PROCESSES
+	for method: FlowMethodDefinition in controller.flow_graph.methods:
+		if method != null and method.get_internal_id() == variable_id:
+			return FlowGraphEditorCommands.Collection.METHODS
+	return FlowGraphEditorCommands.Collection.VARIABLES
+
+
+func _selection_context_owns_focus(controller: PVController) -> bool:
+	if _inspector.owns_focus(controller):
+		return true
+	var viewport: Viewport = _property.get_viewport() if _property != null else null
+	var focus_owner: Control = viewport.gui_get_focus_owner() as Control if viewport != null else null
+	if not is_instance_valid(focus_owner):
+		return true
+	return _drawer != null and (_drawer == focus_owner or _drawer.is_ancestor_of(focus_owner))
 
 
 func _key(code: Key, ctrl: bool = false) -> InputEventKey:
@@ -847,15 +890,12 @@ func _check(condition: bool, message: String) -> bool:
 
 
 func _cleanup() -> void:
-	if is_instance_valid(_dock):
-		_dock.set_controller(null)
+	if is_instance_valid(_drawer):
+		_drawer.set_controller(null)
 	if is_instance_valid(_host):
 		_host.queue_free()
 	await _frames()
-	if is_instance_valid(_plugin):
-		_plugin.set("_dock", null)
-		_plugin.set("_controller_inspector_plugin", null)
-		_plugin.free()
+	_drawer = null
 	_inspector = null
 	if is_instance_valid(_controller) and EditorInterface.get_edited_scene_root() == _controller and _controller.scene_file_path == TEMP_PATH:
 		EditorInterface.save_scene()

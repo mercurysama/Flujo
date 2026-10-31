@@ -7,13 +7,7 @@ const PV_SCENE_INSPECTOR_SCRIPT := preload("res://addons/vp_flujo/editor/pv_scen
 var _failures: Array[String] = []
 var _diagnostics: Array[String] = []
 var _scene_root: Node
-var _dock: VPFlujoDock
-
-
-class CoordinatorTestDock extends VPFlujoDock:
-	func activate_flow_interaction() -> void:
-		show()
-		call(&"_set_interaction_presentation", "Flow", "Leave Flow (F4)", false)
+var _drawer: FluoDrawer
 
 
 func _init() -> void:
@@ -82,12 +76,11 @@ func _run() -> void:
 	_check(controller.get_parent() == _scene_root and controller.owner == _scene_root, "Redo restores the same controller and scene owner.")
 	_check(_selected_node(selection) == controller, "Redo selects the restored controller.")
 
-	_dock = CoordinatorTestDock.new()
-	_dock.configure(manager)
-	get_root().add_child(_dock)
-	_dock.show()
-	_dock.set_controller(controller)
-	var coordinator: FlowInteractionCoordinator = FlowInteractionCoordinator.new(_dock)
+	_drawer = FluoDrawer.new()
+	_drawer.configure(manager)
+	get_root().add_child(_drawer)
+	_drawer.set_controller(controller)
+	var coordinator: FlowInteractionCoordinator = FlowInteractionCoordinator.new(_drawer)
 	coordinator.set_selected_controller(controller)
 	var shortcut: Shortcut = FlowInteractionCoordinator.create_default_shortcut()
 	var f4: InputEventKey = InputEventKey.new()
@@ -95,6 +88,7 @@ func _run() -> void:
 	f4.keycode = KEY_F4
 	_check(coordinator.handle_shortcut(f4, shortcut, get_root()), "F4 enters Flow after Redo restores the controller.")
 	_check(coordinator.get_state() == FlowInteractionCoordinator.State.FLOW, "The public F4 transition reaches FLOW.")
+	_check(_drawer.is_open() and _drawer.visible, "F4 activates the primary Fluo drawer surface.")
 	_check(coordinator.handle_shortcut(f4, shortcut, get_root()), "A second F4 returns control to Godot.")
 	_check(
 		coordinator.get_state() == FlowInteractionCoordinator.State.GODOT \
@@ -167,8 +161,9 @@ func _check(condition: bool, message: String) -> bool:
 
 
 func _finish() -> void:
-	if is_instance_valid(_dock):
-		_dock.queue_free()
+	if is_instance_valid(_drawer):
+		_drawer.close()
+		_drawer.queue_free()
 	if is_instance_valid(_scene_root) and EditorInterface.get_edited_scene_root() == _scene_root:
 		EditorInterface.close_scene()
 	await _frames(6)

@@ -21,9 +21,9 @@
     },
     {
       "id": "FLUJO-BHV-SCROLL-001",
-      "area": "Flow dock scrolling",
-      "precondition": "The Flow dock has less vertical space than the complete selected-item editor requires.",
-      "public_action": "Scroll the Flow dock with its native vertical ScrollContainer.",
+      "area": "Fluo Flow panel scrolling",
+      "precondition": "The Fluo Flow panel has less vertical space than the complete selected-item editor requires.",
+      "public_action": "Scroll the Fluo Flow panel with its native vertical ScrollContainer.",
       "expected_result": "The vertical range exceeds the visible page and the final configuration controls can be brought fully into view.",
       "invariants": [
         "One vertical scroll surface contains the complete configuration area.",
@@ -41,7 +41,7 @@
       "area": "Keyboard focus and stable-ID selection",
       "precondition": "A schema 3 collection row or one of its public editor controls is active.",
       "public_action": "Use public selection, Tab, Shift+Tab, Enter, Escape, F2, popup, Move, Undo, or Redo interactions.",
-      "expected_result": "The selected stable ID and current dock context remain aligned while focus follows only deliberate user navigation.",
+      "expected_result": "The selected stable ID and current Flow/Fluo context remain aligned while focus follows only deliberate user navigation.",
       "invariants": [
         "Selection identity never depends on the visible name or row index.",
         "Rebuilds do not retain callbacks to detached controls.",
@@ -70,7 +70,7 @@
     {
       "id": "FLUJO-BHV-DELETE-001",
       "area": "Delete, Undo, Redo, selection, and focus",
-      "precondition": "A deletable Method, Variable, Process, Timer, or supported block is selected through the real Inspector/plugin/dock path.",
+      "precondition": "A deletable Method, Variable, Process, Timer, or supported block is selected through the real Inspector/plugin/Fluo path.",
       "public_action": "Confirm Delete, then invoke scene-context Undo and Redo.",
       "expected_result": "Delete chooses the same-index successor or prior final row, Undo selects the restored item, Redo restores the replacement, and an empty collection clears the editor.",
       "invariants": [
@@ -83,7 +83,7 @@
       "test_paths": [
         "tests/editor/flow_delete_selection_lifecycle_test.gd"
       ],
-      "notes": "The focal verifies stable-ID row and dock recovery across Inspector-property replacement for Delete, Undo, and Redo, including focus ownership and teardown."
+      "notes": "The focal verifies stable-ID row and Flow/Fluo recovery across Inspector-property replacement for Delete, Undo, and Redo, including active-block Flusso closure, focus ownership and teardown."
     },
     {
       "id": "FLUJO-BHV-MIGRATION-001",
@@ -425,7 +425,7 @@
       "public_action": "Open Fluo, toggle its side switch, close Flusso, close Fluo, or click outside the drawer.",
       "expected_result": "One overlay drawer is reused, side placement changes immediately, first Escape closes Flusso when present, subsequent Escape/top X/exterior click closes Fluo, and valid prior focus can be restored.",
       "invariants": [
-        "The drawer does not permanently resize the legacy dock.",
+        "The production plugin does not mount or resize the legacy dock.",
         "Backdrop input is consumed rather than leaked to editor controls underneath.",
         "Touch-oriented close buttons keep their intended minimum target size."
       ],
@@ -435,6 +435,24 @@
         "tests/editor/fluo_drawer_test.gd",
         "tests/editor/fluo_drawer_integration_test.gd"
       ]
+    },
+    {
+      "id": "FLUJO-BHV-FLUO-LEGACY-SURFACE-001",
+      "area": "Fluo primary surface and legacy dock compatibility boundary",
+      "precondition": "The plugin loads in the Godot editor with the Inspector relay and Fluo composition available.",
+      "public_action": "Inspect the mounted editor composition and open Fluo through its menu, F4, Inspector, or Flow path.",
+      "expected_result": "The plugin mounts one Fluo overlay, keeps Flow and Flusso usable, and does not mount/register the legacy VPFlujoDock or Open Fluo (POC) surface.",
+      "invariants": [
+        "The legacy vp_flujo_dock.gd implementation remains available only for isolated compatibility coverage.",
+        "Removing the visible dock does not remove shared model, runtime, command, Inspector, F4, or Fluo behavior.",
+        "The Inspector remains the container entry point and does not gain a duplicate Blocks list."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/editor/fluo_drawer_integration_test.gd"
+      ],
+      "notes": "Guardería editor cleanup evidence: legacy production mounting/registration is absent while the Fluo-primary Add and configuration path remains available."
     },
     {
       "id": "FLUJO-BHV-FLUO-OFFSET-001",
@@ -627,6 +645,549 @@
         "docs/fluo_preview_01.md"
       ],
       "notes": "Manual evidence recorded 2026-10-27 from the Android Godot preview screenshot supplied by the maintainer."
+    },
+    {
+      "id": "FLUJO-BHV-STRUCTURED-DOCUMENT-001",
+      "area": "Reusable structured document model, validation, and runtime rendering",
+      "precondition": "A FlowStructuredDocument contains ordered FlowTextSegment and FlowChipSegment resources, including deliberate null positions or invalid authored literal metadata.",
+      "public_action": "Construct, duplicate, validate, render, save, and reload a structured document through the runtime/model contracts.",
+      "expected_result": "Text remains literal and exact; supported literal types render deterministically in segment order; invalid data remains unchanged and produces ordered FlowDiagnostic entries; ResourceSaver preserves concrete classes, IDs, order, values, and Variant.Type.",
+      "invariants": [
+        "Segment identity is generated by FlowId and never depends on array index, text, or label.",
+        "Validation is read-only, deterministic, does not normalize values, and preserves deliberate null positions.",
+        "Runtime/model code has no dependency on editor APIs, Control, Node state, FPrint, Fluo, or Flusso."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/model/flow_structured_document_test.tscn"
+      ],
+      "notes": "Kínder K1/K2 focal evidence. This entry covers reusable Flujo infrastructure and does not claim a visual chip, FPrint Guardería migration, parser, variables, expressions, or editor authoring."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-CORE-1A-001",
+      "area": "Reusable Flow chip schema, slot, and value-source core",
+      "precondition": "Runtime model resources define a chip field schema, semantic slot definitions, and typed value sources without an editor or UI dependency.",
+      "public_action": "Construct FIXED, FLEXIBLE, and HYBRID schemas; associate a chip with a semantic slot and literal value source; duplicate the model resources.",
+      "expected_result": "The model preserves explicit text policy, slot meaning, exact literal Variant.Type data, and independent FlowId identities across duplication.",
+      "invariants": [
+        "slot_id names semantic meaning and segment_id names a concrete chip instance.",
+        "ValueSource identity is independent from segment identity and is regenerated on independent duplication.",
+        "Literal values never use implicit conversion; NIL, unsupported variants, and non-finite floats remain invalid.",
+        "The runtime model contains no editor, Control, or persistence-scenario dependency."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/model/flow_chip_core_step_1a_test.tscn"
+      ],
+      "notes": "FPrint Kínder Step 1A focal model evidence. Complete schema validation, complex fixtures, UI, and new scenario persistence remain deferred."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-CORE-1B-001",
+      "area": "Reusable chip-field schema instances and validation",
+      "precondition": "A runtime FlowChipFieldSchema declares FIXED, FLEXIBLE, or HYBRID structure, optional text template parts, accepted types/sources, and runtime-safe defaults.",
+      "public_action": "Build an initial FlowStructuredDocument from the schema, validate it, duplicate it, and save/reload the schema/document resources.",
+      "expected_result": "Required fixed slots and minimum variadic content are generated with independent segment/source identities; flexible fields start at their minimum only; text policy is respected; deterministic read-only diagnostics report invalid schema or document data.",
+      "invariants": [
+        "slot_id identifies fixed semantic slots or a declared variadic zone, while segment_id identifies each concrete chip instance.",
+        "FIXED, FLEXIBLE, and HYBRID count, type, source-kind, optional-slot, variadic-zone, and reorder rules are declared by the schema rather than private block logic.",
+        "Validation never deletes, coerces, normalizes, or replaces invalid document data.",
+        "FlowLiteralValueSegment.value_type/value remain the sole persistent legacy literal truth; FlowLiteralValueSource remains an adapter boundary.",
+        "ResourceSaver and deep duplication preserve order, text, slot associations, literal data, and independent IDs without editor/runtime coupling."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/model/flow_chip_core_step_1b_test.tscn"
+      ],
+      "notes": "FPrint Kínder Step 1B implementation evidence. No inline editor, block execution, For/If/Process type, FPrint migration, or visual chip surface is included."
+    },
+    {
+      "id": "FLUJO-BHV-BLOCK-BUILDER-FPRINT-001",
+      "area": "FPrint Guardería external package dogfood",
+      "precondition": "The approved mercury.fprint package is available under res://flow_packages and a schema 3 FlowProcess can be authored through the public catalog path.",
+      "public_action": "Discover, add, configure, persist, duplicate, reload, and execute FPrint through the public FlowBlock/FlowOutputBlock contract.",
+      "expected_result": "FPrint is discovered as mercury.fprint:fprint, added as an independent FlowOutputBlock, renders Prefix/Message/Suffix generically, composes prefix + message + suffix, persists and reloads its values, and executes through Process.",
+      "invariants": [
+        "The manifest is v1 with exactly one descriptor and the presentation sidecar is data-only.",
+        "FPrint receives valid independent FlowIds and duplication preserves values without sharing instances.",
+        "Runtime uses get_output_message() and has no Builder, editor, package-specific, or container-specific dependency.",
+        "Process is the only host integration claimed by this delivery; Timer, State Machine, and future containers are not FPrint tests."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/model/flow_fprint_package_test.tscn",
+        "tests/editor/flow_fprint_dogfood_editor_test.gd",
+        "tests/runtime/flow_fprint_process_runtime_test.tscn"
+      ],
+      "notes": "Fresh 2026-10-29 model, editor, and Process runtime runs pass after the K5 focal expectation correction. The separate manual Guardería review remains approved; no Timer/State Machine/future-container claim is made."
+    },
+    {
+      "id": "FLUJO-BHV-BLOCK-BUILDER-FPRINT-MANUAL-001",
+      "area": "FPrint Guardería manual Godot acceptance",
+      "precondition": "The approved mercury.fprint package is opened through the normal Inspector → Fluo → Flow → Flusso path in Godot 4.7.2 stable Flathub.",
+      "public_action": "Add FPrint to Process, edit Prefix/Message/Suffix, use live editing and Revertir, and execute the Process output.",
+      "expected_result": "FPrint is visible and editable through the generic host path, Revertir works, independent instances remain independent, and Process emits the configured literal prefix + message + suffix output.",
+      "invariants": [
+        "The manual pass covers the bounded Guardería slice only; Timer, State Machine and future containers are not claimed.",
+        "Fluo remains the primary F4/menu/Inspector surface and active-block deletion closes Flusso while retaining Flow.",
+        "This approval does not declare flujo-block-builder v1 or FPrint v1 complete, and does not claim the separate Kínder K3 runtime descriptor delivery."
+      ],
+      "coverage": "manual",
+      "baseline_status": "manual_approved",
+      "test_paths": [
+        "docs/current_iteration.md",
+        "docs/project_memory.md"
+      ],
+      "notes": "FPRINT GUARDERÍA MANUAL PASS. Closure: FPRINT GUARDERÍA CLOSED — EDITOR CLEANUP READY FOR MANUAL REVIEW. Observed FPrint output: hola mundo!!!\\nyo soy FPrint!!!. This manual approval does not claim the separate Kínder K3 runtime descriptor delivery."
+    },
+    {
+      "id": "FLUJO-BHV-STRUCTURED-CHIP-DESCRIPTOR-001",
+      "area": "Generic Typed Chip System descriptor boundary",
+      "precondition": "A FlowChipSegment subtype participates in the runtime semantic-chip contract, including valid or invalid FlowLiteralValueSegment data.",
+      "public_action": "Request a chip type descriptor, deterministic label, and structured tooltip data through FlowChipSegment.",
+      "expected_result": "A generic consumer receives stable type metadata, a value label, and ordered neutral tooltip fields without knowing the concrete segment subtype; invalid literal data remains unchanged and is safe to query.",
+      "invariants": [
+        "Descriptor identity is a stable type_id independent of display name, persistent segment ID, or array index.",
+        "Descriptor and tooltip objects are runtime-safe ephemeral projections and contain no editor/UI/FPrint dependencies or concrete colors.",
+        "LiteralValue supports bool, int, float, String, and StringName with deterministic label and Variant text.",
+        "Missing subtype implementations return safe null/empty projections instead of crashing or repairing authored data.",
+        "No visual chip, editor widget, selection, editing event, or FPrint migration is introduced by K3."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/model/flow_chip_descriptor_test.tscn"
+      ],
+      "notes": "Kínder K3 focal evidence. K1/K2 structured-document behavior remains covered separately by FLUJO-BHV-STRUCTURED-DOCUMENT-001."
+    },
+    {
+      "id": "FLUJO-BHV-STRUCTURED-DOCUMENT-EDITOR-001",
+      "area": "Generic structured document editor and typed chip operations",
+      "precondition": "An editor-owned FlowStructuredDocument contains ordered text and FlowChipSegment resources, and an EditorUndoRedoManager is available.",
+      "public_action": "Render the document, insert + Value, select/edit/delete a chip, edit literal text, and invoke Undo/Redo.",
+      "expected_result": "The surface preserves segment order and literal text, presents chips as real FlowChipControl units, edits through the generic descriptor/segment contract, and restores exact IDs and values through Undo/Redo.",
+      "invariants": [
+        "Selection and structural operations use segment_id rather than an Array index.",
+        "FlowChipControl and FlowStructuredDocumentEditor remain editor-only and do not know FPrint.",
+        "Type changes use explicit descriptor defaults and never silently convert authored values.",
+        "@, # and $ remain literal text and null segment positions do not crash the editor."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/editor/flow_structured_document_editor_test.gd"
+      ],
+      "notes": "FPrint Kínder K4 focal editor evidence. The SceneTree test is invoked directly with Godot's editor --script entrypoint; the neutral harness remains a separate visual/manual surface."
+    },
+    {
+      "id": "FLUJO-BHV-STRUCTURED-DOCUMENT-EDITOR-MANUAL-001",
+      "area": "Generic structured document editor manual Godot acceptance",
+      "precondition": "The K4 manual harness is opened in Godot 4.7.2 through the editor tool menu or harness scene.",
+      "public_action": "Inspect text, the solid literal chip, selection, tooltip, + Value, typed editing, deletion, Undo/Redo, multiline text, escaped @, and literal #/$.",
+      "expected_result": "The visual editor is legible and interactive as a real text-plus-Control surface, with no FPrint migration or parser behavior.",
+      "invariants": [
+        "The manual checklist remains separate from automated headless evidence.",
+        "The editor surface owns no runtime snapshot or second Revertir mechanism.",
+        "The protected demo/main.tscn file is not modified by the harness."
+      ],
+      "coverage": "manual",
+      "baseline_status": "manual_pending",
+      "test_paths": [
+        "docs/fprint_kinder_k4_contract.md",
+        "tests/editor/flow_structured_document_editor_harness.tscn"
+      ],
+      "notes": "K4 is not COMPLETE until a maintainer records a visual/manual PASS."
+    },
+    {
+      "id": "FLUJO-BHV-BLOCK-BUILDER-FPRINT-KINDER-001",
+      "area": "FPrint Kínder K5 structured-document package integration",
+      "precondition": "The mercury.fprint package is available through the public catalog and a Process contains an FPrint with its optional structured document property.",
+      "public_action": "Inspect the generic Flusso field, enable or edit a structured document, use Undo/Redo and Revertir, save/reload the graph or scene, and execute the Process.",
+      "expected_result": "A null document preserves prefix + message + suffix; a present document uses the reusable structured-document renderer/editor and replaces Message, while persistence and Process runtime retain the authored document.",
+      "invariants": [
+        "FPrint retains prefix, message, and suffix and does not auto-convert legacy message content.",
+        "The descriptor, renderer, FlowStructuredDocumentEditor, FlowChipControl, and Typed Chip System path is generic and has no FPrint-specific editor or chip.",
+        "Structured edits use the owning PVController undo history; Revertir restores an independent opening snapshot with exact segment IDs and order.",
+        "Unicode, multiline text with escaped @ and literal #/$, typed values, null positions, ResourceSaver, PackedScene, and Process output remain deterministic.",
+        "This slice does not declare functional flujo-block-builder v1, FPrint v1, Timer, State Machine, parser, Variables, Expressions, or a graph/schema change."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/model/flow_fprint_package_test.tscn",
+        "tests/editor/flow_fprint_dogfood_editor_test.gd",
+        "tests/runtime/flow_fprint_process_runtime_test.tscn"
+      ],
+      "notes": "Fresh 2026-10-29 model, focal editor, Process runtime, structured-document model/editor, chip descriptor, catalog-validator, model-smoke, and editor-load evidence pass. K5 remains separate from K4 and the manual integrated Flusso checklist; no manual approval or D5 claim is inferred."
+    },
+    {
+      "id": "FLUJO-BHV-BLOCK-BUILDER-FPRINT-KINDER-MANUAL-001",
+      "area": "FPrint Kínder K5 manual Flusso and structured editor acceptance",
+      "precondition": "A maintainer opens the real Inspector → Fluo → Flow → Flusso path with a mercury.fprint Process in Godot 4.7.2.",
+      "public_action": "Inspect the empty document enable state, edit the structured document and typed chip, use keyboard focus, Undo/Redo and Revertir, save/reopen, and compare two FPrint instances.",
+      "expected_result": "The integrated host surface is legible and interactive, preserves Unicode/multiline text with escaped @ and literal #/$, shows the public chip/editor controls, and keeps legacy and structured FPrint instances independent.",
+      "invariants": [
+        "Manual evidence is separate from headless model/editor/runtime tests.",
+        "No FPrint-specific visual widget or parser is introduced.",
+        "The protected demo/main.tscn remains unchanged and D5 functional Builder v1 remains incomplete."
+      ],
+      "coverage": "manual",
+      "baseline_status": "manual_pending",
+      "test_paths": [
+        "docs/fprint_kinder_k5_contract.md",
+        "tests/editor/flow_fprint_dogfood_editor_test.gd"
+      ],
+      "notes": "Manual review remains pending until the maintainer observes the integrated Flusso checklist; K4 harness approval is not silently reused as K5 approval."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-FIELD-EDITOR-2A-001",
+      "area": "Generic schema-backed inline chip field editor",
+      "precondition": "An editor-owned FlowChipFieldEditor receives a FlowChipFieldSchema, a FlowStructuredDocument, and an EditorUndoRedoManager.",
+      "public_action": "Place the real caret in text, insert a value source, select/edit/delete/move a chip, navigate between text and chips, and use Undo/Redo across FIXED, FLEXIBLE, and HYBRID fixtures.",
+      "expected_result": "Text and semantic chips remain in one ordered inline flow; insertion occurs at the exact character caret; selection uses segment_id; schema limits and slot policies are enforced; validation is visible and read-only; and undo/redo preserves authored identities.",
+      "invariants": [
+        "FlowChipFieldEditor and FlowChipControl are generic editor-only components with no FPrint, For, If, or Process knowledge.",
+        "Whitespace, multiline text, Unicode, @, #, and $ remain literal content.",
+        "FIXED, FLEXIBLE, and HYBRID behavior comes from FlowChipFieldSchema and FlowChipFieldValidator rather than private block logic.",
+        "No implicit literal conversion or half-chip deletion is possible, and max-count rejection leaves the model unchanged.",
+        "The future source insertion boundary accepts insert_value_source_at_caret without coupling to the SceneTree."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/editor/flow_chip_field_editor_step_2a_test.gd"
+      ],
+      "notes": "Flow Chips Step 2A automatic evidence. The test is invoked directly with Godot 4.7.2 --headless --editor --script; visual approval remains a separate human gate."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-FIELD-EDITOR-2A-MANUAL-001",
+      "area": "Generic inline chip field manual Godot acceptance",
+      "precondition": "A maintainer opens Project → Tools → Open Structured Document Harness in Godot 4.7.2.",
+      "public_action": "Review the FIXED, FLEXIBLE, and HYBRID tabs: type text, place the caret, insert in the middle, continue typing, select/edit/delete tokens, inspect tooltip, use keyboard navigation, Undo/Redo, multiline text, and Unicode.",
+      "expected_result": "The field is visibly one integrated text-plus-chip flow with a real caret and clear FIXED/FLEXIBLE/HYBRID feedback; no auxiliary token list or block-specific editor is required.",
+      "invariants": [
+        "Manual evidence is separate from the automatic Step 2A test.",
+        "The harness is neutral and does not modify demo/main.tscn or exercise FPrint behavior.",
+        "The recorded manual checkpoint is separate from the automatic Step 2A focal."
+      ],
+      "coverage": "manual",
+      "baseline_status": "manual_approved",
+      "test_paths": [
+        "docs/flow_chip_field_step_2a_contract.md",
+        "tests/editor/flow_structured_document_editor_harness.tscn"
+      ],
+      "notes": "Maintainer/user manual checkpoint confirmed FIXED, FLEXIBLE, HYBRID, chip selection, and chip editing end to end; Step 2B continues the separate text-input/insertion review."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-FIELD-EDITOR-2B-001",
+      "area": "Continuous inline text input and complete literal insertion",
+      "precondition": "An editor-owned FlowChipFieldEditor receives a FlowChipFieldSchema, a FlowStructuredDocument, and an EditorUndoRedoManager.",
+      "public_action": "Type or paste continuous text, edit String/StringName chips, open + Value, choose a compatible literal type, insert it at the caret, and use Undo/Redo across FIXED, FLEXIBLE, and HYBRID fixtures.",
+      "expected_result": "The active native text control remains focused with its caret and selection while model text changes; Unicode/IME/paste content remains exact; + Value exposes the compatible Bool, Int, Float, String, and StringName subset with safe defaults and inserts at the caret, while distinguishing a reached maximum, an invalid insertion position, and an empty schema-compatible literal intersection.",
+      "invariants": [
+        "text_changed does not destructively rebuild the active TextEdit or reconstruct Unicode text from keycodes.",
+        "StringName edits retain TYPE_STRING_NAME and String edits accept a complete Unicode phrase without per-character refocus.",
+        "FIXED generated chips preserve their schema types/defaults; FLEXIBLE and HYBRID filter insertion by accepted field/slot types and insertion zone.",
+        "+ Value feedback is derived from FlowChipFieldSchema and distinguishes maximum count, invalid caret/zone, and no compatible literal type.",
+        "Caret continuation, structural insertion, value/type changes, and Undo/Redo preserve stable segment IDs and authored text.",
+        "No VariableRef, Expression, NodePropertyRef, trigger parser, drag/drop, or package-specific editor is introduced."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/editor/flow_chip_field_editor_step_2b_test.gd"
+      ],
+      "notes": "Step 2B.1 focal evidence covers maximum-count, invalid-position, incompatible-type/source-kind feedback, selector filtering, unlimited bounds, and the unchanged HYBRID Bool/Int intersection. The manual harness remains separate human evidence."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-FIELD-EDITOR-2B-MANUAL-001",
+      "area": "Continuous inline text and literal insertion manual Godot acceptance",
+      "precondition": "A maintainer opens Project → Tools → Open Structured Document Harness in Godot 4.7.2.",
+      "public_action": "Review FIXED, FLEXIBLE, and HYBRID by typing the requested Spanish/Unicode phrases continuously, pasting text, inserting each public literal type at different caret positions, editing String/StringName, and using Undo/Redo.",
+      "expected_result": "The real caret and focus remain usable throughout continuous input; all compatible literal types are discoverable and editable; fixed chips remain intact; flexible/hybrid insertion respects their schema zones; and + Value explains whether insertion is blocked by maximum count, position, or schema compatibility.",
+      "invariants": [
+        "Manual evidence is separate from the Step 2B automatic focal.",
+        "The neutral harness does not modify demo/main.tscn or exercise deferred trigger/value-source behavior.",
+        "Human review is required before Step 2B is declared ready."
+      ],
+      "coverage": "manual",
+      "baseline_status": "manual_approved",
+      "test_paths": [
+        "docs/flow_chip_field_step_2b_contract.md",
+        "tests/editor/flow_structured_document_editor_harness.tscn"
+      ],
+      "notes": "Prior maintainer/user manual checkpoint and Godot Expert/UI audit are carried forward; Step 2B.1 adds the schema-cause-specific feedback without changing the accepted HYBRID Bool/Int intersection."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-VARIABLE-REF-2C-A-001",
+      "area": "Persistent graph-owned VariableRef chip source",
+      "precondition": "A FlowStructuredDocument contains a VariableRef segment and an optional active FlowGraph contains the referenced FlowVariableDefinition.",
+      "public_action": "Construct, validate, duplicate, save, reload, rename, or resolve a VariableRef source by its stable variable ID.",
+      "expected_result": "The source preserves source_id, variable_id, and declared type; the segment preserves concrete type, slot identity, and stable identity; graph-aware validation reports missing or mismatched references without repair.",
+      "invariants": [
+        "FlowGraph.variables is the sole variable definition source; display names are not binding identity.",
+        "Document duplication creates new segment/source IDs while retaining the external graph variable ID.",
+        "ResourceSaver reload preserves VariableRef concrete types, IDs, declared type, and slot data.",
+        "Validation is deterministic and read-only, including missing-variable diagnostics."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/model/flow_variable_ref_step_2c_a_test.tscn"
+      ],
+      "notes": "Flujo Chips Step 2C-A model evidence; runtime value resolution remains deferred."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-FIELD-EDITOR-2C-A-001",
+      "area": "Generic @ trigger and VariableRef inline editor",
+      "precondition": "An editor-owned FlowChipFieldEditor has a schema, structured document, EditorUndoRedoManager, and an active graph-owned variable collection.",
+      "public_action": "Type @, navigate/search/select a compatible variable, cancel the selector, select or edit a Variable Tok by click/double-click/Enter, use active escapes, rename a graph variable, repair a missing reference, and invoke Undo/Redo across FIXED, FLEXIBLE, and HYBRID fields.",
+      "expected_result": "The reusable selector inserts VariableRef at the caret or replaces the adjacent FIXED chip while preserving required identity; Search is initially focused, Arrow Up/Down and Enter/Escape are usable without a mouse, Variable Tok editing changes only its graph binding through the same filtered selector, and schema filtering, focus continuation, escapes, diagnostics, Unicode text, and history remain coherent.",
+      "invariants": [
+        "Variable selection carries stable IDs and never stores display names or indexes.",
+        "FLEXIBLE and HYBRID insert only in their declared variadic zone; FIXED replacement preserves segment_id and slot_id.",
+        "Only \\@ → @ and \\\\ → \\ are active escapes; $ remains literal and inactive; # belongs to Step 2C-B.",
+        "The existing FlowChipControl is the only visual chip surface and missing references are visibly invalid.",
+        "Pending trigger cancellation creates no chip or history operation.",
+        "Variable Tok replacement preserves segment_id, slot_id, location, and source identity while changing variable_id and declared type.",
+        "Variable Tok cancellation creates no history operation; missing references are repaired only by explicit user selection."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/editor/flow_chip_field_editor_step_2c_a_test.gd"
+      ],
+      "notes": "Step 2C-A focal evidence is invoked with Godot 4.7.2 --headless --editor --script; manual selector/focus review remains pending."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-FIELD-EDITOR-2C-A-MANUAL-001",
+      "area": "@ VariableRef inline editor manual Godot acceptance",
+      "precondition": "A maintainer opens Project → Tools → Open Structured Document Harness in Godot 4.7.2.",
+      "public_action": "Review the graph-variable list, @ search/selection/cancel, FIXED replacement, FLEXIBLE/HYBRID insertion, caret continuation, active escapes, rename, missing-reference state, keyboard/mouse/touch activation, save/reopen, and Undo/Redo.",
+      "expected_result": "The selector and inline field are visibly integrated, schema-compatible, keyboard-operable, and readable; VariableRef labels follow graph renames while references remain stable.",
+      "invariants": [
+        "Manual evidence is separate from the automatic Step 2C-A focal tests.",
+        "The neutral harness does not modify demo/main.tscn or exercise deferred #/$/Expression/NodePropertyRef behavior.",
+        "Human review is required before Step 2C-A is declared complete."
+      ],
+      "coverage": "manual",
+      "baseline_status": "manual_pending",
+      "test_paths": [
+        "docs/flow_chip_field_step_2c_a_contract.md",
+        "tests/editor/flow_structured_document_editor_harness.tscn"
+      ],
+      "notes": "Final delivery status is READY FOR MANUAL REVIEW; $flujo-prove remains pending."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-FIELD-EDITOR-2C-A1-001",
+      "area": "Variable Tok policy and semantic caret restoration",
+      "precondition": "An editor-owned FlowChipFieldEditor has a schema, structured document, EditorUndoRedoManager, and an active graph-owned variable collection.",
+      "public_action": "Inspect required/editable/delete/type/source policies, edit a Variable Tok by click/double-click/Enter, cancel insertion or editing, and use Undo/Redo.",
+      "expected_result": "Required presence, editability, deletion, type lock, and source-kind lock remain independent; Variable Tok replacement preserves stable identities; cancellation restores semantic selection/caret/focus without history; and $ remains literal while # belongs to Step 2C-B.",
+      "invariants": [
+        "A required Tok may remain editable while undeletable.",
+        "An optional immutable Tok may retain its explicit allow_delete policy without becoming editable.",
+        "Type and source-kind locks constrain their own axes and do not silently make a permitted binding or value immutable.",
+        "Variable Tok replacement preserves segment_id, slot_id, and source_id and records one owning-document action.",
+        "Pending @ cancellation restores the text segment and local caret by semantic ID without an undo action.",
+        "Only \\@ and \\\\ are active escapes; $ remains inactive literal text while # belongs to Step 2C-B."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/editor/flow_chip_field_editor_step_2c_a_1_test.gd"
+      ],
+      "notes": "Step 2C-A.1 focal and proportionate Godot 4.7.2 model/editor/runtime regressions pass. Manual review remains pending for the neutral harness presentation and focus checklist."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-FIELD-EDITOR-2C-A2-001",
+      "area": "Unified FlowChipFieldEditor document history shortcuts",
+      "precondition": "An editor-owned FlowChipFieldEditor has a configured document history, a focused native text or chip/value control, and the Godot editor layout has finished initializing.",
+      "public_action": "Invoke Ctrl+Z, Ctrl+Shift+Z, or Ctrl+Y repeatedly while editing Literal Tok, Variable Tok, and native text content, including mixed chronological actions.",
+      "expected_result": "Each shortcut performs exactly one operation in the owning Akis history; text and Tok edits share one chronological Undo/Redo path; native controls keep their editing behavior; redo remains available after undo until a new document operation; and selection/caret/focus remain coherent.",
+      "invariants": [
+        "The owning document history is the only public composite-editor history.",
+        "A child native control never executes a second history operation for the same shortcut.",
+        "Ctrl+Shift+Z and Ctrl+Y are equivalent redo requests and Ctrl+Z is an undo request.",
+        "Mixed text and Tok operations undo and redo in authored chronological order.",
+        "Startup editor-layout work is excluded from the document history focal action window.",
+        "# and $ remain literal and no deferred trigger family is introduced."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/editor/flow_chip_field_editor_step_2c_a_2_test.gd",
+        "tests/editor/flow_chip_field_editor_history_shortcut_cycle_test.gd"
+      ],
+      "notes": "The passing focal waits for editor layout initialization before committing its first action. String LineEdit confirmation is covered through text_changed, text_submitted, and focus_exited; per-segment value sessions use MERGE_DISABLE so a String action cannot merge with a prior Int/value action, while continuous typing remains one logical transition. Godot 4.7.2 evidence covers Literal String/StringName, Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y, Tok/text focus, mixed text/String chronology, and mixed text/VariableRef chronology."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-FIELD-EDITOR-2C-A2-MANUAL-001",
+      "area": "Unified inline editor history manual Godot acceptance",
+      "precondition": "A maintainer opens Project → Tools → Open Structured Document Harness in Godot 4.7.2 after the editor is fully loaded.",
+      "public_action": "Review native TextEdit/LineEdit input, Literal Tok and Variable Tok focus, mixed text/Tok edits, repeated Undo/Redo, selector cancellation, and caret/focus restoration.",
+      "expected_result": "The visible editor uses one predictable owning-document history without duplicate native actions; each shortcut advances exactly one operation; cancellation is history-free; and the native caret/focus returns to the expected semantic target.",
+      "invariants": [
+        "Manual evidence is separate from automatic headless focal evidence.",
+        "The neutral harness remains generic and does not modify demo/main.tscn.",
+        "# and $ remain literal during this review."
+      ],
+      "coverage": "manual",
+      "baseline_status": "manual_pending",
+      "test_paths": [
+        "docs/flow_chip_field_step_2c_a_2_contract.md",
+        "tests/editor/flow_structured_document_editor_harness.tscn"
+      ],
+      "notes": "Ready for maintainer manual review after the corrected automatic focal and proportionate regressions pass."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-EXPRESSION-2C-B-001",
+      "area": "Persistent structured Expression Tok source",
+      "precondition": "A FlowStructuredDocument contains an Expression segment whose source uses the Step 2C-B operator catalog and an optional active FlowGraph contains referenced variables.",
+      "public_action": "Construct, validate, duplicate, save, reload, preview, and graph-validate an Expression source with Literal and VariableRef operands.",
+      "expected_result": "The source preserves only its stable source ID, operator ID, and ordered operands; exact signatures derive the result type; invalid structure and missing/mismatched VariableRef bindings are diagnosed without repair; and persistence/duplication preserve the concrete segment and slot data with fresh copied IDs.",
+      "invariants": [
+        "The catalog exposes exactly add, greater_than, equal, and and with no implicit numeric promotion.",
+        "Expression operands are limited to LiteralValueSource and VariableRefValueSource; nested Expressions are rejected.",
+        "Preview, result type, tooltip fields, and validity are derived rather than independently persisted.",
+        "Graph variable display names are presentation only; VariableRef identity remains the stable variable ID.",
+        "Runtime evaluation is deferred and no graph schema or migration is introduced."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "docs/flow_chip_field_step_2c_b_contract.md",
+        "tests/model/flow_expression_step_2c_b_test.tscn"
+      ],
+      "notes": "Step 2C-B model focal passed on Godot 4.7.2; editor integration remains a separate behavior entry."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-FIELD-EDITOR-2C-B-001",
+      "area": "Legacy Expression Tok inline editor compatibility",
+      "precondition": "An editor-owned FlowExpressionEditor is opened directly for a legacy Expression source with a schema, structured document, EditorUndoRedoManager, and optional graph-owned variables.",
+      "public_action": "Build or edit an Expression in the legacy structured popup and use the owning document Undo/Redo history.",
+      "expected_result": "The legacy Expression editor remains usable as a direct compatibility surface; its detached draft, typed operands, preview, cancellation, existing Tok editing, and one-action confirm history remain intact. The # trigger is reserved for Condition Tok.",
+      "invariants": [
+        "The popup edits a detached draft and does not write document history until Confirm.",
+        "Schema and slot source-kind/result-type acceptance remains authoritative for FIXED, FLEXIBLE, and HYBRID fields.",
+        "Legacy Expression model and direct editor compatibility remain intact.",
+        "Only the existing generic FlowChipControl renders the Expression Tok.",
+        "NodePropertyRef, nested expressions, textual parsing, drag/drop, runtime resolution, FPrint migration, and demo/main.tscn remain out of scope."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_covered",
+      "test_paths": [
+        "docs/flow_chip_field_step_2c_b_contract.md",
+        "tests/editor/flow_chip_field_editor_step_2c_b_test.gd"
+      ],
+      "notes": "The direct legacy Expression focal remains separate from the Condition # trigger and C.2 editor focal."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-FIELD-EDITOR-2C-B1-001",
+      "area": "Expression operand usability and review persistence",
+      "precondition": "The Expression popup has a Step 2C-B draft with Literal/VariableRef operands and the neutral harness is open with its fixture graph.",
+      "public_action": "Change source kind, choose a compatible variable, edit typed Literal values, confirm/cancel, save, reload, and use document Undo/Redo.",
+      "expected_result": "Operand rows update immediately; int/float/bool/String controls edit the draft values; missing VariableRefs disable Confirm; the four approved operators construct Count + 1, Health > 0, Enabled AND Visible, and Message + \"!\"; existing Toks edit their content; and explicit harness save/reload restores the same semantic data and preview.",
+      "invariants": [
+        "The Expression editor remains a detached draft until Confirm creates one document action.",
+        "Literal values are preserved when a non-type control changes and reset only for an incompatible type.",
+        "VariableRef type is restricted by the selected operator and derived from the selected graph variable.",
+        "The variadic fixture slot_id is assigned by insertion and the validator remains strict.",
+        "$, NodePropertyRef, nesting, parsing, runtime evaluation, StringName Expression operands, and demo/main.tscn remain out of scope."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_covered",
+      "test_paths": [
+        "docs/flow_chip_field_step_2c_b_1_contract.md",
+        "tests/model/flow_expression_step_2c_b_test.tscn",
+        "tests/editor/flow_chip_field_editor_step_2c_b_test.gd",
+        "tests/editor/flow_expression_editor_usability_focal_test.gd"
+      ],
+      "notes": "The independent usability focal passes float editing, confirm/reopen, Count→Health binding, source identity, document Undo/Redo, and ResourceSaver/ResourceLoader. The broader historical B.1 script remains not_covered until its stale expectations are rerun under the two-failure execution policy."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-FIELD-EDITOR-2C-B-MANUAL-001",
+      "area": "Expression Tok manual Godot acceptance",
+      "precondition": "A maintainer opens Project → Tools → Open Structured Document Harness in Godot 4.7.2 after the editor is fully loaded.",
+      "public_action": "Review the EXPRESSION compatibility fixture: direct popup focus and keyboard navigation, operator/type filtering, cancellation, existing Tok editing, save/reopen, and Undo/Redo.",
+      "expected_result": "The Expression popup and inline Tok are visibly integrated, schema-compatible, keyboard-operable, and readable; cancellation is history-free; and confirmed insertion/editing uses one predictable document history action.",
+      "invariants": [
+        "Manual evidence is separate from automatic model/editor focal evidence.",
+        "The neutral harness does not modify demo/main.tscn or exercise the Condition # workflow; C.2 owns that manual review.",
+        "Human review is required; this entry cannot declare Step 2C-B complete."
+      ],
+      "coverage": "manual",
+      "baseline_status": "manual_pending",
+      "test_paths": [
+        "docs/flow_chip_field_step_2c_b_contract.md",
+        "tests/editor/flow_structured_document_editor_harness.tscn"
+      ],
+      "notes": "Step 2C-B delivery is explicitly limited to READY FOR MANUAL REVIEW after the automatic focal is rerun successfully."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-CONDITION-2C-C1-001",
+      "area": "Persistent structured Condition Tok semantic model",
+      "precondition": "A FlowConditionValueSource contains one or more ordered comparisons with LiteralValueSource or VariableRefValueSource operands.",
+      "public_action": "Construct, validate, resolve, preview, duplicate, save, reload, and graph-validate a Condition source.",
+      "expected_result": "Condition produces TYPE_BOOL structurally; exact comparison signatures, bool/int equality semantics, AND/OR connectors, graph-owned VariableRefs, stable comparison IDs, derived preview, deep duplication, and ResourceSaver/Loader persistence behave deterministically.",
+      "invariants": [
+        "The Condition catalog exposes exactly six comparisons and the and/or connectors; NOT, groups, nesting, arithmetic, and string concatenation remain absent.",
+        "int/float are not implicitly promoted; String and bool support only equality/desigualdad; bool/int equality maps bool to numeric 1/0 and accepts every integer without an error.",
+        "connectors are positional and have comparisons.size() - 1 entries; AND precedence is higher than OR.",
+        "FlowGraph.variables is the sole authoritative VariableRef name/type source; persisted metadata mismatches are diagnosed without repair.",
+        "Preview and produced type are derived; invalid conditions still declare bool and fail future resolution.",
+        "Expression remains legacy/transitional and demo/main.tscn is protected; no C.2 UI is introduced."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "docs/flow_condition_tok_step_2c_c_1_contract.md",
+        "tests/model/flow_condition_step_2c_c_1_test.tscn"
+      ],
+      "notes": "C.1 semantic model only. The comparison-row editor, AND/OR controls, and + Add condition belong to C.2."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-CONDITION-2C-C2-001",
+      "area": "Condition Tok visual editor and # trigger",
+      "precondition": "An editor-owned FlowChipFieldEditor has a Condition-compatible schema, a structured document, EditorUndoRedoManager, and an active FlowGraph with typed variables.",
+      "public_action": "Type #, edit comparison rows, choose graph variables, edit literals, add/remove comparisons, confirm/cancel, and use document Undo/Redo.",
+      "expected_result": "# opens only Condition Editor; a new comparison starts with no selected sources or operator; Variable derives type from FlowGraph.variables without an editable type selector; Literal requires an explicit int/float/String/bool type before its value editor; connectors require an explicit AND/OR choice; exact operator validation and bool/int equality semantics are immediate; rows preserve visual order; preview updates without invented defaults; Confirm creates one complete Condition history action; Cancel is history-free; and escaped \\# remains literal text.",
+      "invariants": [
+        "The first comparison always exists and new rows have no semantic defaults; additional rows own one empty positional connector until explicitly selected and can be removed without leaving a connector orphan.",
+        "Condition produces bool and is accepted only by compatible FIXED, FLEXIBLE, or HYBRID schema slots with the correct slot_id and slot_kind.",
+        "Variable replacement changes only variable_id metadata while preserving the VariableRef source_id; FlowGraph.variables remains authoritative for name/type and missing references show <missing>.",
+        "Expression remains directly usable as a legacy compatibility editor, but # never opens it; ~ and $ remain inactive.",
+        "No NOT, groups, nesting, Operation Tok, or arithmetic controls are introduced."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "docs/flow_condition_tok_step_2c_c_2_contract.md",
+        "tests/editor/flow_condition_editor_step_2c_c_2_test.gd"
+      ],
+      "notes": "Step 2C-C.2 focal covers popup controls, # routing, variable/literal UX, validation, add/delete, preview, confirm/cancel, Undo/Redo, persistence, escaped #, and schema policy modes."
+    },
+    {
+      "id": "FLUJO-BHV-CHIP-CONDITION-2C-C2-MANUAL-001",
+      "area": "Condition Tok manual Godot acceptance",
+      "precondition": "A maintainer opens Project → Tools → Open Structured Document Harness in Godot 4.7.2 after the editor is fully loaded.",
+      "public_action": "Review the CONDITION fixture with mouse, touch-sized controls, keyboard focus, # insertion, variable selection, literal editing, add/remove rows, preview, save/reopen, Confirm, Cancel, Undo/Redo, and the legacy EXPRESSION tab.",
+      "expected_result": "The CONDITION popup and Tok are legible and keyboard-operable; variable types are informational only; previews show Health > 0, Lives == 1, Enabled == true, Message != \"hola\", and AND/OR sequences; and the legacy Expression surface remains available without being reached from #.",
+      "invariants": [
+        "Manual evidence is separate from automatic model/editor evidence.",
+        "demo/main.tscn remains untouched and Operation Tok is not started.",
+        "Human review is required before declaring the step complete."
+      ],
+      "coverage": "manual",
+      "baseline_status": "manual_pending",
+      "test_paths": [
+        "docs/flow_condition_tok_step_2c_c_2_contract.md",
+        "tests/editor/flow_structured_document_editor_harness.tscn"
+      ],
+      "notes": "Automatic C.2 evidence is ready; visual/manual Godot review remains pending."
     }
   ]
 }

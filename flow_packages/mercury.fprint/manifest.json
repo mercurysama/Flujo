@@ -1,0 +1,11 @@
+{
+  "manifest_version": 1,
+  "package_id": "mercury.fprint",
+  "blocks": [
+    {
+      "type_id": "fprint",
+      "script": "block.gd",
+      "display_name": "FPrint"
+    }
+  ]
+}

@@ -41,6 +41,50 @@ static func is_valid_value_type(value: int) -> bool:
 			or value == ValueType.COLOR
 
 
+## The canonical variable taxonomy maps directly to Godot Variant types.
+## Value-source consumers use this mapping instead of defining a parallel enum.
+static func to_variant_type(value: int) -> Variant.Type:
+	match value:
+		ValueType.BOOL:
+			return Variant.Type.TYPE_BOOL
+		ValueType.INT:
+			return Variant.Type.TYPE_INT
+		ValueType.FLOAT:
+			return Variant.Type.TYPE_FLOAT
+		ValueType.STRING:
+			return Variant.Type.TYPE_STRING
+		ValueType.VECTOR2:
+			return Variant.Type.TYPE_VECTOR2
+		ValueType.VECTOR3:
+			return Variant.Type.TYPE_VECTOR3
+		ValueType.COLOR:
+			return Variant.Type.TYPE_COLOR
+	return Variant.Type.TYPE_NIL
+
+
+static func value_type_display_name(value: int) -> String:
+	match value:
+		ValueType.BOOL:
+			return "bool"
+		ValueType.INT:
+			return "int"
+		ValueType.FLOAT:
+			return "float"
+		ValueType.STRING:
+			return "String"
+		ValueType.VECTOR2:
+			return "Vector2"
+		ValueType.VECTOR3:
+			return "Vector3"
+		ValueType.COLOR:
+			return "Color"
+	return "unknown(%d)" % value
+
+
+func get_declared_variant_type() -> Variant.Type:
+	return to_variant_type(value_type)
+
+
 @export_storage var _internal_id: String = FlowId.create()
 
 @export var display_name: String = "Variable"

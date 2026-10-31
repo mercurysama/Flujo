@@ -74,6 +74,7 @@ var _fluo_mode: bool = false
 var _flusso_snapshots: Dictionary = {}
 var _flusso_owned_properties: Dictionary = {}
 var _flow_entry_focus_pending: bool = false
+var _preserve_deleted_block_selection_state: bool = false
 var _deleted_resource_id: String = ""
 var _deleted_resource_replacement_id: String = ""
 var _deleted_resource_collection: FlowGraphEditorCommands.Collection = FlowGraphEditorCommands.Collection.PROCESSES
@@ -97,7 +98,8 @@ func _on_commands_changed() -> void:
 	var restore_focus: bool = _editor_owns_focus()
 	if controller != null and controller.flow_graph != null:
 		_reconcile_deleted_resource_selection(controller.flow_graph)
-		_reconcile_deleted_block_selection(controller.flow_graph)
+		_reconcile_deleted_block_selection(controller.flow_graph, restore_focus)
+		_reconcile_stale_block_selection(controller.flow_graph, restore_focus)
 		if _dock_mode and restore_focus and not _deleted_block_id.is_empty():
 			_variable_focus_control = &"ReadyBlocksList"
 		if _dock_mode and not _deleted_resource_id.is_empty():
@@ -301,7 +303,8 @@ func _rebuild_interface(generation: int = -1) -> void:
 	if controller != null:
 		graph = controller.flow_graph
 		_reconcile_deleted_resource_selection(graph)
-		_reconcile_deleted_block_selection(graph)
+		_reconcile_deleted_block_selection(graph, _editor_owns_focus())
+		_reconcile_stale_block_selection(graph, _editor_owns_focus())
 		_reconcile_stale_resource_selection(graph)
 	_render(FlowGraphInspectorPresenter.present(graph), controller, generation)
 
@@ -528,10 +531,16 @@ func _render_ready_process_editor(parent: Container) -> void:
 	editor.process_move_requested.connect(_move_selected)
 	editor.process_delete_requested.connect(_on_delete_pressed)
 	parent.add_child(editor)
+	if _fluo_mode and _ready_block_details_open and not _ready_block_id.is_empty():
+		call_deferred(&"_ensure_flusso_snapshot", _ready_block_id)
 
 
 func _on_ready_block_selected(block_id: String) -> void:
-	_clear_deleted_block_selection_state()
+	if _fluo_mode and _ready_block_id != block_id:
+		_flusso_snapshots.clear()
+		_flusso_owned_properties.clear()
+	if not _preserve_deleted_block_selection_state:
+		_clear_deleted_block_selection_state()
 	_ready_block_id = block_id
 	if _fluo_mode and _ready_block_details_open:
 		_ensure_flusso_snapshot(block_id)
@@ -584,7 +593,9 @@ func focus_flow_entry() -> void:
 func _focus_flow_entry_after_rebuild(editor: FlowReadyProcessEditor, generation: int) -> void:
 	if generation != _rebuild_generation or not is_instance_valid(editor):
 		return
+	_preserve_deleted_block_selection_state = true
 	editor.focus_flow_entry()
+	_preserve_deleted_block_selection_state = false
 
 
 func navigate_ready_block(direction: int) -> bool:
@@ -674,7 +685,9 @@ func _snapshot_block_properties(block: FlowBlock, owned_properties: Dictionary) 
 		if property_name.is_empty():
 			continue
 		var value: Variant = block.get(property_name)
-		if value is Array:
+		if value is FlowStructuredDocument:
+			value = (value as FlowStructuredDocument).duplicate_preserving_ids()
+		elif value is Array:
 			value = (value as Array).duplicate(true)
 		elif value is Dictionary:
 			value = (value as Dictionary).duplicate(true)
@@ -1754,12 +1767,15 @@ func _begin_deleted_block_selection(container: FlowBlockContainer, deleted_id: S
 	_deleted_block_replacement_id = _replacement_id_after_removal(container.blocks, deleted_id)
 
 
-func _reconcile_deleted_block_selection(graph: FlowGraph) -> void:
+func _reconcile_deleted_block_selection(graph: FlowGraph, restore_focus: bool = false) -> void:
 	if _deleted_block_id.is_empty() or _deleted_block_container_id.is_empty() or _commands == null:
 		return
 	if not _ready_block_id.is_empty() \
 			and _ready_block_id != _deleted_block_id \
 			and _ready_block_id != _deleted_block_replacement_id:
+		_flusso_snapshots.erase(_deleted_block_id)
+		_flusso_owned_properties.erase(_deleted_block_id)
+		_clear_deleted_block_selection_state()
 		return
 	var controller: PVController = _active_controller()
 	var container: FlowBlockContainer = _commands.find_block_container(controller, _deleted_block_container_id)
@@ -1767,12 +1783,40 @@ func _reconcile_deleted_block_selection(graph: FlowGraph) -> void:
 		_clear_deleted_block_selection_state()
 		return
 	if _contains_resource_id(container.blocks, _deleted_block_id):
+		_flusso_snapshots.erase(_deleted_block_id)
+		_flusso_owned_properties.erase(_deleted_block_id)
 		_ready_block_id = _deleted_block_id
+		_flow_entry_focus_pending = true
 		return
+	_close_flusso_for_deleted_block(_deleted_block_id, restore_focus)
 	if not _deleted_block_replacement_id.is_empty() and _contains_resource_id(container.blocks, _deleted_block_replacement_id):
 		_ready_block_id = _deleted_block_replacement_id
 		return
 	_ready_block_id = ""
+
+
+func _reconcile_stale_block_selection(graph: FlowGraph, restore_focus: bool = false) -> void:
+	if _ready_block_id.is_empty() or not _is_block_collection() or _commands == null:
+		return
+	var controller: PVController = _active_controller()
+	var container: FlowBlockContainer = _commands.find_block_container(controller, _selected_id)
+	if container == null or _contains_resource_id(container.blocks, _ready_block_id):
+		return
+	_close_flusso_for_deleted_block(_ready_block_id, restore_focus)
+	_ready_block_id = ""
+	_clear_deleted_block_selection_state()
+
+
+func _close_flusso_for_deleted_block(block_id: String, restore_focus: bool) -> void:
+	if block_id.is_empty():
+		return
+	_flusso_snapshots.erase(block_id)
+	_flusso_owned_properties.erase(block_id)
+	if not _ready_block_details_open or _ready_block_id != block_id:
+		return
+	_ready_block_details_open = false
+	_flow_entry_focus_pending = true
+	_variable_focus_control = &"ReadyBlocksList" if restore_focus else &""
 
 
 func _request_dock_delete_selection_recovery(

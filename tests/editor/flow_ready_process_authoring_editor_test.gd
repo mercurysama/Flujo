@@ -51,9 +51,9 @@ func _run() -> void:
 func _test_production_catalog(undo_redo: EditorUndoRedoManager) -> void:
 	var context: RefCounted = AUTHORING_CONTEXT_SCRIPT.new() as RefCounted
 	var entries: Array = context.call(&"get_entries") as Array
-	_check(entries.size() == 3, "Production root exposes exactly the three catalog built-ins.")
-	var expected_ids: Array[String] = ["print", "everything_flows", "custom_hello"]
-	var expected_names: Array[String] = ["Print", "Everything Flows", "Custom Hello"]
+	_check(entries.size() == 4, "Production root exposes the three catalog built-ins and FPrint.")
+	var expected_ids: Array[String] = ["print", "everything_flows", "custom_hello", "mercury.fprint:fprint"]
+	var expected_names: Array[String] = ["Print", "Everything Flows", "Custom Hello", "FPrint"]
 	for index: int in mini(entries.size(), expected_ids.size()):
 		var entry: FlowEditorBlockCatalogEntry = entries[index] as FlowEditorBlockCatalogEntry
 		_check(entry != null and entry.authoring_id == expected_ids[index],
@@ -65,8 +65,8 @@ func _test_production_catalog(undo_redo: EditorUndoRedoManager) -> void:
 	await _mount_surface(undo_redo, null, empty_blocks, "Production")
 	var editor: FlowReadyProcessEditor = _editor()
 	var add_row: HBoxContainer = _node(editor, "AddBlockActions") as HBoxContainer
-	_check(add_row != null and add_row.get_child_count() == 4,
-		"Production Flow Add renders three catalog buttons plus separate Call Method.")
+	_check(add_row != null and add_row.get_child_count() == 5,
+		"Production Flow Add renders FPrint with the catalog buttons plus separate Call Method.")
 	if add_row != null:
 		for index: int in mini(add_row.get_child_count(), expected_ids.size()):
 			var button: Button = add_row.get_child(index) as Button

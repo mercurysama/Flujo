@@ -137,6 +137,11 @@ func _active_property_owns_focus(controller: PVController) -> bool:
 		and (focus_owner == _active_flow_graph_property or _active_flow_graph_property.is_ancestor_of(focus_owner))
 
 
+## Exposes the current Inspector focus boundary to the composition root.
+func owns_focus(controller: PVController) -> bool:
+	return _active_property_owns_focus(controller)
+
+
 func _queue_delete_selection_recovery(controller: PVController) -> void:
 	var pending_controller: PVController = _delete_recovery_controller.get_ref() as PVController \
 		if _delete_recovery_controller != null else null
