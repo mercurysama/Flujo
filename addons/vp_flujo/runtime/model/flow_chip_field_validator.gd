@@ -400,6 +400,7 @@ static func _validate_document(
 			_validate_operation_reference(source, variable_graph, segment_path, result)
 			_validate_node_reference(source, variable_graph, segment_path, result)
 			_validate_node_property_reference(source, variable_graph, segment_path, result)
+			_validate_complex_reference(source, variable_graph, segment_path, result)
 			_validate_condition_reference(source, variable_graph, segment_path, result)
 
 		if schema == null or not FlowChipFieldSchema.is_valid_mode(schema.mode):
@@ -723,6 +724,22 @@ static func _validate_node_property_reference(
 		segment_path + ".value_source",
 		variable_graph
 	)
+
+
+static func _validate_complex_reference(
+		source: FlowValueSource,
+		variable_graph: FlowGraph,
+		segment_path: String,
+		result: FlowValidationResult
+) -> void:
+	if variable_graph == null:
+		return
+	if source is FlowArrayValueSource or source is FlowDictionaryValueSource:
+		source.validate_against_graph(
+			result,
+			segment_path + ".value_source",
+			variable_graph
+		)
 
 
 static func _validate_condition_reference(
