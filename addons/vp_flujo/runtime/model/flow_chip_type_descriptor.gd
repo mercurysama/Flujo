@@ -19,6 +19,7 @@ const VARIANT_TYPE_VECTOR3: Variant.Type = Variant.Type.TYPE_VECTOR3
 const VARIANT_TYPE_VECTOR3I: Variant.Type = Variant.Type.TYPE_VECTOR3I
 const VARIANT_TYPE_COLOR: Variant.Type = Variant.Type.TYPE_COLOR
 const VARIANT_TYPE_NODE_PATH: Variant.Type = Variant.Type.TYPE_NODE_PATH
+const VARIANT_TYPE_OBJECT: Variant.Type = Variant.Type.TYPE_OBJECT
 
 
 ## Stable semantic identity. This is not a display name or an array index.
@@ -74,6 +75,8 @@ static func default_value_for_type(candidate: Variant.Type) -> Variant:
 			return Color.WHITE
 		VARIANT_TYPE_NODE_PATH:
 			return NodePath()
+		VARIANT_TYPE_OBJECT:
+			return null
 	return null
 
 
@@ -101,4 +104,6 @@ static func variant_type_display_name(candidate: Variant.Type) -> String:
 			return "Color"
 		VARIANT_TYPE_NODE_PATH:
 			return "NodePath"
+		VARIANT_TYPE_OBJECT:
+			return "Object"
 	return "unknown(%d)" % int(candidate)
