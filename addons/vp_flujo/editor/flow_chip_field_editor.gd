@@ -31,6 +31,9 @@ const FLOW_CONDITION_EDITOR_SCRIPT: Script = preload(
 const FLOW_OPERATION_EDITOR_SCRIPT: Script = preload(
 	"res://addons/vp_flujo/editor/flow_operation_editor.gd"
 )
+const FLOW_NODE_PROPERTY_SELECTOR_SCRIPT: Script = preload(
+	"res://addons/vp_flujo/editor/flow_node_property_selector.gd"
+)
 const FLOW_SEMANTIC_INSERTION_ANCHOR_SCRIPT: Script = preload(
 	"res://addons/vp_flujo/editor/flow_chip_semantic_insertion_anchor.gd"
 )
@@ -47,11 +50,15 @@ const FEEDBACK_NO_COMPATIBLE_EXPRESSION: String = \
 	"No compatible expression signature is available here."
 const FEEDBACK_NO_COMPATIBLE_OPERATION: String = \
 	"No compatible Operation source is available here."
+const FEEDBACK_NO_COMPATIBLE_NODE_PROPERTY: String = \
+	"No compatible Node Property source is available here."
 
 
 var _schema: FlowChipFieldSchema
 var _document: FlowStructuredDocument
 var _variable_graph: FlowGraph
+var _scene_controller: PVController
+var _scene_root: Node
 var _undo_redo: EditorUndoRedoManager
 var _action_owner: Object
 
@@ -62,6 +69,7 @@ var _variable_selector: FlowVariableSelector
 var _expression_editor: FlowExpressionEditor
 var _condition_editor: FlowConditionEditor
 var _operation_editor: FlowOperationEditor
+var _node_property_selector: FlowNodePropertySelector
 var _validation_label: Label
 var _feedback_label: Label
 var _details_panel: PanelContainer
@@ -120,6 +128,15 @@ var _operation_trigger_before_text_states: Array[Dictionary] = []
 var _operation_trigger_anchor: FlowChipSemanticInsertionAnchor
 var _operation_edit_active: bool = false
 var _operation_edit_segment_id: String = ""
+var _node_property_trigger_active: bool = false
+var _node_property_trigger_segment_id: String = ""
+var _node_property_trigger_start: int = -1
+var _node_property_trigger_end: int = -1
+var _node_property_trigger_before_segments: Array[FlowDocumentSegment] = []
+var _node_property_trigger_before_text_states: Array[Dictionary] = []
+var _node_property_trigger_anchor: FlowChipSemanticInsertionAnchor
+var _node_property_edit_active: bool = false
+var _node_property_edit_segment_id: String = ""
 
 
 var schema: FlowChipFieldSchema:
@@ -185,6 +202,10 @@ func _init() -> void:
 	_operation_editor.operation_confirmed.connect(_on_operation_confirmed)
 	_operation_editor.cancelled.connect(_on_operation_editor_cancelled)
 	add_child(_operation_editor)
+	_node_property_selector = FLOW_NODE_PROPERTY_SELECTOR_SCRIPT.new() as FlowNodePropertySelector
+	_node_property_selector.property_selected.connect(_on_node_property_selected)
+	_node_property_selector.cancelled.connect(_on_node_property_selector_cancelled)
+	add_child(_node_property_selector)
 
 	_validation_label = Label.new()
 	_validation_label.name = &"ChipFieldValidation"
@@ -279,6 +300,8 @@ func configure(
 	_clear_condition_edit_state()
 	_clear_operation_trigger_state()
 	_clear_operation_edit_state()
+	_clear_node_property_trigger_state()
+	_clear_node_property_edit_state()
 	_clear_feedback()
 	_refresh()
 
@@ -374,6 +397,22 @@ func set_variable_graph(value: FlowGraph) -> void:
 	_refresh()
 
 
+func set_scene_context(controller: PVController, scene_root: Node = null) -> void:
+	_scene_controller = controller if is_instance_valid(controller) else null
+	_scene_root = scene_root if is_instance_valid(scene_root) else null
+	if _scene_root == null:
+		_scene_root = EditorInterface.get_edited_scene_root()
+	_refresh()
+
+
+func get_scene_controller() -> PVController:
+	return _scene_controller
+
+
+func get_scene_root() -> Node:
+	return _scene_root
+
+
 func get_variable_graph() -> FlowGraph:
 	return _variable_graph
 
@@ -445,6 +484,10 @@ func get_condition_editor() -> FlowConditionEditor:
 func get_operation_editor() -> FlowOperationEditor:
 	return _operation_editor
 
+func get_node_property_selector() -> FlowNodePropertySelector:
+	return _node_property_selector
+
+
 
 func get_variable_edit_segment_id() -> String:
 	return _variable_edit_segment_id if _variable_edit_active else ""
@@ -460,6 +503,10 @@ func get_condition_edit_segment_id() -> String:
 
 func get_operation_edit_segment_id() -> String:
 	return _operation_edit_segment_id if _operation_edit_active else ""
+
+func get_node_property_edit_segment_id() -> String:
+	return _node_property_edit_segment_id if _node_property_edit_active else ""
+
 
 
 ## Exposes the pending semantic position for deterministic editor tests and
