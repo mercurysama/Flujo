@@ -10,6 +10,8 @@ signal cancelled
 
 var _draft: FlowOperationValueSource
 var _graph: FlowGraph
+var _scene_controller: PVController
+var _scene_root: Node
 var _schema: FlowChipFieldSchema
 var _context: Dictionary = {}
 var _operator_menu: OptionButton
@@ -19,7 +21,9 @@ var _preview_label: Label
 var _feedback_label: Label
 var _confirm_button: Button
 var _variable_selector: FlowVariableSelector
+var _node_property_picker: FlowNodePropertyOperandPicker
 var _variable_operand_index: int = -1
+var _node_property_operand_index: int = -1
 var _invalid_literal_inputs: Dictionary = {}
 var _closing_for_action: bool = false
 
@@ -97,6 +101,11 @@ func _init() -> void:
 	_variable_selector.cancelled.connect(_on_variable_selector_cancelled)
 	add_child(_variable_selector)
 
+	_node_property_picker = FlowNodePropertyOperandPicker.new()
+	_node_property_picker.source_selected.connect(_on_node_property_selected)
+	_node_property_picker.cancelled.connect(_on_node_property_picker_cancelled)
+	add_child(_node_property_picker)
+
 
 func open_for_operation(
 		source: FlowOperationValueSource,
@@ -106,7 +115,10 @@ func open_for_operation(
 ) -> void:
 	_graph = graph
 	_context = context.duplicate()
+	_scene_controller = _context.get("scene_controller", null) as PVController
+	_scene_root = _context.get("scene_root", null) as Node
 	_schema = _context.get("schema", null) as FlowChipFieldSchema
+	_node_property_picker.configure(_scene_controller, _scene_root)
 	if source != null:
 		_draft = source.duplicate(true) as FlowOperationValueSource
 	else:
@@ -185,11 +197,15 @@ func _rebuild_rows() -> void:
 		kind.set_item_metadata(1, FlowValueSource.SOURCE_KIND_VARIABLE_REF)
 		kind.add_item("Literal")
 		kind.set_item_metadata(2, FlowValueSource.SOURCE_KIND_LITERAL)
+		kind.add_item("Node Property")
+		kind.set_item_metadata(3, FlowValueSource.SOURCE_KIND_NODE_PROPERTY_REF)
 		var source: FlowValueSource = _draft.operands[index]
 		if source is FlowVariableRefValueSource:
 			kind.select(1)
 		elif source is FlowLiteralValueSource:
 			kind.select(2)
+		elif source is FlowNodePropertyRefValueSource:
+			kind.select(3)
 		else:
 			kind.select(0)
 		kind.item_selected.connect(_on_kind_selected.bind(index))
@@ -218,6 +234,23 @@ func _rebuild_rows() -> void:
 						derived_type = definition.get_declared_variant_type()
 				badge.text = FlowChipTypeDescriptor.variant_type_display_name(derived_type)
 				badge.tooltip_text = "Type comes from FlowGraph.variables"
+				line.add_child(badge)
+		elif source is FlowNodePropertyRefValueSource:
+			var node_source: FlowNodePropertyRefValueSource = 				source as FlowNodePropertyRefValueSource
+			choose = Button.new()
+			choose.name = "Operand%dChooseNodeProperty" % index
+			choose.text = _node_property_button_text(node_source)
+			choose.custom_minimum_size = Vector2(165.0, 36.0)
+			choose.focus_mode = Control.FOCUS_ALL
+			choose.pressed.connect(_open_node_property_picker.bind(index, choose))
+			line.add_child(choose)
+			if node_source.get_value_type() != Variant.Type.TYPE_NIL:
+				badge = Label.new()
+				badge.name = "Operand%dTypeBadge" % index
+				badge.text = FlowChipTypeDescriptor.variant_type_display_name(
+					node_source.get_value_type()
+				)
+				badge.tooltip_text = "Type comes from the selected Godot property."
 				line.add_child(badge)
 		elif source is FlowLiteralValueSource:
 			var literal: FlowLiteralValueSource = source as FlowLiteralValueSource
@@ -358,10 +391,14 @@ func _on_kind_selected(_selected: int, operand_index: int) -> void:
 		_draft.operands[operand_index] = FlowVariableRefValueSource.new()
 	elif source_kind == FlowValueSource.SOURCE_KIND_LITERAL:
 		_draft.operands[operand_index] = FlowLiteralValueSource.new()
+	elif source_kind == FlowValueSource.SOURCE_KIND_NODE_PROPERTY_REF:
+		_draft.operands[operand_index] = FlowNodePropertyRefValueSource.new()
 	else:
 		_draft.operands[operand_index] = null
 	_rebuild_rows()
 	_update_preview()
+	if source_kind == FlowValueSource.SOURCE_KIND_NODE_PROPERTY_REF:
+		call_deferred(&"_open_node_property_picker_for_current", operand_index)
 
 
 func _on_type_selected(selected: int, operand_index: int) -> void:
@@ -476,6 +513,48 @@ func _open_variable_selector(operand_index: int, button: Button) -> void:
 	)
 
 
+func _open_node_property_picker(
+		operand_index: int,
+		button: Button
+) -> void:
+	if _draft == null or operand_index < 0 or operand_index >= _draft.operands.size():
+		return
+	_node_property_operand_index = operand_index
+	_node_property_picker.configure(_scene_controller, _scene_root)
+	if not _node_property_picker.open_for_types(
+		_types_for_operand(operand_index),
+		button.get_global_rect() if button != null else Rect2()
+	):
+		_node_property_operand_index = -1
+
+
+func _open_node_property_picker_for_current(operand_index: int) -> void:
+	if operand_index < 0 or operand_index >= _rows.size():
+		return
+	var button: Button = _rows[operand_index].get("choose", null) as Button
+	_open_node_property_picker(operand_index, button)
+
+
+func accept_scene_node_payload(payload: Dictionary) -> bool:
+	return _node_property_picker.accept_scene_node_payload(payload) 		if _node_property_picker != null else false
+
+
+func _on_node_property_selected(source: FlowNodePropertyRefValueSource) -> void:
+	if source == null or _draft == null 			or _node_property_operand_index < 0 			or _node_property_operand_index >= _draft.operands.size():
+		return
+	var current: FlowNodePropertyRefValueSource = 		_draft.operands[_node_property_operand_index] as FlowNodePropertyRefValueSource
+	if current != null:
+		source.source_id = current.source_id
+	_draft.operands[_node_property_operand_index] = source
+	_node_property_operand_index = -1
+	_rebuild_rows()
+	_update_preview()
+
+
+func _on_node_property_picker_cancelled() -> void:
+	_node_property_operand_index = -1
+
+
 func _on_variable_selected(variable_id: String) -> void:
 	if _graph == null or _draft == null or _variable_operand_index < 0:
 		return
@@ -537,6 +616,8 @@ func _validation_message() -> String:
 			return "Choose a variable for operand %s." % ("A" if index == 0 else "B")
 		if source is FlowLiteralValueSource and not source.is_valid():
 			return "Complete the literal value for operand %s." % ("A" if index == 0 else "B")
+		if source is FlowNodePropertyRefValueSource and not source.is_valid():
+			return "Choose a node property for operand %s." % ("A" if index == 0 else "B")
 	if not _invalid_literal_inputs.is_empty():
 		return "Enter a valid literal value."
 	var result: FlowValidationResult = FlowValidationResult.new()
@@ -587,6 +668,12 @@ func _on_popup_hide() -> void:
 func _focus_default() -> void:
 	if visible and _operator_menu != null:
 		_operator_menu.grab_focus()
+
+
+func _node_property_button_text(source: FlowNodePropertyRefValueSource) -> String:
+	if source == null or not source.is_valid():
+		return "Choose node property..."
+	return source.get_preview()
 
 
 func _variable_button_text(source: FlowVariableRefValueSource) -> String:
