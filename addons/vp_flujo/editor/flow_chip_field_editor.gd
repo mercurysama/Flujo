@@ -2867,6 +2867,9 @@ func _on_node_property_selector_cancelled() -> void:
 func _bind_nested_scene_sources(source: FlowValueSource) -> void:
 	if source == null:
 		return
+	if source is FlowNodeRefValueSource:
+		_bind_node_ref_requirement_if_possible(source as FlowNodeRefValueSource)
+		return
 	if source is FlowNodePropertyRefValueSource:
 		_bind_requirement_if_possible(source as FlowNodePropertyRefValueSource)
 		return
@@ -3285,6 +3288,8 @@ func _cancel_node_property_trigger(remove_trigger: bool) -> void:
 	var panel: FlowSceneNodePanel = _scene_node_panel()
 	if panel != null:
 		panel.clear_request_target()
+	if _scene_reference_choice != null and _scene_reference_choice.visible:
+		_scene_reference_choice.hide()
 	if _node_property_selector != null and _node_property_selector.visible:
 		_node_property_selector.hide()
 	if segment != null:
