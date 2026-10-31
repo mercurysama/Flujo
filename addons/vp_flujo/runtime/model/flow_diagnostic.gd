@@ -141,6 +141,13 @@ const CODE_NODE_PROPERTY_CONTEXT_MISSING: StringName = &"node_property_context_m
 const CODE_NODE_PROPERTY_NODE_MISSING: StringName = &"node_property_node_missing"
 const CODE_NODE_PROPERTY_MISSING: StringName = &"node_property_missing"
 const CODE_NODE_PROPERTY_TYPE_MISMATCH: StringName = &"node_property_type_mismatch"
+const CODE_NODE_REF_LOCATOR_MISSING: StringName = &"node_ref_locator_missing"
+const CODE_NODE_REF_REQUIREMENT_ID_INVALID: StringName = &"node_ref_requirement_id_invalid"
+const CODE_NODE_REF_REQUIREMENT_MISSING: StringName = &"node_ref_requirement_missing"
+const CODE_NODE_REF_PATH_INVALID: StringName = &"node_ref_path_invalid"
+const CODE_NODE_REF_CONTEXT_MISSING: StringName = &"node_ref_context_missing"
+const CODE_NODE_REF_NODE_MISSING: StringName = &"node_ref_node_missing"
+const CODE_NODE_REF_CLASS_MISMATCH: StringName = &"node_ref_class_mismatch"
 
 # Short aliases keep the diagnostic vocabulary usable by generic callers that
 # do not repeat the full ChipField prefix.
