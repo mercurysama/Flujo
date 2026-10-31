@@ -13,6 +13,12 @@ const VARIANT_TYPE_INT: Variant.Type = Variant.Type.TYPE_INT
 const VARIANT_TYPE_FLOAT: Variant.Type = Variant.Type.TYPE_FLOAT
 const VARIANT_TYPE_STRING: Variant.Type = Variant.Type.TYPE_STRING
 const VARIANT_TYPE_STRING_NAME: Variant.Type = Variant.Type.TYPE_STRING_NAME
+const VARIANT_TYPE_VECTOR2: Variant.Type = Variant.Type.TYPE_VECTOR2
+const VARIANT_TYPE_VECTOR2I: Variant.Type = Variant.Type.TYPE_VECTOR2I
+const VARIANT_TYPE_VECTOR3: Variant.Type = Variant.Type.TYPE_VECTOR3
+const VARIANT_TYPE_VECTOR3I: Variant.Type = Variant.Type.TYPE_VECTOR3I
+const VARIANT_TYPE_COLOR: Variant.Type = Variant.Type.TYPE_COLOR
+const VARIANT_TYPE_NODE_PATH: Variant.Type = Variant.Type.TYPE_NODE_PATH
 
 
 ## Stable semantic identity. This is not a display name or an array index.
@@ -56,6 +62,18 @@ static func default_value_for_type(candidate: Variant.Type) -> Variant:
 			return ""
 		VARIANT_TYPE_STRING_NAME:
 			return StringName()
+		VARIANT_TYPE_VECTOR2:
+			return Vector2.ZERO
+		VARIANT_TYPE_VECTOR2I:
+			return Vector2i.ZERO
+		VARIANT_TYPE_VECTOR3:
+			return Vector3.ZERO
+		VARIANT_TYPE_VECTOR3I:
+			return Vector3i.ZERO
+		VARIANT_TYPE_COLOR:
+			return Color.WHITE
+		VARIANT_TYPE_NODE_PATH:
+			return NodePath()
 	return null
 
 
@@ -71,4 +89,16 @@ static func variant_type_display_name(candidate: Variant.Type) -> String:
 			return "String"
 		VARIANT_TYPE_STRING_NAME:
 			return "StringName"
+		VARIANT_TYPE_VECTOR2:
+			return "Vector2"
+		VARIANT_TYPE_VECTOR2I:
+			return "Vector2i"
+		VARIANT_TYPE_VECTOR3:
+			return "Vector3"
+		VARIANT_TYPE_VECTOR3I:
+			return "Vector3i"
+		VARIANT_TYPE_COLOR:
+			return "Color"
+		VARIANT_TYPE_NODE_PATH:
+			return "NodePath"
 	return "unknown(%d)" % int(candidate)
