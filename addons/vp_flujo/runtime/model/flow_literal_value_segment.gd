@@ -10,6 +10,12 @@ const TYPE_INT: Variant.Type = FlowLiteralValueSource.TYPE_INT
 const TYPE_FLOAT: Variant.Type = FlowLiteralValueSource.TYPE_FLOAT
 const TYPE_STRING: Variant.Type = FlowLiteralValueSource.TYPE_STRING
 const TYPE_STRING_NAME: Variant.Type = FlowLiteralValueSource.TYPE_STRING_NAME
+const TYPE_VECTOR2: Variant.Type = FlowLiteralValueSource.TYPE_VECTOR2
+const TYPE_VECTOR2I: Variant.Type = FlowLiteralValueSource.TYPE_VECTOR2I
+const TYPE_VECTOR3: Variant.Type = FlowLiteralValueSource.TYPE_VECTOR3
+const TYPE_VECTOR3I: Variant.Type = FlowLiteralValueSource.TYPE_VECTOR3I
+const TYPE_COLOR: Variant.Type = FlowLiteralValueSource.TYPE_COLOR
+const TYPE_NODE_PATH: Variant.Type = FlowLiteralValueSource.TYPE_NODE_PATH
 const DISPLAY_NAME: String = "Literal"
 const CATEGORY: StringName = FlowChipTypeDescriptor.CATEGORY_LITERAL
 const LABEL_STRATEGY: StringName = FlowChipTypeDescriptor.LABEL_STRATEGY_VALUE
@@ -42,7 +48,7 @@ func get_chip_type_descriptor() -> FlowChipTypeDescriptor:
 	descriptor.label_strategy = LABEL_STRATEGY
 	descriptor.semantic_style_role = STYLE_ROLE
 	descriptor.editable = true
-	descriptor.supported_variant_types = [TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING, TYPE_STRING_NAME]
+	descriptor.supported_variant_types = [TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING, TYPE_STRING_NAME, TYPE_VECTOR2, TYPE_VECTOR2I, TYPE_VECTOR3, TYPE_VECTOR3I, TYPE_COLOR, TYPE_NODE_PATH]
 	return descriptor
 
 
