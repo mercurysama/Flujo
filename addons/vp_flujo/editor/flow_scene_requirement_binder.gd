@@ -43,10 +43,11 @@ func ensure_requirement(controller: PVController, node: Node) -> String:
 	var before_requirements: Array[FlowRequiredNodeDefinition] = []
 	if not constructor_was_missing:
 		before_requirements.assign(constructor.requirements)
-	var after_requirements: Array[FlowRequiredNodeDefinition] = before_requirements.duplicate()
+	var after_requirements: Array[FlowRequiredNodeDefinition] = []
+	after_requirements.assign(before_requirements)
 	after_requirements.append(requirement)
-	var before_bindings: Dictionary[String, NodePath] = controller.requirement_bindings.duplicate()
-	var after_bindings: Dictionary[String, NodePath] = before_bindings.duplicate()
+	var before_bindings: Dictionary = controller.requirement_bindings.duplicate()
+	var after_bindings: Dictionary = before_bindings.duplicate()
 	after_bindings[requirement.get_internal_id()] = binding_path
 
 	_undo_redo.create_action("Bind Scene Node Requirement")
@@ -67,9 +68,10 @@ static func _requirement_id_for_binding(
 ) -> String:
 	if controller == null:
 		return ""
-	var keys: Array[String] = controller.requirement_bindings.keys()
+	var keys: Array = controller.requirement_bindings.keys()
 	keys.sort()
-	for requirement_id: String in keys:
+	for key: Variant in keys:
+		var requirement_id: String = String(key)
 		if controller.requirement_bindings[requirement_id] == binding_path:
 			return requirement_id
 	return ""
