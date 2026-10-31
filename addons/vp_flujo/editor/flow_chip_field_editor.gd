@@ -1383,10 +1383,7 @@ func _structured_source_available(
 		return false
 	var definition: FlowChipSlotDefinition = _insertion_slot_definition()
 	if _schema.mode == FlowChipFieldSchema.Mode.FIXED:
-		var context: Dictionary = _variable_insertion_context()
-		if int(context.get("replacement_index", -1)) < 0:
-			return false
-		definition = context.get("slot", null) as FlowChipSlotDefinition
+		return false
 	elif _schema.mode == FlowChipFieldSchema.Mode.HYBRID and definition == null:
 		return false
 	if definition != null and (
@@ -3785,6 +3782,10 @@ func _on_chip_edit_requested(segment_id: String) -> void:
 	if _find_segment(segment_id) is FlowNodeRefSegment:
 		_on_node_ref_edit_requested(segment_id)
 		return
+	var complex_segment: FlowChipSegment = _find_segment(segment_id) as FlowChipSegment
+	if _is_complex_segment(complex_segment):
+		_on_complex_edit_requested(segment_id)
+		return
 	var chip: FlowChipSegment = _find_segment(segment_id) as FlowChipSegment
 	if chip != null and not _can_edit_chip(chip):
 		_on_chip_selected(segment_id)
@@ -4948,6 +4949,12 @@ func _refresh_variable_resolutions() -> void:
 				_scene_resolution_context()
 			)
 			continue
+		if segment is FlowArraySegment:
+			(segment as FlowArraySegment).set_variable_graph(_variable_graph)
+			continue
+		if segment is FlowDictionarySegment:
+			(segment as FlowDictionarySegment).set_variable_graph(_variable_graph)
+			continue
 		if variable_segment == null:
 			continue
 		if _variable_graph == null:
@@ -5016,6 +5023,16 @@ func _chip_from_source(source: FlowValueSource) -> FlowChipSegment:
 		return FlowNodePropertyRefSegment.new(source as FlowNodePropertyRefValueSource)
 	if source is FlowNodeRefValueSource:
 		return FlowNodeRefSegment.new(source as FlowNodeRefValueSource)
+	if source is FlowArrayValueSource:
+		return FlowArraySegment.new(source as FlowArrayValueSource)
+	if source is FlowDictionaryValueSource:
+		return FlowDictionarySegment.new(source as FlowDictionaryValueSource)
+	if source is FlowResourceRefValueSource:
+		return FlowResourceRefSegment.new(source as FlowResourceRefValueSource)
+	if source is FlowEnumValueSource:
+		return FlowEnumSegment.new(source as FlowEnumValueSource)
+	if source is FlowBitfieldValueSource:
+		return FlowBitfieldSegment.new(source as FlowBitfieldValueSource)
 	var generic: FlowChipSegment = FlowChipSegment.new()
 	generic.set_value_source(source)
 	return generic
@@ -5131,11 +5148,11 @@ func _can_edit_chip(chip: FlowChipSegment) -> bool:
 		return _can_change_chip_content(chip)
 	if chip is FlowConditionSegment:
 		return _can_change_chip_content(chip)
-	if chip is FlowNodeRefSegment:
+	if chip is FlowNodeRefSegment or chip is FlowResourceRefSegment:
 		if descriptor == null or not descriptor.editable or not _schema_can_change_reference():
 			return false
-		var node_definition: FlowChipSlotDefinition = _slot_definition_for(chip)
-		return node_definition == null or node_definition.can_change_reference()
+		var reference_definition: FlowChipSlotDefinition = _slot_definition_for(chip)
+		return reference_definition == null or reference_definition.can_change_reference()
 	return descriptor != null and descriptor.editable and _can_change_chip_content(chip)
 
 
