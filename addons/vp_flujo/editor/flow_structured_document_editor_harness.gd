@@ -42,7 +42,7 @@ func configure(undo_redo: EditorUndoRedoManager) -> void:
 	content.add_child(heading)
 
 	var instructions: Label = Label.new()
-	instructions.text = "Click inside text to place the real caret. Type @ to choose a graph variable, # to build a CONDITION, or use + Value to insert a literal at that caret. Click a chip to edit it. Backspace/Delete selects or removes a whole token."
+	instructions.text = "Place the real caret in text. @ chooses a variable, # builds a CONDITION, ~ builds an OPERATION, and $ opens the Scene Node → Property flow in compatible fields. + Value inserts a literal. Click a Tok to edit it."
 	instructions.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(instructions)
 
@@ -124,6 +124,7 @@ func _build_fixture_pages(expression_document: FlowStructuredDocument = null) ->
 	_add_fixture(_tabs, "FLEXIBLE", _flexible_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "HYBRID", _hybrid_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "CONDITION", _condition_schema(), _graph, _undo_redo)
+	_add_fixture(_tabs, "SCENE PROPERTY", _node_property_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "EXPRESSION", _expression_schema(), _graph, _undo_redo, expression_document)
 
 
@@ -197,6 +198,8 @@ func _fixture_description(label: String) -> String:
 			return "Legacy compatibility fixture. Expression remains available to existing callers; # now opens CONDITION."
 		"CONDITION":
 			return "Type # to open CONDITION. Try Health > 0, Lives == 1, Enabled == true, Message != \"hola\", then add AND/OR rows."
+		"SCENE PROPERTY":
+			return "Type $ to open Scene Nodes, choose or drag a node, then select a property compatible with the field. Escape with \\$ for literal text."
 	return ""
 
 
@@ -279,6 +282,39 @@ func _expression_schema() -> FlowChipFieldSchema:
 	field.variadic_slot_definition.accepted_source_kinds = [FlowValueSource.SOURCE_KIND_EXPRESSION]
 	field.add_text_part("Expression: ")
 	field.add_slot_part("expression")
+	return field
+
+
+func _node_property_schema() -> FlowChipFieldSchema:
+	var field: FlowChipFieldSchema = FlowChipFieldSchema.new()
+	field.mode = FlowChipFieldSchema.Mode.FLEXIBLE
+	field.text_mode = FlowChipFieldSchema.TextMode.RUNTIME_CONTENT
+	field.accepted_value_types = [
+		FlowLiteralValueSource.TYPE_BOOL,
+		FlowLiteralValueSource.TYPE_INT,
+		FlowLiteralValueSource.TYPE_FLOAT,
+		FlowLiteralValueSource.TYPE_STRING,
+		FlowLiteralValueSource.TYPE_STRING_NAME,
+		FlowLiteralValueSource.TYPE_VECTOR2,
+		FlowLiteralValueSource.TYPE_VECTOR2I,
+		FlowLiteralValueSource.TYPE_VECTOR3,
+		FlowLiteralValueSource.TYPE_VECTOR3I,
+		FlowLiteralValueSource.TYPE_COLOR,
+		FlowLiteralValueSource.TYPE_NODE_PATH,
+	]
+	field.accepted_source_kinds = [FlowValueSource.SOURCE_KIND_NODE_PROPERTY_REF]
+	field.flexible_max_count = 4
+	var slot: FlowChipSlotDefinition = FlowChipSlotDefinition.new(
+		"scene_value",
+		"Scene Value"
+	)
+	slot.repeatable = true
+	slot.max_count = 4
+	slot.accepted_value_types = field.accepted_value_types.duplicate()
+	slot.accepted_source_kinds = [FlowValueSource.SOURCE_KIND_NODE_PROPERTY_REF]
+	field.variadic_slot_definition = slot
+	field.add_text_part("Scene property: ")
+	field.add_slot_part("scene_value")
 	return field
 
 
