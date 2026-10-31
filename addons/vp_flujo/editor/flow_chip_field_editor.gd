@@ -1628,6 +1628,20 @@ func _on_text_control_changed(segment_id: String, input: TextEdit) -> void:
 		_condition_trigger_end = maxi(_condition_trigger_start + 1, text_offset)
 		_set_document_text_without_history(segment, input.text, input, text_offset)
 		return
+	if _operation_trigger_active and segment_id == _operation_trigger_segment_id:
+		if not _pending_operation_trigger_exists(input.text):
+			_cancel_operation_trigger(true)
+			return
+		_operation_trigger_end = maxi(_operation_trigger_start + 1, text_offset)
+		_set_document_text_without_history(segment, input.text, input, text_offset)
+		return
+	if _node_property_trigger_active and segment_id == _node_property_trigger_segment_id:
+		if not _pending_node_property_trigger_exists(input.text):
+			_cancel_node_property_trigger(true)
+			return
+		_node_property_trigger_end = maxi(_node_property_trigger_start + 1, text_offset)
+		_set_document_text_without_history(segment, input.text, input, text_offset)
+		return
 	# A host may assign TextEdit.text and emit text_changed while the native
 	# control keeps its old column (usually zero). Real typing/paste updates the
 	# caret with the edit, so only the stale non-empty zero-column case defaults
@@ -1710,6 +1724,29 @@ func _on_text_control_changed(segment_id: String, input: TextEdit) -> void:
 			operation_before_text_states
 		)
 		return
+	var node_property_start: int = _find_unescaped_trigger(
+		normalized_text,
+		int(change.get("start", 0)),
+		int(change.get("end", normalized_text.length())),
+		normalized.get("escaped_positions", []) as Array[int],
+		"$"
+	)
+	if node_property_start >= 0:
+		var node_before_segments: Array[FlowDocumentSegment] = _copy_segments(_document.segments)
+		var node_before_text_states: Array[Dictionary] = _text_states_for_segments(
+			node_before_segments
+		)
+		_set_text_control_value(input, normalized_text, normalized_caret)
+		_begin_node_property_trigger(
+			segment,
+			input,
+			normalized_text,
+			node_property_start,
+			normalized_caret,
+			node_before_segments,
+			node_before_text_states
+		)
+		return
 	if normalized_text != input.text:
 		var before_segments: Array[FlowDocumentSegment] = _copy_segments(_document.segments)
 		var before_text_states: Array[Dictionary] = _text_states_for_segments(before_segments)
@@ -1748,7 +1785,7 @@ func _changed_text_span(before: String, after: String) -> Dictionary:
 
 ## Normalizes only active escape pairs that intersect the current native edit.
 ## Future trigger characters can be added to this small scanner without making
-## the document parser aware of them. $ is intentionally not active.
+## the document parser is unaware of trigger semantics; active escapes are editor-local.
 func _normalize_active_escapes(
 		text: String,
 		changed_start: int,
@@ -1763,7 +1800,8 @@ func _normalize_active_escapes(
 		var pair_is_active: bool = index + 1 < text.length() \
 			and text[index] == "\\" \
 		and (text[index + 1] == "@" or text[index + 1] == "#" \
-			or text[index + 1] == "~" or text[index + 1] == "\\")
+			or text[index + 1] == "~" or text[index + 1] == "$" \
+			or text[index + 1] == "\\")
 		var pair_intersects_change: bool = pair_is_active \
 			and index < changed_end \
 			and index + 2 > changed_start
@@ -1773,7 +1811,7 @@ func _normalize_active_escapes(
 			var output_index: int = normalized.length()
 			normalized += text[index + 1]
 			if text[index + 1] == "@" or text[index + 1] == "#" \
-					or text[index + 1] == "~":
+					or text[index + 1] == "~" or text[index + 1] == "$":
 				escaped_positions.append(output_index)
 			index += 2
 			continue
