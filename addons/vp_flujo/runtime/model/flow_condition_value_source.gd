@@ -98,7 +98,8 @@ func validate_graph_references(
 
 
 func resolve(context: Variant = null) -> FlowValueResult:
-	var graph: FlowGraph = context.graph 		if context is FlowValueResolutionContext else context as FlowGraph
+	var resolution_context: FlowValueResolutionContext = context as FlowValueResolutionContext
+	var graph: FlowGraph = resolution_context.graph 		if resolution_context != null else context as FlowGraph
 	var validation: FlowValidationResult = validate_condition(graph)
 	if validation.has_errors():
 		return FlowValueResult.fail(PRODUCED_TYPE, _first_error(validation, "value_source"))
