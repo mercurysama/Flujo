@@ -78,6 +78,13 @@ func refresh() -> void:
 		return
 	var root_item: TreeItem = _tree.create_item()
 	root_item.set_text(0, "%s  [%s]" % [scene_root.name, scene_root.get_class()])
+	root_item.set_metadata(0, {
+		"type": "flujo_scene_node",
+		"node_path": NodePath("."),
+		"node_name": String(scene_root.name),
+		"class_name": String(scene_root.get_class()),
+		"requirement_id": _requirement_id_for_node(scene_root),
+	})
 	_populate_children(scene_root, scene_root, root_item)
 
 
