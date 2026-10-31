@@ -2694,6 +2694,8 @@ func _drop_data(_at_position: Vector2, data: Variant) -> void:
 func _on_node_property_selected(source: FlowNodePropertyRefValueSource) -> void:
 	if source == null:
 		return
+	if not _node_property_edit_active and not _can_insert_source(source):
+		return
 	_bind_requirement_if_possible(source)
 	var panel: FlowSceneNodePanel = _scene_node_panel()
 	if panel != null:
