@@ -4664,7 +4664,8 @@ func _can_insert_source(source: FlowValueSource) -> bool:
 				and not source is FlowExpressionValueSource \
 				and not source is FlowConditionValueSource \
 				and not source is FlowOperationValueSource \
-				and not source is FlowNodePropertyRefValueSource:
+				and not source is FlowNodePropertyRefValueSource \
+				and not source is FlowNodeRefValueSource:
 			_reject("FIXED fields do not accept additional chips.")
 			return false
 		var fixed_context: Dictionary = _variable_insertion_context()
@@ -4683,6 +4684,8 @@ func _can_insert_source(source: FlowValueSource) -> bool:
 				else FEEDBACK_NO_COMPATIBLE_OPERATION if source is FlowOperationValueSource
 				else FEEDBACK_NO_COMPATIBLE_NODE_PROPERTY \
 					if source is FlowNodePropertyRefValueSource
+				else FEEDBACK_NO_COMPATIBLE_NODE \
+					if source is FlowNodeRefValueSource
 				else "No compatible Condition source is available here."
 			)
 			return false
@@ -4744,6 +4747,11 @@ func _can_insert_source(source: FlowValueSource) -> bool:
 	elif source is FlowNodePropertyRefValueSource:
 		if not _schema_can_change_content() \
 				or (definition != null and not definition.can_change_content()):
+			_reject(FEEDBACK_TOK_IMMUTABLE)
+			return false
+	elif source is FlowNodeRefValueSource:
+		if not _schema_can_change_reference() \
+				or (definition != null and not definition.can_change_reference()):
 			_reject(FEEDBACK_TOK_IMMUTABLE)
 			return false
 	else:
