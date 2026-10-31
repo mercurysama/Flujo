@@ -60,6 +60,7 @@ const CODE_INVALID_LITERAL_VALUE_TYPE: StringName = &"invalid_literal_value_type
 const CODE_LITERAL_VALUE_TYPE_MISMATCH: StringName = &"literal_value_type_mismatch"
 const CODE_LITERAL_TYPE_NIL: StringName = &"literal_type_nil"
 const CODE_LITERAL_FLOAT_NOT_FINITE: StringName = &"literal_float_not_finite"
+const CODE_LITERAL_COMPONENT_NOT_FINITE: StringName = &"literal_component_not_finite"
 const CODE_NULL_CHIP_FIELD_SCHEMA: StringName = &"null_chip_field_schema"
 const CODE_NULL_CHIP_FIELD_DOCUMENT: StringName = &"null_chip_field_document"
 const CODE_EMPTY_CHIP_FIELD_SCHEMA_ID: StringName = &"empty_chip_field_schema_id"
