@@ -3244,6 +3244,9 @@ func _on_chip_edit_requested(segment_id: String) -> void:
 	if _find_segment(segment_id) is FlowOperationSegment:
 		_on_operation_edit_requested(segment_id)
 		return
+	if _find_segment(segment_id) is FlowNodePropertyRefSegment:
+		_on_node_property_edit_requested(segment_id)
+		return
 	var chip: FlowChipSegment = _find_segment(segment_id) as FlowChipSegment
 	if chip != null and not _can_edit_chip(chip):
 		_on_chip_selected(segment_id)
@@ -3597,6 +3600,39 @@ func _render_details() -> void:
 		edit_operation.focus_mode = Control.FOCUS_ALL
 		edit_operation.pressed.connect(_on_operation_edit_requested.bind(segment.get_segment_id()))
 		_details.add_child(edit_operation)
+		_add_policy_detail_labels(chip_editable, type_locked, source_kind_locked)
+		return
+	var node_property_segment: FlowNodePropertyRefSegment = segment as FlowNodePropertyRefSegment
+	var node_property_source: FlowNodePropertyRefValueSource = \
+		segment.get_value_source() as FlowNodePropertyRefValueSource
+	if node_property_segment != null and node_property_source != null:
+		var node_preview: Label = Label.new()
+		node_preview.name = &"NodePropertyPreview"
+		node_preview.text = "Preview: " + node_property_source.get_preview()
+		node_preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_details.add_child(node_preview)
+		var node_type: Label = Label.new()
+		node_type.name = &"NodePropertyResultType"
+		node_type.text = "Result Type: " + FlowChipTypeDescriptor.variant_type_display_name(
+			node_property_source.get_value_type()
+		)
+		_details.add_child(node_type)
+		var locator: Label = Label.new()
+		locator.name = &"NodePropertyLocator"
+		locator.text = "Requirement: %s" % node_property_source.requirement_id \
+			if not node_property_source.requirement_id.is_empty() \
+			else "Node Path: %s" % String(node_property_source.node_path)
+		locator.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_details.add_child(locator)
+		var edit_node_property: Button = Button.new()
+		edit_node_property.name = &"EditNodeProperty"
+		edit_node_property.text = "Edit Node Property"
+		edit_node_property.disabled = not chip_editable
+		edit_node_property.focus_mode = Control.FOCUS_ALL
+		edit_node_property.pressed.connect(
+			_on_node_property_edit_requested.bind(segment.get_segment_id())
+		)
+		_details.add_child(edit_node_property)
 		_add_policy_detail_labels(chip_editable, type_locked, source_kind_locked)
 		return
 	if not descriptor.editable:
@@ -4211,7 +4247,8 @@ func _can_insert_source(source: FlowValueSource) -> bool:
 		if not source is FlowVariableRefValueSource \
 				and not source is FlowExpressionValueSource \
 				and not source is FlowConditionValueSource \
-				and not source is FlowOperationValueSource:
+				and not source is FlowOperationValueSource \
+				and not source is FlowNodePropertyRefValueSource:
 			_reject("FIXED fields do not accept additional chips.")
 			return false
 		var fixed_context: Dictionary = _variable_insertion_context()
@@ -4228,6 +4265,8 @@ func _can_insert_source(source: FlowValueSource) -> bool:
 				FEEDBACK_NO_COMPATIBLE_VARIABLE if source is FlowVariableRefValueSource
 				else FEEDBACK_NO_COMPATIBLE_EXPRESSION if source is FlowExpressionValueSource
 				else FEEDBACK_NO_COMPATIBLE_OPERATION if source is FlowOperationValueSource
+				else FEEDBACK_NO_COMPATIBLE_NODE_PROPERTY \
+					if source is FlowNodePropertyRefValueSource
 				else "No compatible Condition source is available here."
 			)
 			return false
@@ -4286,6 +4325,11 @@ func _can_insert_source(source: FlowValueSource) -> bool:
 				or (definition != null and not definition.can_change_content()):
 			_reject(FEEDBACK_TOK_IMMUTABLE)
 			return false
+	elif source is FlowNodePropertyRefValueSource:
+		if not _schema_can_change_content() \
+				or (definition != null and not definition.can_change_content()):
+			_reject(FEEDBACK_TOK_IMMUTABLE)
+			return false
 	else:
 		if not _schema_can_change_content() \
 				or (definition != null and not definition.can_change_content()):
@@ -4316,6 +4360,11 @@ func _refresh_variable_resolutions() -> void:
 			continue
 		if segment is FlowOperationSegment:
 			(segment as FlowOperationSegment).set_variable_graph(_variable_graph)
+			continue
+		if segment is FlowNodePropertyRefSegment:
+			(segment as FlowNodePropertyRefSegment).set_resolution_context(
+				_scene_resolution_context()
+			)
 			continue
 		if variable_segment == null:
 			continue
@@ -4381,6 +4430,8 @@ func _chip_from_source(source: FlowValueSource) -> FlowChipSegment:
 		return FlowConditionSegment.new(source as FlowConditionValueSource)
 	if source is FlowOperationValueSource:
 		return FlowOperationSegment.new(source as FlowOperationValueSource)
+	if source is FlowNodePropertyRefValueSource:
+		return FlowNodePropertyRefSegment.new(source as FlowNodePropertyRefValueSource)
 	var generic: FlowChipSegment = FlowChipSegment.new()
 	generic.set_value_source(source)
 	return generic
