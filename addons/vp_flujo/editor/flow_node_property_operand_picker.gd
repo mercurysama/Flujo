@@ -15,6 +15,7 @@ signal cancelled
 var _controller: PVController = null
 var _scene_root: Node = null
 var _accepted_types: Array[Variant.Type] = []
+var _anchor: Rect2 = Rect2()
 var _selector: FlowNodePropertySelector
 
 
@@ -38,6 +39,7 @@ func open_for_types(
 		anchor: Rect2 = Rect2()
 ) -> bool:
 	_accepted_types = accepted_types.duplicate()
+	_anchor = anchor
 	var panel: FlowSceneNodePanel = _scene_node_panel()
 	if panel == null:
 		cancelled.emit()
@@ -65,13 +67,12 @@ func accept_scene_node_payload(payload: Dictionary) -> bool:
 	if not is_instance_valid(node):
 		cancelled.emit()
 		return false
-	var anchor: Rect2 = Rect2()
 	_selector.open_for_node(
 		node,
 		String(payload.get("requirement_id", "")),
 		node_path,
 		_accepted_types,
-		anchor
+		_anchor
 	)
 	return true
 
