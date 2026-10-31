@@ -124,6 +124,7 @@ func _build_fixture_pages(expression_document: FlowStructuredDocument = null) ->
 	_add_fixture(_tabs, "FLEXIBLE", _flexible_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "HYBRID", _hybrid_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "CONDITION", _condition_schema(), _graph, _undo_redo)
+	_add_fixture(_tabs, "OPERATION", _operation_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "SCENE PROPERTY", _node_property_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "EXPRESSION", _expression_schema(), _graph, _undo_redo, expression_document)
 
@@ -197,7 +198,9 @@ func _fixture_description(label: String) -> String:
 		"EXPRESSION":
 			return "Legacy compatibility fixture. Expression remains available to existing callers; # now opens CONDITION."
 		"CONDITION":
-			return "Type # to open CONDITION. Try Health > 0, Lives == 1, Enabled == true, Message != \"hola\", then add AND/OR rows."
+			return "Type # to open CONDITION. Operands can be Variable, Literal, or Node Property; try $Node.z_index > 0 or $Node.visible == true."
+		"OPERATION":
+			return "Type ~ to open OPERATION. Operands can be Variable, Literal, or Node Property; try $Node.position + Vector2(...) where the field supports Vector2."
 		"SCENE PROPERTY":
 			return "Type $ to open Scene Nodes, choose or drag a node, then select a property compatible with the field. Escape with \\$ for literal text."
 	return ""
@@ -316,6 +319,53 @@ func _node_property_schema() -> FlowChipFieldSchema:
 	field.add_text_part("Scene property: ")
 	field.add_slot_part("scene_value")
 	return field
+
+
+func _operation_schema() -> FlowChipFieldSchema:
+	var field: FlowChipFieldSchema = FlowChipFieldSchema.new()
+	field.mode = FlowChipFieldSchema.Mode.FIXED
+	field.text_mode = FlowChipFieldSchema.TextMode.RUNTIME_CONTENT
+	field.accepted_value_types = [
+		Variant.Type.TYPE_INT,
+		Variant.Type.TYPE_FLOAT,
+		Variant.Type.TYPE_STRING,
+		Variant.Type.TYPE_VECTOR2,
+		Variant.Type.TYPE_VECTOR3,
+	]
+	field.accepted_source_kinds = [FlowValueSource.SOURCE_KIND_OPERATION]
+	var slot: FlowChipSlotDefinition = FlowChipSlotDefinition.new(
+		"operation",
+		"Operation",
+		true
+	)
+	slot.accepted_value_types = field.accepted_value_types.duplicate()
+	slot.accepted_source_kinds = [FlowValueSource.SOURCE_KIND_OPERATION]
+	slot.initial_value_source = _operation_source()
+	slot.allow_delete = false
+	slot.allow_reorder = false
+	slot.min_count = 1
+	slot.max_count = 1
+	field.slots = [slot]
+	field.add_text_part("Operation: ")
+	field.add_slot_part("operation")
+	return field
+
+
+func _operation_source() -> FlowOperationValueSource:
+	var count: FlowVariableDefinition = null
+	for candidate: FlowVariableDefinition in _graph.variables:
+		if candidate != null and candidate.display_name == "Count":
+			count = candidate
+			break
+	if count == null:
+		count = _manual_variable("Count", FlowVariableDefinition.ValueType.INT)
+	return FlowOperationValueSource.new(
+		FlowOperationOperatorCatalog.OPERATOR_ADD,
+		[
+			FlowVariableRefValueSource.new(count.get_internal_id(), count.value_type),
+			FlowLiteralValueSource.new(Variant.Type.TYPE_INT, 1),
+		]
+	)
 
 
 func _condition_schema() -> FlowChipFieldSchema:
