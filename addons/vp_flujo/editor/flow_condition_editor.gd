@@ -300,10 +300,13 @@ func _build_operand_controls(
 	kind.set_item_metadata(2, FlowValueSource.SOURCE_KIND_LITERAL)
 	kind.add_item("Node Property")
 	kind.set_item_metadata(3, FlowValueSource.SOURCE_KIND_NODE_PROPERTY_REF)
+	kind.add_item("Operation")
+	kind.set_item_metadata(4, FlowValueSource.SOURCE_KIND_OPERATION)
 	var is_variable: bool = source is FlowVariableRefValueSource
 	var is_literal: bool = source is FlowLiteralValueSource
 	var is_node_property: bool = source is FlowNodePropertyRefValueSource
-	kind.select(1 if is_variable else (2 if is_literal else (3 if is_node_property else 0)))
+	var is_operation: bool = source is FlowOperationValueSource
+	kind.select(1 if is_variable else (2 if is_literal else (3 if is_node_property else (4 if is_operation else 0))))
 	kind.item_selected.connect(_on_operand_kind_selected.bind(row_index, side))
 	line.add_child(kind)
 	var value: Control = null
@@ -348,6 +351,25 @@ func _build_operand_controls(
 			property_badge.tooltip_text = "Type comes from the selected Godot property."
 			line.add_child(property_badge)
 		value = choose_property
+	elif is_operation:
+		var operation_source: FlowOperationValueSource = source as FlowOperationValueSource
+		var edit_operation: Button = Button.new()
+		edit_operation.name = "Operand%sEditOperation%d" % [side, row_index]
+		edit_operation.text = _nested_operation_button_text(operation_source)
+		edit_operation.focus_mode = Control.FOCUS_ALL
+		edit_operation.custom_minimum_size = Vector2(180.0, 36.0)
+		edit_operation.pressed.connect(
+			_open_nested_operation_editor.bind(row_index, side, edit_operation)
+		)
+		line.add_child(edit_operation)
+		var operation_type: Variant.Type = operation_source.get_value_type()
+		if operation_type != Variant.Type.TYPE_NIL:
+			var operation_badge: Label = Label.new()
+			operation_badge.name = "Operand%sTypeBadge%d" % [side, row_index]
+			operation_badge.text = _type_name(operation_type)
+			operation_badge.tooltip_text = "Type produced by the nested Operation."
+			line.add_child(operation_badge)
+		value = edit_operation
 	elif is_literal:
 		var literal: FlowLiteralValueSource = source as FlowLiteralValueSource
 		var type_menu: OptionButton = OptionButton.new()
@@ -500,6 +522,8 @@ func _on_operand_kind_selected(_selected: int, row_index: int, side: String) -> 
 		next = FlowLiteralValueSource.new(Variant.Type.TYPE_NIL, null)
 	elif selected_kind == FlowValueSource.SOURCE_KIND_NODE_PROPERTY_REF:
 		next = FlowNodePropertyRefValueSource.new()
+	elif selected_kind == FlowValueSource.SOURCE_KIND_OPERATION:
+		next = FlowOperationValueSource.new(&"", [null, null])
 	else:
 		next = null
 	if side == "A":
@@ -509,6 +533,8 @@ func _on_operand_kind_selected(_selected: int, row_index: int, side: String) -> 
 	_rebuild_rows()
 	if selected_kind == FlowValueSource.SOURCE_KIND_NODE_PROPERTY_REF:
 		call_deferred(&"_open_node_property_picker_for_current", row_index, side)
+	elif selected_kind == FlowValueSource.SOURCE_KIND_OPERATION:
+		call_deferred(&"_open_nested_operation_editor_for_current", row_index, side)
 
 
 func _on_operand_type_selected(selected: int, row_index: int, side: String) -> void:
@@ -646,6 +672,80 @@ func _on_node_property_selected(source: FlowNodePropertyRefValueSource) -> void:
 func _on_node_property_picker_cancelled() -> void:
 	_node_property_row_index = -1
 	_node_property_side = ""
+
+
+func _open_nested_operation_editor(
+		row_index: int,
+		side: String,
+		button: Button
+) -> void:
+	if _draft == null or row_index < 0 or row_index >= _draft.comparisons.size():
+		return
+	var comparison: FlowConditionComparison = _draft.comparisons[row_index]
+	var source: FlowOperationValueSource = 		(comparison.left_source if side == "A" else comparison.right_source) 		as FlowOperationValueSource
+	if source == null:
+		return
+	_nested_operation_row_index = row_index
+	_nested_operation_side = side
+	var nested_editor: FlowOperationEditor = _ensure_nested_operation_editor()
+	nested_editor.open_for_operation(
+		source,
+		_graph,
+		button.get_global_rect() if button != null else get_global_rect(),
+		{
+			"scene_controller": _scene_controller,
+			"scene_root": _scene_root,
+			"operation_nesting_depth": 0,
+		}
+	)
+
+
+func _open_nested_operation_editor_for_current(row_index: int, side: String) -> void:
+	if row_index < 0 or row_index >= _rows.size():
+		return
+	var row: Dictionary = _rows[row_index]
+	var side_data: Dictionary = row["left"] if side == "A" else row["right"]
+	var button: Button = side_data.get("value", null) as Button
+	_open_nested_operation_editor(row_index, side, button)
+
+
+func _ensure_nested_operation_editor() -> FlowOperationEditor:
+	if is_instance_valid(_nested_operation_editor):
+		return _nested_operation_editor
+	_nested_operation_editor = FlowOperationEditor.new()
+	_nested_operation_editor.name = &"ConditionNestedOperationEditor"
+	_nested_operation_editor.operation_confirmed.connect(_on_nested_operation_confirmed)
+	_nested_operation_editor.cancelled.connect(_on_nested_operation_cancelled)
+	add_child(_nested_operation_editor)
+	return _nested_operation_editor
+
+
+func _on_nested_operation_confirmed(source: FlowOperationValueSource) -> void:
+	if source == null or _draft == null 			or _nested_operation_row_index < 0 			or _nested_operation_row_index >= _draft.comparisons.size():
+		return
+	var comparison: FlowConditionComparison = _draft.comparisons[_nested_operation_row_index]
+	var current: FlowOperationValueSource = 		(comparison.left_source if _nested_operation_side == "A" 		else comparison.right_source) as FlowOperationValueSource
+	if current != null:
+		source.source_id = current.source_id
+	if _nested_operation_side == "A":
+		comparison.left_source = source
+	else:
+		comparison.right_source = source
+	_nested_operation_row_index = -1
+	_nested_operation_side = ""
+	_rebuild_rows()
+
+
+func _on_nested_operation_cancelled() -> void:
+	_nested_operation_row_index = -1
+	_nested_operation_side = ""
+
+
+func _on_negate_toggled(enabled: bool) -> void:
+	if _draft == null:
+		return
+	_draft.negated = enabled
+	_update_preview()
 
 
 func _compatible_variables(allowed: Array[Variant.Type]) -> Array[FlowVariableDefinition]:
@@ -797,6 +897,12 @@ func _literal_placeholder(value_type: Variant.Type) -> String:
 		Variant.Type.TYPE_FLOAT: return "Decimal"
 		Variant.Type.TYPE_STRING: return "Text"
 	return "Value"
+
+
+func _nested_operation_button_text(source: FlowOperationValueSource) -> String:
+	if source == null or not source.is_valid():
+		return "Build Operation..."
+	return "(" + source.get_preview(_graph) + ")"
 
 
 func _node_property_button_text(source: FlowNodePropertyRefValueSource) -> String:
