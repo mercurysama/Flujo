@@ -37,6 +37,9 @@ const FLOW_NODE_PROPERTY_SELECTOR_SCRIPT: Script = preload(
 const FLOW_SCENE_REFERENCE_CHOICE_SCRIPT: Script = preload(
 	"res://addons/vp_flujo/editor/flow_scene_reference_choice.gd"
 )
+const FLOW_COMPLEX_VALUE_EDITOR_SCRIPT: Script = preload(
+	"res://addons/vp_flujo/editor/flow_complex_value_editor.gd"
+)
 const FLOW_SEMANTIC_INSERTION_ANCHOR_SCRIPT: Script = preload(
 	"res://addons/vp_flujo/editor/flow_chip_semantic_insertion_anchor.gd"
 )
@@ -70,12 +73,15 @@ var _action_owner: Object
 var _surface: FlowContainer
 var _add_value_button: Button
 var _literal_type_menu: PopupMenu
+var _add_structured_button: Button
+var _structured_type_menu: PopupMenu
 var _variable_selector: FlowVariableSelector
 var _expression_editor: FlowExpressionEditor
 var _condition_editor: FlowConditionEditor
 var _operation_editor: FlowOperationEditor
 var _node_property_selector: FlowNodePropertySelector
 var _scene_reference_choice: FlowSceneReferenceChoice
+var _complex_editor: FlowComplexValueEditor
 var _validation_label: Label
 var _feedback_label: Label
 var _details_panel: PanelContainer
@@ -146,6 +152,8 @@ var _node_property_edit_segment_id: String = ""
 var _node_ref_edit_active: bool = false
 var _node_ref_edit_segment_id: String = ""
 var _pending_node_payload: Dictionary = {}
+var _complex_edit_active: bool = false
+var _complex_edit_segment_id: String = ""
 
 
 var schema: FlowChipFieldSchema:
@@ -195,6 +203,18 @@ func _init() -> void:
 	_add_value_button.add_child(_literal_type_menu)
 	header.add_child(_add_value_button)
 
+	_add_structured_button = Button.new()
+	_add_structured_button.name = &"AddStructuredValue"
+	_add_structured_button.text = "+ Structured"
+	_add_structured_button.tooltip_text = "Insert a schema-compatible Array, Dictionary, Resource, Enum, or Bitfield."
+	_add_structured_button.focus_mode = Control.FOCUS_ALL
+	_add_structured_button.pressed.connect(_open_structured_type_selector)
+	_structured_type_menu = PopupMenu.new()
+	_structured_type_menu.name = &"StructuredTypeSelector"
+	_structured_type_menu.id_pressed.connect(_on_structured_type_selected)
+	_add_structured_button.add_child(_structured_type_menu)
+	header.add_child(_add_structured_button)
+
 	_variable_selector = FLOW_VARIABLE_SELECTOR_SCRIPT.new() as FlowVariableSelector
 	_variable_selector.variable_selected.connect(_on_variable_selected)
 	_variable_selector.cancelled.connect(_on_variable_selector_cancelled)
@@ -220,6 +240,10 @@ func _init() -> void:
 	_scene_reference_choice.property_requested.connect(_on_scene_property_requested)
 	_scene_reference_choice.cancelled.connect(_on_scene_reference_choice_cancelled)
 	add_child(_scene_reference_choice)
+	_complex_editor = FLOW_COMPLEX_VALUE_EDITOR_SCRIPT.new() as FlowComplexValueEditor
+	_complex_editor.source_confirmed.connect(_on_complex_source_confirmed)
+	_complex_editor.cancelled.connect(_on_complex_editor_cancelled)
+	add_child(_complex_editor)
 
 	_validation_label = Label.new()
 	_validation_label.name = &"ChipFieldValidation"
