@@ -82,6 +82,18 @@ static func validate(
 						variable_graph
 					)
 			continue
+		if segment is FlowOperationSegment:
+			var operation_segment: FlowOperationSegment = segment as FlowOperationSegment
+			operation_segment.validate_structure(result, segment_path)
+			if variable_graph != null:
+				var operation_source: FlowOperationValueSource = 					operation_segment.get_value_source() as FlowOperationValueSource
+				if operation_source != null:
+					operation_source.validate_against_graph(
+						result,
+						segment_path + ".value_source",
+						variable_graph
+					)
+			continue
 		if segment is FlowConditionSegment:
 			var condition_segment: FlowConditionSegment = segment as FlowConditionSegment
 			condition_segment.validate_structure(result, segment_path)
