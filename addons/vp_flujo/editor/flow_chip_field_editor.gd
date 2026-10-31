@@ -2765,8 +2765,14 @@ func accept_scene_node_payload(payload: Dictionary) -> bool:
 
 
 func _open_property_selector_for_payload(node: Node, payload: Dictionary) -> void:
-	var insertion: Dictionary = _node_property_insertion_context()
-	var slot: FlowChipSlotDefinition = insertion.get("slot", null) as FlowChipSlotDefinition
+	var slot: FlowChipSlotDefinition = null
+	if _node_property_edit_active:
+		slot = _slot_definition_for(
+			_find_segment(_node_property_edit_segment_id) as FlowChipSegment
+		)
+	else:
+		var insertion: Dictionary = _node_property_insertion_context()
+		slot = insertion.get("slot", null) as FlowChipSlotDefinition
 	var accepted_types: Array[Variant.Type] = _accepted_value_types_for_slot(slot)
 	_node_property_selector.open_for_node(
 		node,
