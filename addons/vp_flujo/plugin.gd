@@ -6,6 +6,9 @@ extends EditorPlugin
 const PV_CONTROLLER_SCRIPT := preload("res://addons/vp_flujo/runtime/pv_controller.gd")
 const PV_SCENE_INSPECTOR_CLASS := preload("res://addons/vp_flujo/editor/pv_scene_inspector.gd")
 const FLUO_DRAWER_CLASS := preload("res://addons/vp_flujo/editor/fluo_drawer.gd")
+const FLOW_SCENE_NODE_PANEL_CLASS := preload(
+	"res://addons/vp_flujo/editor/flow_scene_node_panel.gd"
+)
 const PV_CONTROLLER_INSPECTOR_PLUGIN_CLASS := preload("res://addons/vp_flujo/editor/pv_controller_inspector_plugin.gd")
 const FLOW_INTERACTION_COORDINATOR_CLASS := preload("res://addons/vp_flujo/editor/flow_interaction_coordinator.gd")
 const FLOW_CONTROLLER_PROVISIONER_CLASS := preload("res://addons/vp_flujo/editor/flow_controller_provisioner.gd")
@@ -25,6 +28,7 @@ var _interaction_coordinator: FlowInteractionCoordinator
 var _interaction_shortcut: Shortcut
 var _controller_provisioner: FlowControllerProvisioner
 var _fluo_drawer: FluoDrawer
+var _scene_node_panel: FlowSceneNodePanel
 var _structured_document_harness: FlowStructuredDocumentEditorHarness
 
 
@@ -43,7 +47,9 @@ func _enter_tree() -> void:
 	)
 	add_inspector_plugin(_controller_inspector_plugin)
 	_mount_fluo_drawer()
+	_mount_scene_node_panel()
 	add_tool_menu_item("Open Fluo", Callable(self, &"_on_fluo_open_requested"))
+	add_tool_menu_item("Open Node Panel", Callable(self, &"_on_scene_node_panel_requested"))
 	add_tool_menu_item(
 		STRUCTURED_DOCUMENT_HARNESS_MENU_ITEM,
 		Callable(self, &"_on_structured_document_harness_requested")
@@ -73,6 +79,7 @@ func _exit_tree() -> void:
 		_interaction_coordinator.shutdown()
 	_interaction_coordinator = null
 	_dispose_structured_document_harness()
+	_dispose_scene_node_panel()
 	_dispose_fluo_drawer()
 	_controller_provisioner = null
 	_interaction_shortcut = null
@@ -80,6 +87,7 @@ func _exit_tree() -> void:
 		remove_inspector_plugin(_controller_inspector_plugin)
 	_controller_inspector_plugin = null
 	remove_tool_menu_item("Open Fluo")
+	remove_tool_menu_item("Open Node Panel")
 	remove_tool_menu_item(STRUCTURED_DOCUMENT_HARNESS_MENU_ITEM)
 	_scene_inspector = null
 
@@ -108,6 +116,46 @@ func _mount_fluo_drawer() -> void:
 
 	editor_base_control.add_child(_fluo_drawer)
 	_fluo_drawer.set_controller(_controller_instance())
+	_fluo_drawer.side_changed.connect(_on_fluo_side_changed)
+
+
+func _mount_scene_node_panel() -> void:
+	if is_instance_valid(_scene_node_panel):
+		return
+	var editor_base_control: Control = EditorInterface.get_base_control()
+	if not is_instance_valid(editor_base_control):
+		return
+	_scene_node_panel = FLOW_SCENE_NODE_PANEL_CLASS.new() as FlowSceneNodePanel
+	if _scene_node_panel == null:
+		return
+	editor_base_control.add_child(_scene_node_panel)
+	_scene_node_panel.set_controller(_controller_instance())
+	if is_instance_valid(_fluo_drawer):
+		_scene_node_panel.set_opposite_to_fluo(_fluo_drawer.is_right_side())
+
+
+func _dispose_scene_node_panel() -> void:
+	var panel: FlowSceneNodePanel = _scene_node_panel
+	_scene_node_panel = null
+	if not is_instance_valid(panel):
+		return
+	panel.close()
+	if panel.get_parent() != null:
+		panel.get_parent().remove_child(panel)
+	panel.free()
+
+
+func _on_scene_node_panel_requested() -> void:
+	if not is_instance_valid(_scene_node_panel):
+		return
+	_update_controller_context()
+	_scene_node_panel.set_controller(_controller_instance())
+	_scene_node_panel.open()
+
+
+func _on_fluo_side_changed(right_side: bool) -> void:
+	if is_instance_valid(_scene_node_panel):
+		_scene_node_panel.set_opposite_to_fluo(right_side)
 
 
 func _dispose_fluo_drawer() -> void:
@@ -437,6 +485,8 @@ func _set_controller(controller: PVController) -> bool:
 			FlowGraphEditorCommands.Collection.VARIABLES,
 			""
 		)
+	if is_instance_valid(_scene_node_panel):
+		_scene_node_panel.set_controller(next_controller)
 
 	return true
 
