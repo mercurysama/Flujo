@@ -131,6 +131,15 @@ const CODE_OPERATION_SIGNATURE_INCOMPATIBLE: StringName = &"operation_signature_
 const CODE_OPERATION_DIVISION_BY_ZERO: StringName = &"operation_division_by_zero"
 const CODE_OPERATION_MODULO_BY_ZERO: StringName = &"operation_modulo_by_zero"
 const CODE_VALUE_RESOLUTION_TYPE_MISMATCH: StringName = &"value_resolution_type_mismatch"
+const CODE_NODE_PROPERTY_LOCATOR_MISSING: StringName = &"node_property_locator_missing"
+const CODE_NODE_PROPERTY_REQUIREMENT_ID_INVALID: StringName = &"node_property_requirement_id_invalid"
+const CODE_NODE_PROPERTY_PATH_INVALID: StringName = &"node_property_path_invalid"
+const CODE_NODE_PROPERTY_NAME_EMPTY: StringName = &"node_property_name_empty"
+const CODE_NODE_PROPERTY_TYPE_UNSUPPORTED: StringName = &"node_property_type_unsupported"
+const CODE_NODE_PROPERTY_CONTEXT_MISSING: StringName = &"node_property_context_missing"
+const CODE_NODE_PROPERTY_NODE_MISSING: StringName = &"node_property_node_missing"
+const CODE_NODE_PROPERTY_MISSING: StringName = &"node_property_missing"
+const CODE_NODE_PROPERTY_TYPE_MISMATCH: StringName = &"node_property_type_mismatch"
 
 # Short aliases keep the diagnostic vocabulary usable by generic callers that
 # do not repeat the full ChipField prefix.
