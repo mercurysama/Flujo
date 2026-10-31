@@ -32,11 +32,15 @@ func _test_catalog() -> void:
 		FlowOperationOperatorCatalog.operator_ids().size() == 6,
 		"Operation catalog exposes six MVP operators."
 	)
+	var mixed_types: Array[Variant.Type] = [
+		Variant.Type.TYPE_INT,
+		Variant.Type.TYPE_FLOAT,
+	]
 	_check(
-		not FlowOperationOperatorCatalog.find_signature(
+		FlowOperationOperatorCatalog.find_signature(
 			&"add",
-			[Variant.Type.TYPE_INT, Variant.Type.TYPE_FLOAT]
-		).is_empty() == false,
+			mixed_types
+		).is_empty(),
 		"Operation catalog rejects implicit int/float promotion."
 	)
 	_check(
