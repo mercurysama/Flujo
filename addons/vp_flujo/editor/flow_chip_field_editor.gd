@@ -3203,7 +3203,8 @@ func _create_value_control(segment: FlowChipSegment) -> Control:
 			var color_input: ColorPickerButton = ColorPickerButton.new()
 			color_input.name = &"FlowChipColorValue"
 			color_input.focus_mode = Control.FOCUS_ALL
-			color_input.color = value as Color
+			var color_value: Color = value
+			color_input.color = color_value
 			color_input.color_changed.connect(_on_color_value_changed)
 			return color_input
 	return null
@@ -3218,13 +3219,17 @@ func _create_vector_value_control(
 	var component_count: int = 2 		if value_type == Variant.Type.TYPE_VECTOR2 or value_type == Variant.Type.TYPE_VECTOR2I else 3
 	var values: Array[float] = []
 	if value_type == Variant.Type.TYPE_VECTOR2:
-		values = [value.x, value.y]
+		var v2: Vector2 = value
+		values = [v2.x, v2.y]
 	elif value_type == Variant.Type.TYPE_VECTOR2I:
-		values = [float(value.x), float(value.y)]
+		var v2i: Vector2i = value
+		values = [float(v2i.x), float(v2i.y)]
 	elif value_type == Variant.Type.TYPE_VECTOR3:
-		values = [value.x, value.y, value.z]
+		var v3: Vector3 = value
+		values = [v3.x, v3.y, v3.z]
 	else:
-		values = [float(value.x), float(value.y), float(value.z)]
+		var v3i: Vector3i = value
+		values = [float(v3i.x), float(v3i.y), float(v3i.z)]
 	for index: int in component_count:
 		var spin: SpinBox = SpinBox.new()
 		spin.name = "Component%d" % index
