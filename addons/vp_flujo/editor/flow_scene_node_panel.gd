@@ -1,5 +1,5 @@
 @tool
-## SceneTree projection used as the Node drag source for $ NodePropertyRef.
+## SceneTree projection used as the drag source for $ NodeRef / NodePropertyRef.
 class_name FlowSceneNodePanel
 extends Control
 
@@ -114,7 +114,7 @@ func _build_interface() -> void:
 	header.add_child(close_button)
 
 	var hint: Label = Label.new()
-	hint.text = "Drag a node into an Akis field, or double-click it after typing $."
+	hint.text = "Drag a node into Akis, or double-click it after typing $. The field decides whether it needs the Node itself or one of its properties."
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(hint)
 
