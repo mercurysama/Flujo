@@ -113,6 +113,14 @@ func validate_structure(result: FlowValidationResult, element_path: String) -> v
 			element_path + ".value",
 			_source_id
 		)
+	elif not _has_finite_components(value_type, value):
+		_add_error(
+			result,
+			FlowDiagnostic.CODE_LITERAL_COMPONENT_NOT_FINITE,
+			"Literal value source components must be finite.",
+			element_path + ".value",
+			_source_id
+		)
 
 
 static func is_allowed_type(candidate: Variant.Type) -> bool:
