@@ -121,6 +121,15 @@ const CODE_CONDITION_CONNECTOR_COUNT_INVALID: StringName = &"condition_connector
 const CODE_CONDITION_CONNECTOR_UNKNOWN: StringName = &"condition_connector_unknown"
 const CODE_CONDITION_SIGNATURE_INCOMPATIBLE: StringName = &"condition_signature_incompatible"
 const CODE_CONDITION_INVALID: StringName = &"condition_invalid"
+const CODE_OPERATION_OPERATOR_EMPTY: StringName = &"operation_operator_empty"
+const CODE_OPERATION_OPERATOR_UNKNOWN: StringName = &"operation_operator_unknown"
+const CODE_OPERATION_ARITY_INVALID: StringName = &"operation_arity_invalid"
+const CODE_OPERATION_OPERAND_NULL: StringName = &"operation_operand_null"
+const CODE_OPERATION_OPERAND_KIND_INVALID: StringName = &"operation_operand_kind_invalid"
+const CODE_OPERATION_SIGNATURE_INCOMPATIBLE: StringName = &"operation_signature_incompatible"
+const CODE_OPERATION_DIVISION_BY_ZERO: StringName = &"operation_division_by_zero"
+const CODE_OPERATION_MODULO_BY_ZERO: StringName = &"operation_modulo_by_zero"
+const CODE_VALUE_RESOLUTION_TYPE_MISMATCH: StringName = &"value_resolution_type_mismatch"
 
 # Short aliases keep the diagnostic vocabulary usable by generic callers that
 # do not repeat the full ChipField prefix.
