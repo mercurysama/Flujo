@@ -287,6 +287,10 @@ func configure(
 	_schema = next_schema
 	_undo_redo = next_undo_redo
 	_action_owner = next_owner
+	if next_owner is PVController:
+		_scene_controller = next_owner as PVController
+		_variable_graph = _scene_controller.flow_graph
+		_scene_root = EditorInterface.get_edited_scene_root()
 	if next_document == null and _schema != null:
 		var creation: FlowChipFieldCreationResult = FlowChipFieldFactory.new().create(_schema)
 		next_document = creation.document
