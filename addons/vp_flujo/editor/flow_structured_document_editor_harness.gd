@@ -198,9 +198,9 @@ func _fixture_description(label: String) -> String:
 		"EXPRESSION":
 			return "Legacy compatibility fixture. Expression remains available to existing callers; # now opens CONDITION."
 		"CONDITION":
-			return "Type # to open CONDITION. Operands can be Variable, Literal, or Node Property; try $Node.z_index > 0 or $Node.visible == true."
+			return "Type # to open CONDITION. Operands can be Variable, Literal, Node Property, or Operation. Try NOT ((Health + 2) > 10)."
 		"OPERATION":
-			return "Type ~ to open OPERATION. Operands can be Variable, Literal, or Node Property; try $Node.position + Vector2(...) where the field supports Vector2."
+			return "Type ~ to open OPERATION. Operands can be Variable, Literal, Node Property, or another Operation; nested previews stay parenthesized."
 		"SCENE PROPERTY":
 			return "Type $ to open Scene Nodes, choose or drag a node, then select a property compatible with the field. Escape with \\$ for literal text."
 	return ""
