@@ -2042,6 +2042,8 @@ func _open_condition_editor(input: TextEdit) -> void:
 func _condition_insertion_context() -> Dictionary:
 	var context: Dictionary = _variable_insertion_context()
 	context["schema"] = _schema
+	context["scene_controller"] = _scene_controller
+	context["scene_root"] = _scene_root
 	var slot: FlowChipSlotDefinition = context.get("slot", null) as FlowChipSlotDefinition
 	if slot == null:
 		var replacement: FlowChipSegment = _segment_at(
@@ -2083,6 +2085,8 @@ func _pending_condition_trigger_exists(text: String) -> bool:
 
 
 func _on_condition_confirmed(source: FlowConditionValueSource) -> void:
+	if source != null:
+		_bind_nested_scene_sources(source)
 	if _condition_trigger_active:
 		_insert_condition_source_at_caret(source)
 	elif _condition_edit_active:
@@ -2249,7 +2253,12 @@ func _on_condition_edit_requested(segment_id: String) -> bool:
 	_condition_editor.open_for_condition(
 		source, _variable_graph,
 		(get_chip_control(segment_id).get_global_rect() if get_chip_control(segment_id) != null else Rect2()),
-		{"schema": _schema, "slot": _slot_definition_for(condition)}
+		{
+			"schema": _schema,
+			"slot": _slot_definition_for(condition),
+			"scene_controller": _scene_controller,
+			"scene_root": _scene_root,
+		}
 	)
 	return true
 
@@ -2312,6 +2321,8 @@ func _open_operation_editor(input: TextEdit) -> void:
 func _operation_insertion_context() -> Dictionary:
 	var context: Dictionary = _variable_insertion_context()
 	context["schema"] = _schema
+	context["scene_controller"] = _scene_controller
+	context["scene_root"] = _scene_root
 	var slot: FlowChipSlotDefinition = context.get("slot", null) as FlowChipSlotDefinition
 	if slot == null:
 		var replacement: FlowChipSegment = _segment_at(
@@ -2347,6 +2358,8 @@ func get_operation_insertion_feedback() -> String:
 
 
 func _on_operation_confirmed(source: FlowOperationValueSource) -> void:
+	if source != null:
+		_bind_nested_scene_sources(source)
 	if _operation_trigger_active:
 		_insert_operation_source_at_caret(source)
 	elif _operation_edit_active:
@@ -2529,7 +2542,12 @@ func _on_operation_edit_requested(segment_id: String) -> bool:
 		source,
 		_variable_graph,
 		get_chip_control(segment_id).get_global_rect() 			if get_chip_control(segment_id) != null else Rect2(),
-		{"schema": _schema, "slot": _slot_definition_for(operation)}
+		{
+			"schema": _schema,
+			"slot": _slot_definition_for(operation),
+			"scene_controller": _scene_controller,
+			"scene_root": _scene_root,
+		}
 	)
 	return true
 
@@ -2721,6 +2739,26 @@ func _on_node_property_selector_cancelled() -> void:
 		_clear_node_property_edit_state()
 		_focus_chip(segment_id)
 		call_deferred(&"_restore_chip_focus_deferred", segment_id)
+
+
+func _bind_nested_scene_sources(source: FlowValueSource) -> void:
+	if source == null:
+		return
+	if source is FlowNodePropertyRefValueSource:
+		_bind_requirement_if_possible(source as FlowNodePropertyRefValueSource)
+		return
+	if source is FlowConditionValueSource:
+		var condition: FlowConditionValueSource = source as FlowConditionValueSource
+		for comparison: FlowConditionComparison in condition.comparisons:
+			if comparison == null:
+				continue
+			_bind_nested_scene_sources(comparison.left_source)
+			_bind_nested_scene_sources(comparison.right_source)
+		return
+	if source is FlowOperationValueSource:
+		var operation: FlowOperationValueSource = source as FlowOperationValueSource
+		for operand: FlowValueSource in operation.operands:
+			_bind_nested_scene_sources(operand)
 
 
 func _bind_requirement_if_possible(source: FlowNodePropertyRefValueSource) -> void:
