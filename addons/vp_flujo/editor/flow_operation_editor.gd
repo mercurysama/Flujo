@@ -79,6 +79,7 @@ func _init() -> void:
 	var actions: HBoxContainer = HBoxContainer.new()
 	actions.alignment = BoxContainer.ALIGNMENT_END
 	var cancel_button: Button = Button.new()
+	cancel_button.name = &"CancelOperation"
 	cancel_button.text = "Cancel"
 	cancel_button.focus_mode = Control.FOCUS_ALL
 	cancel_button.pressed.connect(_cancel)
@@ -121,6 +122,12 @@ func open_for_operation(
 
 func get_draft() -> FlowOperationValueSource:
 	return _draft
+
+
+func set_draft(source: FlowOperationValueSource) -> void:
+	_draft = source.duplicate_with_new_id() as FlowOperationValueSource 		if source != null else FlowOperationValueSource.new(&"", [null, null])
+	_invalid_literal_inputs.clear()
+	_rebuild()
 
 
 func can_confirm() -> bool:
