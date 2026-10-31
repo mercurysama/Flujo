@@ -212,12 +212,20 @@ func _validate_operand(
 		_add_condition_error(result, FlowDiagnostic.CODE_CONDITION_SOURCE_NULL,
 			"Condition operand source is null.", operand_path, _source_id)
 		return
-	if not (operand is FlowLiteralValueSource or operand is FlowVariableRefValueSource):
-		_add_condition_error(result, FlowDiagnostic.CODE_CONDITION_SOURCE_KIND_INVALID,
-			"Condition operands accept only LiteralValueSource or VariableRefValueSource.",
-			operand_path, operand.get_source_id())
+	if not (
+		operand is FlowLiteralValueSource
+		or operand is FlowVariableRefValueSource
+		or operand is FlowNodePropertyRefValueSource
+	):
+		_add_condition_error(
+			result,
+			FlowDiagnostic.CODE_CONDITION_SOURCE_KIND_INVALID,
+			"Condition operands accept Literal, VariableRef, or NodePropertyRef sources.",
+			operand_path,
+			operand.get_source_id()
+		)
 	operand.validate_structure(result, operand_path)
-	if variable_graph != null and operand is FlowVariableRefValueSource:
+	if variable_graph != null:
 		_validate_graph_operand(result, operand, operand_path, variable_graph)
 
 
@@ -227,6 +235,13 @@ static func _validate_graph_operand(
 		operand_path: String,
 		variable_graph: FlowGraph
 ) -> void:
+	if operand is FlowNodePropertyRefValueSource:
+		(operand as FlowNodePropertyRefValueSource).validate_against_graph(
+			result,
+			operand_path,
+			variable_graph
+		)
+		return
 	if not operand is FlowVariableRefValueSource:
 		return
 	var variable_source: FlowVariableRefValueSource = operand as FlowVariableRefValueSource
@@ -257,6 +272,8 @@ static func preview_source(source: FlowValueSource, variable_graph: FlowGraph = 
 			if variable != null:
 				return variable.display_name
 		return "<missing>"
+	if source is FlowNodePropertyRefValueSource:
+		return (source as FlowNodePropertyRefValueSource).get_preview()
 	return "<missing>"
 
 
