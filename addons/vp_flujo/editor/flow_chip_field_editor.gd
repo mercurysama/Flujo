@@ -2729,7 +2729,10 @@ func _bind_requirement_if_possible(source: FlowNodePropertyRefValueSource) -> vo
 	var node: Node = _scene_root.get_node_or_null(source.node_path)
 	if not is_instance_valid(node) or node.get_parent() != _scene_controller:
 		return
-	var binder: FlowSceneRequirementBinder = FlowSceneRequirementBinder.new(_undo_redo)
+	var binder: FlowSceneRequirementBinder = FlowSceneRequirementBinder.new(
+		_undo_redo,
+		_history_owner()
+	)
 	var requirement_id: String = binder.ensure_requirement(_scene_controller, node)
 	if not requirement_id.is_empty():
 		source.requirement_id = requirement_id
