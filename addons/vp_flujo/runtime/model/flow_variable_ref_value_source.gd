@@ -48,7 +48,8 @@ func resolve_value() -> Variant:
 
 
 func resolve(context: Variant = null) -> FlowValueResult:
-	var graph: FlowGraph = context as FlowGraph
+	var resolution_context: FlowValueResolutionContext = context as FlowValueResolutionContext
+	var graph: FlowGraph = resolution_context.graph if resolution_context != null else context as FlowGraph
 	var variable: FlowVariableDefinition = resolve_definition(graph)
 	if variable == null:
 		return FlowValueResult.fail(
@@ -72,6 +73,20 @@ func resolve(context: Variant = null) -> FlowValueResult:
 				variable_id
 			)
 		)
+	if resolution_context != null and resolution_context.has_variable_value(variable_id):
+		var runtime_value: Variant = resolution_context.get_variable_value(variable_id)
+		if typeof(runtime_value) != get_value_type():
+			return FlowValueResult.fail(
+				get_value_type(),
+				FlowDiagnostic.new(
+					FlowDiagnostic.CODE_VALUE_RESOLUTION_TYPE_MISMATCH,
+					FlowDiagnostic.Severity.ERROR,
+					"Runtime variable value does not match its declared type.",
+					"value_source.variable_id",
+					variable_id
+				)
+			)
+		return FlowValueResult.ok(runtime_value, get_value_type())
 	return FlowValueResult.ok(_default_value(variable), get_value_type())
 
 
@@ -138,6 +153,12 @@ static func _default_value(variable: FlowVariableDefinition) -> Variant:
 			return variable.float_value
 		FlowVariableDefinition.ValueType.STRING:
 			return variable.string_value
+		FlowVariableDefinition.ValueType.VECTOR2:
+			return variable.vector2_value
+		FlowVariableDefinition.ValueType.VECTOR3:
+			return variable.vector3_value
+		FlowVariableDefinition.ValueType.COLOR:
+			return variable.color_value
 	return null
 
 
