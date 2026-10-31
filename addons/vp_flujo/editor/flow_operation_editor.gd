@@ -8,6 +8,9 @@ signal operation_confirmed(source: FlowOperationValueSource)
 signal cancelled
 
 
+const MAX_EDITOR_NESTING_DEPTH: int = 6
+
+
 var _draft: FlowOperationValueSource
 var _graph: FlowGraph
 var _scene_controller: PVController
@@ -22,8 +25,11 @@ var _feedback_label: Label
 var _confirm_button: Button
 var _variable_selector: FlowVariableSelector
 var _node_property_picker: FlowNodePropertyOperandPicker
+var _nested_operation_editor: FlowOperationEditor
 var _variable_operand_index: int = -1
 var _node_property_operand_index: int = -1
+var _nested_operation_operand_index: int = -1
+var _nesting_depth: int = 0
 var _invalid_literal_inputs: Dictionary = {}
 var _closing_for_action: bool = false
 
@@ -117,6 +123,7 @@ func open_for_operation(
 	_context = context.duplicate()
 	_scene_controller = _context.get("scene_controller", null) as PVController
 	_scene_root = _context.get("scene_root", null) as Node
+	_nesting_depth = int(_context.get("operation_nesting_depth", 0))
 	_schema = _context.get("schema", null) as FlowChipFieldSchema
 	_node_property_picker.configure(_scene_controller, _scene_root)
 	if source != null:
@@ -199,15 +206,11 @@ func _rebuild_rows() -> void:
 		kind.set_item_metadata(2, FlowValueSource.SOURCE_KIND_LITERAL)
 		kind.add_item("Node Property")
 		kind.set_item_metadata(3, FlowValueSource.SOURCE_KIND_NODE_PROPERTY_REF)
+		kind.add_item("Operation")
+		kind.set_item_metadata(4, FlowValueSource.SOURCE_KIND_OPERATION)
+		kind.set_item_disabled(4, _nesting_depth >= MAX_EDITOR_NESTING_DEPTH)
 		var source: FlowValueSource = _draft.operands[index]
-		if source is FlowVariableRefValueSource:
-			kind.select(1)
-		elif source is FlowLiteralValueSource:
-			kind.select(2)
-		elif source is FlowNodePropertyRefValueSource:
-			kind.select(3)
-		else:
-			kind.select(0)
+		kind.select(_source_kind_menu_index(kind, source.get_source_kind()) if source != null else 0)
 		kind.item_selected.connect(_on_kind_selected.bind(index))
 		line.add_child(kind)
 
@@ -251,6 +254,22 @@ func _rebuild_rows() -> void:
 					node_source.get_value_type()
 				)
 				badge.tooltip_text = "Type comes from the selected Godot property."
+				line.add_child(badge)
+		elif source is FlowOperationValueSource:
+			var nested_source: FlowOperationValueSource = source as FlowOperationValueSource
+			choose = Button.new()
+			choose.name = "Operand%dEditOperation" % index
+			choose.text = _nested_operation_button_text(nested_source)
+			choose.custom_minimum_size = Vector2(190.0, 36.0)
+			choose.focus_mode = Control.FOCUS_ALL
+			choose.pressed.connect(_open_nested_operation_editor.bind(index, choose))
+			line.add_child(choose)
+			var nested_type: Variant.Type = nested_source.get_value_type()
+			if nested_type != Variant.Type.TYPE_NIL:
+				badge = Label.new()
+				badge.name = "Operand%dTypeBadge" % index
+				badge.text = FlowChipTypeDescriptor.variant_type_display_name(nested_type)
+				badge.tooltip_text = "Type produced by the nested Operation."
 				line.add_child(badge)
 		elif source is FlowLiteralValueSource:
 			var literal: FlowLiteralValueSource = source as FlowLiteralValueSource
@@ -393,12 +412,16 @@ func _on_kind_selected(_selected: int, operand_index: int) -> void:
 		_draft.operands[operand_index] = FlowLiteralValueSource.new()
 	elif source_kind == FlowValueSource.SOURCE_KIND_NODE_PROPERTY_REF:
 		_draft.operands[operand_index] = FlowNodePropertyRefValueSource.new()
+	elif source_kind == FlowValueSource.SOURCE_KIND_OPERATION 			and _nesting_depth < MAX_EDITOR_NESTING_DEPTH:
+		_draft.operands[operand_index] = FlowOperationValueSource.new(&"", [null, null])
 	else:
 		_draft.operands[operand_index] = null
 	_rebuild_rows()
 	_update_preview()
 	if source_kind == FlowValueSource.SOURCE_KIND_NODE_PROPERTY_REF:
 		call_deferred(&"_open_node_property_picker_for_current", operand_index)
+	elif source_kind == FlowValueSource.SOURCE_KIND_OPERATION:
+		call_deferred(&"_open_nested_operation_editor_for_current", operand_index)
 
 
 func _on_type_selected(selected: int, operand_index: int) -> void:
@@ -555,6 +578,65 @@ func _on_node_property_picker_cancelled() -> void:
 	_node_property_operand_index = -1
 
 
+func _open_nested_operation_editor(
+		operand_index: int,
+		button: Button
+) -> void:
+	if _draft == null or operand_index < 0 or operand_index >= _draft.operands.size():
+		return
+	if _nesting_depth >= MAX_EDITOR_NESTING_DEPTH:
+		return
+	var source: FlowOperationValueSource = 		_draft.operands[operand_index] as FlowOperationValueSource
+	if source == null:
+		return
+	_nested_operation_operand_index = operand_index
+	var nested: FlowOperationEditor = _ensure_nested_operation_editor()
+	nested.open_for_operation(
+		source,
+		_graph,
+		button.get_global_rect() if button != null else get_global_rect(),
+		{
+			"scene_controller": _scene_controller,
+			"scene_root": _scene_root,
+			"operation_nesting_depth": _nesting_depth + 1,
+		}
+	)
+
+
+func _open_nested_operation_editor_for_current(operand_index: int) -> void:
+	if operand_index < 0 or operand_index >= _rows.size():
+		return
+	var button: Button = _rows[operand_index].get("choose", null) as Button
+	_open_nested_operation_editor(operand_index, button)
+
+
+func _ensure_nested_operation_editor() -> FlowOperationEditor:
+	if is_instance_valid(_nested_operation_editor):
+		return _nested_operation_editor
+	_nested_operation_editor = FlowOperationEditor.new()
+	_nested_operation_editor.name = &"NestedOperationEditor"
+	_nested_operation_editor.operation_confirmed.connect(_on_nested_operation_confirmed)
+	_nested_operation_editor.cancelled.connect(_on_nested_operation_cancelled)
+	add_child(_nested_operation_editor)
+	return _nested_operation_editor
+
+
+func _on_nested_operation_confirmed(source: FlowOperationValueSource) -> void:
+	if source == null or _draft == null 			or _nested_operation_operand_index < 0 			or _nested_operation_operand_index >= _draft.operands.size():
+		return
+	var current: FlowOperationValueSource = 		_draft.operands[_nested_operation_operand_index] as FlowOperationValueSource
+	if current != null:
+		source.source_id = current.source_id
+	_draft.operands[_nested_operation_operand_index] = source
+	_nested_operation_operand_index = -1
+	_rebuild_rows()
+	_update_preview()
+
+
+func _on_nested_operation_cancelled() -> void:
+	_nested_operation_operand_index = -1
+
+
 func _on_variable_selected(variable_id: String) -> void:
 	if _graph == null or _draft == null or _variable_operand_index < 0:
 		return
@@ -618,6 +700,8 @@ func _validation_message() -> String:
 			return "Complete the literal value for operand %s." % ("A" if index == 0 else "B")
 		if source is FlowNodePropertyRefValueSource and not source.is_valid():
 			return "Choose a node property for operand %s." % ("A" if index == 0 else "B")
+		if source is FlowOperationValueSource and not source.is_valid():
+			return "Complete the nested Operation for operand %s." % ("A" if index == 0 else "B")
 	if not _invalid_literal_inputs.is_empty():
 		return "Enter a valid literal value."
 	var result: FlowValidationResult = FlowValidationResult.new()
@@ -657,6 +741,9 @@ func _confirm() -> void:
 func _cancel() -> void:
 	if _node_property_picker != null:
 		_node_property_picker.cancel_request()
+	if is_instance_valid(_nested_operation_editor) and _nested_operation_editor.visible:
+		_nested_operation_editor.hide()
+	_nested_operation_operand_index = -1
 	_closing_for_action = false
 	hide()
 
@@ -664,6 +751,9 @@ func _cancel() -> void:
 func _on_popup_hide() -> void:
 	if _node_property_picker != null:
 		_node_property_picker.cancel_request()
+	if is_instance_valid(_nested_operation_editor) and _nested_operation_editor.visible:
+		_nested_operation_editor.hide()
+	_nested_operation_operand_index = -1
 	if not _closing_for_action:
 		cancelled.emit()
 	_closing_for_action = false
@@ -672,6 +762,19 @@ func _on_popup_hide() -> void:
 func _focus_default() -> void:
 	if visible and _operator_menu != null:
 		_operator_menu.grab_focus()
+
+
+func _source_kind_menu_index(menu: OptionButton, source_kind: StringName) -> int:
+	for index: int in menu.item_count:
+		if StringName(menu.get_item_metadata(index)) == source_kind:
+			return index
+	return 0
+
+
+func _nested_operation_button_text(source: FlowOperationValueSource) -> String:
+	if source == null or not source.is_valid():
+		return "Build nested Operation..."
+	return "(" + source.get_preview(_graph) + ")"
 
 
 func _node_property_button_text(source: FlowNodePropertyRefValueSource) -> String:
