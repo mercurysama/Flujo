@@ -512,6 +512,10 @@ func get_node_property_selector() -> FlowNodePropertySelector:
 	return _node_property_selector
 
 
+func get_scene_reference_choice() -> FlowSceneReferenceChoice:
+	return _scene_reference_choice
+
+
 
 func get_variable_edit_segment_id() -> String:
 	return _variable_edit_segment_id if _variable_edit_active else ""
@@ -530,6 +534,10 @@ func get_operation_edit_segment_id() -> String:
 
 func get_node_property_edit_segment_id() -> String:
 	return _node_property_edit_segment_id if _node_property_edit_active else ""
+
+
+func get_node_ref_edit_segment_id() -> String:
+	return _node_ref_edit_segment_id if _node_ref_edit_active else ""
 
 
 
@@ -3972,6 +3980,37 @@ func _render_details() -> void:
 		edit_operation.focus_mode = Control.FOCUS_ALL
 		edit_operation.pressed.connect(_on_operation_edit_requested.bind(segment.get_segment_id()))
 		_details.add_child(edit_operation)
+		_add_policy_detail_labels(chip_editable, type_locked, source_kind_locked)
+		return
+	var node_ref_segment: FlowNodeRefSegment = segment as FlowNodeRefSegment
+	var node_ref_source: FlowNodeRefValueSource = 		segment.get_value_source() as FlowNodeRefValueSource
+	if node_ref_segment != null and node_ref_source != null:
+		var node_ref_preview: Label = Label.new()
+		node_ref_preview.name = &"NodeRefPreview"
+		node_ref_preview.text = "Preview: " + node_ref_source.get_preview()
+		_details.add_child(node_ref_preview)
+		var node_ref_type: Label = Label.new()
+		node_ref_type.name = &"NodeRefResultType"
+		node_ref_type.text = "Result Type: Object (Node)"
+		_details.add_child(node_ref_type)
+		var node_ref_class: Label = Label.new()
+		node_ref_class.name = &"NodeRefClass"
+		node_ref_class.text = "Class: " + String(node_ref_source.node_class_hint)
+		_details.add_child(node_ref_class)
+		var node_ref_locator: Label = Label.new()
+		node_ref_locator.name = &"NodeRefLocator"
+		node_ref_locator.text = "Requirement: %s" % node_ref_source.requirement_id 			if not node_ref_source.requirement_id.is_empty() 			else "Node Path: %s" % String(node_ref_source.node_path)
+		node_ref_locator.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_details.add_child(node_ref_locator)
+		var edit_node_ref: Button = Button.new()
+		edit_node_ref.name = &"EditNodeRef"
+		edit_node_ref.text = "Change Node"
+		edit_node_ref.disabled = not chip_editable
+		edit_node_ref.focus_mode = Control.FOCUS_ALL
+		edit_node_ref.pressed.connect(
+			_on_node_ref_edit_requested.bind(segment.get_segment_id())
+		)
+		_details.add_child(edit_node_ref)
 		_add_policy_detail_labels(chip_editable, type_locked, source_kind_locked)
 		return
 	var node_property_segment: FlowNodePropertyRefSegment = segment as FlowNodePropertyRefSegment
