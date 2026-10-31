@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/model/flow_node_ref_lot_07_test.gd" id="1_node_ref"]
+
+[node name="FlowNodeRefLot07Test" type="Node"]
+script = ExtResource("1_node_ref")
