@@ -3042,6 +3042,9 @@ func _replace_node_ref_segment(
 	var index: int = _find_segment_index(segment_id)
 	if index < 0:
 		return false
+	var old_source: FlowNodeRefValueSource = 		existing.get_value_source() as FlowNodeRefValueSource
+	if old_source != null:
+		source.source_id = old_source.source_id
 	var before_segments: Array[FlowDocumentSegment] = _copy_segments(_document.segments)
 	var after_segments: Array[FlowDocumentSegment] = _copy_segments(before_segments)
 	var replacement: FlowNodeRefSegment = FlowNodeRefSegment.new(source)
@@ -3209,6 +3212,8 @@ func _replace_node_property_segment(
 	var index: int = _find_segment_index(segment_id)
 	if index < 0:
 		return false
+	if old_source != null:
+		source.source_id = old_source.source_id
 	var before_segments: Array[FlowDocumentSegment] = _copy_segments(_document.segments)
 	var after_segments: Array[FlowDocumentSegment] = _copy_segments(before_segments)
 	var replacement: FlowNodePropertyRefSegment = FlowNodePropertyRefSegment.new(source)
@@ -4965,6 +4970,11 @@ func _can_edit_chip(chip: FlowChipSegment) -> bool:
 		return _can_change_chip_content(chip)
 	if chip is FlowConditionSegment:
 		return _can_change_chip_content(chip)
+	if chip is FlowNodeRefSegment:
+		if descriptor == null or not descriptor.editable or not _schema_can_change_reference():
+			return false
+		var node_definition: FlowChipSlotDefinition = _slot_definition_for(chip)
+		return node_definition == null or node_definition.can_change_reference()
 	return descriptor != null and descriptor.editable and _can_change_chip_content(chip)
 
 
