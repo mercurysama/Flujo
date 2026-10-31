@@ -91,6 +91,16 @@ func is_valid() -> bool:
 	return false
 
 
+## Optional graph-aware validation hook. Reference/composite sources override it;
+## scalar sources intentionally keep the no-op implementation.
+func validate_against_graph(
+		_result: FlowValidationResult,
+		_element_path: String,
+		_graph: FlowGraph
+) -> void:
+	pass
+
+
 ## Validates only source structure and identity. Consumers may add the
 ## source-specific invalid-value diagnostic without changing this resource.
 func validate_structure(result: FlowValidationResult, element_path: String) -> void:
