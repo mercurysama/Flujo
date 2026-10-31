@@ -94,6 +94,18 @@ static func validate(
 						variable_graph
 					)
 			continue
+		if segment is FlowNodePropertyRefSegment:
+			var node_property_segment: FlowNodePropertyRefSegment = 				segment as FlowNodePropertyRefSegment
+			node_property_segment.validate_structure(result, segment_path)
+			if variable_graph != null:
+				var node_property_source: FlowNodePropertyRefValueSource = 					node_property_segment.get_value_source() as FlowNodePropertyRefValueSource
+				if node_property_source != null:
+					node_property_source.validate_against_graph(
+						result,
+						segment_path + ".value_source",
+						variable_graph
+					)
+			continue
 		if segment is FlowConditionSegment:
 			var condition_segment: FlowConditionSegment = segment as FlowConditionSegment
 			condition_segment.validate_structure(result, segment_path)
