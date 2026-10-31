@@ -34,6 +34,9 @@ const FLOW_OPERATION_EDITOR_SCRIPT: Script = preload(
 const FLOW_NODE_PROPERTY_SELECTOR_SCRIPT: Script = preload(
 	"res://addons/vp_flujo/editor/flow_node_property_selector.gd"
 )
+const FLOW_SCENE_REFERENCE_CHOICE_SCRIPT: Script = preload(
+	"res://addons/vp_flujo/editor/flow_scene_reference_choice.gd"
+)
 const FLOW_SEMANTIC_INSERTION_ANCHOR_SCRIPT: Script = preload(
 	"res://addons/vp_flujo/editor/flow_chip_semantic_insertion_anchor.gd"
 )
@@ -52,6 +55,8 @@ const FEEDBACK_NO_COMPATIBLE_OPERATION: String = \
 	"No compatible Operation source is available here."
 const FEEDBACK_NO_COMPATIBLE_NODE_PROPERTY: String = \
 	"No compatible Node Property source is available here."
+const FEEDBACK_NO_COMPATIBLE_NODE: String = \
+	"No compatible Node source is available here."
 
 
 var _schema: FlowChipFieldSchema
@@ -70,6 +75,7 @@ var _expression_editor: FlowExpressionEditor
 var _condition_editor: FlowConditionEditor
 var _operation_editor: FlowOperationEditor
 var _node_property_selector: FlowNodePropertySelector
+var _scene_reference_choice: FlowSceneReferenceChoice
 var _validation_label: Label
 var _feedback_label: Label
 var _details_panel: PanelContainer
@@ -137,6 +143,8 @@ var _node_property_trigger_before_text_states: Array[Dictionary] = []
 var _node_property_trigger_anchor: FlowChipSemanticInsertionAnchor
 var _node_property_edit_active: bool = false
 var _node_property_edit_segment_id: String = ""
+var _node_ref_edit_active: bool = false
+var _node_ref_edit_segment_id: String = ""
 var _pending_node_payload: Dictionary = {}
 
 
@@ -207,6 +215,11 @@ func _init() -> void:
 	_node_property_selector.property_selected.connect(_on_node_property_selected)
 	_node_property_selector.cancelled.connect(_on_node_property_selector_cancelled)
 	add_child(_node_property_selector)
+	_scene_reference_choice = FLOW_SCENE_REFERENCE_CHOICE_SCRIPT.new() as FlowSceneReferenceChoice
+	_scene_reference_choice.node_requested.connect(_on_scene_node_requested)
+	_scene_reference_choice.property_requested.connect(_on_scene_property_requested)
+	_scene_reference_choice.cancelled.connect(_on_scene_reference_choice_cancelled)
+	add_child(_scene_reference_choice)
 
 	_validation_label = Label.new()
 	_validation_label.name = &"ChipFieldValidation"
