@@ -243,6 +243,11 @@ func _init() -> void:
 	_surface.custom_minimum_size = Vector2(0.0, 72.0)
 	_surface.add_theme_constant_override(&"h_separation", 3)
 	_surface.add_theme_constant_override(&"v_separation", 3)
+	_surface.set_drag_forwarding(
+		Callable(),
+		Callable(self, &"_can_drop_data"),
+		Callable(self, &"_drop_data")
+	)
 	surface_scroll.add_child(_surface)
 
 	_details_panel = PanelContainer.new()
@@ -1530,6 +1535,11 @@ func _create_segment_control(segment: FlowDocumentSegment) -> Control:
 		chip.focus_previous_requested.connect(_on_chip_focus_previous.bind(segment.get_segment_id()))
 		chip.focus_next_requested.connect(_on_chip_focus_next.bind(segment.get_segment_id()))
 		chip.focus_entered.connect(_on_chip_focus_entered.bind(segment.get_segment_id()))
+		chip.set_drag_forwarding(
+			Callable(),
+			Callable(self, &"_can_drop_data"),
+			Callable(self, &"_drop_data")
+		)
 		return chip
 	if segment is FlowTextSegment:
 		var text_segment: FlowTextSegment = segment as FlowTextSegment
@@ -1549,6 +1559,11 @@ func _create_segment_control(segment: FlowDocumentSegment) -> Control:
 		text_control.focus_entered.connect(_on_text_control_focused.bind(segment.get_segment_id(), text_control))
 		text_control.focus_exited.connect(_on_text_control_focus_exited.bind(segment.get_segment_id(), text_control))
 		text_control.gui_input.connect(_on_text_gui_input.bind(segment.get_segment_id(), text_control))
+		text_control.set_drag_forwarding(
+			Callable(),
+			Callable(self, &"_can_drop_data"),
+			Callable(self, &"_drop_data")
+		)
 		return text_control
 	var unsupported: Label = Label.new()
 	unsupported.text = "[Unsupported segment]"
