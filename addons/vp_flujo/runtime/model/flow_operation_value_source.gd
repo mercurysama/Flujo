@@ -156,7 +156,8 @@ func validate_against_graph(
 
 
 func resolve(context: Variant = null) -> FlowValueResult:
-	var graph: FlowGraph = context.graph 		if context is FlowValueResolutionContext else context as FlowGraph
+	var resolution_context: FlowValueResolutionContext = context as FlowValueResolutionContext
+	var graph: FlowGraph = resolution_context.graph 		if resolution_context != null else context as FlowGraph
 	var validation: FlowValidationResult = FlowValidationResult.new()
 	validate_structure(validation, "operation")
 	validate_against_graph(validation, "operation", graph)
