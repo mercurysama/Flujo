@@ -129,6 +129,8 @@ func _create_chip(
 		chip = FlowExpressionSegment.new(source as FlowExpressionValueSource)
 	elif source is FlowConditionValueSource:
 		chip = FlowConditionSegment.new(source as FlowConditionValueSource)
+	elif source is FlowOperationValueSource:
+		chip = FlowOperationSegment.new(source as FlowOperationValueSource)
 	else:
 		chip = FlowChipSegment.new()
 		chip.set_value_source(source)
