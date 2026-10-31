@@ -4215,6 +4215,34 @@ func _render_details() -> void:
 		_details.add_child(edit_operation)
 		_add_policy_detail_labels(chip_editable, type_locked, source_kind_locked)
 		return
+	if _is_complex_segment(segment):
+		var complex_source: FlowValueSource = segment.get_value_source()
+		if complex_source != null:
+			var complex_preview: Label = Label.new()
+			complex_preview.name = &"ComplexValuePreview"
+			complex_preview.text = "Preview: " + FlowValueSourcePreview.preview(
+				complex_source,
+				_variable_graph
+			)
+			complex_preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			_details.add_child(complex_preview)
+			var complex_type: Label = Label.new()
+			complex_type.name = &"ComplexValueType"
+			complex_type.text = "Result Type: " + 				FlowChipTypeDescriptor.variant_type_display_name(
+					complex_source.get_value_type()
+				)
+			_details.add_child(complex_type)
+			var edit_complex: Button = Button.new()
+			edit_complex.name = &"EditComplexValue"
+			edit_complex.text = "Edit Structured Value"
+			edit_complex.disabled = not chip_editable
+			edit_complex.focus_mode = Control.FOCUS_ALL
+			edit_complex.pressed.connect(
+				_on_complex_edit_requested.bind(segment.get_segment_id())
+			)
+			_details.add_child(edit_complex)
+			_add_policy_detail_labels(chip_editable, type_locked, source_kind_locked)
+			return
 	var node_ref_segment: FlowNodeRefSegment = segment as FlowNodeRefSegment
 	var node_ref_source: FlowNodeRefValueSource = 		segment.get_value_source() as FlowNodeRefValueSource
 	if node_ref_segment != null and node_ref_source != null:
