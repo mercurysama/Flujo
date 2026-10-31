@@ -336,11 +336,19 @@ func _collection_value_row(
 		row.add_child(missing)
 
 	if source == null or not source is FlowLiteralValueSource:
-		var scalar: Button = _button("Scalar", replace_action.bind(FlowLiteralValueSource.new()))
+		var scalar: Button = _button(
+			"Scalar",
+			_replace_with_scalar.bind(replace_action)
+		)
 		row.add_child(scalar)
 	if remove_action.is_valid():
 		row.add_child(_button("Remove", remove_action))
 	return row
+
+
+func _replace_with_scalar(replace_action: Callable) -> void:
+	if replace_action.is_valid():
+		replace_action.call(FlowLiteralValueSource.new())
 
 
 func _collection_literal_value_control(source: FlowLiteralValueSource) -> Control:
