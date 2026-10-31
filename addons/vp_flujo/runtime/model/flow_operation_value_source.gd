@@ -110,7 +110,7 @@ func validate_structure(result: FlowValidationResult, element_path: String) -> v
 			_add_error(
 				result,
 				FlowDiagnostic.CODE_OPERATION_OPERAND_KIND_INVALID,
-				"Operation operands accept LiteralValue or VariableRef sources.",
+				"Operation operands accept Literal, VariableRef, or NodePropertyRef sources.",
 				path,
 				operand.get_source_id()
 			)
@@ -133,6 +133,14 @@ func validate_against_graph(
 	if result == null or graph == null:
 		return
 	for index: int in operands.size():
+		var node_property_source: FlowNodePropertyRefValueSource = 			operands[index] as FlowNodePropertyRefValueSource
+		if node_property_source != null:
+			node_property_source.validate_against_graph(
+				result,
+				"%s.operands[%d]" % [element_path, index],
+				graph
+			)
+			continue
 		var variable_source: FlowVariableRefValueSource = 			operands[index] as FlowVariableRefValueSource
 		if variable_source == null:
 			continue
@@ -244,7 +252,7 @@ func _runtime_error(code: StringName, message: String) -> FlowValueResult:
 
 
 func _is_allowed_operand(operand: FlowValueSource) -> bool:
-	return operand is FlowLiteralValueSource or operand is FlowVariableRefValueSource
+	return operand is FlowLiteralValueSource 		or operand is FlowVariableRefValueSource 		or operand is FlowNodePropertyRefValueSource
 
 
 static func _operand_preview(operand: FlowValueSource, graph: FlowGraph) -> String:
