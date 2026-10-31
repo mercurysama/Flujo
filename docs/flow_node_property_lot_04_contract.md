@@ -12,6 +12,11 @@ system.
 This lot intentionally does **not** add generic Object, Resource, Array,
 Dictionary or null values.
 
+A selected SceneTree Node is therefore an **editor authoring payload**, not a
+persisted Node/Object ValueSource. Persistent semantics are the Requirement
+binding (when applicable) plus the typed NodePropertyRef. A standalone Node
+value Tok belongs to the later Object/Resource expansion.
+
 ## Trigger vocabulary
 
 - `@` — Variable / Memory.
