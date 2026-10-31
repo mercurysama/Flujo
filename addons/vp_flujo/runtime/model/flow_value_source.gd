@@ -14,6 +14,11 @@ const SOURCE_KIND_CONDITION: StringName = &"condition"
 const SOURCE_KIND_OPERATION: StringName = &"operation"
 const SOURCE_KIND_NODE_PROPERTY_REF: StringName = &"node_property_ref"
 const SOURCE_KIND_NODE_REF: StringName = &"node_ref"
+const SOURCE_KIND_ARRAY: StringName = &"array"
+const SOURCE_KIND_DICTIONARY: StringName = &"dictionary"
+const SOURCE_KIND_RESOURCE_REF: StringName = &"resource_ref"
+const SOURCE_KIND_ENUM: StringName = &"enum"
+const SOURCE_KIND_BITFIELD: StringName = &"bitfield"
 
 @export_storage var _source_id: String = FlowId.create()
 
