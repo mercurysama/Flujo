@@ -43,6 +43,8 @@ func get_chip_tooltip_data() -> FlowChipTooltipData:
 	var source: FlowConditionValueSource = get_value_source() as FlowConditionValueSource
 	data.add_field("Type", DISPLAY_NAME)
 	data.add_field("Produced Type", "bool")
+	if source != null:
+		data.add_field("NOT", "yes" if source.negated else "no")
 	data.add_field("Preview", source.get_preview(_variable_graph) if source != null else "<missing>")
 	data.add_field("Validity", "valid" if is_chip_valid() else "invalid")
 	return data
