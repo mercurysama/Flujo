@@ -13,6 +13,7 @@ const SOURCE_KIND_EXPRESSION: StringName = &"expression"
 const SOURCE_KIND_CONDITION: StringName = &"condition"
 const SOURCE_KIND_OPERATION: StringName = &"operation"
 const SOURCE_KIND_NODE_PROPERTY_REF: StringName = &"node_property_ref"
+const SOURCE_KIND_NODE_REF: StringName = &"node_ref"
 
 @export_storage var _source_id: String = FlowId.create()
 
