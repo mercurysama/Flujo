@@ -148,6 +148,16 @@ const CODE_NODE_REF_PATH_INVALID: StringName = &"node_ref_path_invalid"
 const CODE_NODE_REF_CONTEXT_MISSING: StringName = &"node_ref_context_missing"
 const CODE_NODE_REF_NODE_MISSING: StringName = &"node_ref_node_missing"
 const CODE_NODE_REF_CLASS_MISMATCH: StringName = &"node_ref_class_mismatch"
+const CODE_COLLECTION_ELEMENT_MISSING: StringName = &"collection_element_missing"
+const CODE_DICTIONARY_KEY_EMPTY: StringName = &"dictionary_key_empty"
+const CODE_DICTIONARY_KEY_DUPLICATE: StringName = &"dictionary_key_duplicate"
+const CODE_RESOURCE_REF_PATH_MISSING: StringName = &"resource_ref_path_missing"
+const CODE_RESOURCE_REF_MISSING: StringName = &"resource_ref_missing"
+const CODE_RESOURCE_REF_TYPE_MISMATCH: StringName = &"resource_ref_type_mismatch"
+const CODE_ENUM_OPTIONS_INVALID: StringName = &"enum_options_invalid"
+const CODE_ENUM_VALUE_INVALID: StringName = &"enum_value_invalid"
+const CODE_BITFIELD_OPTIONS_INVALID: StringName = &"bitfield_options_invalid"
+const CODE_BITFIELD_MASK_INVALID: StringName = &"bitfield_mask_invalid"
 
 # Short aliases keep the diagnostic vocabulary usable by generic callers that
 # do not repeat the full ChipField prefix.
