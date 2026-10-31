@@ -3050,6 +3050,27 @@ func _render_details() -> void:
 		_details.add_child(edit_condition)
 		_add_policy_detail_labels(chip_editable, type_locked, source_kind_locked)
 		return
+	var operation_segment: FlowOperationSegment = segment as FlowOperationSegment
+	var operation_source: FlowOperationValueSource = 		segment.get_value_source() as FlowOperationValueSource
+	if operation_segment != null and operation_source != null:
+		var operation_preview: Label = Label.new()
+		operation_preview.name = &"OperationPreview"
+		operation_preview.text = "Preview: " + operation_source.get_preview(_variable_graph)
+		operation_preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_details.add_child(operation_preview)
+		var operation_type: Label = Label.new()
+		operation_type.name = &"OperationResultType"
+		operation_type.text = "Result Type: " + 			FlowChipTypeDescriptor.variant_type_display_name(operation_source.get_value_type())
+		_details.add_child(operation_type)
+		var edit_operation: Button = Button.new()
+		edit_operation.name = &"EditOperation"
+		edit_operation.text = "Edit Operation"
+		edit_operation.disabled = not chip_editable
+		edit_operation.focus_mode = Control.FOCUS_ALL
+		edit_operation.pressed.connect(_on_operation_edit_requested.bind(segment.get_segment_id()))
+		_details.add_child(edit_operation)
+		_add_policy_detail_labels(chip_editable, type_locked, source_kind_locked)
+		return
 	if not descriptor.editable:
 		_add_policy_detail_labels(false, type_locked, source_kind_locked)
 		return
@@ -3155,7 +3176,7 @@ func _create_value_control(segment: FlowChipSegment) -> Control:
 				_on_native_history_gui_input.bind(numeric_input.get_line_edit())
 			)
 			return numeric_input
-		Variant.Type.TYPE_STRING, Variant.Type.TYPE_STRING_NAME:
+		Variant.Type.TYPE_STRING, Variant.Type.TYPE_STRING_NAME, Variant.Type.TYPE_NODE_PATH:
 			if typeof(value) != value_type:
 				return null
 			var text_input: LineEdit = FLOW_CHIP_LINE_EDIT_SCRIPT.new() as LineEdit
@@ -3172,7 +3193,51 @@ func _create_value_control(segment: FlowChipSegment) -> Control:
 				_on_text_value_focus_exited.bind(segment.get_segment_id(), value_type, text_input)
 			)
 			return text_input
+		Variant.Type.TYPE_VECTOR2, Variant.Type.TYPE_VECTOR2I, 		Variant.Type.TYPE_VECTOR3, Variant.Type.TYPE_VECTOR3I:
+			if typeof(value) != value_type:
+				return null
+			return _create_vector_value_control(value_type, value)
+		Variant.Type.TYPE_COLOR:
+			if typeof(value) != Variant.Type.TYPE_COLOR:
+				return null
+			var color_input: ColorPickerButton = ColorPickerButton.new()
+			color_input.name = &"FlowChipColorValue"
+			color_input.focus_mode = Control.FOCUS_ALL
+			color_input.color = value as Color
+			color_input.color_changed.connect(_on_color_value_changed)
+			return color_input
 	return null
+
+
+func _create_vector_value_control(
+		value_type: Variant.Type,
+		value: Variant
+) -> Control:
+	var box: HBoxContainer = HBoxContainer.new()
+	box.name = &"FlowChipVectorValue"
+	var component_count: int = 2 		if value_type == Variant.Type.TYPE_VECTOR2 or value_type == Variant.Type.TYPE_VECTOR2I else 3
+	var values: Array[float] = []
+	if value_type == Variant.Type.TYPE_VECTOR2:
+		values = [value.x, value.y]
+	elif value_type == Variant.Type.TYPE_VECTOR2I:
+		values = [float(value.x), float(value.y)]
+	elif value_type == Variant.Type.TYPE_VECTOR3:
+		values = [value.x, value.y, value.z]
+	else:
+		values = [float(value.x), float(value.y), float(value.z)]
+	for index: int in component_count:
+		var spin: SpinBox = SpinBox.new()
+		spin.name = "Component%d" % index
+		spin.focus_mode = Control.FOCUS_ALL
+		spin.allow_greater = true
+		spin.allow_lesser = true
+		spin.step = 1.0 if value_type == Variant.Type.TYPE_VECTOR2I 			or value_type == Variant.Type.TYPE_VECTOR3I else 0.01
+		spin.rounded = value_type == Variant.Type.TYPE_VECTOR2I 			or value_type == Variant.Type.TYPE_VECTOR3I
+		spin.value = values[index]
+		spin.custom_minimum_size.x = 90.0
+		spin.value_changed.connect(_on_vector_value_changed.bind(value_type, box))
+		box.add_child(spin)
+	return box
 
 
 ## The Akis action is already executed by _input(). This phase only accepts the
@@ -3198,6 +3263,33 @@ func _on_numeric_value_changed(value: float) -> void:
 		return
 	var value_type: Variant.Type = segment.get_editable_value_type()
 	set_selected_chip_value(int(value) if value_type == Variant.Type.TYPE_INT else value)
+
+
+func _on_vector_value_changed(
+		_value: float,
+		value_type: Variant.Type,
+		box: HBoxContainer
+) -> void:
+	var components: Array[float] = []
+	for child: Node in box.get_children():
+		var spin: SpinBox = child as SpinBox
+		if spin != null:
+			components.append(spin.value)
+	var next: Variant
+	match value_type:
+		Variant.Type.TYPE_VECTOR2:
+			next = Vector2(components[0], components[1])
+		Variant.Type.TYPE_VECTOR2I:
+			next = Vector2i(int(components[0]), int(components[1]))
+		Variant.Type.TYPE_VECTOR3:
+			next = Vector3(components[0], components[1], components[2])
+		Variant.Type.TYPE_VECTOR3I:
+			next = Vector3i(int(components[0]), int(components[1]), int(components[2]))
+	set_selected_chip_value(next)
+
+
+func _on_color_value_changed(value: Color) -> void:
+	set_selected_chip_value(value)
 
 
 func _on_text_value_changed(
@@ -3240,8 +3332,7 @@ func _commit_text_value(
 	var segment: FlowChipSegment = _find_segment(segment_id) as FlowChipSegment
 	if segment == null:
 		return
-	var typed_value: Variant = StringName(value) \
-		if value_type == Variant.Type.TYPE_STRING_NAME else value
+	var typed_value: Variant = StringName(value) 		if value_type == Variant.Type.TYPE_STRING_NAME 		else NodePath(value) if value_type == Variant.Type.TYPE_NODE_PATH else value
 	if typeof(typed_value) != value_type:
 		return
 	_record_native_value_change(segment, input, typed_value)
