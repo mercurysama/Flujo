@@ -655,11 +655,15 @@ func _confirm() -> void:
 
 
 func _cancel() -> void:
+	if _node_property_picker != null:
+		_node_property_picker.cancel_request()
 	_closing_for_action = false
 	hide()
 
 
 func _on_popup_hide() -> void:
+	if _node_property_picker != null:
+		_node_property_picker.cancel_request()
 	if not _closing_for_action:
 		cancelled.emit()
 	_closing_for_action = false
