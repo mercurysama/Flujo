@@ -1447,6 +1447,80 @@ func _on_complex_editor_cancelled() -> void:
 
 
 
+func _is_complex_segment(segment: FlowChipSegment) -> bool:
+	return segment is FlowArraySegment 		or segment is FlowDictionarySegment 		or segment is FlowResourceRefSegment 		or segment is FlowEnumSegment 		or segment is FlowBitfieldSegment
+
+
+func _on_complex_edit_requested(segment_id: String) -> bool:
+	var segment: FlowChipSegment = _find_segment(segment_id) as FlowChipSegment
+	if not _is_complex_segment(segment):
+		return false
+	if not _can_edit_chip(segment):
+		_on_chip_selected(segment_id)
+		_reject(FEEDBACK_TOK_IMMUTABLE)
+		return false
+	var source: FlowValueSource = segment.get_value_source()
+	if source == null:
+		return false
+	_complex_edit_active = true
+	_complex_edit_segment_id = segment_id
+	_on_chip_selected(segment_id)
+	var chip: FlowChipControl = get_chip_control(segment_id)
+	_complex_editor.open_for_source(
+		source,
+		_variable_graph,
+		chip.get_global_rect() if chip != null else get_global_rect()
+	)
+	return true
+
+
+func _replace_complex_segment(segment_id: String, source: FlowValueSource) -> bool:
+	var existing: FlowChipSegment = _find_segment(segment_id) as FlowChipSegment
+	if not _is_complex_segment(existing) or source == null or not source.is_valid():
+		return false
+	var old_source: FlowValueSource = existing.get_value_source()
+	if old_source == null:
+		return false
+	if old_source.get_source_kind() != source.get_source_kind() 			or old_source.get_value_type() != source.get_value_type():
+		_reject(FEEDBACK_TOK_SOURCE_KIND_LOCKED)
+		return false
+	var definition: FlowChipSlotDefinition = _slot_definition_for(existing)
+	if _schema != null and (
+		not _schema.accepts_source_kind(source.get_source_kind())
+		or not _schema.accepts_value_type(source.get_value_type())
+	):
+		return false
+	if definition != null and (
+		not definition.accepts_source_kind(source.get_source_kind())
+		or not definition.accepts_value_type(source.get_value_type())
+	):
+		return false
+	source.source_id = old_source.source_id
+	var replacement: FlowChipSegment = _chip_from_source(source)
+	if replacement == null:
+		return false
+	replacement.segment_id = existing.segment_id
+	replacement.set_slot_id(existing.get_slot_id())
+	replacement.set_slot_kind(existing.get_slot_kind())
+	var index: int = _find_segment_index(segment_id)
+	if index < 0:
+		return false
+	var before_segments: Array[FlowDocumentSegment] = _copy_segments(_document.segments)
+	var after_segments: Array[FlowDocumentSegment] = _copy_segments(before_segments)
+	after_segments[index] = replacement
+	_commit_state_action(
+		"Edit Structured Value",
+		before_segments,
+		_text_states_for_segments(before_segments),
+		after_segments,
+		[]
+	)
+	_on_chip_selected(segment_id)
+	_focus_chip(segment_id)
+	segment_selected.emit(segment_id)
+	return true
+
+
 func select_segment(segment_id: String) -> bool:
 	var segment: FlowDocumentSegment = _find_segment(segment_id)
 	if segment == null:
