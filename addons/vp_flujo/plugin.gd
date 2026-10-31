@@ -328,6 +328,8 @@ func _update_controller_context() -> void:
 	var controller: PVController = _controller_for_selection(selected_nodes, scene_root)
 	_set_interaction_selected_controller(_interaction_controller_for_selection(selected_nodes))
 	_set_controller(controller)
+	if is_instance_valid(_scene_node_panel) and _scene_node_panel.is_open():
+		_scene_node_panel.refresh()
 
 
 func _on_schema_3_variable_selection_changed(
