@@ -110,7 +110,7 @@ func validate_structure(result: FlowValidationResult, element_path: String) -> v
 			_add_error(
 				result,
 				FlowDiagnostic.CODE_OPERATION_OPERAND_KIND_INVALID,
-				"Operation operands accept Literal, VariableRef, or NodePropertyRef sources.",
+				"Operation operands accept Literal, VariableRef, NodePropertyRef, or Operation sources.",
 				path,
 				operand.get_source_id()
 			)
@@ -133,6 +133,14 @@ func validate_against_graph(
 	if result == null or graph == null:
 		return
 	for index: int in operands.size():
+		var nested_operation: FlowOperationValueSource = 			operands[index] as FlowOperationValueSource
+		if nested_operation != null:
+			nested_operation.validate_against_graph(
+				result,
+				"%s.operands[%d]" % [element_path, index],
+				graph
+			)
+			continue
 		var node_property_source: FlowNodePropertyRefValueSource = 			operands[index] as FlowNodePropertyRefValueSource
 		if node_property_source != null:
 			node_property_source.validate_against_graph(
@@ -252,7 +260,7 @@ func _runtime_error(code: StringName, message: String) -> FlowValueResult:
 
 
 func _is_allowed_operand(operand: FlowValueSource) -> bool:
-	return operand is FlowLiteralValueSource 		or operand is FlowVariableRefValueSource 		or operand is FlowNodePropertyRefValueSource
+	return operand is FlowLiteralValueSource 		or operand is FlowVariableRefValueSource 		or operand is FlowNodePropertyRefValueSource 		or operand is FlowOperationValueSource
 
 
 static func _operand_preview(operand: FlowValueSource, graph: FlowGraph) -> String:
@@ -272,6 +280,10 @@ static func _operand_preview(operand: FlowValueSource, graph: FlowGraph) -> Stri
 			return "<missing>"
 		var definition: FlowVariableDefinition = 			variable_source.resolve_definition(graph)
 		return definition.display_name 			if definition != null else "<missing:%s>" % variable_source.variable_id
+	if operand is FlowNodePropertyRefValueSource:
+		return (operand as FlowNodePropertyRefValueSource).get_preview()
+	if operand is FlowOperationValueSource:
+		return "(" + (operand as FlowOperationValueSource).get_preview(graph) + ")"
 	return "<unsupported>"
 
 
