@@ -42,7 +42,7 @@ func configure(undo_redo: EditorUndoRedoManager) -> void:
 	content.add_child(heading)
 
 	var instructions: Label = Label.new()
-	instructions.text = "Place the real caret in text. @ chooses a variable, # builds a CONDITION, ~ builds an OPERATION, and $ opens the Scene Node → Property flow in compatible fields. + Value inserts a literal. Click a Tok to edit it."
+	instructions.text = "Place the real caret in text. @ chooses a variable, # builds a CONDITION, ~ builds an OPERATION, and $ selects a Scene Node; the field decides whether it needs the Node itself, a property, or asks between both. + Value inserts a literal. Click a Tok to edit it."
 	instructions.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(instructions)
 
@@ -125,6 +125,8 @@ func _build_fixture_pages(expression_document: FlowStructuredDocument = null) ->
 	_add_fixture(_tabs, "HYBRID", _hybrid_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "CONDITION", _condition_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "OPERATION", _operation_schema(), _graph, _undo_redo)
+	_add_fixture(_tabs, "SCENE NODE", _node_ref_schema(), _graph, _undo_redo)
+	_add_fixture(_tabs, "SCENE REF", _scene_reference_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "SCENE PROPERTY", _node_property_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "EXPRESSION", _expression_schema(), _graph, _undo_redo, expression_document)
 
@@ -201,6 +203,10 @@ func _fixture_description(label: String) -> String:
 			return "Type # to open CONDITION. Operands can be Variable, Literal, Node Property, or Operation. Try NOT ((Health + 2) > 10)."
 		"OPERATION":
 			return "Type ~ to open OPERATION. Operands can be Variable, Literal, Node Property, or another Operation; nested previews stay parenthesized."
+		"SCENE NODE":
+			return "Required Node slot. It starts as unresolved $Node; press Enter on the Tok and choose a scene node. The result is the live Node itself, not a literal Object."
+		"SCENE REF":
+			return "Type $ and choose a scene node. This field accepts both Node and Node Property, so Flujo asks whether to use $Node or choose $Node.property."
 		"SCENE PROPERTY":
 			return "Type $ to open Scene Nodes, choose or drag a node, then select a property compatible with the field. Escape with \\$ for literal text."
 	return ""
@@ -286,6 +292,59 @@ func _expression_schema() -> FlowChipFieldSchema:
 	field.add_text_part("Expression: ")
 	field.add_slot_part("expression")
 	return field
+
+
+func _node_ref_schema() -> FlowChipFieldSchema:
+	var field: FlowChipFieldSchema = FlowChipFieldSchema.new()
+	field.mode = FlowChipFieldSchema.Mode.FIXED
+	field.text_mode = FlowChipFieldSchema.TextMode.RUNTIME_CONTENT
+	field.accepted_value_types = [Variant.Type.TYPE_OBJECT]
+	field.accepted_source_kinds = [FlowValueSource.SOURCE_KIND_NODE_REF]
+	var slot: FlowChipSlotDefinition = FlowChipSlotDefinition.new(
+		"target",
+		"Target Node",
+		true
+	)
+	slot.accepted_value_types = [Variant.Type.TYPE_OBJECT]
+	slot.accepted_source_kinds = [FlowValueSource.SOURCE_KIND_NODE_REF]
+	slot.initial_value_source = FlowNodeRefValueSource.placeholder(&"Node")
+	slot.allow_delete = false
+	slot.allow_reorder = false
+	slot.allow_reference_change = true
+	slot.min_count = 1
+	slot.max_count = 1
+	field.slots = [slot]
+	field.add_text_part("Target Node: ")
+	field.add_slot_part("target")
+	return field
+
+
+func _scene_reference_schema() -> FlowChipFieldSchema:
+	var field: FlowChipFieldSchema = FlowChipFieldSchema.new()
+	field.mode = FlowChipFieldSchema.Mode.FLEXIBLE
+	field.text_mode = FlowChipFieldSchema.TextMode.RUNTIME_CONTENT
+	field.accepted_value_types = [
+		Variant.Type.TYPE_OBJECT,
+		FlowLiteralValueSource.TYPE_VECTOR2,
+	]
+	field.accepted_source_kinds = [
+		FlowValueSource.SOURCE_KIND_NODE_REF,
+		FlowValueSource.SOURCE_KIND_NODE_PROPERTY_REF,
+	]
+	field.flexible_max_count = 4
+	var slot: FlowChipSlotDefinition = FlowChipSlotDefinition.new(
+		"scene_ref",
+		"Scene Reference"
+	)
+	slot.repeatable = true
+	slot.max_count = 4
+	slot.accepted_value_types = field.accepted_value_types.duplicate()
+	slot.accepted_source_kinds = field.accepted_source_kinds.duplicate()
+	field.variadic_slot_definition = slot
+	field.add_text_part("Scene reference: ")
+	field.add_slot_part("scene_ref")
+	return field
+
 
 
 func _node_property_schema() -> FlowChipFieldSchema:
