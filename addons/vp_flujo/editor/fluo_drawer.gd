@@ -6,6 +6,7 @@ extends Control
 ## It owns no FlowGraph state: it presents the same live PVController model
 ## through its own FlowGraphInspectorProperty view.
 
+signal side_changed(right_side: bool)
 signal schema_3_variable_list_focus_requested(controller: PVController, variable_id: String)
 signal schema_3_container_navigation_changed(
 	controller: PVController,
@@ -245,6 +246,7 @@ func set_right_side(enabled: bool) -> void:
 	if _side_switch != null and _side_switch.button_pressed != enabled:
 		_side_switch.set_pressed_no_signal(enabled)
 	_apply_side_layout()
+	side_changed.emit(_right_side)
 	_motion_state = MotionState.OPEN if was_open else MotionState.CLOSED
 
 
