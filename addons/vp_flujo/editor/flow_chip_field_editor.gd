@@ -28,6 +28,9 @@ const FLOW_EXPRESSION_EDITOR_SCRIPT: Script = preload(
 const FLOW_CONDITION_EDITOR_SCRIPT: Script = preload(
 	"res://addons/vp_flujo/editor/flow_condition_editor.gd"
 )
+const FLOW_OPERATION_EDITOR_SCRIPT: Script = preload(
+	"res://addons/vp_flujo/editor/flow_operation_editor.gd"
+)
 const FLOW_SEMANTIC_INSERTION_ANCHOR_SCRIPT: Script = preload(
 	"res://addons/vp_flujo/editor/flow_chip_semantic_insertion_anchor.gd"
 )
@@ -42,6 +45,8 @@ const FEEDBACK_TOK_SOURCE_KIND_LOCKED: String = \
 	"This Tok's source kind is locked by the current schema."
 const FEEDBACK_NO_COMPATIBLE_EXPRESSION: String = \
 	"No compatible expression signature is available here."
+const FEEDBACK_NO_COMPATIBLE_OPERATION: String = \
+	"No compatible Operation source is available here."
 
 
 var _schema: FlowChipFieldSchema
@@ -56,6 +61,7 @@ var _literal_type_menu: PopupMenu
 var _variable_selector: FlowVariableSelector
 var _expression_editor: FlowExpressionEditor
 var _condition_editor: FlowConditionEditor
+var _operation_editor: FlowOperationEditor
 var _validation_label: Label
 var _feedback_label: Label
 var _details_panel: PanelContainer
@@ -105,6 +111,15 @@ var _condition_trigger_end: int = -1
 var _condition_trigger_anchor: FlowChipSemanticInsertionAnchor
 var _condition_edit_active: bool = false
 var _condition_edit_segment_id: String = ""
+var _operation_trigger_active: bool = false
+var _operation_trigger_segment_id: String = ""
+var _operation_trigger_start: int = -1
+var _operation_trigger_end: int = -1
+var _operation_trigger_before_segments: Array[FlowDocumentSegment] = []
+var _operation_trigger_before_text_states: Array[Dictionary] = []
+var _operation_trigger_anchor: FlowChipSemanticInsertionAnchor
+var _operation_edit_active: bool = false
+var _operation_edit_segment_id: String = ""
 
 
 var schema: FlowChipFieldSchema:
@@ -166,6 +181,10 @@ func _init() -> void:
 	_condition_editor.condition_confirmed.connect(_on_condition_confirmed)
 	_condition_editor.cancelled.connect(_on_condition_editor_cancelled)
 	add_child(_condition_editor)
+	_operation_editor = FLOW_OPERATION_EDITOR_SCRIPT.new() as FlowOperationEditor
+	_operation_editor.operation_confirmed.connect(_on_operation_confirmed)
+	_operation_editor.cancelled.connect(_on_operation_editor_cancelled)
+	add_child(_operation_editor)
 
 	_validation_label = Label.new()
 	_validation_label.name = &"ChipFieldValidation"
@@ -258,6 +277,8 @@ func configure(
 	_clear_expression_edit_state()
 	_clear_condition_trigger_state()
 	_clear_condition_edit_state()
+	_clear_operation_trigger_state()
+	_clear_operation_edit_state()
 	_clear_feedback()
 	_refresh()
 
@@ -421,6 +442,10 @@ func get_condition_editor() -> FlowConditionEditor:
 	return _condition_editor
 
 
+func get_operation_editor() -> FlowOperationEditor:
+	return _operation_editor
+
+
 func get_variable_edit_segment_id() -> String:
 	return _variable_edit_segment_id if _variable_edit_active else ""
 
@@ -431,6 +456,10 @@ func get_expression_edit_segment_id() -> String:
 
 func get_condition_edit_segment_id() -> String:
 	return _condition_edit_segment_id if _condition_edit_active else ""
+
+
+func get_operation_edit_segment_id() -> String:
+	return _operation_edit_segment_id if _operation_edit_active else ""
 
 
 ## Exposes the pending semantic position for deterministic editor tests and
@@ -2114,6 +2143,286 @@ func _clear_condition_edit_state() -> void:
 	_condition_edit_segment_id = ""
 
 
+
+
+func _begin_operation_trigger(
+		segment: FlowTextSegment,
+		input: TextEdit,
+		text: String,
+		trigger_start: int,
+		trigger_end: int,
+		before_segments: Array[FlowDocumentSegment],
+		before_text_states: Array[Dictionary]
+) -> void:
+	if not _operation_insertion_allowed():
+		_reject(get_operation_insertion_feedback())
+		return
+	_operation_trigger_active = true
+	_operation_trigger_segment_id = segment.get_segment_id()
+	_operation_trigger_start = trigger_start
+	_operation_trigger_end = maxi(trigger_start + 1, trigger_end)
+	_operation_trigger_before_segments = before_segments
+	_operation_trigger_before_text_states = before_text_states
+	_operation_trigger_anchor = FLOW_SEMANTIC_INSERTION_ANCHOR_SCRIPT.capture(
+		_document, segment.get_segment_id(), trigger_start
+	) as FlowChipSemanticInsertionAnchor
+	_set_document_text_without_history(segment, text, input, _operation_trigger_end)
+	_open_operation_editor(input)
+
+
+func _open_operation_editor(input: TextEdit) -> void:
+	if _operation_editor == null or input == null:
+		return
+	var caret_local: Vector2 = input.get_caret_draw_pos()
+	var caret_global: Vector2 = input.get_global_transform_with_canvas() * caret_local
+	_operation_editor.open_for_operation(
+		null,
+		_variable_graph,
+		Rect2(caret_global, Vector2(1.0, maxf(input.get_line_height(), 24.0))),
+		_operation_insertion_context()
+	)
+
+
+func _operation_insertion_context() -> Dictionary:
+	var context: Dictionary = _variable_insertion_context()
+	context["schema"] = _schema
+	var slot: FlowChipSlotDefinition = context.get("slot", null) as FlowChipSlotDefinition
+	if slot == null:
+		var replacement: FlowChipSegment = _segment_at(
+			int(context.get("replacement_index", -1))
+		) as FlowChipSegment
+		slot = _slot_definition_for(replacement)
+	context["slot"] = slot
+	return context
+
+
+func _operation_insertion_allowed() -> bool:
+	if _schema == null:
+		return true
+	if not _schema.accepts_source_kind(FlowValueSource.SOURCE_KIND_OPERATION):
+		return false
+	var slot: FlowChipSlotDefinition = _insertion_slot_definition()
+	if slot == null and _schema.mode == FlowChipFieldSchema.Mode.FIXED:
+		slot = _slot_definition_for(_segment_at(_fixed_replacement_index()) as FlowChipSegment)
+	if _schema.mode == FlowChipFieldSchema.Mode.HYBRID 			and slot == null and _fixed_replacement_index() < 0:
+		return false
+	return slot == null or slot.accepts_source_kind(FlowValueSource.SOURCE_KIND_OPERATION)
+
+
+func get_operation_insertion_feedback() -> String:
+	if _document == null:
+		return FEEDBACK_INVALID_CHIP_POSITION
+	if not _operation_insertion_allowed():
+		return FEEDBACK_NO_COMPATIBLE_OPERATION
+	var slot: FlowChipSlotDefinition = _insertion_slot_definition()
+	if _fixed_replacement_index() < 0 and _insertion_limit_reached(slot):
+		return FEEDBACK_MAX_CHIP_COUNT % _insertion_maximum(slot)
+	return ""
+
+
+func _on_operation_confirmed(source: FlowOperationValueSource) -> void:
+	if _operation_trigger_active:
+		_insert_operation_source_at_caret(source)
+	elif _operation_edit_active:
+		_replace_operation_segment(_operation_edit_segment_id, source)
+
+
+func _on_operation_editor_cancelled() -> void:
+	if _operation_trigger_active:
+		_cancel_operation_trigger(true)
+	elif _operation_edit_active:
+		var segment_id: String = _operation_edit_segment_id
+		_clear_operation_edit_state()
+		_focus_chip(segment_id)
+		call_deferred(&"_restore_chip_focus_deferred", segment_id)
+
+
+func _insert_operation_source_at_caret(source: FlowOperationValueSource) -> String:
+	if source == null or not source.is_valid():
+		_cancel_operation_trigger(true)
+		_reject("Operation is invalid.")
+		return ""
+	var graph_validation: FlowValidationResult = FlowValidationResult.new()
+	source.validate_against_graph(graph_validation, "operation", _variable_graph)
+	if graph_validation.has_errors():
+		_cancel_operation_trigger(true)
+		_reject((graph_validation.diagnostics[0] as FlowDiagnostic).message)
+		return ""
+	var context: Dictionary = _variable_insertion_context()
+	var slot: FlowChipSlotDefinition = context.get("slot", null) as FlowChipSlotDefinition
+	var replacement_index: int = int(context.get("replacement_index", -1))
+	if _schema != null and (not _schema.accepts_value_type(source.get_value_type()) 			or not _schema.accepts_source_kind(source.get_source_kind())):
+		_cancel_operation_trigger(true)
+		_reject("Operation is incompatible with this field.")
+		return ""
+	if slot != null and (not slot.accepts_value_type(source.get_value_type()) 			or not slot.accepts_source_kind(source.get_source_kind())):
+		_cancel_operation_trigger(true)
+		_reject("Operation is incompatible with this slot.")
+		return ""
+	var before_segments: Array[FlowDocumentSegment] = _copy_segments(
+		_operation_trigger_before_segments if _operation_trigger_active else _document.segments
+	)
+	var before_text_states: Array[Dictionary] = 		_operation_trigger_before_text_states.duplicate() 		if _operation_trigger_active else _text_states_for_segments(before_segments)
+	var after_segments: Array[FlowDocumentSegment] = _copy_segments(_document.segments)
+	var after_text_states: Array[Dictionary] = []
+	var chip: FlowOperationSegment = FlowOperationSegment.new(source)
+	var focus_id: String = ""
+	if replacement_index < 0 and slot != null:
+		chip.set_slot_id(slot.slot_id)
+		chip.set_slot_kind(
+			FlowChipSegment.SLOT_KIND_VARIADIC 			if _is_variadic_slot_definition(slot) else FlowChipSegment.SLOT_KIND_NAMED
+		)
+	if replacement_index >= 0:
+		var target: FlowChipSegment = _segment_at(replacement_index) as FlowChipSegment
+		if target == null or slot == null:
+			_cancel_operation_trigger(true)
+			_reject(FEEDBACK_INVALID_CHIP_POSITION)
+			return ""
+		chip.segment_id = target.get_segment_id()
+		chip.set_slot_id(target.get_slot_id())
+		chip.set_slot_kind(target.get_slot_kind())
+		after_segments[replacement_index] = chip
+		focus_id = chip.get_segment_id()
+	else:
+		var trigger_text: FlowTextSegment = _find_segment(
+			_operation_trigger_segment_id
+		) as FlowTextSegment
+		var text_index: int = _find_segment_index(_operation_trigger_segment_id)
+		if trigger_text == null or text_index < 0:
+			_cancel_operation_trigger(true)
+			return ""
+		var start: int = clampi(_operation_trigger_start, 0, trigger_text.text.length())
+		var end: int = clampi(_operation_trigger_end, start, trigger_text.text.length())
+		var prefix: String = trigger_text.text.substr(0, start)
+		var suffix: String = trigger_text.text.substr(end)
+		var following: FlowTextSegment = FlowTextSegment.new()
+		following.text = suffix
+		after_segments[text_index] = trigger_text
+		after_segments.insert(text_index + 1, chip)
+		after_segments.insert(text_index + 2, following)
+		after_text_states = [
+			_text_state(trigger_text, prefix),
+			_text_state(following, suffix),
+		]
+		focus_id = following.get_segment_id()
+	_clear_operation_trigger_state()
+	_clear_operation_edit_state()
+	if _operation_editor != null and _operation_editor.visible:
+		_operation_editor.hide()
+	_selected_segment_id = chip.get_segment_id()
+	_current_position_id = chip.get_segment_id()
+	_caret_segment_id = focus_id
+	_caret_offset = 0
+	_caret_boundary_index = -1
+	_focus_restore_id = focus_id
+	_preserve_selection_during_focus_restore = true
+	_commit_state_action(
+		"Insert Operation",
+		before_segments,
+		before_text_states,
+		after_segments,
+		after_text_states
+	)
+	segment_selected.emit(chip.get_segment_id())
+	return chip.get_segment_id()
+
+
+func _replace_operation_segment(
+		segment_id: String,
+		source: FlowOperationValueSource
+) -> bool:
+	var existing: FlowOperationSegment = _find_segment(segment_id) as FlowOperationSegment
+	if existing == null or source == null or not source.is_valid():
+		return false
+	var index: int = _find_segment_index(segment_id)
+	if index < 0:
+		return false
+	var before_segments: Array[FlowDocumentSegment] = _copy_segments(_document.segments)
+	var after_segments: Array[FlowDocumentSegment] = _copy_segments(before_segments)
+	var replacement: FlowOperationSegment = FlowOperationSegment.new(source)
+	replacement.segment_id = existing.segment_id
+	replacement.set_slot_id(existing.get_slot_id())
+	replacement.set_slot_kind(existing.get_slot_kind())
+	after_segments[index] = replacement
+	_clear_operation_edit_state()
+	_commit_state_action(
+		"Edit Operation",
+		before_segments,
+		_text_states_for_segments(before_segments),
+		after_segments,
+		[]
+	)
+	_on_chip_selected(segment_id)
+	_focus_chip(segment_id)
+	segment_selected.emit(segment_id)
+	return true
+
+
+func _cancel_operation_trigger(remove_trigger: bool) -> void:
+	if not _operation_trigger_active:
+		return
+	var segment: FlowTextSegment = _find_segment(
+		_operation_trigger_segment_id
+	) as FlowTextSegment
+	var input: TextEdit = get_text_control(_operation_trigger_segment_id)
+	var restore_offset: int = _operation_trigger_start
+	if segment != null and remove_trigger:
+		var start: int = clampi(_operation_trigger_start, 0, segment.text.length())
+		var end: int = clampi(_operation_trigger_end, start, segment.text.length())
+		var text: String = segment.text.substr(0, start) + segment.text.substr(end)
+		restore_offset = clampi(start, 0, text.length())
+		_set_document_text_without_history(segment, text, input, restore_offset)
+	_clear_operation_trigger_state()
+	if _operation_editor != null and _operation_editor.visible:
+		_operation_editor.hide()
+	if segment != null:
+		_focus_text_control(segment.get_segment_id(), restore_offset)
+		call_deferred(
+			&"_restore_text_focus_deferred",
+			segment.get_segment_id(),
+			restore_offset
+		)
+	_clear_feedback()
+
+
+func _on_operation_edit_requested(segment_id: String) -> bool:
+	var operation: FlowOperationSegment = _find_segment(segment_id) as FlowOperationSegment
+	if operation == null:
+		return false
+	if not _can_edit_chip(operation):
+		_on_chip_selected(segment_id)
+		_reject(FEEDBACK_TOK_IMMUTABLE)
+		return false
+	var source: FlowOperationValueSource = 		operation.get_value_source() as FlowOperationValueSource
+	if source == null:
+		return false
+	_operation_edit_active = true
+	_operation_edit_segment_id = segment_id
+	_on_chip_selected(segment_id)
+	_operation_editor.open_for_operation(
+		source,
+		_variable_graph,
+		get_chip_control(segment_id).get_global_rect() 			if get_chip_control(segment_id) != null else Rect2(),
+		{"schema": _schema, "slot": _slot_definition_for(operation)}
+	)
+	return true
+
+
+func _clear_operation_trigger_state() -> void:
+	_operation_trigger_active = false
+	_operation_trigger_segment_id = ""
+	_operation_trigger_start = -1
+	_operation_trigger_end = -1
+	_operation_trigger_before_segments.clear()
+	_operation_trigger_before_text_states.clear()
+	_operation_trigger_anchor = null
+
+
+func _clear_operation_edit_state() -> void:
+	_operation_edit_active = false
+	_operation_edit_segment_id = ""
+
+
 func _expression_insertion_context() -> Dictionary:
 	var context: Dictionary = _variable_insertion_context()
 	context["schema"] = _schema
@@ -2378,6 +2687,9 @@ func _on_chip_edit_requested(segment_id: String) -> void:
 		return
 	if _find_segment(segment_id) is FlowConditionSegment:
 		_on_condition_edit_requested(segment_id)
+		return
+	if _find_segment(segment_id) is FlowOperationSegment:
+		_on_operation_edit_requested(segment_id)
 		return
 	var chip: FlowChipSegment = _find_segment(segment_id) as FlowChipSegment
 	if chip != null and not _can_edit_chip(chip):
@@ -3249,7 +3561,8 @@ func _can_insert_source(source: FlowValueSource) -> bool:
 	if _schema.mode == FlowChipFieldSchema.Mode.FIXED:
 		if not source is FlowVariableRefValueSource \
 				and not source is FlowExpressionValueSource \
-				and not source is FlowConditionValueSource:
+				and not source is FlowConditionValueSource \
+				and not source is FlowOperationValueSource:
 			_reject("FIXED fields do not accept additional chips.")
 			return false
 		var fixed_context: Dictionary = _variable_insertion_context()
@@ -3316,6 +3629,11 @@ func _can_insert_source(source: FlowValueSource) -> bool:
 				or (definition != null and not definition.can_change_content()):
 			_reject(FEEDBACK_TOK_IMMUTABLE)
 			return false
+	elif source is FlowOperationValueSource:
+		if not _schema_can_change_content() \
+				or (definition != null and not definition.can_change_content()):
+			_reject(FEEDBACK_TOK_IMMUTABLE)
+			return false
 	else:
 		if not _schema_can_change_content() \
 				or (definition != null and not definition.can_change_content()):
@@ -3344,6 +3662,9 @@ func _refresh_variable_resolutions() -> void:
 		if segment is FlowConditionSegment:
 			(segment as FlowConditionSegment).set_variable_graph(_variable_graph)
 			continue
+		if segment is FlowOperationSegment:
+			(segment as FlowOperationSegment).set_variable_graph(_variable_graph)
+			continue
 		if variable_segment == null:
 			continue
 		if _variable_graph == null:
@@ -3366,6 +3687,12 @@ func _literal_types_allowed_by_schema(
 		FlowLiteralValueSource.TYPE_FLOAT,
 		FlowLiteralValueSource.TYPE_STRING,
 		FlowLiteralValueSource.TYPE_STRING_NAME,
+		FlowLiteralValueSource.TYPE_VECTOR2,
+		FlowLiteralValueSource.TYPE_VECTOR2I,
+		FlowLiteralValueSource.TYPE_VECTOR3,
+		FlowLiteralValueSource.TYPE_VECTOR3I,
+		FlowLiteralValueSource.TYPE_COLOR,
+		FlowLiteralValueSource.TYPE_NODE_PATH,
 	]
 	for candidate: Variant.Type in candidates:
 		if _schema != null and not _schema.accepts_value_type(candidate):
@@ -3400,6 +3727,8 @@ func _chip_from_source(source: FlowValueSource) -> FlowChipSegment:
 		return FlowExpressionSegment.new(source as FlowExpressionValueSource)
 	if source is FlowConditionValueSource:
 		return FlowConditionSegment.new(source as FlowConditionValueSource)
+	if source is FlowOperationValueSource:
+		return FlowOperationSegment.new(source as FlowOperationValueSource)
 	var generic: FlowChipSegment = FlowChipSegment.new()
 	generic.set_value_source(source)
 	return generic
