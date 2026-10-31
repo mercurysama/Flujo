@@ -5,10 +5,15 @@ extends RefCounted
 
 
 var _undo_redo: EditorUndoRedoManager
+var _history_owner: Object
 
 
-func _init(undo_redo: EditorUndoRedoManager) -> void:
+func _init(
+		undo_redo: EditorUndoRedoManager,
+		history_owner: Object = null
+) -> void:
 	_undo_redo = undo_redo
+	_history_owner = history_owner
 
 
 func ensure_requirement(controller: PVController, node: Node) -> String:
@@ -50,7 +55,14 @@ func ensure_requirement(controller: PVController, node: Node) -> String:
 	var after_bindings: Dictionary = before_bindings.duplicate()
 	after_bindings[requirement.get_internal_id()] = binding_path
 
-	_undo_redo.create_action("Bind Scene Node Requirement")
+	_undo_redo.create_action(
+		"Bind Scene Node Requirement",
+		UndoRedo.MERGE_DISABLE,
+		_history_owner if is_instance_valid(_history_owner) else controller,
+		false,
+		true
+	)
+	_undo_redo.force_fixed_history()
 	if constructor_was_missing:
 		_undo_redo.add_do_property(graph, &"constructor", constructor)
 		_undo_redo.add_undo_property(graph, &"constructor", null)
