@@ -10,6 +10,12 @@ const TYPE_INT: Variant.Type = Variant.Type.TYPE_INT
 const TYPE_FLOAT: Variant.Type = Variant.Type.TYPE_FLOAT
 const TYPE_STRING: Variant.Type = Variant.Type.TYPE_STRING
 const TYPE_STRING_NAME: Variant.Type = Variant.Type.TYPE_STRING_NAME
+const TYPE_VECTOR2: Variant.Type = Variant.Type.TYPE_VECTOR2
+const TYPE_VECTOR2I: Variant.Type = Variant.Type.TYPE_VECTOR2I
+const TYPE_VECTOR3: Variant.Type = Variant.Type.TYPE_VECTOR3
+const TYPE_VECTOR3I: Variant.Type = Variant.Type.TYPE_VECTOR3I
+const TYPE_COLOR: Variant.Type = Variant.Type.TYPE_COLOR
+const TYPE_NODE_PATH: Variant.Type = Variant.Type.TYPE_NODE_PATH
 
 @export_storage var value_type: Variant.Type = Variant.Type.TYPE_NIL
 @export_storage var value: Variant
@@ -111,7 +117,10 @@ func validate_structure(result: FlowValidationResult, element_path: String) -> v
 
 static func is_allowed_type(candidate: Variant.Type) -> bool:
 	return candidate == TYPE_BOOL or candidate == TYPE_INT or candidate == TYPE_FLOAT \
-		or candidate == TYPE_STRING or candidate == TYPE_STRING_NAME
+		or candidate == TYPE_STRING or candidate == TYPE_STRING_NAME \
+		or candidate == TYPE_VECTOR2 or candidate == TYPE_VECTOR2I \
+		or candidate == TYPE_VECTOR3 or candidate == TYPE_VECTOR3I \
+		or candidate == TYPE_COLOR or candidate == TYPE_NODE_PATH
 
 
 static func value_matches_declared_type(
@@ -137,7 +146,8 @@ static func is_valid_literal(
 		candidate_value: Variant
 ) -> bool:
 	return value_matches_declared_type(candidate_type, candidate_value) \
-		and has_finite_float(candidate_type, candidate_value)
+		and has_finite_float(candidate_type, candidate_value) \
+		and _has_finite_components(candidate_type, candidate_value)
 
 
 static func format_runtime_text(candidate_type: Variant.Type, candidate_value: Variant) -> String:
@@ -149,7 +159,44 @@ static func format_runtime_text(candidate_type: Variant.Type, candidate_value: V
 		return str(float(candidate_value))
 	if candidate_type == TYPE_STRING or candidate_type == TYPE_STRING_NAME:
 		return String(candidate_value)
+	if candidate_type == TYPE_VECTOR2:
+		var v2: Vector2 = candidate_value
+		return "Vector2(%s, %s)" % [str(v2.x), str(v2.y)]
+	if candidate_type == TYPE_VECTOR2I:
+		var v2i: Vector2i = candidate_value
+		return "Vector2i(%d, %d)" % [v2i.x, v2i.y]
+	if candidate_type == TYPE_VECTOR3:
+		var v3: Vector3 = candidate_value
+		return "Vector3(%s, %s, %s)" % [str(v3.x), str(v3.y), str(v3.z)]
+	if candidate_type == TYPE_VECTOR3I:
+		var v3i: Vector3i = candidate_value
+		return "Vector3i(%d, %d, %d)" % [v3i.x, v3i.y, v3i.z]
+	if candidate_type == TYPE_COLOR:
+		var color: Color = candidate_value
+		return "Color(%s, %s, %s, %s)" % [
+			str(color.r), str(color.g), str(color.b), str(color.a)
+		]
+	if candidate_type == TYPE_NODE_PATH:
+		return 'NodePath("%s")' % String(candidate_value).replace('"', '\\"')
 	return ""
+
+
+static func _has_finite_components(
+		candidate_type: Variant.Type,
+		candidate_value: Variant
+) -> bool:
+	match candidate_type:
+		TYPE_VECTOR2:
+			var v2: Vector2 = candidate_value
+			return is_finite(v2.x) and is_finite(v2.y)
+		TYPE_VECTOR3:
+			var v3: Vector3 = candidate_value
+			return is_finite(v3.x) and is_finite(v3.y) and is_finite(v3.z)
+		TYPE_COLOR:
+			var color: Color = candidate_value
+			return is_finite(color.r) and is_finite(color.g) \
+				and is_finite(color.b) and is_finite(color.a)
+	return true
 
 
 static func _add_error(
