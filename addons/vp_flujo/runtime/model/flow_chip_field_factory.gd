@@ -135,6 +135,16 @@ func _create_chip(
 		chip = FlowNodePropertyRefSegment.new(source as FlowNodePropertyRefValueSource)
 	elif source is FlowNodeRefValueSource:
 		chip = FlowNodeRefSegment.new(source as FlowNodeRefValueSource)
+	elif source is FlowArrayValueSource:
+		chip = FlowArraySegment.new(source as FlowArrayValueSource)
+	elif source is FlowDictionaryValueSource:
+		chip = FlowDictionarySegment.new(source as FlowDictionaryValueSource)
+	elif source is FlowResourceRefValueSource:
+		chip = FlowResourceRefSegment.new(source as FlowResourceRefValueSource)
+	elif source is FlowEnumValueSource:
+		chip = FlowEnumSegment.new(source as FlowEnumValueSource)
+	elif source is FlowBitfieldValueSource:
+		chip = FlowBitfieldSegment.new(source as FlowBitfieldValueSource)
 	else:
 		chip = FlowChipSegment.new()
 		chip.set_value_source(source)
