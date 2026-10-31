@@ -54,7 +54,7 @@ func set_scene_context(new_controller: PVController, new_scene_root: Node = null
 
 
 func resolve_scene_node(requirement_id: String, fallback_path: NodePath) -> Node:
-	if controller != null and not requirement_id.is_empty() 			and controller.requirement_bindings.has(requirement_id):
+	if controller != null 			and not requirement_id.is_empty() 			and controller.requirement_bindings.has(requirement_id):
 		var binding: NodePath = controller.requirement_bindings[requirement_id]
 		var required_node: Node = controller.get_node_or_null(binding)
 		if required_node != null:
