@@ -325,6 +325,7 @@ func configure(
 	_clear_operation_edit_state()
 	_clear_node_property_trigger_state()
 	_clear_node_property_edit_state()
+	_clear_node_ref_edit_state()
 	_clear_feedback()
 	_refresh()
 
@@ -3427,6 +3428,9 @@ func _on_chip_edit_requested(segment_id: String) -> void:
 	if _find_segment(segment_id) is FlowNodePropertyRefSegment:
 		_on_node_property_edit_requested(segment_id)
 		return
+	if _find_segment(segment_id) is FlowNodeRefSegment:
+		_on_node_ref_edit_requested(segment_id)
+		return
 	var chip: FlowChipSegment = _find_segment(segment_id) as FlowChipSegment
 	if chip != null and not _can_edit_chip(chip):
 		_on_chip_selected(segment_id)
@@ -4546,6 +4550,11 @@ func _refresh_variable_resolutions() -> void:
 				_scene_resolution_context()
 			)
 			continue
+		if segment is FlowNodeRefSegment:
+			(segment as FlowNodeRefSegment).set_resolution_context(
+				_scene_resolution_context()
+			)
+			continue
 		if variable_segment == null:
 			continue
 		if _variable_graph == null:
@@ -4612,6 +4621,8 @@ func _chip_from_source(source: FlowValueSource) -> FlowChipSegment:
 		return FlowOperationSegment.new(source as FlowOperationValueSource)
 	if source is FlowNodePropertyRefValueSource:
 		return FlowNodePropertyRefSegment.new(source as FlowNodePropertyRefValueSource)
+	if source is FlowNodeRefValueSource:
+		return FlowNodeRefSegment.new(source as FlowNodeRefValueSource)
 	var generic: FlowChipSegment = FlowChipSegment.new()
 	generic.set_value_source(source)
 	return generic
