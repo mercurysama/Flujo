@@ -16,15 +16,19 @@ var _schema: FlowChipFieldSchema
 var _context: Dictionary = {}
 var _rows: Array[Dictionary] = []
 var _rows_box: VBoxContainer
+var _negate_toggle: CheckBox
 var _preview_label: Label
 var _feedback_label: Label
 var _confirm_button: Button
 var _variable_selector: FlowVariableSelector
 var _node_property_picker: FlowNodePropertyOperandPicker
+var _nested_operation_editor: FlowOperationEditor
 var _variable_row_index: int = -1
 var _variable_side: String = ""
 var _node_property_row_index: int = -1
 var _node_property_side: String = ""
+var _nested_operation_row_index: int = -1
+var _nested_operation_side: String = ""
 var _invalid_literal_inputs: Dictionary = {}
 var _closing_for_action: bool = false
 
@@ -53,6 +57,13 @@ func _init() -> void:
 	heading.text = "Build Condition"
 	heading.add_theme_font_size_override(&"font_size", 16)
 	content.add_child(heading)
+
+	_negate_toggle = CheckBox.new()
+	_negate_toggle.name = &"NegateCondition"
+	_negate_toggle.text = "NOT — negate entire condition"
+	_negate_toggle.tooltip_text = "Evaluate the complete condition, then invert its boolean result."
+	_negate_toggle.toggled.connect(_on_negate_toggled)
+	content.add_child(_negate_toggle)
 
 	_rows_box = VBoxContainer.new()
 	_rows_box.name = &"ConditionRows"
@@ -124,6 +135,7 @@ func open_for_condition(
 	_node_property_picker.configure(_scene_controller, _scene_root)
 	_draft = initial_source.duplicate_with_new_id() as FlowConditionValueSource \
 		if initial_source != null else _default_draft()
+	_negate_toggle.button_pressed = _draft.negated
 	_closing_for_action = false
 	_rebuild_rows()
 	var position: Vector2i = Vector2i(int(anchor.position.x), int(anchor.position.y + anchor.size.y))
@@ -138,6 +150,7 @@ func get_draft() -> FlowConditionValueSource:
 func set_draft(source: FlowConditionValueSource) -> void:
 	_draft = source.duplicate_with_new_id() as FlowConditionValueSource \
 		if source != null else _default_draft()
+	_negate_toggle.button_pressed = _draft.negated
 	_rebuild_rows()
 
 
