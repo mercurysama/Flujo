@@ -61,6 +61,12 @@ const FEEDBACK_NO_COMPATIBLE_NODE_PROPERTY: String = \
 const FEEDBACK_NO_COMPATIBLE_NODE: String = \
 	"No compatible Node source is available here."
 
+const STRUCTURED_MENU_ARRAY: int = 1001
+const STRUCTURED_MENU_DICTIONARY: int = 1002
+const STRUCTURED_MENU_RESOURCE: int = 1003
+const STRUCTURED_MENU_ENUM: int = 1004
+const STRUCTURED_MENU_BITFIELD: int = 1005
+
 
 var _schema: FlowChipFieldSchema
 var _document: FlowStructuredDocument
@@ -1333,6 +1339,115 @@ func _literal_type_label(value_type: Variant.Type) -> String:
 		FlowLiteralValueSource.TYPE_STRING_NAME:
 			return "StringName"
 	return "Unknown"
+
+
+func _open_structured_type_selector() -> void:
+	if _structured_type_menu == null:
+		return
+	_structured_type_menu.clear()
+	_add_structured_menu_item("Array", STRUCTURED_MENU_ARRAY, FlowValueSource.SOURCE_KIND_ARRAY, Variant.Type.TYPE_ARRAY)
+	_add_structured_menu_item("Dictionary", STRUCTURED_MENU_DICTIONARY, FlowValueSource.SOURCE_KIND_DICTIONARY, Variant.Type.TYPE_DICTIONARY)
+	_add_structured_menu_item("Resource", STRUCTURED_MENU_RESOURCE, FlowValueSource.SOURCE_KIND_RESOURCE_REF, Variant.Type.TYPE_OBJECT)
+	_add_structured_menu_item("Enum", STRUCTURED_MENU_ENUM, FlowValueSource.SOURCE_KIND_ENUM, Variant.Type.TYPE_INT)
+	_add_structured_menu_item("Bitfield", STRUCTURED_MENU_BITFIELD, FlowValueSource.SOURCE_KIND_BITFIELD, Variant.Type.TYPE_INT)
+	if _structured_type_menu.item_count == 0:
+		_reject("No structured value source is compatible at the current caret.")
+		return
+	_structured_type_menu.popup_on_parent(Rect2i(
+		0,
+		int(_add_structured_button.size.y),
+		int(_add_structured_button.size.x),
+		0
+	))
+
+
+func _add_structured_menu_item(
+		label: String,
+		item_id: int,
+		source_kind: StringName,
+		value_type: Variant.Type
+) -> void:
+	if _structured_source_available(source_kind, value_type):
+		_structured_type_menu.add_item(label, item_id)
+
+
+func _structured_source_available(
+		source_kind: StringName,
+		value_type: Variant.Type
+) -> bool:
+	if _document == null:
+		return false
+	if _schema == null:
+		return true
+	if not _schema.accepts_source_kind(source_kind) or not _schema.accepts_value_type(value_type):
+		return false
+	var definition: FlowChipSlotDefinition = _insertion_slot_definition()
+	if _schema.mode == FlowChipFieldSchema.Mode.FIXED:
+		var context: Dictionary = _variable_insertion_context()
+		if int(context.get("replacement_index", -1)) < 0:
+			return false
+		definition = context.get("slot", null) as FlowChipSlotDefinition
+	elif _schema.mode == FlowChipFieldSchema.Mode.HYBRID and definition == null:
+		return false
+	if definition != null and (
+		not definition.accepts_source_kind(source_kind)
+		or not definition.accepts_value_type(value_type)
+	):
+		return false
+	if _schema.mode != FlowChipFieldSchema.Mode.FIXED and _insertion_limit_reached(definition):
+		return false
+	if source_kind == FlowValueSource.SOURCE_KIND_RESOURCE_REF:
+		return _schema_can_change_reference() and (
+			definition == null or definition.can_change_reference()
+		)
+	return _schema_can_change_content() and (
+		definition == null or definition.can_change_content()
+	)
+
+
+func _on_structured_type_selected(item_id: int) -> void:
+	var source: FlowValueSource = null
+	match item_id:
+		STRUCTURED_MENU_ARRAY:
+			source = FlowArrayValueSource.new()
+		STRUCTURED_MENU_DICTIONARY:
+			source = FlowDictionaryValueSource.new()
+		STRUCTURED_MENU_RESOURCE:
+			source = FlowResourceRefValueSource.placeholder(&"Resource")
+		STRUCTURED_MENU_ENUM:
+			source = FlowEnumValueSource.new()
+		STRUCTURED_MENU_BITFIELD:
+			source = FlowBitfieldValueSource.new()
+	if source == null:
+		return
+	_complex_edit_active = false
+	_complex_edit_segment_id = ""
+	_complex_editor.open_for_source(
+		source,
+		_variable_graph,
+		_add_structured_button.get_global_rect()
+	)
+
+
+func _on_complex_source_confirmed(source: FlowValueSource) -> void:
+	if source == null:
+		return
+	if _complex_edit_active:
+		_replace_complex_segment(_complex_edit_segment_id, source)
+	else:
+		insert_value_source_at_caret(source)
+	_complex_edit_active = false
+	_complex_edit_segment_id = ""
+
+
+func _on_complex_editor_cancelled() -> void:
+	var segment_id: String = _complex_edit_segment_id
+	_complex_edit_active = false
+	_complex_edit_segment_id = ""
+	if not segment_id.is_empty():
+		_focus_chip(segment_id)
+		call_deferred(&"_restore_chip_focus_deferred", segment_id)
+
 
 
 func select_segment(segment_id: String) -> bool:
