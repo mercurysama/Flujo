@@ -110,6 +110,29 @@ func validate_structure(result: FlowValidationResult, element_path: String) -> v
 		)
 
 
+func validate_against_graph(
+		result: FlowValidationResult,
+		element_path: String,
+		graph: FlowGraph
+) -> void:
+	if result == null or graph == null or requirement_id.is_empty():
+		return
+	var found: bool = false
+	if graph.constructor != null:
+		for requirement: FlowRequiredNodeDefinition in graph.constructor.requirements:
+			if requirement != null and requirement.get_internal_id() == requirement_id:
+				found = true
+				break
+	if not found:
+		_add_error(
+			result,
+			FlowDiagnostic.CODE_NODE_PROPERTY_REQUIREMENT_MISSING,
+			"NodePropertyRef requirement_id is missing from the active FlowGraph.",
+			element_path + ".requirement_id",
+			requirement_id
+		)
+
+
 func resolve(context: Variant = null) -> FlowValueResult:
 	var resolution_context: FlowValueResolutionContext = context as FlowValueResolutionContext
 	if resolution_context == null:
