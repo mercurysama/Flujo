@@ -9,14 +9,17 @@ const PRODUCED_TYPE: Variant.Type = Variant.Type.TYPE_BOOL
 
 @export var comparisons: Array[FlowConditionComparison] = []
 @export_storage var connectors: Array[StringName] = []
+@export_storage var negated: bool = false
 
 
 func _init(
 		new_comparisons: Array[FlowConditionComparison] = [],
-		new_connectors: Array[StringName] = []
+		new_connectors: Array[StringName] = [],
+		new_negated: bool = false
 ) -> void:
 	comparisons = new_comparisons.duplicate()
 	connectors = new_connectors.duplicate()
+	negated = new_negated
 
 
 func get_source_kind() -> StringName:
@@ -50,7 +53,7 @@ func get_preview(variable_graph: FlowGraph = null) -> String:
 			result += " %s " % connector_text
 		var comparison: FlowConditionComparison = comparisons[index]
 		result += comparison.get_preview(variable_graph) if comparison != null else "<missing>"
-	return result
+	return "NOT (" + result + ")" if negated else result
 
 
 func get_comparison_previews(variable_graph: FlowGraph = null) -> Array[String]:
@@ -118,7 +121,8 @@ func resolve(context: Variant = null) -> FlowValueResult:
 			right_result.value,
 			right_result.value_type
 		))
-	return FlowValueResult.ok(_combine_values(comparison_values), PRODUCED_TYPE)
+	var combined: bool = _combine_values(comparison_values)
+	return FlowValueResult.ok(not combined if negated else combined, PRODUCED_TYPE)
 
 
 func duplicate_with_new_id() -> FlowValueSource:
@@ -128,6 +132,7 @@ func duplicate_with_new_id() -> FlowValueSource:
 	for comparison: FlowConditionComparison in comparisons:
 		copy.comparisons.append(comparison.duplicate_with_new_id() if comparison != null else null)
 	copy.connectors = connectors.duplicate()
+	copy.negated = negated
 	return copy
 
 
@@ -216,11 +221,12 @@ func _validate_operand(
 		operand is FlowLiteralValueSource
 		or operand is FlowVariableRefValueSource
 		or operand is FlowNodePropertyRefValueSource
+		or operand is FlowOperationValueSource
 	):
 		_add_condition_error(
 			result,
 			FlowDiagnostic.CODE_CONDITION_SOURCE_KIND_INVALID,
-			"Condition operands accept Literal, VariableRef, or NodePropertyRef sources.",
+			"Condition operands accept Literal, VariableRef, NodePropertyRef, or Operation sources.",
 			operand_path,
 			operand.get_source_id()
 		)
@@ -235,6 +241,13 @@ static func _validate_graph_operand(
 		operand_path: String,
 		variable_graph: FlowGraph
 ) -> void:
+	if operand is FlowOperationValueSource:
+		(operand as FlowOperationValueSource).validate_against_graph(
+			result,
+			operand_path,
+			variable_graph
+		)
+		return
 	if operand is FlowNodePropertyRefValueSource:
 		(operand as FlowNodePropertyRefValueSource).validate_against_graph(
 			result,
@@ -274,6 +287,8 @@ static func preview_source(source: FlowValueSource, variable_graph: FlowGraph = 
 		return "<missing>"
 	if source is FlowNodePropertyRefValueSource:
 		return (source as FlowNodePropertyRefValueSource).get_preview()
+	if source is FlowOperationValueSource:
+		return "(" + (source as FlowOperationValueSource).get_preview(variable_graph) + ")"
 	return "<missing>"
 
 
