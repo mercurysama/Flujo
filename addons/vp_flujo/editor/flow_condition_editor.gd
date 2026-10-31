@@ -135,7 +135,7 @@ func open_for_condition(
 	_node_property_picker.configure(_scene_controller, _scene_root)
 	_draft = initial_source.duplicate_with_new_id() as FlowConditionValueSource \
 		if initial_source != null else _default_draft()
-	_negate_toggle.button_pressed = _draft.negated
+	_negate_toggle.set_pressed_no_signal(_draft.negated)
 	_closing_for_action = false
 	_rebuild_rows()
 	var position: Vector2i = Vector2i(int(anchor.position.x), int(anchor.position.y + anchor.size.y))
@@ -150,7 +150,7 @@ func get_draft() -> FlowConditionValueSource:
 func set_draft(source: FlowConditionValueSource) -> void:
 	_draft = source.duplicate_with_new_id() as FlowConditionValueSource \
 		if source != null else _default_draft()
-	_negate_toggle.button_pressed = _draft.negated
+	_negate_toggle.set_pressed_no_signal(_draft.negated)
 	_rebuild_rows()
 
 
@@ -852,6 +852,10 @@ func _confirm() -> void:
 func _cancel() -> void:
 	if _node_property_picker != null:
 		_node_property_picker.cancel_request()
+	if is_instance_valid(_nested_operation_editor) and _nested_operation_editor.visible:
+		_nested_operation_editor.hide()
+	_nested_operation_row_index = -1
+	_nested_operation_side = ""
 	_closing_for_action = false
 	hide()
 
