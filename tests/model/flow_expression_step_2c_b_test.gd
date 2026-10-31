@@ -79,7 +79,7 @@ func _test_operations_batch_signatures() -> void:
 	]
 	for data: Dictionary in invalid:
 		_check(FlowExpressionOperatorCatalog.find_signature(
-			data["id"], [data["left"], data["right"]
+			data["id"], [data["left"], data["right"]]
 		).is_empty(), "Mixed or unsupported signature is rejected: %s" % String(data["id"]))
 	var concat: FlowExpressionValueSource = FlowExpressionValueSource.new(
 		&"concat", [_literal_string("Hola"), _literal_string(" mundo")]
