@@ -17,6 +17,7 @@ func _run() -> void:
 	_test_resolution_failures()
 	_test_graph_validation()
 	_test_duplication()
+	_test_factory_projection()
 	_test_persistence()
 	_cleanup()
 	_finish()
@@ -203,6 +204,46 @@ func _test_duplication() -> void:
 	)
 
 
+func _test_factory_projection() -> void:
+	var source: FlowNodePropertyRefValueSource = FlowNodePropertyRefValueSource.new(
+		"",
+		NodePath("Target"),
+		&"Target",
+		&"position",
+		Variant.Type.TYPE_VECTOR2
+	)
+	var schema: FlowChipFieldSchema = FlowChipFieldSchema.new()
+	schema.mode = FlowChipFieldSchema.Mode.FIXED
+	schema.text_mode = FlowChipFieldSchema.TextMode.RUNTIME_CONTENT
+	schema.accepted_value_types = [Variant.Type.TYPE_VECTOR2]
+	schema.accepted_source_kinds = [
+		FlowValueSource.SOURCE_KIND_NODE_PROPERTY_REF,
+	]
+	var slot: FlowChipSlotDefinition = FlowChipSlotDefinition.new(
+		"scene_value",
+		"Scene Value",
+		true
+	)
+	slot.accepted_value_types = [Variant.Type.TYPE_VECTOR2]
+	slot.accepted_source_kinds = [
+		FlowValueSource.SOURCE_KIND_NODE_PROPERTY_REF,
+	]
+	slot.initial_value_source = source
+	slot.allow_delete = false
+	slot.max_count = 1
+	slot.min_count = 1
+	schema.slots = [slot]
+	schema.add_slot_part("scene_value")
+
+	var creation: FlowChipFieldCreationResult = FlowChipFieldFactory.new().create(schema)
+	_check(
+		creation.document != null
+			and creation.document.segments.size() == 1
+			and creation.document.segments[0] is FlowNodePropertyRefSegment,
+		"ChipFieldFactory materializes NodePropertyRef as its semantic Tok."
+	)
+
+
 func _test_persistence() -> void:
 	var source: FlowNodePropertyRefValueSource = FlowNodePropertyRefValueSource.new(
 		"",
@@ -216,6 +257,10 @@ func _test_persistence() -> void:
 	segment.slot_kind = FlowChipSegment.SLOT_KIND_VARIADIC
 	var document: FlowStructuredDocument = FlowStructuredDocument.new()
 	document.segments = [segment]
+	_check(
+		not FlowStructuredDocumentValidator.validate(document).has_errors(),
+		"StructuredDocumentValidator recognizes NodePropertyRefSegment."
+	)
 
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(TEMP_ROOT))
 	_check(
