@@ -2901,6 +2901,183 @@ func _bind_requirement_if_possible(source: FlowNodePropertyRefValueSource) -> vo
 		source.requirement_id = requirement_id
 
 
+func _bind_node_ref_requirement_if_possible(source: FlowNodeRefValueSource) -> void:
+	if source == null or not source.requirement_id.is_empty():
+		return
+	if not is_instance_valid(_scene_controller) or not is_instance_valid(_scene_root):
+		return
+	var node: Node = _scene_root.get_node_or_null(source.node_path)
+	if not is_instance_valid(node) or node.get_parent() != _scene_controller:
+		return
+	var binder: FlowSceneRequirementBinder = FlowSceneRequirementBinder.new(
+		_undo_redo,
+		_history_owner()
+	)
+	var requirement_id: String = binder.ensure_requirement(_scene_controller, node)
+	if not requirement_id.is_empty():
+		source.requirement_id = requirement_id
+
+
+func _insert_node_ref_source_at_caret(source: FlowNodeRefValueSource) -> String:
+	if source == null or not source.is_valid():
+		_cancel_node_property_trigger(true)
+		_reject("Node source is invalid.")
+		return ""
+	if not _can_insert_source(source):
+		_cancel_node_property_trigger(true)
+		return ""
+	var context: Dictionary = _variable_insertion_context()
+	var slot: FlowChipSlotDefinition = context.get("slot", null) as FlowChipSlotDefinition
+	var replacement_index: int = int(context.get("replacement_index", -1))
+	var before_segments: Array[FlowDocumentSegment] = _copy_segments(
+		_node_property_trigger_before_segments
+	)
+	var before_text_states: Array[Dictionary] = 		_node_property_trigger_before_text_states.duplicate()
+	var after_segments: Array[FlowDocumentSegment] = _copy_segments(_document.segments)
+	var after_text_states: Array[Dictionary] = []
+	var chip: FlowNodeRefSegment = FlowNodeRefSegment.new(source)
+	var focus_id: String = ""
+
+	if replacement_index < 0 and slot != null:
+		chip.set_slot_id(slot.slot_id)
+		chip.set_slot_kind(
+			FlowChipSegment.SLOT_KIND_VARIADIC 			if _is_variadic_slot_definition(slot) else FlowChipSegment.SLOT_KIND_NAMED
+		)
+
+	if replacement_index >= 0:
+		var target: FlowChipSegment = _segment_at(replacement_index) as FlowChipSegment
+		if target == null or slot == null:
+			_cancel_node_property_trigger(true)
+			_reject(FEEDBACK_INVALID_CHIP_POSITION)
+			return ""
+		chip.segment_id = target.get_segment_id()
+		chip.set_slot_id(target.get_slot_id())
+		chip.set_slot_kind(target.get_slot_kind())
+		after_segments[replacement_index] = chip
+		focus_id = chip.get_segment_id()
+	else:
+		var trigger_text: FlowTextSegment = _find_segment(
+			_node_property_trigger_segment_id
+		) as FlowTextSegment
+		var text_index: int = _find_segment_index(_node_property_trigger_segment_id)
+		if trigger_text == null or text_index < 0:
+			_cancel_node_property_trigger(true)
+			return ""
+		var start: int = clampi(
+			_node_property_trigger_start,
+			0,
+			trigger_text.text.length()
+		)
+		var end: int = clampi(
+			_node_property_trigger_end,
+			start,
+			trigger_text.text.length()
+		)
+		var prefix: String = trigger_text.text.substr(0, start)
+		var suffix: String = trigger_text.text.substr(end)
+		var following: FlowTextSegment = FlowTextSegment.new()
+		following.text = suffix
+		after_segments[text_index] = trigger_text
+		after_segments.insert(text_index + 1, chip)
+		after_segments.insert(text_index + 2, following)
+		after_text_states = [
+			_text_state(trigger_text, prefix),
+			_text_state(following, suffix),
+		]
+		focus_id = following.get_segment_id()
+
+	_clear_node_property_trigger_state()
+	_clear_node_ref_edit_state()
+	if _scene_reference_choice != null and _scene_reference_choice.visible:
+		_scene_reference_choice.hide()
+	_selected_segment_id = chip.get_segment_id()
+	_current_position_id = chip.get_segment_id()
+	_caret_segment_id = focus_id
+	_caret_offset = 0
+	_caret_boundary_index = -1
+	_focus_restore_id = focus_id
+	_preserve_selection_during_focus_restore = true
+	_commit_state_action(
+		"Insert Node",
+		before_segments,
+		before_text_states,
+		after_segments,
+		after_text_states
+	)
+	segment_selected.emit(chip.get_segment_id())
+	return chip.get_segment_id()
+
+
+func _replace_node_ref_segment(
+		segment_id: String,
+		source: FlowNodeRefValueSource
+) -> bool:
+	var existing: FlowNodeRefSegment = _find_segment(segment_id) as FlowNodeRefSegment
+	if existing == null or source == null or not source.is_valid():
+		return false
+	var slot: FlowChipSlotDefinition = _slot_definition_for(existing)
+	if _schema != null and (
+		not _schema.accepts_source_kind(source.get_source_kind())
+		or not _schema.accepts_value_type(source.get_value_type())
+	):
+		_reject(FEEDBACK_NO_COMPATIBLE_NODE)
+		return false
+	if slot != null and (
+		not slot.accepts_source_kind(source.get_source_kind())
+		or not slot.accepts_value_type(source.get_value_type())
+	):
+		_reject(FEEDBACK_NO_COMPATIBLE_NODE)
+		return false
+	var index: int = _find_segment_index(segment_id)
+	if index < 0:
+		return false
+	var before_segments: Array[FlowDocumentSegment] = _copy_segments(_document.segments)
+	var after_segments: Array[FlowDocumentSegment] = _copy_segments(before_segments)
+	var replacement: FlowNodeRefSegment = FlowNodeRefSegment.new(source)
+	replacement.segment_id = existing.segment_id
+	replacement.set_slot_id(existing.get_slot_id())
+	replacement.set_slot_kind(existing.get_slot_kind())
+	after_segments[index] = replacement
+	_clear_node_ref_edit_state()
+	_commit_state_action(
+		"Edit Node",
+		before_segments,
+		_text_states_for_segments(before_segments),
+		after_segments,
+		[]
+	)
+	_on_chip_selected(segment_id)
+	_focus_chip(segment_id)
+	segment_selected.emit(segment_id)
+	return true
+
+
+func _on_node_ref_edit_requested(segment_id: String) -> bool:
+	var segment: FlowNodeRefSegment = _find_segment(segment_id) as FlowNodeRefSegment
+	if segment == null:
+		return false
+	if not _can_edit_chip(segment):
+		_on_chip_selected(segment_id)
+		_reject(FEEDBACK_TOK_IMMUTABLE)
+		return false
+	_node_ref_edit_active = true
+	_node_ref_edit_segment_id = segment_id
+	_node_property_edit_active = false
+	_node_property_edit_segment_id = ""
+	_on_chip_selected(segment_id)
+	var panel: FlowSceneNodePanel = _scene_node_panel()
+	if panel == null:
+		_clear_node_ref_edit_state()
+		_reject("Scene Node Panel is unavailable.")
+		return false
+	panel.begin_request(self)
+	_feedback_text = "Select or drag a replacement scene node."
+	_feedback_label.text = _feedback_text
+	_feedback_label.visible = true
+	operation_feedback.emit(_feedback_text)
+	return true
+
+
 func _insert_node_property_source_at_caret(
 		source: FlowNodePropertyRefValueSource
 ) -> String:
@@ -3134,6 +3311,12 @@ func _clear_node_property_trigger_state() -> void:
 func _clear_node_property_edit_state() -> void:
 	_node_property_edit_active = false
 	_node_property_edit_segment_id = ""
+	_pending_node_payload.clear()
+
+
+func _clear_node_ref_edit_state() -> void:
+	_node_ref_edit_active = false
+	_node_ref_edit_segment_id = ""
 	_pending_node_payload.clear()
 
 
