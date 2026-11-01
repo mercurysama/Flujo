@@ -36,6 +36,14 @@ jobs:
         run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_ready_runtime_test.tscn
       - name: Navigation baseline
         run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_navigation_runtime_test.tscn
+      - name: FSM snapshot focal (when present)
+        shell: bash
+        run: |
+          if test -f tests/runtime/flow_fsm_snapshot_test.tscn; then
+            ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_snapshot_test.tscn
+          else
+            echo 'FSM snapshot test missing; not a PASS'
+          fi
       - name: FSM dynamic state focal (when present)
         shell: bash
         run: |
