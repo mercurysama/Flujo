@@ -11,6 +11,7 @@ func _ready() -> void:
 
 func _run() -> void:
 	await _test_schema4_requirement_backed_print()
+	await _test_schema4_requirement_backed_timer()
 	await _test_invalid_requirement_binding_stops_execution()
 	_finish()
 
@@ -85,6 +86,82 @@ func _test_schema4_requirement_backed_print() -> void:
 
 	controller.queue_free()
 	await get_tree().process_frame
+
+
+func _test_schema4_requirement_backed_timer() -> void:
+	var graph: FlowGraph = FlowGraph.new()
+	graph.schema_version = FlowGraph.SCHEMA_VERSION_4
+	graph.constructor = FlowConstructorDefinition.new()
+
+	var requirement: FlowRequiredNodeDefinition = FlowRequiredNodeDefinition.new()
+	requirement.display_name = "Target"
+	requirement.expected_node_name = &"Target"
+	requirement.required_class_name = &"Node2D"
+	graph.constructor.requirements = [requirement]
+
+	var print_block: FlowPrintBlock = FlowPrintBlock.new()
+	print_block.content = FlowStructuredDocument.new()
+	var prefix: FlowTextSegment = FlowTextSegment.new()
+	prefix.text = "timer-z="
+	print_block.content.segments = [
+		prefix,
+		FlowNodePropertyRefSegment.new(
+			FlowNodePropertyRefValueSource.new(
+				requirement.get_internal_id(),
+				NodePath("WrongFallback"),
+				&"Target",
+				&"z_index",
+				Variant.Type.TYPE_INT
+			)
+		),
+	]
+
+	var timer: FlowTimerDefinition = FlowTimerDefinition.new()
+	timer.process_type = FlowProcess.ProcessType.TIMER
+	timer.interval_seconds = 3600.0
+	timer.repeat = true
+	timer.blocks = [print_block]
+	graph.processes = [timer]
+
+	var controller: PVController = PVController.new()
+	controller.flow_graph = graph
+	var target: Node2D = Node2D.new()
+	target.name = "Target"
+	target.z_index = 33
+	controller.add_child(target)
+	controller.requirement_bindings = {
+		requirement.get_internal_id(): NodePath("Target"),
+	}
+	controller.runtime_output.message_emitted.connect(_record)
+	_messages.clear()
+	add_child(controller)
+	await get_tree().process_frame
+
+	var clocks: Array[Timer] = _native_timers(controller)
+	_check(
+		clocks.size() == 1,
+		"Schema 4 Timer scheduler starts one native clock after valid Requirement binding validation."
+	)
+	if clocks.size() == 1:
+		clocks[0].timeout.emit()
+		_check(
+			_messages == ["timer-z=33"],
+			"Schema 4 Timer resolves Requirement-backed Akis through the shared executor."
+		)
+
+	controller.queue_free()
+	await get_tree().process_frame
+
+
+func _native_timers(controller: PVController) -> Array[Timer]:
+	var result: Array[Timer] = []
+	for child: Node in controller.get_children(true):
+		if not child is FlowTimerRuntime:
+			continue
+		for candidate: Node in child.get_children(true):
+			if candidate is Timer:
+				result.append(candidate as Timer)
+	return result
 
 
 func _test_invalid_requirement_binding_stops_execution() -> void:
