@@ -29,6 +29,19 @@ Manual authoring ──────┐
 flujo-block-builder ───┘
 ```
 
+## Reusable Scene Node drag-and-drop planning recipe
+
+For blocks meant to support dragging a Godot scene node into Flow, consult
+[`docs/recipe_node_drag_drop_custom_blocks.md`](../../../docs/recipe_node_drag_drop_custom_blocks.md)
+**as a proposed, not yet implemented authoring extension**. The current
+`FlowSceneNodePanel` supplies NodeRef payloads; it does **not** create
+catalog blocks automatically. Plan a container-agnostic binding descriptor,
+use the approved public catalog/factory/Undo boundary, and classify any new
+mapping/SDK capability as **C** or **D** until approved. Do not add new fields
+to manifest v1, generate custom container-specific block variants, or skip
+the per-block planning and maintainer approval gate. The recipe is applicable
+to Process, Timer, State Machine phases, and other supported containers.
+
 ## Protected architecture
 
 ### Container-agnostic block contract
