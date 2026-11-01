@@ -160,3 +160,9 @@ Todo es Flujo; todo fluye. 🌊
 - Contract `435dd379c04669bcf11594ed94d9a89c45de43cc`, tests `19da090c52fa591c364396375aac809b5a1b4c5d` + `2644fb16129bf298f5ba43984dbda1288c73b79c`, CI focal `4c0c37d3ecc5fb6b044f653462ce788425dbf7e6`.
 - [Actions 41357686834](https://github.com/mercurysama/Flujo/actions/runs/41357686834) SUCCESS. Event-driven A↔B lineage, ninth-hop rejection, sibling cancellation, unrelated request preservation, and isolated second PVController verified. Runtime code unchanged.
 - Next: phase-6 gap audit (6E), then narrow reason/payload and per-tick budget tests. No manual/Android or phase-5 Tok visual acceptance inferred.
+
+## 2026-11-01 — Potok 6E phase-6 gap audit
+
+- [6E audit](fsm_phase6_6e_audit.md) commit `a3ae38b0004b4d466d1d3a9a9fad1e8d497da4d1`; pre-audit HEAD `499711314c1e11465c0c59fb528eb1f8e95f3a8d` [CI 41357770163](https://github.com/mercurysama/Flujo/actions/runs/41357770163) SUCCESS. This lot modified documentation only.
+- Accepted: runtime cross-machine IDs, deterministic queues and callback deferral, finite A↔B chains, 8-hop lineage and independent roots (6A–6D). Unfinished: direct-request typed reason/payload, per-tick work budget, negative machine disable/invalidation permutations, human Android testing.
+- Next lot: 6F-1 define backwards-compatible optional request metadata and observable consumption/commit without altering existing four-argument `transition_committed`, then RED/GREEN CI. Phase 5 Condition Tok UI remains pending.
