@@ -3063,7 +3063,7 @@ func _commit_node_ref_payload(node: Node, payload: Dictionary) -> bool:
 	elif _node_ref_edit_active:
 		success = _replace_node_ref_segment(_node_ref_edit_segment_id, source)
 	else:
-		success = not insert_source_at_caret(source).is_empty()
+		success = not insert_value_source_at_caret(source).is_empty()
 	_pending_node_payload.clear()
 	return success
 
@@ -3092,7 +3092,7 @@ func _on_node_property_selected(source: FlowNodePropertyRefValueSource) -> void:
 	elif _node_property_edit_active:
 		_replace_node_property_segment(_node_property_edit_segment_id, source)
 	else:
-		insert_source_at_caret(source)
+		insert_value_source_at_caret(source)
 	_pending_node_payload.clear()
 
 

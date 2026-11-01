@@ -12,7 +12,9 @@ static func preview(source: FlowValueSource, graph: FlowGraph = null) -> String:
 		if not literal.is_valid():
 			return "<invalid literal>"
 		var text: String = literal.get_runtime_text()
-		return ""%s"" % text 			if literal.get_value_type() == Variant.Type.TYPE_STRING 			or literal.get_value_type() == Variant.Type.TYPE_STRING_NAME 			else text
+		if literal.get_value_type() in [Variant.Type.TYPE_STRING, Variant.Type.TYPE_STRING_NAME]:
+			return "\"%s\"" % text
+		return text
 	if source is FlowVariableRefValueSource:
 		var variable: FlowVariableRefValueSource = source as FlowVariableRefValueSource
 		if graph != null:
