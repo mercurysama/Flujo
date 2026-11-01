@@ -1426,8 +1426,17 @@ func _on_structured_type_selected(item_id: int) -> void:
 	_complex_editor.open_for_source(
 		source,
 		_variable_graph,
-		_add_structured_button.get_global_rect()
+		_add_structured_button.get_global_rect(),
+		_complex_editor_context()
 	)
+
+
+func _complex_editor_context() -> Dictionary:
+	return {
+		"scene_controller": _scene_controller,
+		"scene_root": _scene_root,
+		"schema": _schema,
+	}
 
 
 func _on_complex_source_confirmed(source: FlowValueSource) -> void:
@@ -1473,7 +1482,8 @@ func _on_complex_edit_requested(segment_id: String) -> bool:
 	_complex_editor.open_for_source(
 		source,
 		_variable_graph,
-		chip.get_global_rect() if chip != null else get_global_rect()
+		chip.get_global_rect() if chip != null else get_global_rect(),
+		_complex_editor_context()
 	)
 	return true
 
