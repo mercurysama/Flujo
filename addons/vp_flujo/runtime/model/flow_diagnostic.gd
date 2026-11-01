@@ -158,6 +158,11 @@ const CODE_ENUM_OPTIONS_INVALID: StringName = &"enum_options_invalid"
 const CODE_ENUM_VALUE_INVALID: StringName = &"enum_value_invalid"
 const CODE_BITFIELD_OPTIONS_INVALID: StringName = &"bitfield_options_invalid"
 const CODE_BITFIELD_MASK_INVALID: StringName = &"bitfield_mask_invalid"
+const CODE_STRUCTURED_VALUE_SHAPE_INVALID: StringName = &"structured_value_shape_invalid"
+const CODE_STRUCTURED_VALUE_RESOLUTION_FAILED: StringName = &"structured_value_resolution_failed"
+const CODE_VARIABLE_RESOLUTION_CYCLE: StringName = &"variable_resolution_cycle"
+const CODE_VARIABLE_COMPLEX_SOURCE_MISSING: StringName = &"variable_complex_source_missing"
+const CODE_VARIABLE_COMPLEX_SOURCE_TYPE_MISMATCH: StringName = &"variable_complex_source_type_mismatch"
 
 # Short aliases keep the diagnostic vocabulary usable by generic callers that
 # do not repeat the full ChipField prefix.
