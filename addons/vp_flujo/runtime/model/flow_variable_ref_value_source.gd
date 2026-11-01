@@ -87,7 +87,26 @@ func resolve(context: Variant = null) -> FlowValueResult:
 				)
 			)
 		return FlowValueResult.ok(runtime_value, get_value_type())
-	return FlowValueResult.ok(_default_value(variable), get_value_type())
+
+	if resolution_context != null:
+		if not resolution_context.begin_variable_resolution(variable_id):
+			return FlowValueResult.fail(
+				get_value_type(),
+				FlowDiagnostic.new(
+					FlowDiagnostic.CODE_VARIABLE_RESOLUTION_CYCLE,
+					FlowDiagnostic.Severity.ERROR,
+					"Variable default resolution contains a cycle.",
+					"value_source.variable_id",
+					variable_id
+				)
+			)
+		var resolved_default: FlowValueResult = variable.get_default_value_result(
+			resolution_context
+		)
+		resolution_context.end_variable_resolution(variable_id)
+		return resolved_default
+
+	return variable.get_default_value_result(null)
 
 
 func is_valid() -> bool:
@@ -168,25 +187,6 @@ func duplicate_with_new_id() -> FlowValueSource:
 	var copy: FlowVariableRefValueSource = duplicate(false) as FlowVariableRefValueSource
 	copy._source_id = FlowId.create()
 	return copy
-
-
-static func _default_value(variable: FlowVariableDefinition) -> Variant:
-	match variable.value_type:
-		FlowVariableDefinition.ValueType.BOOL:
-			return variable.bool_value
-		FlowVariableDefinition.ValueType.INT:
-			return variable.int_value
-		FlowVariableDefinition.ValueType.FLOAT:
-			return variable.float_value
-		FlowVariableDefinition.ValueType.STRING:
-			return variable.string_value
-		FlowVariableDefinition.ValueType.VECTOR2:
-			return variable.vector2_value
-		FlowVariableDefinition.ValueType.VECTOR3:
-			return variable.vector3_value
-		FlowVariableDefinition.ValueType.COLOR:
-			return variable.color_value
-	return null
 
 
 static func _add_error(
