@@ -127,7 +127,8 @@ func resolve(context: Variant = null) -> FlowValueResult:
 				FlowDiagnostic.CODE_COLLECTION_ELEMENT_MISSING,
 				"Dictionary contains an incomplete entry."
 			)
-		if output.has(entry.key):
+		var normalized_key: String = entry.key.strip_edges()
+		if output.has(normalized_key):
 			return _failure(
 				FlowDiagnostic.CODE_DICTIONARY_KEY_DUPLICATE,
 				"Dictionary contains a duplicate key."
@@ -144,7 +145,7 @@ func resolve(context: Variant = null) -> FlowValueResult:
 					_source_id
 				)
 			)
-		output[entry.key] = child_result.value
+		output[normalized_key] = child_result.value
 	return FlowValueResult.ok(output, PRODUCED_TYPE)
 
 
