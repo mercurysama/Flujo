@@ -132,3 +132,16 @@ The existing `flow_fsm_transitions_test.gd` already verifies direct requests, ev
 - **Next micro-lot:** `5G` examine stable rejection diagnostics (including queue overflow) or `5F-3` define a safe read-only condition/value binding contract; choose one bounded goal and create its focused test before modifying engine. Multi-machine API belongs to phase 6.
 
 **Recovery:** commit `59eaa042af38562872c532f15178340c9a7bf91e` is last production code change, then this documentation checkpoint. Read the 5F contract and latest CI. Historical RED/GREEN runs remain separate.
+
+## Potok 5G — Runtime admission rejection diagnostics (2026-11-01)
+
+**Prior checkpoint:** `1f2d299544b8f339bd5d52a44eaf9c7770ad66b9`.
+
+- **5G contract:** `be370f3a92f92beab30ca27b88ab49d64daa2010`; [fsm_5g_diagnostics_contract.md](fsm_5g_diagnostics_contract.md). Adds controller-local `request_rejected(machine_id,kind,code)` signal while retaining Boolean success/failure semantics. Reasons: `not_running`, `queue_full`, `invalid_machine`, `invalid_target`, `invalid_event_name` and `invalid_payload`. Deterministic precedence and no payload leakage.
+- **RED:** `a82ecfe6700042949c19e948a685ddfc37789d30`, adds `tests/runtime/flow_fsm_admission_diagnostics_test.gd/.tscn` and bounded CI focal. [GitHub Actions 41353542099](https://github.com/mercurysama/Flujo/actions/runs/41353542099) **FAIL**, as expected without the signal.
+- **GREEN:** `ad65cfde37f55635b28dd5b66f944b993a68f411`, runtime-only implementation. [GitHub Actions 41353576853](https://github.com/mercurysama/Flujo/actions/runs/41353576853) **SUCCESS** including 5G, FSM earlier focals, model/Ready/navigation and snapshot/dynamic regressions.
+- **Observed:** exactly one notification on each rejected admission; accepted requests never emit rejection; 256 max queue remains stable; wrong-clock carryover cannot silently discard an admitted callback; stopped runtime reports `not_running`. Dispatch and serialization unchanged.
+- **Boundary:** these are admission diagnostics, **not** all possible runtime execution errors, fault-injection policies, or a Potok editor UI. Existing model-validation `FlowDiagnostic` codes remain separate. Human/Android acceptance remains pending.
+- **Next small lot:** Phase 5 final acceptance review and explicit deferred Condition Tok payload-binding/editor scope, before advancing to phase 6. Keep phase 6 multiple-machine changes in separate recoverable commits.
+
+**Recovery:** use commit `ad65cfde37f55635b28dd5b66f944b993a68f411` plus this documentation checkpoint. Preserve RED and GREEN CI run links and check latest HEAD before edits.
