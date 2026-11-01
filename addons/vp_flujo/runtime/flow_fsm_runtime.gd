@@ -12,6 +12,8 @@ signal request_rejected(machine_id: String, kind: StringName, code: StringName)
 signal state_exited(machine_id: String, state_id: String)
 signal machine_stopped(machine_id: String, state_id: String)
 signal transition_committed(machine_id: String, from_state_id: String, to_state_id: String, trigger_id: String)
+## Metadata is delivered only for a committed direct request, after the legacy signal.
+signal direct_transition_committed(machine_id: String, from_state_id: String, to_state_id: String, reason: StringName, payload: Dictionary)
 
 const MAX_PENDING_REQUESTS: int = 256
 ## Max committed hops inherited through transition lifecycle callbacks.
@@ -97,7 +99,10 @@ func start(controller: PVController) -> bool:
 
 
 ## Queue one explicit destination; it does not need an authored edge.
-func request_transition(machine_id: String, target_state_id: String) -> bool:
+func request_transition(
+		machine_id: String, target_state_id: String,
+		reason: StringName = &"", payload: Dictionary = {}
+) -> bool:
 	if not _running:
 		request_rejected.emit(machine_id, &"direct", &"not_running")
 		return false
@@ -109,6 +114,12 @@ func request_transition(machine_id: String, target_state_id: String) -> bool:
 	if target == null or not target.enabled:
 		request_rejected.emit(machine_id, &"direct", &"invalid_target")
 		return false
+	if String(reason).length() > 128:
+		request_rejected.emit(machine_id, &"direct", &"invalid_reason")
+		return false
+	if not FlowFSMDataValidator.valid_dictionary(payload):
+		request_rejected.emit(machine_id, &"direct", &"invalid_payload")
+		return false
 	if _pending_requests.size() + _inflight_reserved >= MAX_PENDING_REQUESTS:
 		request_rejected.emit(machine_id, &"direct", &"queue_full")
 		return false
@@ -117,7 +128,8 @@ func request_transition(machine_id: String, target_state_id: String) -> bool:
 		return false
 	_pending_requests.append({
 		"kind": &"direct", "machine_id": machine_id, "target_id": target_state_id,
-		"chain_id": lineage["chain_id"], "chain_hop": lineage["chain_hop"]
+		"chain_id": lineage["chain_id"], "chain_hop": lineage["chain_hop"],
+		"reason": reason, "payload": payload.duplicate(true)
 	})
 	return true
 
@@ -218,7 +230,8 @@ func tick(delta: float, mode: int = FlowStateMachineDefinition.TickMode.PROCESS)
 		if not target_id.is_empty() and target_id != state_id:
 			_commit_transition(machine, state, target_id,
 				String(candidate.get("trigger_id", "")),
-				int(candidate.get("chain_id", 0)), int(candidate.get("chain_hop", 1)))
+				int(candidate.get("chain_id", 0)), int(candidate.get("chain_hop", 1)),
+				candidate.get("reason", &""), candidate.get("payload", {}))
 	# Requests raised in Update/Enter/Exit are deferred to the next matching tick.
 	leftovers.append_array(_pending_requests)
 	# A saturated chain loses its queued descendants, not unrelated roots.
@@ -287,7 +300,9 @@ func _pick_request(
 				return {
 					"target_id": target_id, "trigger_id": "direct",
 					"chain_id": request.get("chain_id", 0),
-					"chain_hop": request.get("chain_hop", 1)
+					"chain_hop": request.get("chain_hop", 1),
+					"reason": request.get("reason", &""),
+					"payload": request.get("payload", {})
 				}
 		elif request.get("kind") == &"event":
 			for edge_index: int in state.transitions.size():
@@ -342,7 +357,9 @@ func _commit_transition(
 		target_id: String,
 		trigger_id: String,
 		chain_id: int = 0,
-		chain_hop: int = 1
+		chain_hop: int = 1,
+		reason: StringName = &"",
+		payload: Dictionary = {}
 ) -> void:
 	var target: FlowStateDefinition = _find_state(machine, target_id)
 	if target == null or not target.enabled:
@@ -362,6 +379,10 @@ func _commit_transition(
 	_execute_phase(machine, target, target.enter_blocks, &"StateEnter")
 	state_entered.emit(machine_id, target_id)
 	transition_committed.emit(machine_id, old_id, target_id, trigger_id)
+	if trigger_id == "direct":
+		direct_transition_committed.emit(
+			machine_id, old_id, target_id, reason, payload.duplicate(true)
+		)
 	_committing_chain_id = previous_chain_id
 	_committing_chain_hop = previous_chain_hop
 
