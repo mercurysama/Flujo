@@ -86,6 +86,17 @@ func resolve(context: Variant = null) -> FlowValueResult:
 					variable_id
 				)
 			)
+		if variable.value_type == FlowVariableDefinition.ValueType.RESOURCE 				and not runtime_value is Resource:
+			return FlowValueResult.fail(
+				get_value_type(),
+				FlowDiagnostic.new(
+					FlowDiagnostic.CODE_VALUE_RESOLUTION_TYPE_MISMATCH,
+					FlowDiagnostic.Severity.ERROR,
+					"Runtime Resource variable must contain a Resource.",
+					"value_source.variable_id",
+					variable_id
+				)
+			)
 		return FlowValueResult.ok(runtime_value, get_value_type())
 
 	if resolution_context != null:
