@@ -180,3 +180,10 @@ Todo es Flujo; todo fluye. 🌊
 - Engine `c22ef8fd2693b2356948bfb6b3363ecdaea1b707`, updated 5G `36095a4e024a3e85fbe453d9fbc6f43aebf9efab` and 5C `46f4f82fee34d0e24efb2d7b8d35cc8fd8c3eb00` drain assertions, [Actions 41361104238](https://github.com/mercurysama/Flujo/actions/runs/41361104238) SUCCESS all tests.
 - Per-machine 32-packet tick processing with fair independent machines, precise carryover reservation and `work_budget_deferred` telemetry; not a CPU-time or all-machine total budget. See `docs/fsm_phase6_6g_result.md`.
 - Resume next at 6H fault-injection tests and phase-6 acceptance; do not close phase-5 Condition Tok and Potok Android UI work.
+
+## 2026-11-01 — Potok 6H final runtime acceptance recovery
+
+- Contract `1cf700c783f4e38bbb2eb0db45788d8eb39d26cd`; tests `5857efa96e728de08aabbb22656b53f3d449f875`, `94b8a942e793adac9e762cddacb4ce2094ee3e23`, `efe478c3517fcc9bfff1fde7001292aa946299f8`, `58832cf2792b3b17bd010612e1ed1a1b757bbea2`; workflow `28ea30ceb7441ed90e3aa1d6612e009494c0da66`.
+- [CI 41363216050](https://github.com/mercurysama/Flujo/actions/runs/41363216050) FAIL for nested-stop lifecycle duplicates (6H-1 green); runtime `_stopping` fix `e494bcf39d27aa1ab25b6c31688ceb1287a98887` produced full [CI 41363328505](https://github.com/mercurysama/Flujo/actions/runs/41363328505) SUCCESS.
+- See `docs/fsm_phase6_6h_result.md` and `docs/fsm_phase6_final_audit.md`. FLU-FSM-002 core multi-machine runtime is automated-pass, **not** global CPU-budget guarantee, complete fault fuzzing, phase-5 Tok integration or Potok UI/Android release validation.
+- Resume at 7A authoring contract for Potok UI with explicit Tok payload/condition dependencies, or a separately scoped 6I global-work-SLA lot if necessary. Preserve red/green commits and the GitHub workflow as recovery evidence.
