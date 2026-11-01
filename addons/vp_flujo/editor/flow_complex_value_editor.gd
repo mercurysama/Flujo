@@ -8,6 +8,8 @@ signal source_confirmed(source: FlowValueSource)
 signal cancelled
 
 
+const MAX_EDITOR_NESTING_DEPTH: int = 8
+
 const CHILD_LITERAL_TYPES: Array[Variant.Type] = [
 	Variant.Type.TYPE_BOOL,
 	Variant.Type.TYPE_INT,
@@ -28,6 +30,7 @@ const CHILD_SOURCE_BITFIELD: int = 2009
 var _draft: FlowValueSource
 var _graph: FlowGraph
 var _context: Dictionary = {}
+var _nesting_depth: int = 0
 var _content: VBoxContainer
 var _body: VBoxContainer
 var _preview: Label
@@ -138,6 +141,7 @@ func open_for_source(
 ) -> void:
 	_graph = graph
 	_context = context.duplicate()
+	_nesting_depth = int(_context.get("complex_nesting_depth", 0))
 	_draft = source.duplicate_with_new_id() if source != null else null
 	_closing_for_action = false
 	_nested_replace = Callable()
@@ -415,6 +419,11 @@ func _source_menu(label_text: String, replace_action: Callable) -> MenuButton:
 			variable_index,
 			_graph == null or _graph.variables.is_empty()
 		)
+	if _nesting_depth >= MAX_EDITOR_NESTING_DEPTH:
+		for item_id: int in [CHILD_SOURCE_ARRAY, CHILD_SOURCE_DICTIONARY]:
+			var item_index: int = popup.get_item_index(item_id)
+			if item_index >= 0:
+				popup.set_item_disabled(item_index, true)
 	popup.id_pressed.connect(
 		_on_collection_source_selected.bind(replace_action, button)
 	)
@@ -460,11 +469,13 @@ func _open_new_complex_source(
 		anchor: Control = null
 ) -> void:
 	_nested_replace = replace_action
+	var child_context: Dictionary = _context.duplicate()
+	child_context["complex_nesting_depth"] = _nesting_depth + 1
 	_ensure_nested_editor().open_for_source(
 		source,
 		_graph,
 		anchor.get_global_rect() if is_instance_valid(anchor) else get_global_rect(),
-		_context
+		child_context
 	)
 
 
@@ -634,11 +645,13 @@ func _ensure_nested_editor() -> FlowComplexValueEditor:
 
 func _open_nested_source(source: FlowValueSource, replace_action: Callable) -> void:
 	_nested_replace = replace_action
+	var child_context: Dictionary = _context.duplicate()
+	child_context["complex_nesting_depth"] = _nesting_depth + 1
 	_ensure_nested_editor().open_for_source(
 		source,
 		_graph,
 		get_global_rect(),
-		_context
+		child_context
 	)
 
 
