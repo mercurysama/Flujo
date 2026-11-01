@@ -445,9 +445,10 @@ static func _validate_structured_block_properties(
 		var property_name: StringName = StringName(String(property.get("name", "")))
 		if property_name.is_empty():
 			continue
-		var document: FlowStructuredDocument = block.get(property_name) as FlowStructuredDocument
-		if document == null:
+		var property_value: Variant = block.get(property_name)
+		if not property_value is FlowStructuredDocument:
 			continue
+		var document: FlowStructuredDocument = property_value as FlowStructuredDocument
 		var validation: FlowValidationResult = FlowStructuredDocumentValidator.validate(
 			document,
 			graph
