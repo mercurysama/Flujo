@@ -173,3 +173,10 @@ Todo es Flujo; todo fluye. 🌊
 - Runtime GREEN `d0e670af2af8dd5f86009d83f7bb5b7e214e2f89`; [CI 41359760201](https://github.com/mercurysama/Flujo/actions/runs/41359760201) SUCCESS all regressions.
 - Direct `request_transition` accepts optional `reason: StringName`, `payload: Dictionary`, validates, deep-copies and reports only on committed direct transitions via new signal. Old two-argument API and `transition_committed` preserved; denied metadata emits stable diagnostics; callbacks defer. See `docs/fsm_phase6_6f1_result.md`.
 - Next 6G per-tick work budget/fairness, then 6H negative testing. Do not claim full phase 6, Tok UI or manual Android acceptance.
+
+## 2026-11-01 — Potok 6G per-machine packet budget green
+
+- Contract `76057049fcb0b5d80e08919cecf363754ca147b0`, RED test `387ffded2840665a706040d94592abb37d0d087f`, scene `2299c301229580582b1a04dd16727e4c8d640b72`, CI focal `84ef9bdc6e8ca56350f97cf2c7ddc8b92ab2b796` ([Actions 41360868794](https://github.com/mercurysama/Flujo/actions/runs/41360868794) FAIL expected).
+- Engine `c22ef8fd2693b2356948bfb6b3363ecdaea1b707`, updated 5G `36095a4e024a3e85fbe453d9fbc6f43aebf9efab` and 5C `46f4f82fee34d0e24efb2d7b8d35cc8fd8c3eb00` drain assertions, [Actions 41361104238](https://github.com/mercurysama/Flujo/actions/runs/41361104238) SUCCESS all tests.
+- Per-machine 32-packet tick processing with fair independent machines, precise carryover reservation and `work_budget_deferred` telemetry; not a CPU-time or all-machine total budget. See `docs/fsm_phase6_6g_result.md`.
+- Resume next at 6H fault-injection tests and phase-6 acceptance; do not close phase-5 Condition Tok and Potok Android UI work.
