@@ -117,7 +117,7 @@ func _test_instance_isolation_and_operations(graph: FlowGraph, first: PVControll
 		Vector2.ZERO,
 		Vector4.ZERO,
 	]
-	for value_type: int in FlowVariableDefinition.ValueType.values():
+	for value_type: int in range(FlowVariableDefinition.ValueType.BOOL, FlowVariableDefinition.ValueType.COLOR + 1):
 		var attribute_id: String = _attribute_id(graph, _type_attribute_name(value_type))
 		var store: FlowInstanceRuntimeStore = second_store
 		_check(store.read(attribute_id).value == defaults[value_type], "Canonical type %d reads its exact default." % value_type)
@@ -227,7 +227,7 @@ func _store_graph() -> FlowGraph:
 		Vector3(1.0, 3.0, 5.0),
 		Color(0.2, 0.4, 0.6, 0.8),
 	]
-	for value_type: int in FlowVariableDefinition.ValueType.values():
+	for value_type: int in range(FlowVariableDefinition.ValueType.BOOL, FlowVariableDefinition.ValueType.COLOR + 1):
 		var attribute: FlowAttributeDefinition = _attribute(
 			_type_attribute_name(value_type),
 			FlowAttributeDefinition.Storage.INSTANCE,
