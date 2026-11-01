@@ -610,3 +610,53 @@ Constructor/Methods, Typed Variables, schema 4/5 and runtime work remain governe
 Update this file after each approved Iteration 7 delivery so it remains a brief, factual handoff.
 
 Todo es Flujo; todo fluye. 🌊
+
+
+## Major Increment Checkpoint — Akis/Tok Lot 10 — 2026-10-31
+
+Lotes 02–10 del impulso Akis/Tok están implementados en
+`feature/block-builder-fprint-dogfood`. El contrato de cierre es
+[flow_akis_tok_lot_10_contract.md](flow_akis_tok_lot_10_contract.md).
+
+### Estado funcional alcanzado
+
+- `@` Variable, `#` Condition, `~` Operation y `$` Node/Node Property
+  comparten el mismo documento Akis y el mismo `FlowValueSource` runtime.
+- Array, Dictionary, Resource, Enum y Bitfield forman parte del mismo sistema y
+  pueden participar en composición anidada.
+- Array/Dictionary authoring ya puede crear Scalar, Variable, Operation,
+  Condition, Node, Node Property, Array, Dictionary, Resource, Enum y Bitfield,
+  reutilizando los editores públicos existentes.
+- Akis puede resolverse a texto compuesto o a un valor tipado único.
+- `FlowPrintBlock.content` consume Akis en runtime sin eliminar el fallback
+  compatible `text`.
+- Graph Variables soportan Array/Dictionary/Resource defaults, runtime override
+  por instancia y detección de ciclos.
+- Duplicación del grafo remapea Variable IDs y Requirement IDs dentro de árboles
+  ValueSource y Akis de bloques después de completar el mapa de identidades.
+- Schema 4 entra al runtime existente para Ready/Process y Timer con
+  `requirement_bindings` validados. Sus `constructor.blocks` legacy siguen
+  inertes; Apply Constructor y creación declarativa de Nodes continúan
+  pendientes.
+- Schema 5 continúa fuera del executor Ready/Timer.
+
+### Evidencia preparada
+
+- `tests/model/flow_integration_lot_10_test.tscn`
+- `tests/runtime/flow_integration_lot_10_test.tscn`
+- `tests/editor/flow_integration_lot_10_editor_test.gd`
+- `tests/model/flow_tok_matrix_lot_10_test.tscn`
+- focales de Lotes 02–09 ya versionados en `tests/`.
+
+El catálogo registra las nuevas conductas Lot 10 como `not_run` y el gate
+visual como `manual_pending`. Esta sesión GitHub-only no dispone de un
+ejecutor Godot/Flatpak, por lo que no reclama una ejecución fresca ni un PASS.
+
+### Siguiente paso
+
+No hay un Lote 11 implícito. El siguiente paso es el **gate único de Godot
+4.7.2** definido en el contrato de Lote 10: focales afectados, regresiones,
+save/reopen, Undo/Redo y revisión visual integrada. Sólo esa evidencia puede
+cambiar el estado a aprobado.
+
+Todo es Flujo; todo fluye. 🌊
