@@ -42,7 +42,7 @@ func configure(undo_redo: EditorUndoRedoManager) -> void:
 	content.add_child(heading)
 
 	var instructions: Label = Label.new()
-	instructions.text = "Place the real caret in text. @ chooses a variable, # builds a CONDITION, ~ builds an OPERATION, and $ selects a Scene Node; the field decides whether it needs the Node itself, a property, or asks between both. + Value inserts a literal. Click a Tok to edit it."
+	instructions.text = "Place the real caret in text. @ chooses a variable, # builds a CONDITION, ~ builds an OPERATION, and $ selects a Scene Node. + Value inserts a literal; + Structured inserts Array/Dictionary/Resource/Enum/Bitfield when the schema allows them. Click a Tok to edit it."
 	instructions.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(instructions)
 
@@ -128,6 +128,11 @@ func _build_fixture_pages(expression_document: FlowStructuredDocument = null) ->
 	_add_fixture(_tabs, "SCENE NODE", _node_ref_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "SCENE REF", _scene_reference_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "SCENE PROPERTY", _node_property_schema(), _graph, _undo_redo)
+	_add_fixture(_tabs, "ARRAY", _array_schema(), _graph, _undo_redo)
+	_add_fixture(_tabs, "DICTIONARY", _dictionary_schema(), _graph, _undo_redo)
+	_add_fixture(_tabs, "RESOURCE", _resource_schema(), _graph, _undo_redo)
+	_add_fixture(_tabs, "ENUM", _enum_schema(), _graph, _undo_redo)
+	_add_fixture(_tabs, "BITFIELD", _bitfield_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "EXPRESSION", _expression_schema(), _graph, _undo_redo, expression_document)
 
 
@@ -209,6 +214,16 @@ func _fixture_description(label: String) -> String:
 			return "Type $ and choose a scene node. This field accepts both Node and Node Property, so Flujo asks whether to use $Node or choose $Node.property."
 		"SCENE PROPERTY":
 			return "Type $ to open Scene Nodes, choose or drag a node, then select a property compatible with the field. Escape with \\$ for literal text."
+		"ARRAY":
+			return "Structured Array Tok. Edit it to add scalar values or nested Array/Dictionary sources; runtime resolves every child ValueSource in order."
+		"DICTIONARY":
+			return "String-keyed structured Dictionary Tok. Keys remain explicit and values are nested FlowValueSources."
+		"RESOURCE":
+			return "ResourceRef Tok. Select a res:// .tres/.res path and expected Resource class; Object remains reference-only, never a literal."
+		"ENUM":
+			return "Semantic int Tok with named enum options. Runtime produces int while Akis preserves the option name."
+		"BITFIELD":
+			return "Semantic int bitmask. Flags must be unique powers of two and Akis preserves their names."
 	return ""
 
 
@@ -378,6 +393,110 @@ func _node_property_schema() -> FlowChipFieldSchema:
 	field.add_text_part("Scene property: ")
 	field.add_slot_part("scene_value")
 	return field
+
+
+func _array_schema() -> FlowChipFieldSchema:
+	return _fixed_structured_schema(
+		"array",
+		"Array",
+		Variant.Type.TYPE_ARRAY,
+		FlowValueSource.SOURCE_KIND_ARRAY,
+		FlowArrayValueSource.new([
+			FlowLiteralValueSource.new(Variant.Type.TYPE_INT, 1),
+			FlowLiteralValueSource.new(Variant.Type.TYPE_STRING, "two"),
+		])
+	)
+
+
+func _dictionary_schema() -> FlowChipFieldSchema:
+	var entries: Array[FlowDictionaryEntry] = [
+		FlowDictionaryEntry.new(
+			"name",
+			FlowLiteralValueSource.new(Variant.Type.TYPE_STRING, "Flujo")
+		),
+		FlowDictionaryEntry.new(
+			"count",
+			FlowLiteralValueSource.new(Variant.Type.TYPE_INT, 2)
+		),
+	]
+	return _fixed_structured_schema(
+		"dictionary",
+		"Dictionary",
+		Variant.Type.TYPE_DICTIONARY,
+		FlowValueSource.SOURCE_KIND_DICTIONARY,
+		FlowDictionaryValueSource.new(entries)
+	)
+
+
+func _resource_schema() -> FlowChipFieldSchema:
+	return _fixed_structured_schema(
+		"resource",
+		"Resource",
+		Variant.Type.TYPE_OBJECT,
+		FlowValueSource.SOURCE_KIND_RESOURCE_REF,
+		FlowResourceRefValueSource.placeholder(&"Resource"),
+		true
+	)
+
+
+func _enum_schema() -> FlowChipFieldSchema:
+	return _fixed_structured_schema(
+		"enum",
+		"Enum",
+		Variant.Type.TYPE_INT,
+		FlowValueSource.SOURCE_KIND_ENUM,
+		FlowEnumValueSource.new(
+			&"Direction",
+			[&"Left", &"Right", &"Up", &"Down"],
+			[0, 1, 2, 3],
+			1
+		)
+	)
+
+
+func _bitfield_schema() -> FlowChipFieldSchema:
+	return _fixed_structured_schema(
+		"bitfield",
+		"Bitfield",
+		Variant.Type.TYPE_INT,
+		FlowValueSource.SOURCE_KIND_BITFIELD,
+		FlowBitfieldValueSource.new(
+			&"Permissions",
+			[&"Read", &"Write", &"Execute"],
+			[1, 2, 4],
+			3
+		)
+	)
+
+
+func _fixed_structured_schema(
+		slot_id: String,
+		label: String,
+		value_type: Variant.Type,
+		source_kind: StringName,
+		initial_source: FlowValueSource,
+		reference_policy: bool = false
+) -> FlowChipFieldSchema:
+	var field: FlowChipFieldSchema = FlowChipFieldSchema.new()
+	field.mode = FlowChipFieldSchema.Mode.FIXED
+	field.text_mode = FlowChipFieldSchema.TextMode.RUNTIME_CONTENT
+	field.accepted_value_types = [value_type]
+	field.accepted_source_kinds = [source_kind]
+	var slot: FlowChipSlotDefinition = FlowChipSlotDefinition.new(slot_id, label, true)
+	slot.accepted_value_types = [value_type]
+	slot.accepted_source_kinds = [source_kind]
+	slot.initial_value_source = initial_source
+	slot.allow_delete = false
+	slot.allow_reorder = false
+	slot.allow_content_change = not reference_policy
+	slot.allow_reference_change = reference_policy
+	slot.min_count = 1
+	slot.max_count = 1
+	field.slots = [slot]
+	field.add_text_part(label + ": ")
+	field.add_slot_part(slot_id)
+	return field
+
 
 
 func _operation_schema() -> FlowChipFieldSchema:
