@@ -26,6 +26,22 @@ const CHILD_SOURCE_DICTIONARY: int = 2006
 const CHILD_SOURCE_RESOURCE: int = 2007
 const CHILD_SOURCE_ENUM: int = 2008
 const CHILD_SOURCE_BITFIELD: int = 2009
+const CHILD_SOURCE_NODE: int = 2010
+const CHILD_SOURCE_NODE_PROPERTY: int = 2011
+
+const CHILD_PROPERTY_TYPES: Array[Variant.Type] = [
+	Variant.Type.TYPE_BOOL,
+	Variant.Type.TYPE_INT,
+	Variant.Type.TYPE_FLOAT,
+	Variant.Type.TYPE_STRING,
+	Variant.Type.TYPE_STRING_NAME,
+	Variant.Type.TYPE_VECTOR2,
+	Variant.Type.TYPE_VECTOR2I,
+	Variant.Type.TYPE_VECTOR3,
+	Variant.Type.TYPE_VECTOR3I,
+	Variant.Type.TYPE_COLOR,
+	Variant.Type.TYPE_NODE_PATH,
+]
 
 var _draft: FlowValueSource
 var _graph: FlowGraph
@@ -42,6 +58,7 @@ var _nested_replace: Callable = Callable()
 var _variable_selector: FlowVariableSelector
 var _operation_editor: FlowOperationEditor
 var _condition_editor: FlowConditionEditor
+var _node_property_picker: FlowNodePropertyOperandPicker
 var _pending_replace: Callable = Callable()
 var _resource_dialog: EditorFileDialog
 
@@ -132,6 +149,12 @@ func _init() -> void:
 	_condition_editor.cancelled.connect(_on_nested_source_cancelled)
 	add_child(_condition_editor)
 
+	_node_property_picker = FlowNodePropertyOperandPicker.new()
+	_node_property_picker.name = &"NestedNodePropertyPicker"
+	_node_property_picker.source_selected.connect(_on_nested_node_property_selected)
+	_node_property_picker.cancelled.connect(_on_nested_source_cancelled)
+	add_child(_node_property_picker)
+
 
 func open_for_source(
 		source: FlowValueSource,
@@ -142,6 +165,11 @@ func open_for_source(
 	_graph = graph
 	_context = context.duplicate()
 	_nesting_depth = int(_context.get("complex_nesting_depth", 0))
+	if _node_property_picker != null:
+		_node_property_picker.configure(
+			_context.get("scene_controller", null) as PVController,
+			_context.get("scene_root", null) as Node
+		)
 	_draft = source.duplicate_with_new_id() if source != null else null
 	_closing_for_action = false
 	_nested_replace = Callable()
@@ -376,6 +404,13 @@ func _collection_value_row(
 			row.add_child(_button("Edit", _open_operation_source.bind(source, replace_action)))
 		elif source is FlowConditionValueSource:
 			row.add_child(_button("Edit", _open_condition_source.bind(source, replace_action)))
+		elif source is FlowNodeRefValueSource:
+			row.add_child(_button("Edit", _open_node_source.bind(replace_action)))
+		elif source is FlowNodePropertyRefValueSource:
+			row.add_child(_button(
+				"Edit",
+				_open_node_property_source.bind(replace_action, row)
+			))
 	else:
 		var missing: Label = Label.new()
 		missing.text = "<unset>"
@@ -407,6 +442,8 @@ func _source_menu(label_text: String, replace_action: Callable) -> MenuButton:
 	popup.add_item("Variable", CHILD_SOURCE_VARIABLE)
 	popup.add_item("Operation", CHILD_SOURCE_OPERATION)
 	popup.add_item("Condition", CHILD_SOURCE_CONDITION)
+	popup.add_item("Node", CHILD_SOURCE_NODE)
+	popup.add_item("Node Property", CHILD_SOURCE_NODE_PROPERTY)
 	popup.add_separator()
 	popup.add_item("Array", CHILD_SOURCE_ARRAY)
 	popup.add_item("Dictionary", CHILD_SOURCE_DICTIONARY)
@@ -419,6 +456,11 @@ func _source_menu(label_text: String, replace_action: Callable) -> MenuButton:
 			variable_index,
 			_graph == null or _graph.variables.is_empty()
 		)
+	var scene_available: bool = _scene_context_available()
+	for item_id: int in [CHILD_SOURCE_NODE, CHILD_SOURCE_NODE_PROPERTY]:
+		var scene_index: int = popup.get_item_index(item_id)
+		if scene_index >= 0:
+			popup.set_item_disabled(scene_index, not scene_available)
 	if _nesting_depth >= MAX_EDITOR_NESTING_DEPTH:
 		for item_id: int in [CHILD_SOURCE_ARRAY, CHILD_SOURCE_DICTIONARY]:
 			var item_index: int = popup.get_item_index(item_id)
@@ -447,6 +489,10 @@ func _on_collection_source_selected(
 			_open_operation_source(null, replace_action, anchor)
 		CHILD_SOURCE_CONDITION:
 			_open_condition_source(null, replace_action, anchor)
+		CHILD_SOURCE_NODE:
+			_open_node_source(replace_action)
+		CHILD_SOURCE_NODE_PROPERTY:
+			_open_node_property_source(replace_action, anchor)
 		CHILD_SOURCE_ARRAY:
 			_open_new_complex_source(FlowArrayValueSource.new(), replace_action, anchor)
 		CHILD_SOURCE_DICTIONARY:
@@ -551,6 +597,73 @@ func _on_nested_operation_confirmed(source: FlowOperationValueSource) -> void:
 
 
 func _on_nested_condition_confirmed(source: FlowConditionValueSource) -> void:
+	if _pending_replace.is_valid():
+		_pending_replace.call(source)
+	_pending_replace = Callable()
+	_rebuild()
+
+
+func _scene_context_available() -> bool:
+	var root: Node = _context.get("scene_root", null) as Node
+	if is_instance_valid(root):
+		return true
+	return is_instance_valid(EditorInterface.get_edited_scene_root())
+
+
+func _scene_node_panel() -> FlowSceneNodePanel:
+	var base: Control = EditorInterface.get_base_control()
+	if not is_instance_valid(base):
+		return null
+	return base.find_child("FlowSceneNodePanel", true, false) as FlowSceneNodePanel
+
+
+func _open_node_source(replace_action: Callable) -> void:
+	if not replace_action.is_valid():
+		return
+	var panel: FlowSceneNodePanel = _scene_node_panel()
+	if panel == null:
+		return
+	_pending_replace = replace_action
+	panel.begin_request(self)
+
+
+func accept_scene_node_payload(payload: Dictionary) -> bool:
+	if not _pending_replace.is_valid() 			or String(payload.get("type", "")) != "flujo_scene_node":
+		return false
+	var node_path: NodePath = payload.get("node_path", NodePath())
+	var node_name: StringName = StringName(String(payload.get("node_name", "")))
+	var class_name: StringName = StringName(String(payload.get("class_name", "Node")))
+	var requirement_id: String = String(payload.get("requirement_id", ""))
+	_pending_replace.call(FlowNodeRefValueSource.new(
+		requirement_id,
+		node_path,
+		node_name,
+		class_name
+	))
+	_pending_replace = Callable()
+	var panel: FlowSceneNodePanel = _scene_node_panel()
+	if panel != null:
+		panel.clear_request_target()
+	_rebuild()
+	return true
+
+
+func _open_node_property_source(
+		replace_action: Callable,
+		anchor: Control = null
+) -> void:
+	if not replace_action.is_valid() or _node_property_picker == null:
+		return
+	_pending_replace = replace_action
+	_node_property_picker.open_for_types(
+		CHILD_PROPERTY_TYPES,
+		anchor.get_global_rect() if is_instance_valid(anchor) else get_global_rect()
+	)
+
+
+func _on_nested_node_property_selected(
+		source: FlowNodePropertyRefValueSource
+) -> void:
 	if _pending_replace.is_valid():
 		_pending_replace.call(source)
 	_pending_replace = Callable()
@@ -932,6 +1045,11 @@ func _cancel() -> void:
 		_operation_editor.hide()
 	if is_instance_valid(_condition_editor) and _condition_editor.visible:
 		_condition_editor.hide()
+	if _node_property_picker != null:
+		_node_property_picker.cancel_request()
+	var scene_panel: FlowSceneNodePanel = _scene_node_panel()
+	if scene_panel != null:
+		scene_panel.clear_request_target()
 	_nested_replace = Callable()
 	_pending_replace = Callable()
 	_closing_for_action = false
