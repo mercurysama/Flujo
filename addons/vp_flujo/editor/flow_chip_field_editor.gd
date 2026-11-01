@@ -546,6 +546,10 @@ func get_scene_reference_choice() -> FlowSceneReferenceChoice:
 	return _scene_reference_choice
 
 
+func get_complex_editor() -> FlowComplexValueEditor:
+	return _complex_editor
+
+
 
 func get_variable_edit_segment_id() -> String:
 	return _variable_edit_segment_id if _variable_edit_active else ""
