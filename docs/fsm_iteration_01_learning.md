@@ -1,0 +1,59 @@
+# Flujo FSM — Iteration journal / Skill learning
+
+**Iteration:** FSM-01 / remote branch `feature/fsm-runtime-flow-flusso`  
+**Start:** 2026-11-01  
+**Status:** IN PROGRESS. No FSM runtime/UI test pass is claimed.  
+**Origin:** `feature/block-builder-fprint-dogfood` @ `5cf7c4d5a3e1a1e292036ff5da393433c8c54e8c`.
+
+## Objective and scope
+
+Implement the FSM plan in [fsm_implementation_plan.md](fsm_implementation_plan.md) while preserving portable runtime/editor separation, schema compatibility, FlowGraph immutability and per-PVController runtime isolation. Keep user-facing UI in the existing Inspector → Fluo → Flow / Flusso workflow. This journal is the source for later enrichment of the Flujo skill; describe reproducible lessons, not unverified impressions.
+
+## Baseline already inspected (code review, not test execution)
+
+- `FlowStateMachineDefinition`: stable identity, enabled flag, ordered states, `initial_state_id`, lookup and deep duplication.
+- `FlowStateDefinition`: inherited block container, legacy `is_initial` (schema 1 only).
+- `FlowGraphValidator`: per-machine initial-state integrity and stable identity validation.
+- `FlowReadyExecutor`: Ready, Timer and legacy supported constructor paths in schema 3/4, with `FlowNavigationDecision` and per-execution budgets.
+- `PVController`: existing per-instance output, context and timer runtime; schema 5 stores have a separate, non-executable contract.
+- Fluo: Inspector container activation, Flow selection, Flusso editing, live persistence and Revertir, keyboard navigation, panel-side switching. Do not duplicate Inspector Blocks.
+
+## Engineering decisions to preserve
+
+1. A machine with one state is a complete executable definition; an empty machine can only be edited.
+2. Serialized definitions must never store the runtime active state.
+3. Dynamic states live in the controller instance and do not mutate `FlowGraph`.
+4. Persistent references are stable IDs, not names, array indices, NodePaths or references to live Nodes.
+5. Transitions must be queued and non-reentrant with deterministic conflict order and bounded work.
+6. A model/schema extension requires explicit migration and round-trip tests before promotion.
+7. New blocks use the existing generic SDK/catalog/Fluo path; avoid container-specific duplicate block classes.
+8. Changes to existing behavior require `$flujo-baseline` before production edits, `$flujo-prove` before committing and manual approval of visible UI. A missing test is **not** a PASS.
+
+## Achievements and evidence
+
+| Item | Outcome | Evidence |
+|---|---|---|
+| Isolated development branch | CREATED | `feature/fsm-runtime-flow-flusso` |
+| Implementation plan | ADDED | `docs/fsm_implementation_plan.md` |
+| UI requirements review | REVIEWED | `README.md`, `docs/current_iteration.md`, `docs/fluo_preview_01.md` |
+| FSM execution | NOT YET VALIDATED | No new executable milestone claimed |
+| Desktop / Android manual review | PENDING FINAL GATE | Separate acceptance lists required |
+
+## Obstacles and safeguards
+
+- The current work environment cannot resolve github.com through the container's Git client and has no detected Godot/Flatpak binary. GitHub connector reads/writes work, but **local headless Godot execution is not available here**. Any verification not actually run must remain pending. Never fabricate a successful command or approval.
+- The baseline branch contains schema 5 stores that are not covered by Ready/Timer execution. Do not silently enable them when implementing FSM.
+- `FlowStateDefinition.blocks` currently carries ordered blocks; any `enter/exit` additions need a defined compatibility policy.
+- Changing Inspector/Fluo UI requires manual verification for focus and Android/touch; headless tests cannot substitute for that evidence.
+
+## Next work and handoff
+
+1. Freeze the first numbered runtime/specification decisions and establish remote test evidence.
+2. Implement the smallest independently auditable FSM runtime slice after the baseline gate.
+3. Add transitions, events, multiple machines, dynamic state registry, persistence, UI and debug incrementally.
+4. After the branch implementation and automated evidence, download it on Fedora for one grouped human validation matrix.
+5. At each milestone append **observed** behavior, exact files/commands, pass/fail or not-run status, regressions, causes, fixes and reusable Skill rules here. Include only available engineering-flow metrics.
+
+**Skill takeaway:** require explicit FSM separation between authored definitions, instance-local scheduler, serializable snapshots, and the editor; keep all acceptance evidence labeled automatic/manual/unrun.
+
+Todo es Flujo; todo fluye. 🌊
