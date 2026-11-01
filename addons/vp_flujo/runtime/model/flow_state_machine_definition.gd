@@ -77,6 +77,14 @@ func duplicate_with_new_ids() -> FlowStateMachineDefinition:
 		copy.states.append(state_copy)
 		state_id_map[state.get_internal_id()] = state_copy.get_internal_id()
 
+	# Resolve state-owned edge targets only after the local ID map is complete.
+	for state_copy: FlowStateDefinition in copy.states:
+		if state_copy == null:
+			continue
+		for transition: FlowStateTransitionDefinition in state_copy.transitions:
+			if transition != null and state_id_map.has(transition.target_state_id):
+				transition.target_state_id = state_id_map[transition.target_state_id]
+
 	if initial_state_id.is_empty():
 		for state_copy: FlowStateDefinition in copy.states:
 			if state_copy != null:

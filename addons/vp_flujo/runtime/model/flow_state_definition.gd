@@ -6,6 +6,7 @@ extends FlowBlockContainer
 ## Empty legacy phases default safely; blocks remains the Update phase.
 @export var enter_blocks: Array[FlowBlock] = []
 @export var exit_blocks: Array[FlowBlock] = []
+@export var transitions: Array[FlowStateTransitionDefinition] = []
 
 func _init() -> void:
 	display_name = "State"
@@ -14,6 +15,11 @@ func duplicate_state_with_new_ids() -> FlowStateDefinition:
 	var copy: FlowStateDefinition = duplicate_with_new_ids() as FlowStateDefinition
 	copy.enter_blocks = _copy_phase(enter_blocks)
 	copy.exit_blocks = _copy_phase(exit_blocks)
+	copy.transitions = []
+	for transition: FlowStateTransitionDefinition in transitions:
+		copy.transitions.append(
+			transition.duplicate_with_new_id() if transition != null else null
+		)
 	return copy
 
 

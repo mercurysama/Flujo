@@ -378,6 +378,7 @@ static func _validate_state_machines(
 			_validate_blocks(state, state_path, graph, result, seen_instances, seen_ids)
 			_validate_fsm_phase(state.enter_blocks, state_path + ".enter", graph, result, seen_instances, seen_ids)
 			_validate_fsm_phase(state.exit_blocks, state_path + ".exit", graph, result, seen_instances, seen_ids)
+			_validate_fsm_transitions(state, state_machine, state_path, graph, result, seen_instances, seen_ids)
 
 		_validate_initial_state_reference(state_machine, machine_path, result)
 
@@ -394,6 +395,50 @@ static func _validate_fsm_phase(
 	var phase: FlowBlockContainer = FlowBlockContainer.new()
 	phase.blocks = blocks
 	_validate_blocks(phase, path, graph, result, seen_instances, seen_ids)
+
+
+## Transition references are local to their owning machine and stable across reordering.
+static func _validate_fsm_transitions(
+		state: FlowStateDefinition,
+		machine: FlowStateMachineDefinition,
+		state_path: String,
+		graph: FlowGraph,
+		result: FlowValidationResult,
+		seen_instances: Dictionary[int, String],
+		seen_ids: Dictionary[String, String]
+) -> void:
+	var targets: Dictionary[String, bool] = {}
+	for candidate: FlowStateDefinition in machine.states:
+		if candidate != null:
+			targets[candidate.get_internal_id()] = true
+	for index: int in state.transitions.size():
+		var edge: FlowStateTransitionDefinition = state.transitions[index]
+		if edge == null:
+			continue
+		var path: String = "%s.transitions[%d]" % [state_path, index]
+		if not _validate_resource_identity(edge, path, result, seen_instances, seen_ids):
+			continue
+		if not targets.has(edge.target_state_id):
+			_add_error(result, FlowDiagnostic.CODE_FSM_TRANSITION_TARGET_INVALID,
+				"FSM transition destination must exist in the same machine.",
+				path + ".target_state_id", edge.get_internal_id())
+		if edge.trigger == FlowStateTransitionDefinition.Trigger.CONDITION:
+			if edge.condition == null or edge.condition.get_value_type() != Variant.Type.TYPE_BOOL:
+				_add_error(result, FlowDiagnostic.CODE_FSM_CONDITION_INVALID,
+					"Condition transition requires a boolean FlowValueSource.",
+					path + ".condition", edge.get_internal_id())
+			else:
+				edge.condition.validate_structure(result, path + ".condition")
+				edge.condition.validate_against_graph(result, path + ".condition", graph)
+		elif edge.trigger == FlowStateTransitionDefinition.Trigger.EVENT:
+			if String(edge.event_name).strip_edges().is_empty():
+				_add_error(result, FlowDiagnostic.CODE_FSM_EVENT_EMPTY,
+					"Event transition requires an event name.",
+					path + ".event_name", edge.get_internal_id())
+		else:
+			_add_error(result, FlowDiagnostic.CODE_FSM_TRIGGER_INVALID,
+				"FSM transition trigger is unsupported.",
+				path + ".trigger", edge.get_internal_id())
 
 
 static func _validate_initial_state_reference(

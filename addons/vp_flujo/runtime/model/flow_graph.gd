@@ -109,6 +109,14 @@ func _duplicate_state(
 	_duplicate_blocks(state, copy, id_map)
 	copy.enter_blocks = _duplicate_fsm_phase(state.enter_blocks, id_map)
 	copy.exit_blocks = _duplicate_fsm_phase(state.exit_blocks, id_map)
+	copy.transitions = []
+	for transition: FlowStateTransitionDefinition in state.transitions:
+		if transition == null:
+			copy.transitions.append(null)
+			continue
+		var edge: FlowStateTransitionDefinition = transition.duplicate_with_new_id()
+		id_map[transition.get_internal_id()] = edge.get_internal_id()
+		copy.transitions.append(edge)
 	return copy
 
 
@@ -245,8 +253,17 @@ func _remap_state_machine_references(
 		id_map: Dictionary[String, String]
 ) -> void:
 	for state_machine: FlowStateMachineDefinition in copy_state_machines:
-		if state_machine != null:
-			state_machine.initial_state_id = _remap_reference(state_machine.initial_state_id, id_map)
+		if state_machine == null:
+			continue
+		state_machine.initial_state_id = _remap_reference(state_machine.initial_state_id, id_map)
+		for state: FlowStateDefinition in state_machine.states:
+			if state == null:
+				continue
+			for transition: FlowStateTransitionDefinition in state.transitions:
+				if transition == null:
+					continue
+				transition.target_state_id = _remap_reference(transition.target_state_id, id_map)
+				FlowValueSourceReferenceRemapper.remap_graph_ids(transition.condition, id_map)
 
 
 func _remap_method_call_references(
