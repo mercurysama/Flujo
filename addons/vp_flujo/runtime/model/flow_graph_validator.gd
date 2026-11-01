@@ -34,6 +34,7 @@ static func validate(graph: FlowGraph) -> FlowValidationResult:
 
 	_validate_legacy_containers(
 		graph.containers,
+		graph,
 		result,
 		seen_instances,
 		seen_ids,
@@ -41,6 +42,7 @@ static func validate(graph: FlowGraph) -> FlowValidationResult:
 	)
 	_validate_processes(
 		graph.processes,
+		graph,
 		result,
 		seen_instances,
 		seen_ids,
@@ -58,6 +60,7 @@ static func validate(graph: FlowGraph) -> FlowValidationResult:
 	)
 	_validate_state_machines(
 		graph.state_machines,
+		graph,
 		result,
 		seen_instances,
 		seen_ids,
@@ -146,6 +149,7 @@ static func _validate_schema_sources(graph: FlowGraph, result: FlowValidationRes
 
 static func _validate_legacy_containers(
 		containers: Array[FlowBlockContainer],
+		graph: FlowGraph,
 		result: FlowValidationResult,
 		seen_instances: Dictionary[int, String],
 		seen_ids: Dictionary[String, String],
@@ -177,11 +181,12 @@ static func _validate_legacy_containers(
 				container.get_internal_id()
 			)
 
-		_validate_blocks(container, container_path, result, seen_instances, seen_ids)
+		_validate_blocks(container, container_path, graph, result, seen_instances, seen_ids)
 
 
 static func _validate_processes(
 		processes: Array[FlowProcess],
+		graph: FlowGraph,
 		result: FlowValidationResult,
 		seen_instances: Dictionary[int, String],
 		seen_ids: Dictionary[String, String],
@@ -203,7 +208,7 @@ static func _validate_processes(
 			continue
 
 		owner_container_ids[process.get_internal_id()] = true
-		_validate_blocks(process, process_path, result, seen_instances, seen_ids)
+		_validate_blocks(process, process_path, graph, result, seen_instances, seen_ids)
 
 
 static func _validate_variables(
@@ -312,6 +317,7 @@ static func _validate_value_type(
 
 static func _validate_state_machines(
 		state_machines: Array[FlowStateMachineDefinition],
+		graph: FlowGraph,
 		result: FlowValidationResult,
 		seen_instances: Dictionary[int, String],
 		seen_ids: Dictionary[String, String],
@@ -348,7 +354,7 @@ static func _validate_state_machines(
 				continue
 
 			owner_container_ids[state.get_internal_id()] = true
-			_validate_blocks(state, state_path, result, seen_instances, seen_ids)
+			_validate_blocks(state, state_path, graph, result, seen_instances, seen_ids)
 
 		_validate_initial_state_reference(state_machine, machine_path, result)
 
@@ -398,6 +404,7 @@ static func _validate_initial_state_reference(
 static func _validate_blocks(
 		container: FlowBlockContainer,
 		container_path: String,
+		graph: FlowGraph,
 		result: FlowValidationResult,
 		seen_instances: Dictionary[int, String],
 		seen_ids: Dictionary[String, String]
@@ -417,6 +424,48 @@ static func _validate_blocks(
 					"result": result,
 					"path": block_path,
 				})
+				_validate_structured_block_properties(
+					block,
+					block_path,
+					graph,
+					result
+				)
+
+
+static func _validate_structured_block_properties(
+		block: FlowBlock,
+		block_path: String,
+		graph: FlowGraph,
+		result: FlowValidationResult
+) -> void:
+	for raw_property: Variant in block.get_property_list():
+		if not raw_property is Dictionary:
+			continue
+		var property: Dictionary = raw_property as Dictionary
+		var property_name: StringName = StringName(String(property.get("name", "")))
+		if property_name.is_empty():
+			continue
+		var document: FlowStructuredDocument = block.get(property_name) as FlowStructuredDocument
+		if document == null:
+			continue
+		var validation: FlowValidationResult = FlowStructuredDocumentValidator.validate(
+			document,
+			graph
+		)
+		for diagnostic: FlowDiagnostic in validation.diagnostics:
+			if diagnostic == null:
+				continue
+			var suffix: String = diagnostic.element_path
+			var element_path: String = "%s.%s" % [block_path, String(property_name)]
+			if not suffix.is_empty():
+				element_path += "." + suffix
+			result.add_diagnostic(FlowDiagnostic.new(
+				diagnostic.code,
+				diagnostic.severity,
+				diagnostic.message,
+				element_path,
+				diagnostic.related_id
+			))
 
 
 static func _validate_variable_references(
@@ -549,7 +598,7 @@ static func _validate_schema_3(graph: FlowGraph, result: FlowValidationResult, s
 	else:
 		var constructor_path: String = "constructor"
 		if _validate_resource_identity(graph.constructor, constructor_path, result, seen_instances, seen_ids):
-			_validate_blocks(graph.constructor, constructor_path, result, seen_instances, seen_ids)
+			_validate_blocks(graph.constructor, constructor_path, graph, result, seen_instances, seen_ids)
 			var dependency_names: Dictionary[String, bool] = {}
 			for dependency_index: int in graph.constructor.dependencies.size():
 				var dependency: FlowDependencyDefinition = graph.constructor.dependencies[dependency_index]
@@ -571,7 +620,7 @@ static func _validate_schema_3(graph: FlowGraph, result: FlowValidationResult, s
 		if not _validate_resource_identity(method, method_path, result, seen_instances, seen_ids):
 			continue
 		_validate_display_name(method.display_name, method_names, result, method_path, method.get_internal_id())
-		_validate_blocks(method, method_path, result, seen_instances, seen_ids)
+		_validate_blocks(method, method_path, graph, result, seen_instances, seen_ids)
 		var parameter_names: Dictionary[String, bool] = {}
 		for parameter_index: int in method.parameters.size():
 			var parameter: FlowMethodParameterDefinition = method.parameters[parameter_index]
