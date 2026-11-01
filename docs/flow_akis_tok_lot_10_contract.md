@@ -154,6 +154,23 @@ los contratos cruzados y las superficies visuales afectadas.
 
 Esto no convierte evidencia no ejecutada en PASS.
 
+### L10-011 — Compatibilidad de la taxonomía escalar
+
+Los valores históricos `BOOL..COLOR` permanecen en 0–6 y continúan siendo la
+taxonomía escalar compartida para Method parameters/returns y Schema 5
+Attributes/Outputs.
+
+Array, Dictionary y Resource son una extensión exclusiva de graph Variables:
+
+- se aceptan mediante `is_valid_variable_value_type()`;
+- requieren `complex_value_source`;
+- `is_valid_value_type()` sigue aceptando sólo 0–6;
+- un Method/Attribute/Output no se vuelve complejo por el simple hecho de que
+  los miembros adicionales existan en el enum de almacenamiento.
+
+El smoke histórico conserva así su garantía sobre los siete tipos escalares,
+mientras las focales de Lote 09/10 cubren las Variables complejas.
+
 ## Contratos preservados
 
 - `segment_id` identifica la instancia Tok.
