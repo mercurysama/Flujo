@@ -15,6 +15,10 @@ func execute(controller: Node, graph: FlowGraph, output: FlowRuntimeOutput, entr
 			"[Flujo] Ready runtime currently supports FlowGraph schema 3 or 4."
 		)
 		return
+	if graph.schema_version == FlowGraph.SCHEMA_VERSION_4 			and entry_point == &"Constructor":
+		# Schema 4 retains constructor.blocks only as inert legacy payload.
+		# Declarative Requirement application is a separate future runtime.
+		return
 	var resolution_context: FlowValueResolutionContext
 	if controller is PVController:
 		resolution_context = (controller as PVController).get_value_resolution_context()
