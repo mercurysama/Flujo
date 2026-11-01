@@ -250,7 +250,7 @@ func _test_typed_variable_metadata_validation() -> void:
 	_check(invalid_binding_negative.binding == -1)
 	_check(invalid_binding_upper.binding == 2)
 	_check(invalid_value_type_negative.value_type == -1)
-	_check(invalid_value_type_upper.value_type == 7)
+	_check(invalid_value_type_upper.value_type == FlowVariableDefinition.ValueType.RESOURCE + 1)
 
 	var invalid_schema_3: FlowGraph = FlowGraph.new()
 	invalid_schema_3.schema_version = FlowGraph.SCHEMA_VERSION_3
@@ -258,7 +258,7 @@ func _test_typed_variable_metadata_validation() -> void:
 	var invalid_schema_3_variable: FlowVariableDefinition = FlowVariableDefinition.new()
 	invalid_schema_3_variable.scope = -1
 	invalid_schema_3_variable.binding = 2
-	invalid_schema_3_variable.value_type = 7
+	invalid_schema_3_variable.value_type = FlowVariableDefinition.ValueType.RESOURCE + 1
 	invalid_schema_3.variables = [invalid_schema_3_variable]
 	var invalid_metadata_method: FlowMethodDefinition = FlowMethodDefinition.new()
 	invalid_metadata_method.display_name = "Invalid Metadata"
