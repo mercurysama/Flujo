@@ -7,7 +7,7 @@
 - The preceding FSM-001 focal confirms the basic single-state Enter → manual Update → disable Exit path and separate PVControllers.
 - Current runtime provides `start`, bounded `tick`, `stop`, `reset`, active-state query and signals. `PVController` connects FSM ticking to Godot `_process` and `_physics_process`.
 - The original FSM-001 test did **not** assert reset/Exit→Enter, repeated single-state ticks, disable→enable recovery, idempotent stop or Exit during scene teardown. The new **4B** focal characterizes these public behaviors without changing the FSM engine.
-- **Not automatically proved:** pause/unpause with real SceneTree ticks, PROCESS/PHYSICS scheduling, synchronous signal reentrancy, error paths and external human/Android review. Do not mark the entire phase 4 formally closed from a green core test.
+- **Now automatically proved by 4C:** real SceneTree pause/unpause, PROCESS/PHYSICS scheduling and callback-requested deferred stop. **Still not covered exhaustively:** arbitrary nested synchronous signal mutations, fault injection/error paths and any external human/Android acceptance.
 
 ## Micro-lot 4B
 
@@ -25,6 +25,12 @@ Added `tests/runtime/flow_fsm_lifecycle_edge_test.gd` and `.tscn`. CI runs this 
 
 ## Continuity
 
-**Next micro-lot 4C:** isolate real Godot pause/process/physics integration and synchronous signal callbacks. Only after recorded CI evidence decide whether a small implementation fix is necessary; do not blindly refactor the FSM engine. Track failures in this file and in `docs/fsm_iteration_01_learning.md`.
+**4B evidence:** [GitHub Actions 41346215618](https://github.com/mercurysama/Flujo/actions/runs/41346215618) — completed **SUCCESS** including the new lifecycle edge focal and existing regressions.
+
+**4C evidence:** [GitHub Actions 41346334448](https://github.com/mercurysama/Flujo/actions/runs/41346334448) — completed **SUCCESS** including the new real-clocks/pause focal, 4B focal and existing regressions.
+
+**Assessment:** **Phase 4 core runtime = AUTOMATED ACCEPTANCE PASSED**, not overall release acceptance. Remaining formal gate is grouped human review and optional negative/error-boundary hardening; don't attribute UI or Android acceptance to headless success.
+
+**Next micro-lot:** phase 5 targeted gaps (event delivery, invalid transition diagnostics) without large cross-phase refactors. Preserve this file as a recovery marker; see the FSM roadmap for phase numbering.
 
 **Skill lesson:** tests that assert `manual tick` do not prove the engine's scheduling, pause, or signal-reentrancy behavior. Preserve independent acceptance matrices.
