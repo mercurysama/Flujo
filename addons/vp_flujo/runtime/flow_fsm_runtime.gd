@@ -37,6 +37,8 @@ var _dynamic_states: Dictionary[String, Dictionary] = {}
 var _running: bool = false
 var _in_tick: bool = false
 var _stop_after_tick: bool = false
+## Prevent nested stop() calls from shutdown Exit/Stopped observers.
+var _stopping: bool = false
 var last_delta: float = 0.0
 
 
@@ -76,6 +78,7 @@ func start(controller: PVController) -> bool:
 	_graph = graph
 	_running = true
 	_stop_after_tick = false
+	_stopping = false
 	_pending_requests.clear()
 	_dynamic_states.clear()
 	_next_chain_id = 1
@@ -271,11 +274,13 @@ func tick(delta: float, mode: int = FlowStateMachineDefinition.TickMode.PROCESS)
 
 ## Stop is idempotent and releases all queued transitions.
 func stop() -> void:
-	if not _running:
+	if not _running or _stopping:
 		return
 	if _in_tick:
 		_stop_after_tick = true
 		return
+	# Exit/Stopped observers can request stop() again; one shutdown owns cleanup.
+	_stopping = true
 	for machine: FlowStateMachineDefinition in _graph.state_machines:
 		if machine == null:
 			continue
@@ -297,6 +302,7 @@ func stop() -> void:
 	_running = false
 	_controller = null
 	_graph = null
+	_stopping = false
 
 
 ## Direct commands keep FIFO precedence; events use priority and authored order.
