@@ -6,6 +6,24 @@ This contract defines the approved Iteration 7 plan for typed variables. It does
 
 Iteration 6 implemented schema 3 structure, method-call references, and optional method return declarations. Argument bindings, value sources, return blocks and transport, conversions, cycle validation, execution, timers, script invocation, and schema 3 Constructor or Method authoring remain outside this iteration.
 
+## Supersession note — 2026-10-31
+
+TVAR-001 through TVAR-009 remain the compatibility contract for the historical
+**shared scalar taxonomy**: BOOL, INT, FLOAT, STRING, VECTOR2, VECTOR3 and COLOR
+retain numeric values 0–6 and remain the only types accepted by Method
+parameters/returns and schema 5 Attribute/Output declarations.
+
+The later Akis/Tok Lote 09–10 work appends ARRAY, DICTIONARY and RESOURCE to the
+storage enum **for graph Variables only**. These members are accepted through
+`FlowVariableDefinition.is_valid_variable_value_type()` and require an owned
+structured `complex_value_source`. The shared
+`FlowVariableDefinition.is_valid_value_type()` intentionally remains the
+seven-scalar validator.
+
+This later extension does not renumber 0–6, does not reinterpret old serialized
+data, and does not silently widen Method or schema 5 typed declarations. See
+[flow_akis_tok_lot_10_contract.md](flow_akis_tok_lot_10_contract.md).
+
 ## Current implemented baseline
 
 - `FlowVariableDefinition` already has a stable internal ID, display name, `Scope`, `Binding`, `ValueType`, typed default fields, note, persistence flag, `owner_container_id`, and `global_variable_id`.
