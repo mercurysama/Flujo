@@ -632,13 +632,13 @@ func accept_scene_node_payload(payload: Dictionary) -> bool:
 		return false
 	var node_path: NodePath = payload.get("node_path", NodePath())
 	var node_name: StringName = StringName(String(payload.get("node_name", "")))
-	var class_name: StringName = StringName(String(payload.get("class_name", "Node")))
+	var node_class_name: StringName = StringName(String(payload.get("class_name", "Node")))
 	var requirement_id: String = String(payload.get("requirement_id", ""))
 	_pending_replace.call(FlowNodeRefValueSource.new(
 		requirement_id,
 		node_path,
 		node_name,
-		class_name
+		node_class_name
 	))
 	_pending_replace = Callable()
 	var panel: FlowSceneNodePanel = _scene_node_panel()
