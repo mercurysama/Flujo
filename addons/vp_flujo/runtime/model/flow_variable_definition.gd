@@ -34,6 +34,8 @@ static func is_valid_binding(value: int) -> bool:
 	return value == Binding.OWN_VALUE or value == Binding.GLOBAL_REFERENCE
 
 
+## Canonical scalar taxonomy shared by method signatures and schema 5 attributes.
+## Numeric values 0..6 are the historical compatibility contract.
 static func is_valid_value_type(value: int) -> bool:
 	return value == ValueType.BOOL \
 			or value == ValueType.INT \
@@ -41,8 +43,13 @@ static func is_valid_value_type(value: int) -> bool:
 			or value == ValueType.STRING \
 			or value == ValueType.VECTOR2 \
 			or value == ValueType.VECTOR3 \
-			or value == ValueType.COLOR 			or value == ValueType.ARRAY 			or value == ValueType.DICTIONARY 			or value == ValueType.RESOURCE
+			or value == ValueType.COLOR
 
+
+## Graph Variables extend the scalar taxonomy with structured default sources.
+## Use this helper only when the owning resource is FlowVariableDefinition.
+static func is_valid_variable_value_type(value: int) -> bool:
+	return is_valid_value_type(value) or is_complex_value_type(value)
 
 ## The canonical variable taxonomy maps directly to Godot Variant types.
 ## Value-source consumers use this mapping instead of defining a parallel enum.
