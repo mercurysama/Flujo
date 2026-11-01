@@ -913,7 +913,14 @@ func _confirm_draft() -> void:
 func _cancel() -> void:
 	if is_instance_valid(_nested_editor) and _nested_editor.visible:
 		_nested_editor.hide()
+	if is_instance_valid(_variable_selector) and _variable_selector.visible:
+		_variable_selector.hide()
+	if is_instance_valid(_operation_editor) and _operation_editor.visible:
+		_operation_editor.hide()
+	if is_instance_valid(_condition_editor) and _condition_editor.visible:
+		_condition_editor.hide()
 	_nested_replace = Callable()
+	_pending_replace = Callable()
 	_closing_for_action = false
 	hide()
 
