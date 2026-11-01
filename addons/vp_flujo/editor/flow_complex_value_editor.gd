@@ -213,6 +213,7 @@ func _build_array(source: FlowArrayValueSource) -> void:
 	actions.add_child(_button("Add Scalar", _add_array_scalar))
 	actions.add_child(_button("Add Array", _add_array_array))
 	actions.add_child(_button("Add Dictionary", _add_array_dictionary))
+	actions.add_child(_source_menu("Add Source…", _append_array_source))
 	_body.add_child(actions)
 
 
@@ -365,6 +366,12 @@ func _collection_value_row(
 		row.add_child(preview)
 		if _is_complex_source(source):
 			row.add_child(_button("Edit", _open_nested_source.bind(source, replace_action)))
+		elif source is FlowVariableRefValueSource:
+			row.add_child(_button("Edit", _open_variable_source.bind(source, replace_action)))
+		elif source is FlowOperationValueSource:
+			row.add_child(_button("Edit", _open_operation_source.bind(source, replace_action)))
+		elif source is FlowConditionValueSource:
+			row.add_child(_button("Edit", _open_condition_source.bind(source, replace_action)))
 	else:
 		var missing: Label = Label.new()
 		missing.text = "<unset>"
@@ -377,6 +384,7 @@ func _collection_value_row(
 			_replace_with_scalar.bind(replace_action)
 		)
 		row.add_child(scalar)
+	row.add_child(_source_menu("Change…", replace_action))
 	if remove_action.is_valid():
 		row.add_child(_button("Remove", remove_action))
 	return row
@@ -385,6 +393,157 @@ func _collection_value_row(
 func _replace_with_scalar(replace_action: Callable) -> void:
 	if replace_action.is_valid():
 		replace_action.call(FlowLiteralValueSource.new())
+
+
+func _source_menu(label_text: String, replace_action: Callable) -> MenuButton:
+	var button: MenuButton = MenuButton.new()
+	button.text = label_text
+	var popup: PopupMenu = button.get_popup()
+	popup.add_item("Scalar", CHILD_SOURCE_SCALAR)
+	popup.add_item("Variable", CHILD_SOURCE_VARIABLE)
+	popup.add_item("Operation", CHILD_SOURCE_OPERATION)
+	popup.add_item("Condition", CHILD_SOURCE_CONDITION)
+	popup.add_separator()
+	popup.add_item("Array", CHILD_SOURCE_ARRAY)
+	popup.add_item("Dictionary", CHILD_SOURCE_DICTIONARY)
+	popup.add_item("Resource", CHILD_SOURCE_RESOURCE)
+	popup.add_item("Enum", CHILD_SOURCE_ENUM)
+	popup.add_item("Bitfield", CHILD_SOURCE_BITFIELD)
+	var variable_index: int = popup.get_item_index(CHILD_SOURCE_VARIABLE)
+	if variable_index >= 0:
+		popup.set_item_disabled(
+			variable_index,
+			_graph == null or _graph.variables.is_empty()
+		)
+	popup.id_pressed.connect(
+		_on_collection_source_selected.bind(replace_action, button)
+	)
+	return button
+
+
+func _on_collection_source_selected(
+		item_id: int,
+		replace_action: Callable,
+		anchor: Control
+) -> void:
+	if not replace_action.is_valid():
+		return
+	match item_id:
+		CHILD_SOURCE_SCALAR:
+			replace_action.call(FlowLiteralValueSource.new())
+			_rebuild()
+		CHILD_SOURCE_VARIABLE:
+			_open_variable_source(null, replace_action, anchor)
+		CHILD_SOURCE_OPERATION:
+			_open_operation_source(null, replace_action, anchor)
+		CHILD_SOURCE_CONDITION:
+			_open_condition_source(null, replace_action, anchor)
+		CHILD_SOURCE_ARRAY:
+			_open_new_complex_source(FlowArrayValueSource.new(), replace_action, anchor)
+		CHILD_SOURCE_DICTIONARY:
+			_open_new_complex_source(FlowDictionaryValueSource.new(), replace_action, anchor)
+		CHILD_SOURCE_RESOURCE:
+			_open_new_complex_source(
+				FlowResourceRefValueSource.placeholder(&"Resource"),
+				replace_action,
+				anchor
+			)
+		CHILD_SOURCE_ENUM:
+			_open_new_complex_source(FlowEnumValueSource.new(), replace_action, anchor)
+		CHILD_SOURCE_BITFIELD:
+			_open_new_complex_source(FlowBitfieldValueSource.new(), replace_action, anchor)
+
+
+func _open_new_complex_source(
+		source: FlowValueSource,
+		replace_action: Callable,
+		anchor: Control = null
+) -> void:
+	_nested_replace = replace_action
+	_ensure_nested_editor().open_for_source(
+		source,
+		_graph,
+		anchor.get_global_rect() if is_instance_valid(anchor) else get_global_rect(),
+		_context
+	)
+
+
+func _open_variable_source(
+		source: FlowValueSource,
+		replace_action: Callable,
+		anchor: Control = null
+) -> void:
+	if _graph == null or _graph.variables.is_empty():
+		return
+	_pending_replace = replace_action
+	var context: Dictionary = {}
+	if source is FlowVariableRefValueSource:
+		context["current_variable_id"] = 			(source as FlowVariableRefValueSource).variable_id
+	_variable_selector.open_for_variables(
+		_graph.variables,
+		anchor.get_global_rect() if is_instance_valid(anchor) else get_global_rect(),
+		"",
+		context
+	)
+
+
+func _open_operation_source(
+		source: FlowValueSource,
+		replace_action: Callable,
+		anchor: Control = null
+) -> void:
+	_pending_replace = replace_action
+	var operation: FlowOperationValueSource = source as FlowOperationValueSource
+	var context: Dictionary = _context.duplicate()
+	context["operation_nesting_depth"] = 		int(context.get("operation_nesting_depth", 0)) + 1
+	_operation_editor.open_for_operation(
+		operation,
+		_graph,
+		anchor.get_global_rect() if is_instance_valid(anchor) else get_global_rect(),
+		context
+	)
+
+
+func _open_condition_source(
+		source: FlowValueSource,
+		replace_action: Callable,
+		anchor: Control = null
+) -> void:
+	_pending_replace = replace_action
+	_condition_editor.open_for_condition(
+		source as FlowConditionValueSource,
+		_graph,
+		anchor.get_global_rect() if is_instance_valid(anchor) else get_global_rect(),
+		_context
+	)
+
+
+func _on_nested_variable_selected(variable_id: String) -> void:
+	if not _pending_replace.is_valid() or _graph == null:
+		_pending_replace = Callable()
+		return
+	for variable: FlowVariableDefinition in _graph.variables:
+		if variable != null and variable.get_internal_id() == variable_id:
+			_pending_replace.call(
+				FlowVariableRefValueSource.new(variable_id, variable.value_type)
+			)
+			break
+	_pending_replace = Callable()
+	_rebuild()
+
+
+func _on_nested_operation_confirmed(source: FlowOperationValueSource) -> void:
+	if _pending_replace.is_valid():
+		_pending_replace.call(source)
+	_pending_replace = Callable()
+	_rebuild()
+
+
+func _on_nested_condition_confirmed(source: FlowConditionValueSource) -> void:
+	if _pending_replace.is_valid():
+		_pending_replace.call(source)
+	_pending_replace = Callable()
+	_rebuild()
 
 
 func _collection_literal_value_control(source: FlowLiteralValueSource) -> Control:
@@ -475,7 +634,12 @@ func _ensure_nested_editor() -> FlowComplexValueEditor:
 
 func _open_nested_source(source: FlowValueSource, replace_action: Callable) -> void:
 	_nested_replace = replace_action
-	_ensure_nested_editor().open_for_source(source, _graph, get_global_rect())
+	_ensure_nested_editor().open_for_source(
+		source,
+		_graph,
+		get_global_rect(),
+		_context
+	)
 
 
 func _on_nested_source_confirmed(source: FlowValueSource) -> void:
@@ -487,6 +651,7 @@ func _on_nested_source_confirmed(source: FlowValueSource) -> void:
 
 func _on_nested_source_cancelled() -> void:
 	_nested_replace = Callable()
+	_pending_replace = Callable()
 
 
 func _add_array_scalar() -> void:
@@ -504,6 +669,14 @@ func _add_array_array() -> void:
 func _add_array_dictionary() -> void:
 	var source: FlowArrayValueSource = _draft as FlowArrayValueSource
 	source.elements.append(FlowDictionaryValueSource.new())
+	_rebuild()
+
+
+func _append_array_source(source: FlowValueSource) -> void:
+	var array: FlowArrayValueSource = _draft as FlowArrayValueSource
+	if array == null or source == null:
+		return
+	array.elements.append(source)
 	_rebuild()
 
 
