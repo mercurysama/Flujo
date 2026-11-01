@@ -449,7 +449,8 @@ func _enum_schema() -> FlowChipFieldSchema:
 			&"Direction",
 			[&"Left", &"Right", &"Up", &"Down"],
 			[0, 1, 2, 3],
-			1
+			1,
+			true
 		)
 	)
 
