@@ -631,7 +631,9 @@ Lotes 02–10 del impulso Akis/Tok están implementados en
 - `FlowPrintBlock.content` consume Akis en runtime sin eliminar el fallback
   compatible `text`.
 - Graph Variables soportan Array/Dictionary/Resource defaults, runtime override
-  por instancia y detección de ciclos.
+  por instancia y detección de ciclos. BOOL..COLOR conservan 0–6 como taxonomía
+  escalar compartida; los tipos complejos son una extensión exclusiva de Variables
+  y no amplían Method parameters/returns ni Schema 5 Attributes/Outputs.
 - Duplicación del grafo remapea Variable IDs y Requirement IDs dentro de árboles
   ValueSource y Akis de bloques después de completar el mapa de identidades.
 - Schema 4 entra al runtime existente para Ready/Process y Timer con
