@@ -1188,6 +1188,102 @@
         "tests/editor/flow_structured_document_editor_harness.tscn"
       ],
       "notes": "Automatic C.2 evidence is ready; visual/manual Godot review remains pending."
+    },
+    {
+      "id": "FLUJO-BHV-AKIS-LOT10-REFERENCE-REMAP-001",
+      "area": "Akis graph-owned reference duplication",
+      "precondition": "A schema 4 FlowGraph contains VariableRef, NodeRef, or NodePropertyRef sources nested in block-owned Akis or structured Variable defaults.",
+      "public_action": "Duplicate the complete FlowGraph with new stable IDs.",
+      "expected_result": "Every graph-owned reference inside the duplicated ValueSource tree points to the corresponding duplicated Variable or Requirement, while owned segment/source identities remain independent.",
+      "invariants": [
+        "VariableRef.variable_id and scene-source requirement_id are remapped only from the completed graph ID map.",
+        "Array, Dictionary, Expression, Operation, and Condition trees are traversed recursively without flattening or repairing authored data.",
+        "Block-owned Akis is deep-copied and cannot retain references to graph-owned definitions from the original graph.",
+        "NodePath fallbacks, display hints, property names, and source semantic kinds remain authored data and are not rewritten by ID remapping."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/model/flow_integration_lot_10_test.tscn"
+      ],
+      "notes": "Lot 10A focal authored on the feature branch. Formal Godot 4.7.2 execution remains pending."
+    },
+    {
+      "id": "FLUJO-BHV-AKIS-LOT10-SCHEMA4-RUNTIME-001",
+      "area": "Schema 4 Requirement-backed Akis runtime",
+      "precondition": "A schema 4 FlowGraph has a valid constructor Requirement, a PVController binding, and a Ready Process whose block-owned Akis references that Requirement.",
+      "public_action": "Execute Constructor/Ready through FlowReadyExecutor and resolve the Requirement-backed Node or property through the shared FlowValueResolutionContext.",
+      "expected_result": "Schema 4 executes through the same generic block traversal as schema 3, live Requirement-backed values reach Akis/Print output, and malformed Requirement binding maps stop execution deterministically.",
+      "invariants": [
+        "FlowReadyExecutor supports schema 3 and schema 4 only; schema 5 remains on its separate runtime boundary.",
+        "Runtime never persists a direct Node/Object/Callable in FlowGraph; the controller owns requirement_id to NodePath bindings.",
+        "Requirement binding validation occurs before schema 4 block execution and invalid bindings do not silently fall back.",
+        "A valid Requirement-backed property is re-read from the live scene on each execution pass."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_integration_lot_10_test.tscn"
+      ],
+      "notes": "Lot 10B end-to-end focal authored; no repository GitHub Actions workflow currently runs Godot."
+    },
+    {
+      "id": "FLUJO-BHV-AKIS-LOT10-COLLECTION-AUTHORING-001",
+      "area": "Composed ValueSource authoring inside Array and Dictionary",
+      "precondition": "FlowComplexValueEditor edits an Array or Dictionary with an optional active FlowGraph and inherited scene/editor context.",
+      "public_action": "Create or replace collection children through the shared source menu and existing Variable, Operation, Condition, and structured-value editors.",
+      "expected_result": "Collections can author scalar, VariableRef, Operation, Condition, Array, Dictionary, Resource, Enum, and Bitfield children without flattening them, and the resulting source tree resolves through the same runtime contracts.",
+      "invariants": [
+        "Existing scalar/Array/Dictionary authoring remains available for compatibility.",
+        "Variable selection persists stable variable_id and the declared graph Variable type.",
+        "Operation and Condition reuse their public editors rather than private collection-specific implementations.",
+        "Structured child replacement preserves the existing source_id when replacing an occupied collection position.",
+        "Recursive Array/Dictionary creation is bounded by the editor depth guard while non-collection composed sources remain available."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/editor/flow_integration_lot_10_editor_test.gd"
+      ],
+      "notes": "Lot 10C/D editor focal authored for Godot 4.7.2 editor execution."
+    },
+    {
+      "id": "FLUJO-BHV-AKIS-LOT10-TOK-MATRIX-001",
+      "area": "Complete implemented Tok family interoperability",
+      "precondition": "One schema 4 Akis document contains valid Literal, VariableRef, Operation, Condition, NodeRef, NodePropertyRef, Array, Dictionary, ResourceRef, Enum, and Bitfield segments with one shared resolution context.",
+      "public_action": "Validate the complete document against its graph and resolve it as runtime text.",
+      "expected_result": "Every implemented Tok family validates and resolves through the common Akis boundary, preserving its semantic value and composing into one deterministic output.",
+      "invariants": [
+        "No Tok family needs a package-specific renderer or executor branch to participate in Akis runtime text.",
+        "Operation and Condition may consume composed sources while strict type signatures remain authoritative.",
+        "Scene references resolve through Requirement/scene context, Variables through graph/runtime state, and ResourceRef through the project Resource boundary.",
+        "Enum and Bitfield remain semantic int sources rather than separate graph Variable storage types."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/model/flow_tok_matrix_lot_10_test.tscn"
+      ],
+      "notes": "Lot 10E all-Tok integration matrix authored; execution remains pending."
+    },
+    {
+      "id": "FLUJO-BHV-AKIS-LOT10-MANUAL-001",
+      "area": "Final Akis/Tok integration human acceptance",
+      "precondition": "The feature branch is opened in Godot 4.7.2 with a disposable schema 4 scene/controller fixture and the Lot 02-10 focal tests available.",
+      "public_action": "Run the final focal set, then inspect one real Akis field using @, #, ~, $, structured values, Undo/Redo, duplication, save/reopen, and runtime output.",
+      "expected_result": "The complete implemented Tok/Akis surface behaves coherently in authoring and runtime, schema 3 compatibility remains intact, schema 4 Requirement-backed values execute, and no protected demo scene change is required.",
+      "invariants": [
+        "This is one consolidated human gate for the implementation burst; prior automated/manual claims are not silently rewritten.",
+        "A PASS requires actual Godot 4.7.2 execution and visible interaction evidence, not source inspection alone.",
+        "demo/main.tscn remains untouched.",
+        "Schema 5 execution, new action blocks, and unimplemented future reference families are outside this acceptance gate."
+      ],
+      "coverage": "manual",
+      "baseline_status": "manual_pending",
+      "test_paths": [
+        "docs/flow_akis_tok_lot_10_contract.md"
+      ],
+      "notes": "Final consolidated review is intentionally pending until Mercury runs the Godot 4.7.2 gate."
     }
   ]
 }
