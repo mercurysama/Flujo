@@ -162,8 +162,9 @@ func set_variable_property(
 	if property_name == &"value_type":
 		var next_type: int = int(value)
 		var previous_source: FlowValueSource = variable.complex_value_source
-		var next_source: FlowValueSource = previous_source
+		var next_source: FlowValueSource = null
 		if FlowVariableDefinition.is_complex_value_type(next_type):
+			next_source = previous_source
 			var expected_kind: StringName = FlowVariableDefinition.expected_complex_source_kind(
 				next_type
 			)
