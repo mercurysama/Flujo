@@ -68,6 +68,8 @@ var _color_preview_id: String = ""
 var _color_preview_original: Color = Color.WHITE
 var _color_preview_value: Color = Color.WHITE
 var _color_preview_button_reference: WeakRef
+var _variable_complex_editor: FlowComplexValueEditor
+var _variable_complex_edit_id: String = ""
 var _ready_block_id: String = ""
 var _ready_block_details_open: bool = false
 var _fluo_mode: bool = false
@@ -154,6 +156,9 @@ func _reset_dock_context() -> void:
 	_restore_selected_list_focus = false
 	_clear_deleted_selection_state()
 	_close_delete_confirmation()
+	_variable_complex_edit_id = ""
+	if is_instance_valid(_variable_complex_editor) and _variable_complex_editor.visible:
+		_variable_complex_editor.hide()
 	_request_rebuild()
 
 
@@ -958,6 +963,114 @@ func _add_variable_value_field(parent: Container, variable: FlowVariableDefiniti
 			color_input.gui_input.connect(_on_variable_control_gui_input.bind(color_input))
 			parent.add_child(color_input)
 			color_input.custom_minimum_size.y = _theme_color_swatch_height(color_input)
+
+
+		FlowVariableDefinition.ValueType.ARRAY, \
+		FlowVariableDefinition.ValueType.DICTIONARY, \
+		FlowVariableDefinition.ValueType.RESOURCE:
+			_add_variable_complex_value_field(parent, variable)
+
+func _add_variable_complex_value_field(
+		parent: Container,
+		variable: FlowVariableDefinition
+) -> void:
+	var source: FlowValueSource = variable.complex_value_source
+	var expected_kind: StringName = FlowVariableDefinition.expected_complex_source_kind(
+		variable.value_type
+	)
+	var valid_source: bool = source != null 		and source.get_source_kind() == expected_kind 		and source.get_value_type() == variable.get_declared_variant_type()
+	if not valid_source:
+		var invalid: Label = Label.new()
+		invalid.name = &"VariableComplexValueInvalid"
+		invalid.text = "Structured value is missing or incompatible."
+		invalid.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		parent.add_child(invalid)
+		var initialize: Button = Button.new()
+		initialize.name = &"VariableComplexValueInitialize"
+		initialize.text = "Initialize " + FlowVariableDefinition.value_type_display_name(
+			variable.value_type
+		)
+		initialize.pressed.connect(
+			_on_variable_complex_initialize.bind(variable.get_internal_id())
+		)
+		parent.add_child(initialize)
+		return
+
+	var preview: Label = Label.new()
+	preview.name = &"VariableComplexValuePreview"
+	preview.text = FlowValueSourcePreview.preview(source, _active_controller().flow_graph)
+	preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	parent.add_child(preview)
+
+	var edit: Button = Button.new()
+	edit.name = &"VariableComplexValueEdit"
+	edit.text = "Edit " + FlowVariableDefinition.value_type_display_name(variable.value_type)
+	edit.focus_mode = Control.FOCUS_ALL
+	edit.pressed.connect(
+		_on_variable_complex_edit.bind(variable.get_internal_id(), edit)
+	)
+	parent.add_child(edit)
+
+
+func _ensure_variable_complex_editor() -> FlowComplexValueEditor:
+	if is_instance_valid(_variable_complex_editor):
+		return _variable_complex_editor
+	_variable_complex_editor = FlowComplexValueEditor.new()
+	_variable_complex_editor.name = &"VariableComplexValueEditor"
+	_variable_complex_editor.source_confirmed.connect(
+		_on_variable_complex_source_confirmed
+	)
+	_variable_complex_editor.cancelled.connect(_on_variable_complex_cancelled)
+	add_child(_variable_complex_editor)
+	return _variable_complex_editor
+
+
+func _on_variable_complex_initialize(variable_id: String) -> void:
+	var controller: PVController = _active_controller()
+	if controller == null or controller.flow_graph == null or _commands == null:
+		return
+	var variable: FlowVariableDefinition = _selected_variable(controller.flow_graph)
+	if variable == null or variable.get_internal_id() != variable_id:
+		return
+	var source: FlowValueSource = FlowVariableDefinition.default_complex_source(
+		variable.value_type
+	)
+	if source != null and _commands.set_variable_complex_source(
+		controller,
+		variable_id,
+		source
+	):
+		_request_rebuild()
+
+
+func _on_variable_complex_edit(variable_id: String, anchor: Control) -> void:
+	var controller: PVController = _active_controller()
+	if controller == null or controller.flow_graph == null:
+		return
+	var variable: FlowVariableDefinition = _selected_variable(controller.flow_graph)
+	if variable == null or variable.get_internal_id() != variable_id 			or variable.complex_value_source == null:
+		return
+	_variable_complex_edit_id = variable_id
+	_ensure_variable_complex_editor().open_for_source(
+		variable.complex_value_source,
+		controller.flow_graph,
+		anchor.get_global_rect() if is_instance_valid(anchor) else get_global_rect()
+	)
+
+
+func _on_variable_complex_source_confirmed(source: FlowValueSource) -> void:
+	var controller: PVController = _active_controller()
+	var variable_id: String = _variable_complex_edit_id
+	_variable_complex_edit_id = ""
+	if controller == null or _commands == null or variable_id.is_empty():
+		return
+	if _commands.set_variable_complex_source(controller, variable_id, source):
+		_request_rebuild()
+
+
+func _on_variable_complex_cancelled() -> void:
+	_variable_complex_edit_id = ""
+
 
 
 func _on_color_picker_opened(button: ColorPickerButton, variable_id: String, original_value: Color) -> void:
