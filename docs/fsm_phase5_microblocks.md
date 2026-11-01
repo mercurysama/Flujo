@@ -37,3 +37,21 @@ The existing `flow_fsm_transitions_test.gd` already verifies direct requests, ev
 - **No engine changes.** The new automated test characterizes the already implemented contract.
 - **Next 5C micro-lot:** separate FIFO/overflow/priority under multiple pending events; if existing behavior fails, add a minimal runtime fix in a distinct commit and rerun the focal.
 - **Manual release verification:** remains pending, independent of automated evidence.
+
+## FSM-5C — Bounded cross-clock event queue (2026-11-01)
+
+**Start HEAD:** `4f255e367fae83c676db4fc1c17998ca805d831b`. **Scope:** isolate simultaneous requests, per-controller queue capacity and reentrant acceptance in a single auditable micro-lot.
+
+**RED (reproducible regression):** commit `70082beb8d81234c037a050f2370f29156ead2f3` added `tests/runtime/flow_fsm_queue_capacity_test.gd/.tscn` and the independent bounded `FSM-5C cross-clock capacity focal` workflow step. [GitHub Actions 41350741548](https://github.com/mercurysama/Flujo/actions/runs/41350741548): **FAIL** specifically on the 5C focal; this is preserved diagnostic history.
+
+**Root cause:** `tick()` snapshots existing pending requests into `incoming` and empties `_pending_requests` before calling Update. With 256 incoming events addressed to a different machine clock, a synchronous Update callback could receive `true` from `emit_event` despite the final queue being full. The final `leftovers.slice(0, MAX_PENDING_REQUESTS)` silently discarded that accepted request.
+
+**GREEN (focused production correction):** commit `81ed1de668e64a62ba49db08551c3f398aa81865` reserves capacity for cross-clock incoming items **before** Update. Both `emit_event` and `request_transition` include `_inflight_reserved` in their admission check. A full cross-clock queue causes callback admission to return `false`, not promise a request that will be dropped. Once the other clock drains events, callbacks may enqueue new requests for the next tick. Clearing reserved count at the end of each matching tick restores the normal bound. [GitHub Actions 41350821319](https://github.com/mercurysama/Flujo/actions/runs/41350821319): **SUCCESS** across the full FSM workflow and existing regressions.
+
+**Covered:** exact 256 capacity; 257th event and direct command rejected; wrong-clock carryover retained intact; full-queue callback explicitly rejected; consumed events free capacity; accepted callback deferred one tick and delivered exactly once; FSM base regressions unchanged.
+
+**Not asserted:** full gameplay UI/Android, all combinations of many machines or fault-injected shutdown; no manual approval inferred.
+
+**Next micro-lot 5D:** isolate multi-event priority versus FIFO arrival, multiple clocks and request budget under callbacks without changing shared queue semantics unless a failing focal proves a defect. Later phase 6 addresses multi-machine communication comprehensively.
+
+**Recovery:** checkout `feature/fsm-runtime-flow-flusso`, inspect `docs/fsm_phase5_microblocks.md`, compare last CI against this checkpoint; add one focal before any new engine change. Keep RED/GREEN commits separate and preserve the CI failure as evidence.
