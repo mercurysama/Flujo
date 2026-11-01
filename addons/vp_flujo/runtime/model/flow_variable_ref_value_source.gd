@@ -137,6 +137,33 @@ func validate_structure(result: FlowValidationResult, element_path: String) -> v
 		)
 
 
+func validate_against_graph(
+		result: FlowValidationResult,
+		element_path: String,
+		graph: FlowGraph
+) -> void:
+	if result == null or graph == null:
+		return
+	var variable: FlowVariableDefinition = resolve_definition(graph)
+	if variable == null:
+		_add_error(
+			result,
+			FlowDiagnostic.CODE_VARIABLE_REFERENCE_MISSING,
+			"VariableRef references a variable that is missing from the active FlowGraph.",
+			element_path + ".variable_id",
+			variable_id
+		)
+		return
+	if variable.get_declared_variant_type() != get_value_type():
+		_add_error(
+			result,
+			FlowDiagnostic.CODE_VARIABLE_REFERENCE_TYPE_MISMATCH,
+			"VariableRef declared type does not match the resolved variable type.",
+			element_path + ".declared_value_type",
+			variable_id
+		)
+
+
 func duplicate_with_new_id() -> FlowValueSource:
 	var copy: FlowVariableRefValueSource = duplicate(false) as FlowVariableRefValueSource
 	copy._source_id = FlowId.create()
