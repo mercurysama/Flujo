@@ -20,6 +20,9 @@ enum ValueType {
 	VECTOR2,
 	VECTOR3,
 	COLOR,
+	ARRAY,
+	DICTIONARY,
+	RESOURCE,
 }
 
 
@@ -38,7 +41,7 @@ static func is_valid_value_type(value: int) -> bool:
 			or value == ValueType.STRING \
 			or value == ValueType.VECTOR2 \
 			or value == ValueType.VECTOR3 \
-			or value == ValueType.COLOR
+			or value == ValueType.COLOR 			or value == ValueType.ARRAY 			or value == ValueType.DICTIONARY 			or value == ValueType.RESOURCE
 
 
 ## The canonical variable taxonomy maps directly to Godot Variant types.
@@ -59,6 +62,12 @@ static func to_variant_type(value: int) -> Variant.Type:
 			return Variant.Type.TYPE_VECTOR3
 		ValueType.COLOR:
 			return Variant.Type.TYPE_COLOR
+		ValueType.ARRAY:
+			return Variant.Type.TYPE_ARRAY
+		ValueType.DICTIONARY:
+			return Variant.Type.TYPE_DICTIONARY
+		ValueType.RESOURCE:
+			return Variant.Type.TYPE_OBJECT
 	return Variant.Type.TYPE_NIL
 
 
@@ -78,11 +87,43 @@ static func value_type_display_name(value: int) -> String:
 			return "Vector3"
 		ValueType.COLOR:
 			return "Color"
+		ValueType.ARRAY:
+			return "Array"
+		ValueType.DICTIONARY:
+			return "Dictionary"
+		ValueType.RESOURCE:
+			return "Resource"
 	return "unknown(%d)" % value
 
 
 func get_declared_variant_type() -> Variant.Type:
 	return to_variant_type(value_type)
+
+
+static func is_complex_value_type(value: int) -> bool:
+	return value == ValueType.ARRAY 		or value == ValueType.DICTIONARY 		or value == ValueType.RESOURCE
+
+
+static func expected_complex_source_kind(value: int) -> StringName:
+	match value:
+		ValueType.ARRAY:
+			return FlowValueSource.SOURCE_KIND_ARRAY
+		ValueType.DICTIONARY:
+			return FlowValueSource.SOURCE_KIND_DICTIONARY
+		ValueType.RESOURCE:
+			return FlowValueSource.SOURCE_KIND_RESOURCE_REF
+	return &""
+
+
+static func default_complex_source(value: int) -> FlowValueSource:
+	match value:
+		ValueType.ARRAY:
+			return FlowArrayValueSource.new()
+		ValueType.DICTIONARY:
+			return FlowDictionaryValueSource.new()
+		ValueType.RESOURCE:
+			return FlowResourceRefValueSource.placeholder(&"Resource")
+	return null
 
 
 @export_storage var _internal_id: String = FlowId.create()
@@ -98,6 +139,8 @@ func get_declared_variant_type() -> Variant.Type:
 @export var vector2_value: Vector2 = Vector2.ZERO
 @export var vector3_value: Vector3 = Vector3.ZERO
 @export var color_value: Color = Color.WHITE
+## Owned default source for ARRAY / DICTIONARY / RESOURCE variables.
+@export_storage var complex_value_source: FlowValueSource
 @export var persistent: bool = false
 @export_multiline var user_note: String = ""
 
@@ -107,7 +150,54 @@ func get_declared_variant_type() -> Variant.Type:
 func get_internal_id() -> String:
 	return _internal_id
 
+func get_default_value_result(
+		context: FlowValueResolutionContext = null
+) -> FlowValueResult:
+	match value_type:
+		ValueType.BOOL:
+			return FlowValueResult.ok(bool_value, Variant.Type.TYPE_BOOL)
+		ValueType.INT:
+			return FlowValueResult.ok(int_value, Variant.Type.TYPE_INT)
+		ValueType.FLOAT:
+			return FlowValueResult.ok(float_value, Variant.Type.TYPE_FLOAT)
+		ValueType.STRING:
+			return FlowValueResult.ok(string_value, Variant.Type.TYPE_STRING)
+		ValueType.VECTOR2:
+			return FlowValueResult.ok(vector2_value, Variant.Type.TYPE_VECTOR2)
+		ValueType.VECTOR3:
+			return FlowValueResult.ok(vector3_value, Variant.Type.TYPE_VECTOR3)
+		ValueType.COLOR:
+			return FlowValueResult.ok(color_value, Variant.Type.TYPE_COLOR)
+
+	if not is_complex_value_type(value_type) or complex_value_source == null:
+		return FlowValueResult.fail(
+			get_declared_variant_type(),
+			FlowDiagnostic.new(
+				FlowDiagnostic.CODE_VARIABLE_COMPLEX_SOURCE_MISSING,
+				FlowDiagnostic.Severity.ERROR,
+				"Complex variable has no default ValueSource.",
+				"variable.complex_value_source",
+				_internal_id
+			)
+		)
+
+	var expected_kind: StringName = expected_complex_source_kind(value_type)
+	if complex_value_source.get_source_kind() != expected_kind 			or complex_value_source.get_value_type() != get_declared_variant_type():
+		return FlowValueResult.fail(
+			get_declared_variant_type(),
+			FlowDiagnostic.new(
+				FlowDiagnostic.CODE_VARIABLE_COMPLEX_SOURCE_TYPE_MISMATCH,
+				FlowDiagnostic.Severity.ERROR,
+				"Complex variable default source does not match its declared type.",
+				"variable.complex_value_source",
+				_internal_id
+			)
+		)
+	return complex_value_source.resolve(context)
+
+
 func duplicate_with_new_id() -> FlowVariableDefinition:
 	var copy: FlowVariableDefinition = duplicate(false) as FlowVariableDefinition
 	copy._internal_id = FlowId.create()
+	copy.complex_value_source = complex_value_source.duplicate_with_new_id() 		if complex_value_source != null else null
 	return copy
