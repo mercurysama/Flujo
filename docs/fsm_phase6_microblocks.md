@@ -19,3 +19,12 @@
 - During B0 Exit and B1 Enter, callback requests targeting A2 and A1 respectively are queued for A's next MANUAL tick. No reentrant A transition or second B transition occurs. The valid A2 direct request wins before the self-target A1 request, and the self request is harmlessly consumed.
 - Preserve authored graph resources, stable IDs, existing queue limit and lifecycle signals. This lot tests existing APIs only. No direct request reason/payload, budget redesign, multi-controller API or UI changes.
 - Acceptance: dedicated headless 6B test with targeted CI plus existing regression matrix; modify the engine only if a concrete failure is demonstrated.
+
+## 6B — Verified Enter/Exit cross-machine deferral (2026-11-01)
+
+- **Contract commit:** `23b3c915607f6bd5a00cb16a8dd3e0751222e90d`. **Focal test commit:** `e936c392d4b38851ec6722904cfa4b0c7ebc7b98` adds `tests/runtime/flow_fsm_cross_machine_lifecycle_test.gd/.tscn`. **CI wiring:** `84e8fc218e9a03407206823a39ba225670563c0e`.
+- [GitHub Actions 41356265134](https://github.com/mercurysama/Flujo/actions/runs/41356265134) **SUCCESS**, including the dedicated `Potok-6B cross-machine lifecycle focal` and all prior regression steps.
+- Test observes requests from A0 Exit and A1 Enter toward B1 then B2, both admitted and queued. B remains unchanged during A tick. On B's matching clock, the first target B1 wins FIFO, then B0 Exit and B1 Enter enqueue two requests back to A. These cannot execute recursively and commit on A's subsequent clock; the first valid A2 request wins over later same-state A1. Queue drains without duplicate transitions; authored graph remains valid.
+- **No runtime/model production changes**. Existing controller-local queue and synchronous signal callbacks already honor the lifecycle boundary. This is evidence for 6B only, not for chain/cycle saturation or phase 6 completion.
+- **Next micro-lot 6C:** define and test cyclic cross-machine ping-pong and saturation/chain budget behavior. Do not modify shared budget without a reproducible failing focal and explicit contract. UI/Android and Condition Tok payload integration remain outside this lot.
+- **Recovery:** resume from CI 41356265134 and the docs checkpoint, inspect latest HEAD, preserve the test and distinct commits.
