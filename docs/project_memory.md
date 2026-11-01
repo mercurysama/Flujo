@@ -531,3 +531,47 @@ the discrepancy remains preserved and unresolved.
 8. Define first stable release criteria.
 
 Todo es Flujo; todo fluye. 🌊
+
+
+## Major Increment Checkpoint — Akis/Tok Lot 10 — 2026-10-31
+
+El impulso Akis/Tok alcanzó su checkpoint de integración en
+`feature/block-builder-fprint-dogfood`. La fuente normativa de este cierre es
+[flow_akis_tok_lot_10_contract.md](flow_akis_tok_lot_10_contract.md).
+
+### Lecciones reutilizables
+
+- **Akis es el boundary de valores, no un widget privado.** Los bloques que
+  necesitan contenido mixto deben declarar `FlowStructuredDocument` y resolver
+  sus sources por el contrato común.
+- **Toks suministran o referencian valores; Blocks realizan acciones.** No crear
+  un Tok distinto para Set Variable, Call Method, Return u otras acciones.
+- **Toda identidad del grafo se remapea después del mapa completo.** Esto aplica
+  tanto a `variable_id` como a `requirement_id`, incluso dentro de
+  Array/Dictionary/Operation/Condition y Akis propiedad de un bloque.
+- **La capacidad de autoría debe igualar el modelo.** Si una colección persiste
+  `FlowValueSource` arbitrarios, su editor no debe restringirla
+  artificialmente a literales/colecciones.
+- **Scene references reutilizan el panel de Nodes.** Node/Node Property dentro
+  de estructuras anidadas no justifican una segunda UI.
+- **Schema 4 runtime es deliberadamente estrecho.** Ready/Timer pueden resolver
+  Requirements con bindings validados, pero los legacy `constructor.blocks`
+  siguen inertes y Apply Constructor permanece futuro.
+- **Recursión de modelo y recursión de UI son contratos distintos.** Las
+  colecciones pueden ser recursivas persistentemente mientras el editor impone
+  un límite de profundidad seguro.
+- **No inferir PASS de archivos de test.** Las nuevas entradas del behavior
+  catalog permanecen `not_run` / `manual_pending` hasta Godot 4.7.2.
+
+### Gate pendiente
+
+La sesión de integración fue GitHub-only y no encontró `godot`, `flatpak`
+ni `flatpak-spawn` disponibles en el entorno de herramientas. El formal
+`$flujo-prove` no puede devolver `PASA` aquí; requiere el gate consolidado
+en Fedora/Godot 4.7.2 y la revisión visual del editor.
+
+No existe un Lote 11 autorizado por este checkpoint. Cualquier nueva capacidad
+de acción, Schema 5 runtime, Apply Constructor o argumentos/returns de Methods
+requiere su propio contrato y autorización.
+
+Todo es Flujo; todo fluye. 🌊
