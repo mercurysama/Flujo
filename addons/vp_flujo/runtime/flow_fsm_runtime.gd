@@ -10,11 +10,13 @@ signal machine_stopped(machine_id: String, state_id: String)
 signal transition_committed(machine_id: String, from_state_id: String, to_state_id: String, trigger_id: String)
 
 const MAX_PENDING_REQUESTS: int = 256
+const MAX_DYNAMIC_STATES: int = 128
 
 var _controller: PVController
 var _graph: FlowGraph
 var _active: Dictionary[String, String] = {}
 var _pending_requests: Array[Dictionary] = []
+var _dynamic_states: Dictionary[String, Dictionary] = {}
 var _running: bool = false
 var _in_tick: bool = false
 var _stop_after_tick: bool = false
@@ -58,6 +60,7 @@ func start(controller: PVController) -> bool:
 	_running = true
 	_stop_after_tick = false
 	_pending_requests.clear()
+	_dynamic_states.clear()
 	for machine: FlowStateMachineDefinition in graph.state_machines:
 		if machine == null or not machine.enabled or not machine.auto_start or machine.states.is_empty():
 			continue
@@ -168,6 +171,7 @@ func stop() -> void:
 			state_exited.emit(machine_id, state_id)
 		machine_stopped.emit(machine_id, state_id)
 	_pending_requests.clear()
+	_dynamic_states.clear()
 	_active.clear()
 	_running = false
 	_controller = null
@@ -243,7 +247,7 @@ func _commit_transition(
 	if target == null or not target.enabled:
 		return
 	var machine_id: String = machine.get_internal_id()
-	var old_id: String = state.get_internal_id()
+	var old_id: String = get_active_state_id(machine_id)
 	_execute_phase(machine, state, state.exit_blocks, &"StateExit")
 	state_exited.emit(machine_id, old_id)
 	_active[machine_id] = target_id
@@ -261,13 +265,130 @@ func _find_machine(machine_id: String) -> FlowStateMachineDefinition:
 	return null
 
 
+## Dynamic identities borrow a read-only authored template.
 func _find_state(machine: FlowStateMachineDefinition, state_id: String) -> FlowStateDefinition:
+	if machine == null:
+		return null
+	var authored: FlowStateDefinition = _find_authored_state(machine, state_id)
+	if authored != null:
+		return authored
+	var registry: Dictionary = _dynamic_states.get(machine.get_internal_id(), {})
+	var record: FlowFSMDynamicStateRecord = registry.get(state_id) as FlowFSMDynamicStateRecord
+	if record == null:
+		return null
+	return _find_authored_state(machine, record.template_state_id)
+
+
+func _find_authored_state(machine: FlowStateMachineDefinition, state_id: String) -> FlowStateDefinition:
 	if machine == null:
 		return null
 	for state: FlowStateDefinition in machine.states:
 		if state != null and state.get_internal_id() == state_id:
 			return state
 	return null
+
+
+func has_state(machine_id: String, state_id: String) -> bool:
+	return _find_state(_find_machine(machine_id), state_id) != null
+
+
+## Each runtime alias is isolated, quota-checked and created from a known template.
+func register_state(
+		machine_id: String,
+		template_state_id: String,
+		runtime_id: String = "",
+		lifetime: int = FlowFSMDynamicStateRecord.Lifetime.EPHEMERAL,
+		data: Dictionary = {}
+) -> String:
+	if not _running:
+		return ""
+	var machine: FlowStateMachineDefinition = _find_machine(machine_id)
+	if machine == null or not machine.enabled:
+		return ""
+	var template: FlowStateDefinition = _find_authored_state(machine, template_state_id)
+	if template == null or not template.enabled:
+		return ""
+	if not FlowFSMDynamicStateRecord.is_valid_lifetime(lifetime) \
+			or not FlowFSMDataValidator.valid_dictionary(data):
+		return ""
+	var registry: Dictionary = _dynamic_states.get(machine_id, {})
+	if registry.size() >= MAX_DYNAMIC_STATES:
+		return ""
+	var candidate_id: String = FlowId.create() if runtime_id.is_empty() else runtime_id
+	if not FlowId.is_valid(candidate_id) or _find_state(machine, candidate_id) != null:
+		return ""
+	var record: FlowFSMDynamicStateRecord = FlowFSMDynamicStateRecord.new(
+		candidate_id, template_state_id, lifetime, data
+	)
+	registry[candidate_id] = record
+	_dynamic_states[machine_id] = registry
+	return candidate_id
+
+
+func get_dynamic_state_ids(machine_id: String) -> Array[String]:
+	var result: Array[String] = []
+	var registry: Dictionary = _dynamic_states.get(machine_id, {})
+	for state_id: String in registry.keys():
+		result.append(state_id)
+	return result
+
+
+func get_dynamic_state_lifetime(machine_id: String, state_id: String) -> int:
+	var registry: Dictionary = _dynamic_states.get(machine_id, {})
+	var record: FlowFSMDynamicStateRecord = registry.get(state_id) as FlowFSMDynamicStateRecord
+	return record.lifetime if record != null else -1
+
+
+func get_dynamic_state_data(machine_id: String, state_id: String) -> Dictionary:
+	var registry: Dictionary = _dynamic_states.get(machine_id, {})
+	var record: FlowFSMDynamicStateRecord = registry.get(state_id) as FlowFSMDynamicStateRecord
+	return record.data.duplicate(true) if record != null else {}
+
+
+func set_dynamic_state_data(machine_id: String, state_id: String, data: Dictionary) -> bool:
+	if not FlowFSMDataValidator.valid_dictionary(data):
+		return false
+	var registry: Dictionary = _dynamic_states.get(machine_id, {})
+	var record: FlowFSMDynamicStateRecord = registry.get(state_id) as FlowFSMDynamicStateRecord
+	if record == null:
+		return false
+	record.data = data.duplicate(true)
+	return true
+
+
+func change_state(machine_id: String, state_id: String) -> bool:
+	return request_transition(machine_id, state_id)
+
+
+## Removing an active alias requires an immediate, valid fallback outside tick.
+func remove_state(machine_id: String, state_id: String, fallback_state_id: String = "") -> bool:
+	if not _running:
+		return false
+	var registry: Dictionary = _dynamic_states.get(machine_id, {})
+	if not registry.has(state_id):
+		return false
+	var machine: FlowStateMachineDefinition = _find_machine(machine_id)
+	if machine == null:
+		return false
+	if get_active_state_id(machine_id) == state_id:
+		if _in_tick or fallback_state_id.is_empty() or fallback_state_id == state_id:
+			return false
+		var target: FlowStateDefinition = _find_state(machine, fallback_state_id)
+		var old_state: FlowStateDefinition = _find_state(machine, state_id)
+		if target == null or not target.enabled or old_state == null:
+			return false
+		_commit_transition(machine, old_state, fallback_state_id, "dynamic-removal")
+	registry.erase(state_id)
+	_dynamic_states[machine_id] = registry
+	var kept: Array[Dictionary] = []
+	for request: Dictionary in _pending_requests:
+		if request.get("kind") == &"direct" \
+				and request.get("machine_id") == machine_id \
+				and request.get("target_id") == state_id:
+			continue
+		kept.append(request)
+	_pending_requests = kept
+	return true
 
 
 ## Transient wrapper preserves the generic Ready/Timer block execution contract.
