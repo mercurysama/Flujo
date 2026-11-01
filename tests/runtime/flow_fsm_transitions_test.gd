@@ -35,7 +35,11 @@ func _run() -> void:
 	second.initial_state_id = side.get_internal_id()
 	second.tick_mode = FlowStateMachineDefinition.TickMode.PHYSICS
 	graph.state_machines = [machine, second]
-	_check(not FlowGraphValidator.validate(graph).has_errors(), "Valid transition graph is accepted.")
+	var validation: FlowValidationResult = FlowGraphValidator.validate(graph)
+	if validation.has_errors():
+		for diagnostic: FlowDiagnostic in validation.diagnostics:
+			print("[Flujo] FSM 002 diagnostic ", diagnostic.code, " at ", diagnostic.element_path, ": ", diagnostic.message)
+	_check(not validation.has_errors(), "Valid transition graph is accepted.")
 	var copy: FlowGraph = graph.duplicate_with_new_ids()
 	_check(not FlowGraphValidator.validate(copy).has_errors(), "Duplicated transition graph is valid.")
 	if copy != null:
