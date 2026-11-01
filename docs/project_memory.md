@@ -560,6 +560,10 @@ El impulso Akis/Tok alcanzó su checkpoint de integración en
 - **Recursión de modelo y recursión de UI son contratos distintos.** Las
   colecciones pueden ser recursivas persistentemente mientras el editor impone
   un límite de profundidad seguro.
+- **Enum de almacenamiento no significa contrato compartido.** BOOL..COLOR
+  mantienen los valores 0–6 y el validador escalar compartido; ARRAY,
+  DICTIONARY y RESOURCE se aceptan sólo para graph Variables mediante su helper
+  específico, para no ampliar accidentalmente Methods o Schema 5.
 - **No inferir PASS de archivos de test.** Las nuevas entradas del behavior
   catalog permanecen `not_run` / `manual_pending` hasta Godot 4.7.2.
 
