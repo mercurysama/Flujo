@@ -15,8 +15,19 @@ const CHILD_LITERAL_TYPES: Array[Variant.Type] = [
 	Variant.Type.TYPE_STRING,
 ]
 
+const CHILD_SOURCE_SCALAR: int = 2001
+const CHILD_SOURCE_VARIABLE: int = 2002
+const CHILD_SOURCE_OPERATION: int = 2003
+const CHILD_SOURCE_CONDITION: int = 2004
+const CHILD_SOURCE_ARRAY: int = 2005
+const CHILD_SOURCE_DICTIONARY: int = 2006
+const CHILD_SOURCE_RESOURCE: int = 2007
+const CHILD_SOURCE_ENUM: int = 2008
+const CHILD_SOURCE_BITFIELD: int = 2009
+
 var _draft: FlowValueSource
 var _graph: FlowGraph
+var _context: Dictionary = {}
 var _content: VBoxContainer
 var _body: VBoxContainer
 var _preview: Label
@@ -25,6 +36,10 @@ var _confirm: Button
 var _closing_for_action: bool = false
 var _nested_editor: FlowComplexValueEditor
 var _nested_replace: Callable = Callable()
+var _variable_selector: FlowVariableSelector
+var _operation_editor: FlowOperationEditor
+var _condition_editor: FlowConditionEditor
+var _pending_replace: Callable = Callable()
 var _resource_dialog: EditorFileDialog
 
 
@@ -96,16 +111,37 @@ func _init() -> void:
 	_resource_dialog.file_selected.connect(_on_resource_file_selected)
 	add_child(_resource_dialog)
 
+	_variable_selector = FlowVariableSelector.new()
+	_variable_selector.name = &"NestedVariableSelector"
+	_variable_selector.variable_selected.connect(_on_nested_variable_selected)
+	_variable_selector.cancelled.connect(_on_nested_source_cancelled)
+	add_child(_variable_selector)
+
+	_operation_editor = FlowOperationEditor.new()
+	_operation_editor.name = &"NestedOperationEditor"
+	_operation_editor.operation_confirmed.connect(_on_nested_operation_confirmed)
+	_operation_editor.cancelled.connect(_on_nested_source_cancelled)
+	add_child(_operation_editor)
+
+	_condition_editor = FlowConditionEditor.new()
+	_condition_editor.name = &"NestedConditionEditor"
+	_condition_editor.condition_confirmed.connect(_on_nested_condition_confirmed)
+	_condition_editor.cancelled.connect(_on_nested_source_cancelled)
+	add_child(_condition_editor)
+
 
 func open_for_source(
 		source: FlowValueSource,
 		graph: FlowGraph = null,
-		anchor: Rect2 = Rect2()
+		anchor: Rect2 = Rect2(),
+		context: Dictionary = {}
 ) -> void:
 	_graph = graph
+	_context = context.duplicate()
 	_draft = source.duplicate_with_new_id() if source != null else null
 	_closing_for_action = false
 	_nested_replace = Callable()
+	_pending_replace = Callable()
 	_rebuild()
 	var popup_position: Vector2i = Vector2i(
 		int(anchor.position.x),
