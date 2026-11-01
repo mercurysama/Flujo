@@ -24,6 +24,8 @@ static func preview(source: FlowValueSource, graph: FlowGraph = null) -> String:
 		return (source as FlowNodeRefValueSource).get_preview()
 	if source is FlowNodePropertyRefValueSource:
 		return (source as FlowNodePropertyRefValueSource).get_preview()
+	if source is FlowExpressionValueSource:
+		return (source as FlowExpressionValueSource).get_preview(graph)
 	if source is FlowOperationValueSource:
 		return (source as FlowOperationValueSource).get_preview(graph)
 	if source is FlowConditionValueSource:
