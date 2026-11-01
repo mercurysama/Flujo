@@ -11,18 +11,21 @@ const PRODUCED_TYPE: Variant.Type = Variant.Type.TYPE_INT
 @export_storage var option_names: Array[StringName] = []
 @export_storage var option_values: Array[int] = []
 @export_storage var selected_value: int = 0
+@export_storage var has_selection: bool = false
 
 
 func _init(
 		new_enum_name: StringName = &"Enum",
 		new_option_names: Array[StringName] = [],
 		new_option_values: Array[int] = [],
-		new_selected_value: int = 0
+		new_selected_value: int = 0,
+		new_has_selection: bool = false
 ) -> void:
 	enum_name = new_enum_name
 	option_names.assign(new_option_names)
 	option_values.assign(new_option_values)
 	selected_value = new_selected_value
+	has_selection = new_has_selection
 
 
 func get_source_kind() -> StringName:
@@ -34,10 +37,12 @@ func get_value_type() -> Variant.Type:
 
 
 func is_valid() -> bool:
-	return FlowId.is_valid(_source_id) and _options_valid() 		and option_values.has(selected_value)
+	return FlowId.is_valid(_source_id) and _options_valid() 		and has_selection and option_values.has(selected_value)
 
 
 func get_preview() -> String:
+	if not has_selection:
+		return "%s.<unset>" % String(enum_name)
 	var index: int = option_values.find(selected_value)
 	if index < 0:
 		return "%s(<invalid:%d>)" % [String(enum_name), selected_value]
@@ -56,7 +61,7 @@ func validate_structure(result: FlowValidationResult, element_path: String) -> v
 			element_path,
 			_source_id
 		)
-	elif not option_values.has(selected_value):
+	elif not has_selection or not option_values.has(selected_value):
 		_add_error(
 			result,
 			FlowDiagnostic.CODE_ENUM_VALUE_INVALID,
