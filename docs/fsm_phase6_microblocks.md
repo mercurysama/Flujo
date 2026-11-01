@@ -11,3 +11,11 @@
 - **Engine runtime unchanged.** This is characterization of already present behavior, not a claim that the entire phase 6 is implemented. No serialized model, UI or Android changes.
 - **Next micro-lot 6B:** define/test cross-machine commands originating in Enter/Exit observers and their delivery ordering, without adding reason/payload fields until a separate typed contract is approved. Later 6C can address chain-local saturation/cycle policy and multi-controller isolation.
 - **Recovery:** resume from the 6A evidence above and this document. Do not infer Phase 5 Tok/UI completion from green 6A CI.
+
+## 6B — Cross-machine Enter/Exit callback contract (2026-11-01)
+
+- A and B are different machines on MANUAL and PHYSICS clocks within one controller. After start, A is directly moved from A0 to A1. On A0 Exit a listener requests B1; on A1 Enter another listener requests B2. Both admissions return true and preserve FIFO order. Attempts to invoke B's tick recursively from the callbacks do nothing.
+- Neither B target can execute during A's clock. B's first PHYSICS tick consumes the two requests, commits B0 → B1 exactly once (FIFO), and defers the new state's Update.
+- During B0 Exit and B1 Enter, callback requests targeting A2 and A1 respectively are queued for A's next MANUAL tick. No reentrant A transition or second B transition occurs. The valid A2 direct request wins before the self-target A1 request, and the self request is harmlessly consumed.
+- Preserve authored graph resources, stable IDs, existing queue limit and lifecycle signals. This lot tests existing APIs only. No direct request reason/payload, budget redesign, multi-controller API or UI changes.
+- Acceptance: dedicated headless 6B test with targeted CI plus existing regression matrix; modify the engine only if a concrete failure is demonstrated.
