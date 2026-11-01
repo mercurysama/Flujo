@@ -39,7 +39,7 @@ func remap_internal_references(id_map: Dictionary[String, String]) -> void:
 			var chip: FlowChipSegment = segment as FlowChipSegment
 			if chip == null:
 				continue
-			FlowValueSourceReferenceRemapper.remap_variable_ids(
+			FlowValueSourceReferenceRemapper.remap_graph_ids(
 				chip.get_value_source(),
 				id_map
 			)
