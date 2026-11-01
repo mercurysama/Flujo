@@ -15,6 +15,8 @@ signal visual_program_enabled_changed(is_enabled: bool)
 		requirement_bindings = value.duplicate()
 
 var runtime_output: FlowRuntimeOutput = FlowRuntimeOutput.new()
+## Per-instance Akis/Variable runtime state. Never serialized into the shared graph.
+var value_resolution_context: FlowValueResolutionContext
 var _ready_executed: bool = false
 var _timer_runtime: FlowTimerRuntime
 ## Transient schema 5 state. These fields are deliberately not exported.
@@ -35,6 +37,22 @@ var visual_program_enabled: bool = true:
 
 func can_execute_visual_program() -> bool:
 	return visual_program_enabled and is_inside_tree()
+
+
+func get_value_resolution_context() -> FlowValueResolutionContext:
+	if value_resolution_context == null 			or value_resolution_context.graph != flow_graph:
+		value_resolution_context = FlowValueResolutionContext.new(
+			flow_graph,
+			self,
+			get_tree().current_scene if is_inside_tree() and get_tree() != null else null
+		)
+	else:
+		value_resolution_context.graph = flow_graph
+		value_resolution_context.set_scene_context(
+			self,
+			get_tree().current_scene if is_inside_tree() and get_tree() != null else null
+		)
+	return value_resolution_context
 
 
 func _ready() -> void:
@@ -64,6 +82,7 @@ func _exit_tree() -> void:
 	instance_runtime_store = null
 	class_runtime_store = null
 	runtime_store_result = null
+	value_resolution_context = null
 	_stop_timers()
 
 
