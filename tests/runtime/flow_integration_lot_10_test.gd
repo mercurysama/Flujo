@@ -11,6 +11,7 @@ func _ready() -> void:
 
 func _run() -> void:
 	await _test_schema4_requirement_backed_print()
+	await _test_invalid_requirement_binding_stops_execution()
 	_finish()
 
 
@@ -82,6 +83,53 @@ func _test_schema4_requirement_backed_print() -> void:
 		"Schema 4 runtime re-reads the live Requirement-bound property on each pass."
 	)
 
+	controller.queue_free()
+	await get_tree().process_frame
+
+
+func _test_invalid_requirement_binding_stops_execution() -> void:
+	var graph: FlowGraph = FlowGraph.new()
+	graph.schema_version = FlowGraph.SCHEMA_VERSION_4
+	graph.constructor = FlowConstructorDefinition.new()
+
+	var requirement: FlowRequiredNodeDefinition = FlowRequiredNodeDefinition.new()
+	requirement.display_name = "Target"
+	requirement.expected_node_name = &"Target"
+	requirement.required_class_name = &"Node2D"
+	graph.constructor.requirements = [requirement]
+
+	var print_block: FlowPrintBlock = FlowPrintBlock.new()
+	print_block.content = FlowStructuredDocument.new()
+	print_block.content.segments = [
+		FlowNodeRefSegment.new(
+			FlowNodeRefValueSource.new(
+				requirement.get_internal_id(),
+				NodePath("Target"),
+				&"Target",
+				&"Node2D"
+			)
+		),
+	]
+	var process: FlowProcess = FlowProcess.new()
+	process.blocks = [print_block]
+	graph.processes = [process]
+
+	var controller: PVController = PVController.new()
+	controller.flow_graph = graph
+	var target: Node2D = Node2D.new()
+	target.name = "Target"
+	controller.add_child(target)
+	controller.requirement_bindings = {
+		requirement.get_internal_id(): NodePath("../invalid"),
+	}
+	controller.runtime_output.message_emitted.connect(_record)
+	_messages.clear()
+	add_child(controller)
+	await get_tree().process_frame
+	_check(
+		_messages.is_empty(),
+		"Malformed Schema 4 Requirement bindings stop execution instead of silently falling back."
+	)
 	controller.queue_free()
 	await get_tree().process_frame
 
