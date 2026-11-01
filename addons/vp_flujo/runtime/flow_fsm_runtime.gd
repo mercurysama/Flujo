@@ -7,6 +7,8 @@ signal state_entered(machine_id: String, state_id: String)
 signal state_updated(machine_id: String, state_id: String)
 ## Fired for each event consumed by its machine clock, even without a matching edge.
 signal event_consumed(machine_id: String, event_name: StringName, payload: Dictionary)
+## Stable rejection codes for runtime admission; no payload is leaked.
+signal request_rejected(machine_id: String, kind: StringName, code: StringName)
 signal state_exited(machine_id: String, state_id: String)
 signal machine_stopped(machine_id: String, state_id: String)
 signal transition_committed(machine_id: String, from_state_id: String, to_state_id: String, trigger_id: String)
@@ -86,12 +88,19 @@ func start(controller: PVController) -> bool:
 
 ## Queue one explicit destination; it does not need an authored edge.
 func request_transition(machine_id: String, target_state_id: String) -> bool:
-	if not _running or _pending_requests.size() + _inflight_reserved >= MAX_PENDING_REQUESTS:
+	if not _running:
+		request_rejected.emit(machine_id, &"direct", &"not_running")
 		return false
 	var machine: FlowStateMachineDefinition = _find_machine(machine_id)
+	if machine == null or not machine.enabled or not _active.has(machine_id):
+		request_rejected.emit(machine_id, &"direct", &"invalid_machine")
+		return false
 	var target: FlowStateDefinition = _find_state(machine, target_state_id)
-	if machine == null or target == null or not target.enabled \
-			or not machine.enabled or not _active.has(machine_id):
+	if target == null or not target.enabled:
+		request_rejected.emit(machine_id, &"direct", &"invalid_target")
+		return false
+	if _pending_requests.size() + _inflight_reserved >= MAX_PENDING_REQUESTS:
+		request_rejected.emit(machine_id, &"direct", &"queue_full")
 		return false
 	_pending_requests.append({
 		"kind": &"direct", "machine_id": machine_id, "target_id": target_state_id
@@ -101,11 +110,21 @@ func request_transition(machine_id: String, target_state_id: String) -> bool:
 
 ## Event delivery is deferred until the machine's next matching tick.
 func emit_event(machine_id: String, event_name: StringName, payload: Dictionary = {}) -> bool:
-	if not _running or String(event_name).is_empty() \
-			or _pending_requests.size() + _inflight_reserved >= MAX_PENDING_REQUESTS:
+	if not _running:
+		request_rejected.emit(machine_id, &"event", &"not_running")
 		return false
-	if not _active.has(machine_id) or _find_machine(machine_id) == null \
-			or not FlowFSMDataValidator.valid_dictionary(payload):
+	if String(event_name).strip_edges().is_empty():
+		request_rejected.emit(machine_id, &"event", &"invalid_event_name")
+		return false
+	var machine: FlowStateMachineDefinition = _find_machine(machine_id)
+	if machine == null or not machine.enabled or not _active.has(machine_id):
+		request_rejected.emit(machine_id, &"event", &"invalid_machine")
+		return false
+	if not FlowFSMDataValidator.valid_dictionary(payload):
+		request_rejected.emit(machine_id, &"event", &"invalid_payload")
+		return false
+	if _pending_requests.size() + _inflight_reserved >= MAX_PENDING_REQUESTS:
+		request_rejected.emit(machine_id, &"event", &"queue_full")
 		return false
 	_pending_requests.append({
 		"kind": &"event",
