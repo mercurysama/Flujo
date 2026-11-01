@@ -414,3 +414,134 @@ func _execute_phase(
 		[],
 		true
 	)
+
+
+## EPHEMERAL aliases are cleared on reset; SESSION/PERSISTENT aliases survive.
+func reset() -> bool:
+	if not _running or _in_tick:
+		return false
+	for machine: FlowStateMachineDefinition in _graph.state_machines:
+		if machine == null or not _active.has(machine.get_internal_id()):
+			continue
+		var next: FlowStateDefinition = machine.get_initial_state()
+		if next == null or not next.enabled:
+			return false
+	_pending_requests.clear()
+	for machine: FlowStateMachineDefinition in _graph.state_machines:
+		if machine == null or not _active.has(machine.get_internal_id()):
+			continue
+		var previous_id: String = get_active_state_id(machine.get_internal_id())
+		var previous: FlowStateDefinition = _find_state(machine, previous_id)
+		if previous != null:
+			_execute_phase(machine, previous, previous.exit_blocks, &"StateExit")
+			state_exited.emit(machine.get_internal_id(), previous_id)
+		var initial: FlowStateDefinition = machine.get_initial_state()
+		_active[machine.get_internal_id()] = initial.get_internal_id()
+		var registry: Dictionary = _dynamic_states.get(machine.get_internal_id(), {})
+		var retained: Dictionary = {}
+		for state_id: String in registry.keys():
+			var record: FlowFSMDynamicStateRecord = registry[state_id] as FlowFSMDynamicStateRecord
+			if record != null and record.lifetime != FlowFSMDynamicStateRecord.Lifetime.EPHEMERAL:
+				retained[state_id] = record
+		_dynamic_states[machine.get_internal_id()] = retained
+		_execute_phase(machine, initial, initial.enter_blocks, &"StateEnter")
+		state_entered.emit(machine.get_internal_id(), initial.get_internal_id())
+	return true
+
+
+## Returns a detached portable dictionary; EPHEMERAL and SESSION are omitted.
+func export_snapshot() -> Dictionary:
+	if not _running or _in_tick:
+		return {}
+	return FlowFSMSnapshotCodec.make_snapshot(_graph, _active, _dynamic_states)
+
+
+## Failed preflight leaves the currently running FSM completely unchanged.
+func restore_snapshot(snapshot: Variant) -> bool:
+	if not _running or _in_tick:
+		return false
+	var prepared: Dictionary = FlowFSMSnapshotCodec.prepare(snapshot, _graph, _active)
+	if not prepared.get("ok", false):
+		push_warning("[Flujo] FSM snapshot rejected: %s" % String(prepared.get("reason", "")))
+		return false
+	var next_active: Dictionary[String, String] = prepared["active"]
+	var next_dynamic: Dictionary[String, Dictionary] = prepared["dynamic"]
+	for machine: FlowStateMachineDefinition in _graph.state_machines:
+		if machine == null or not _active.has(machine.get_internal_id()):
+			continue
+		var old_id: String = get_active_state_id(machine.get_internal_id())
+		var old_state: FlowStateDefinition = _find_state(machine, old_id)
+		if old_state != null:
+			_execute_phase(machine, old_state, old_state.exit_blocks, &"StateExit")
+			state_exited.emit(machine.get_internal_id(), old_id)
+	_dynamic_states = next_dynamic
+	_active = next_active
+	_pending_requests.clear()
+	for machine: FlowStateMachineDefinition in _graph.state_machines:
+		if machine == null or not _active.has(machine.get_internal_id()):
+			continue
+		var current_id: String = get_active_state_id(machine.get_internal_id())
+		var current: FlowStateDefinition = _find_state(machine, current_id)
+		if current != null:
+			_execute_phase(machine, current, current.enter_blocks, &"StateEnter")
+			state_entered.emit(machine.get_internal_id(), current_id)
+	return true
+
+
+## Save only inside Godot's user:// sandbox and preserve last valid backup.
+func save_to_file(path: String) -> bool:
+	if not _snapshot_path_allowed(path):
+		return false
+	var snapshot: Dictionary = export_snapshot()
+	if snapshot.is_empty() or not FlowFSMDataValidator.valid_dictionary(snapshot):
+		return false
+	var json: String = JSON.stringify(snapshot, "\t")
+	if json.length() > FlowFSMDataValidator.MAX_JSON_LENGTH:
+		return false
+	var absolute: String = ProjectSettings.globalize_path(path)
+	if DirAccess.make_dir_recursive_absolute(absolute.get_base_dir()) != OK:
+		return false
+	var temporary: String = absolute + ".tmp"
+	var file: FileAccess = FileAccess.open(temporary, FileAccess.WRITE)
+	if file == null:
+		return false
+	file.store_string(json)
+	file.flush()
+	file = null
+	if FileAccess.get_file_as_string(temporary) != json:
+		DirAccess.remove_absolute(temporary)
+		return false
+	var prior: bool = FileAccess.file_exists(absolute)
+	var backup: String = absolute + ".bak"
+	if prior:
+		if FileAccess.file_exists(backup):
+			DirAccess.remove_absolute(backup)
+		if DirAccess.copy_absolute(absolute, backup) != OK:
+			DirAccess.remove_absolute(temporary)
+			return false
+	if DirAccess.rename_absolute(temporary, absolute) != OK:
+		# Some platforms do not atomically replace an existing destination.
+		if not prior or DirAccess.remove_absolute(absolute) != OK \
+				or DirAccess.rename_absolute(temporary, absolute) != OK:
+			if prior and FileAccess.file_exists(backup):
+				DirAccess.copy_absolute(backup, absolute)
+			if FileAccess.file_exists(temporary):
+				DirAccess.remove_absolute(temporary)
+			return false
+	return true
+
+
+func restore_from_file(path: String) -> bool:
+	if not _snapshot_path_allowed(path) or not FileAccess.file_exists(path):
+		return false
+	var contents: String = FileAccess.get_file_as_string(path)
+	if contents.length() > FlowFSMDataValidator.MAX_JSON_LENGTH:
+		return false
+	var decoded: Variant = JSON.parse_string(contents)
+	return restore_snapshot(decoded)
+
+
+func _snapshot_path_allowed(path: String) -> bool:
+	return path.begins_with("user://") and path.ends_with(".json") \
+		and not path.contains("..") and not path.contains("\\") \
+		and path.length() > "user://x.json".length()
