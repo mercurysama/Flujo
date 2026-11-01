@@ -39,3 +39,11 @@
 - Fill the pending queue with 256 events destined for B, check that A's request is rejected with `queue_full` without mutation, and that a subsequent B tick drains the burst, freeing capacity. This is a controller-level admission budget, **not** yet a chain-local execution budget.
 - Preserve unrelated machine behavior and all previous CI regression tests.
 - **Decision gate for 6C-2:** specify chain identity/provenance and per-tick budget plus affected-chain cancellation without discarding unrelated work; add a separate RED test before any production changes. A long-running but bounded one-transition-per-tick cycle is legitimate unless such a policy explicitly identifies it as saturated.
+
+## 6C-2 — Verified chain-local hop limit (2026-11-01)
+
+- **Contract:** `27fc4eda2df870dc84eb946c1c294f5c03b0b21b`; **RED test and CI:** `dbf00cc72626054d90ec165e3219cf7d672b4d46`, `1c767018fcd03426576009dc0e7e3e620d3fe473`, `f49181a87d071e173f49a5ce595696956dd79a16` ([Actions 41357182605](https://github.com/mercurysama/Flujo/actions/runs/41357182605) FAIL, expected).
+- **Runtime correction:** `612f57bf23cf47e3723f8e3f031300eed4fe454f` ([Actions 41357280685](https://github.com/mercurysama/Flujo/actions/runs/41357280685) **SUCCESS** across all existing tests).
+- Introduces per-controller lineage IDs; synchronous transition callbacks inherit a chain with an eight-commit hop limit. A ninth-hop enqueue is rejected with `chain_budget_exceeded`, pending descendants of the affected chain are filtered, and an unrelated request remains eligible.
+- **Not finished:** independent event-chain/multiple-sibling tests, per-tick CPU budget, all phase-6 direct-request payload/reason work, Potok editor and manual Android verification. See [6C-2 result](fsm_phase6_6c2_result.md) and [contract](fsm_phase6_6c2_chain_budget_contract.md).
+- **Next 6D:** test event-sourced lineages and sibling cancellation; keep commits small and preserve the phase-5 Tok/UI debt.
