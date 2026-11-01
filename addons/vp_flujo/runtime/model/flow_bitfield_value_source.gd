@@ -104,7 +104,7 @@ func _options_valid() -> bool:
 	for index: int in option_names.size():
 		var name: String = String(option_names[index]).strip_edges()
 		var value: int = option_values[index]
-		if name.is_empty() or value <= 0 				or (value & (value - 1)) != 0 				or seen_names.has(name) or seen_values.has(value):
+		if name.is_empty() 				or value <= 0 				or (value & (value - 1)) != 0 				or seen_names.has(name) 				or seen_values.has(value):
 			return false
 		seen_names[name] = true
 		seen_values[value] = true
