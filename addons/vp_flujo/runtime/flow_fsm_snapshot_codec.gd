@@ -77,9 +77,13 @@ static func prepare(
 		var template_id: String = String(entry.get("template_state_id", ""))
 		var lifetime: Variant = entry.get("lifetime", -1)
 		var record_data: Variant = entry.get("data")
+		# JSON.parse_string may decode integral numeric fields as floating-point.
+		var numeric_lifetime: bool = typeof(lifetime) in [TYPE_INT, TYPE_FLOAT] \
+			and is_finite(float(lifetime)) \
+			and float(lifetime) == float(int(lifetime))
 		if machine == null or not current_active.has(machine_id) \
 				or not FlowId.is_valid(alias_id) \
-				or typeof(lifetime) != TYPE_INT \
+				or not numeric_lifetime \
 				or int(lifetime) != FlowFSMDynamicStateRecord.Lifetime.PERSISTENT \
 				or typeof(record_data) != TYPE_DICTIONARY:
 			return {"ok": false, "reason": "snapshot_dynamic_identity_invalid"}
