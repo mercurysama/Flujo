@@ -123,7 +123,7 @@ func resolve(context: Variant = null) -> FlowValueResult:
 func is_valid() -> bool:
 	return FlowId.is_valid(_source_id) \
 		and FlowId.is_valid(variable_id) \
-		and FlowVariableDefinition.is_valid_value_type(declared_value_type) \
+		and FlowVariableDefinition.is_valid_variable_value_type(declared_value_type) \
 		and get_value_type() != Variant.Type.TYPE_NIL
 
 
@@ -156,7 +156,7 @@ func validate_structure(result: FlowValidationResult, element_path: String) -> v
 			element_path + ".variable_id",
 			variable_id
 		)
-	if not FlowVariableDefinition.is_valid_value_type(declared_value_type) \
+	if not FlowVariableDefinition.is_valid_variable_value_type(declared_value_type) \
 			or get_value_type() == Variant.Type.TYPE_NIL:
 		_add_error(
 			result,
