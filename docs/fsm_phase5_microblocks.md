@@ -119,3 +119,16 @@ The existing `flow_fsm_transitions_test.gd` already verifies direct requests, ev
 **Next small lot:** 5F-2 define how a consumed payload becomes available to an observer or compatible Tok at a deterministic tick boundary, independently of cross-machine authoring (phase 6). Maintain RED/GREEN separation and one narrow tested change per commit.
 
 **Recovery:** last runtime-code checkpoint `f27edb2fb7ec2b64cd14387e8804d0b79ee71efd`, then this docs commit. Read `docs/fsm_5f_event_envelope_contract.md` and latest CI run. Do not rename class APIs as a cosmetic consequence of Potok.
+
+## Potok / FSM-5F-2 — Observing consumed event payloads (2026-11-01)
+
+**Before this lot:** `59e8cb558306eb77c57538d1e8355883614f3815`.
+
+- **5F-2A contract:** commit `de7e4b0de954afd615a1a649534943b9e7d2032d`, [fsm_5f_event_envelope_contract.md](fsm_5f_event_envelope_contract.md). New portable `event_consumed(machine_id,event_name,payload)` notification emitted **after Update** on the matching clock and **before arbitration** once per queued event in FIFO order, including events with no matching edge. Observers receive a deep copy; listeners generating commands cannot bypass deferred-request rules. This is receipt/consumption, not guaranteed transition success.
+- **5F-2B RED:** commit `14dae4b143a106003a762950fb97c20402943aaf`: independent `tests/runtime/flow_fsm_event_consumption_test.gd/.tscn` plus bounded workflow focal. [Actions 41352804834](https://github.com/mercurysama/Flujo/actions/runs/41352804834) **FAIL** on the missing event signal, retained as evidence.
+- **5F-2C GREEN:** commit `59eaa042af38562872c532f15178340c9a7bf91e`: runtime signal and emission during matching-clock tick only, with `payload.duplicate(true)` for each emitted event. [Actions 41352843883](https://github.com/mercurysama/Flujo/actions/runs/41352843883) **SUCCESS** including 5F-2 and all existing model, navigation, Ready, snapshot, dynamic and FSM 5A–5F-1 regressions.
+- **Observed:** matched and unmatched events arrive in FIFO order, payload is detached from sender, other-clock item waits, callback-generated event cannot recursively tick or transition and is observed next matching tick, graph remains read-only.
+- **Known limitation:** signal payload is a *per-emission copy*, not a per-listener copy. Independent listeners should duplicate before mutation. No data binding to Condition Tok or block execution context yet; this is **not** approval of phase 5 full UI or Android.
+- **Next micro-lot:** `5G` examine stable rejection diagnostics (including queue overflow) or `5F-3` define a safe read-only condition/value binding contract; choose one bounded goal and create its focused test before modifying engine. Multi-machine API belongs to phase 6.
+
+**Recovery:** commit `59eaa042af38562872c532f15178340c9a7bf91e` is last production code change, then this documentation checkpoint. Read the 5F contract and latest CI. Historical RED/GREEN runs remain separate.
