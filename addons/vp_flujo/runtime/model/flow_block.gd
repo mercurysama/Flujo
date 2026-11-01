@@ -19,9 +19,30 @@ func validate_structure(_context: Dictionary) -> void:
 	pass
 
 
-## Extension hook for remapping IDs owned by a duplicated block.
-func remap_internal_references(_id_map: Dictionary[String, String]) -> void:
-	pass
+## Generic remap hook for graph-owned references embedded in block Akis.
+## Concrete blocks may extend this contract for additional reference families.
+func remap_internal_references(id_map: Dictionary[String, String]) -> void:
+	if id_map.is_empty():
+		return
+	for raw_property: Variant in get_property_list():
+		if not raw_property is Dictionary:
+			continue
+		var property: Dictionary = raw_property as Dictionary
+		var property_name: StringName = StringName(String(property.get("name", "")))
+		if property_name.is_empty():
+			continue
+		var property_value: Variant = get(property_name)
+		if not property_value is FlowStructuredDocument:
+			continue
+		var document: FlowStructuredDocument = property_value as FlowStructuredDocument
+		for segment: FlowDocumentSegment in document.segments:
+			var chip: FlowChipSegment = segment as FlowChipSegment
+			if chip == null:
+				continue
+			FlowValueSourceReferenceRemapper.remap_variable_ids(
+				chip.get_value_source(),
+				id_map
+			)
 
 
 func get_navigation_decision(_context: FlowNavigationContext) -> FlowNavigationDecision:
