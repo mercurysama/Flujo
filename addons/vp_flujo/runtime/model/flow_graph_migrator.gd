@@ -222,6 +222,13 @@ static func _copy_process(source: FlowProcess) -> FlowProcess:
 	var copy: FlowProcess = source.duplicate(false) as FlowProcess
 	copy._internal_id = source.get_internal_id()
 	_copy_blocks(source, copy)
+	return copy
+
+
+static func _copy_state(source: FlowStateDefinition) -> FlowStateDefinition:
+	var copy: FlowStateDefinition = source.duplicate(false) as FlowStateDefinition
+	copy._internal_id = source.get_internal_id()
+	_copy_blocks(source, copy)
 	copy.enter_blocks = []
 	for block: FlowBlock in source.enter_blocks:
 		copy.enter_blocks.append(_copy_block(block) if block != null else null)
@@ -230,14 +237,10 @@ static func _copy_process(source: FlowProcess) -> FlowProcess:
 		copy.exit_blocks.append(_copy_block(block) if block != null else null)
 	copy.transitions = []
 	for edge: FlowStateTransitionDefinition in source.transitions:
-		copy.transitions.append(edge.duplicate(true) as FlowStateTransitionDefinition if edge != null else null)
-	return copy
-
-
-static func _copy_state(source: FlowStateDefinition) -> FlowStateDefinition:
-	var copy: FlowStateDefinition = source.duplicate(false) as FlowStateDefinition
-	copy._internal_id = source.get_internal_id()
-	_copy_blocks(source, copy)
+		if edge == null:
+			copy.transitions.append(null)
+		else:
+			copy.transitions.append(edge.duplicate(true) as FlowStateTransitionDefinition)
 	return copy
 
 
