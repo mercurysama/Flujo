@@ -27,6 +27,9 @@ jobs:
         run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --quit-after 5
       - name: Behavior catalog validator
         run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . --script tests/governance/behavior_catalog_validator_test.gd
+      - name: Diagnose complex editor parser
+        continue-on-error: true
+        run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --check-only --script addons/vp_flujo/editor/flow_complex_value_editor.gd
       - name: Model baseline
         run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/model/flow_model_smoke_test.tscn
       - name: Ready baseline
