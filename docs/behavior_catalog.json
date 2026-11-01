@@ -1212,12 +1212,13 @@
       "id": "FLUJO-BHV-AKIS-LOT10-SCHEMA4-RUNTIME-001",
       "area": "Schema 4 Requirement-backed Akis runtime",
       "precondition": "A schema 4 FlowGraph has a valid constructor Requirement, a PVController binding, and a Ready Process whose block-owned Akis references that Requirement.",
-      "public_action": "Execute Constructor/Ready through FlowReadyExecutor and resolve the Requirement-backed Node or property through the shared FlowValueResolutionContext.",
-      "expected_result": "Schema 4 executes through the same generic block traversal as schema 3, live Requirement-backed values reach Akis/Print output, and malformed Requirement binding maps stop execution deterministically.",
+      "public_action": "Execute Ready or Timer through the schema 3/4 runtime path and resolve Requirement-backed Node/property values through the shared FlowValueResolutionContext.",
+      "expected_result": "Schema 4 Ready and Timer entries use the generic block traversal, live Requirement-backed values reach Akis output, malformed Requirement binding maps stop execution, and schema 4 legacy Constructor blocks remain inert.",
       "invariants": [
-        "FlowReadyExecutor supports schema 3 and schema 4 only; schema 5 remains on its separate runtime boundary.",
+        "FlowReadyExecutor supports schema 3 and schema 4 Process/Timer execution; schema 5 remains on its separate runtime boundary.",
+        "Schema 4 constructor.blocks remain inert legacy payload; declarative Constructor application and node creation are not introduced.",
         "Runtime never persists a direct Node/Object/Callable in FlowGraph; the controller owns requirement_id to NodePath bindings.",
-        "Requirement binding validation occurs before schema 4 block execution and invalid bindings do not silently fall back.",
+        "Requirement binding validation occurs before schema 4 Ready/Timer execution and invalid bindings do not silently fall back.",
         "A valid Requirement-backed property is re-read from the live scene on each execution pass."
       ],
       "coverage": "automatic",
@@ -1232,11 +1233,12 @@
       "area": "Composed ValueSource authoring inside Array and Dictionary",
       "precondition": "FlowComplexValueEditor edits an Array or Dictionary with an optional active FlowGraph and inherited scene/editor context.",
       "public_action": "Create or replace collection children through the shared source menu and existing Variable, Operation, Condition, and structured-value editors.",
-      "expected_result": "Collections can author scalar, VariableRef, Operation, Condition, Array, Dictionary, Resource, Enum, and Bitfield children without flattening them, and the resulting source tree resolves through the same runtime contracts.",
+      "expected_result": "Collections can author scalar, VariableRef, Operation, Condition, NodeRef, NodePropertyRef, Array, Dictionary, Resource, Enum, and Bitfield children without flattening them, and the resulting source tree resolves through the same runtime contracts.",
       "invariants": [
         "Existing scalar/Array/Dictionary authoring remains available for compatibility.",
         "Variable selection persists stable variable_id and the declared graph Variable type.",
         "Operation and Condition reuse their public editors rather than private collection-specific implementations.",
+        "Node and Node Property reuse the existing Scene Node panel/property picker and preserve requirement_id when one is already bound, with relative NodePath fallback otherwise.",
         "Structured child replacement preserves the existing source_id when replacing an occupied collection position.",
         "Recursive Array/Dictionary creation is bounded by the editor depth guard while non-collection composed sources remain available."
       ],
