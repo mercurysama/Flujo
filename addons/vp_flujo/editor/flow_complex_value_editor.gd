@@ -92,7 +92,7 @@ func _init() -> void:
 	_resource_dialog.name = &"ComplexResourceDialog"
 	_resource_dialog.file_mode = EditorFileDialog.FILE_MODE_OPEN_FILE
 	_resource_dialog.access = EditorFileDialog.ACCESS_RESOURCES
-	_resource_dialog.add_filter("*.tres,*.res", "Godot Resource")
+	_resource_dialog.add_filter("*.*", "Project Resource")
 	_resource_dialog.file_selected.connect(_on_resource_file_selected)
 	add_child(_resource_dialog)
 
