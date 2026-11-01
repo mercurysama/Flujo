@@ -257,7 +257,7 @@ func _build_enum(source: FlowEnumValueSource) -> void:
 		var item: int = selected.item_count
 		selected.add_item("%s = %d" % [source.option_names[index], source.option_values[index]])
 		selected.set_item_metadata(item, source.option_values[index])
-		if source.option_values[index] == source.selected_value:
+		if source.has_selection and source.option_values[index] == source.selected_value:
 			selected_index = item
 	selected.select(selected_index)
 	selected.item_selected.connect(_on_enum_selected.bind(selected))
@@ -623,6 +623,7 @@ func _on_enum_selected(index: int, menu: OptionButton) -> void:
 	var source: FlowEnumValueSource = _draft as FlowEnumValueSource
 	if source != null:
 		source.selected_value = int(menu.get_item_metadata(index))
+		source.has_selection = true
 		_refresh_preview_and_confirm()
 
 
