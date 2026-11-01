@@ -96,6 +96,10 @@ func _execute_blocks(controller: Node, graph: FlowGraph, container: FlowBlockCon
 							message_diagnostic.message 								if message_diagnostic != null 								else "Output block returned no runtime value.",
 						]
 					)
+				elif message_result.value_type != Variant.Type.TYPE_STRING:
+					push_warning(
+						"[Flujo] output_value_type_mismatch at %s: Output blocks must resolve String." % block_path
+					)
 				else:
 					output.write(
 						controller,
