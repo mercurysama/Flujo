@@ -8,6 +8,7 @@ var graph: FlowGraph = null
 var controller: PVController = null
 var scene_root: Node = null
 var _variable_values: Dictionary = {}
+var _resolving_variable_ids: Dictionary[String, bool] = {}
 
 
 func _init(
@@ -42,6 +43,21 @@ func get_variable_value(variable_id: String) -> Variant:
 
 func clear_runtime_values() -> void:
 	_variable_values.clear()
+
+
+func begin_variable_resolution(variable_id: String) -> bool:
+	if variable_id.is_empty() or _resolving_variable_ids.has(variable_id):
+		return false
+	_resolving_variable_ids[variable_id] = true
+	return true
+
+
+func end_variable_resolution(variable_id: String) -> void:
+	_resolving_variable_ids.erase(variable_id)
+
+
+func is_resolving_variable(variable_id: String) -> bool:
+	return _resolving_variable_ids.has(variable_id)
 
 
 func set_scene_context(new_controller: PVController, new_scene_root: Node = null) -> void:
