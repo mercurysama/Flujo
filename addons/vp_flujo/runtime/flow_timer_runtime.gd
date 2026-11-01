@@ -12,7 +12,10 @@ func start(controller: PVController) -> void:
 		return
 	_controller = controller
 	_graph = controller.flow_graph
-	if _graph == null or _graph.schema_version != FlowGraph.SCHEMA_VERSION_3:
+	if _graph == null or _graph.schema_version not in [
+		FlowGraph.SCHEMA_VERSION_3,
+		FlowGraph.SCHEMA_VERSION_4,
+	]:
 		return
 	var invalid_paths: Array[String] = []
 	for diagnostic: FlowDiagnostic in FlowGraphValidator.validate(_graph).diagnostics:
@@ -20,6 +23,21 @@ func start(controller: PVController) -> void:
 			invalid_paths.append(diagnostic.element_path)
 	if invalid_paths.has("graph"):
 		return
+	if _graph.schema_version == FlowGraph.SCHEMA_VERSION_4:
+		var binding_validation: FlowValidationResult = 			FlowGraphValidator.validate_requirement_bindings(
+				_graph,
+				_controller.requirement_bindings
+			)
+		for diagnostic: FlowDiagnostic in binding_validation.diagnostics:
+			if diagnostic != null 					and diagnostic.severity == FlowDiagnostic.Severity.ERROR:
+				push_warning(
+					"[Flujo] %s at %s: %s" % [
+						diagnostic.code,
+						diagnostic.element_path,
+						diagnostic.message,
+					]
+				)
+				return
 	for index: int in _graph.processes.size():
 		var definition: FlowTimerDefinition = _graph.processes[index] as FlowTimerDefinition
 		if definition == null or not definition.enabled:
