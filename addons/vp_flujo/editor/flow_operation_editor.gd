@@ -594,7 +594,7 @@ func _open_nested_operation_editor(
 	nested.open_for_operation(
 		source,
 		_graph,
-		button.get_global_rect() if button != null else get_global_rect(),
+		button.get_global_rect() if button != null else Rect2(Vector2(position), Vector2(size)),
 		{
 			"scene_controller": _scene_controller,
 			"scene_root": _scene_root,
