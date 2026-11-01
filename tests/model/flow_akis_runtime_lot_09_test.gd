@@ -11,6 +11,7 @@ func _ready() -> void:
 func _run() -> void:
 	_test_text_and_typed_resolution()
 	_test_complex_variable_defaults()
+	_test_resource_variable_boundary()
 	_test_variable_cycle_guard()
 	_test_graph_duplication_remaps_nested_variable_refs()
 	_finish()
@@ -124,6 +125,30 @@ func _test_complex_variable_defaults() -> void:
 		override.success and override.value == [9, 8, 7],
 		"Per-instance runtime variable value overrides the persisted complex default."
 	)
+
+
+func _test_resource_variable_boundary() -> void:
+	var resource_variable: FlowVariableDefinition = FlowVariableDefinition.new()
+	resource_variable.display_name = "Material"
+	resource_variable.value_type = FlowVariableDefinition.ValueType.RESOURCE
+	resource_variable.complex_value_source = FlowResourceRefValueSource.placeholder(
+		&"Resource"
+	)
+	var graph: FlowGraph = FlowGraph.new()
+	graph.variables = [resource_variable]
+	var context: FlowValueResolutionContext = FlowValueResolutionContext.new(graph)
+	context.set_variable_value(resource_variable.get_internal_id(), Node.new())
+	var result: FlowValueResult = FlowVariableRefValueSource.new(
+		resource_variable.get_internal_id(),
+		resource_variable.value_type
+	).resolve(context)
+	_check(
+		not result.success
+			and result.diagnostic != null
+			and result.diagnostic.code == FlowDiagnostic.CODE_VALUE_RESOLUTION_TYPE_MISMATCH,
+		"Resource Variable rejects Node runtime overrides despite shared TYPE_OBJECT."
+	)
+	(context.get_variable_value(resource_variable.get_internal_id()) as Node).free()
 
 
 func _test_variable_cycle_guard() -> void:
