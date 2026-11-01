@@ -924,7 +924,7 @@ func _add_variable_value_field(parent: Container, variable: FlowVariableDefiniti
 	var label: Label = Label.new()
 	label.text = "Value"
 	parent.add_child(label)
-	if not FlowVariableDefinition.is_valid_value_type(variable.value_type):
+	if not FlowVariableDefinition.is_valid_variable_value_type(variable.value_type):
 		var invalid: Label = Label.new()
 		invalid.name = &"VariableInvalidValueType"
 		invalid.text = "Invalid type (%d). Choose a valid Type to edit a value." % variable.value_type
