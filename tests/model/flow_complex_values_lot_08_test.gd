@@ -204,13 +204,6 @@ func _test_factory_projection() -> void:
 		FlowEnumValueSource.new(&"Mode", [&"A", &"B"], [0, 1], 1, true),
 		FlowBitfieldValueSource.new(&"Flags", [&"A", &"B"], [1, 2], 3),
 	]
-	var expected_classes: Array[StringName] = [
-		&"FlowArraySegment",
-		&"FlowDictionarySegment",
-		&"FlowResourceRefSegment",
-		&"FlowEnumSegment",
-		&"FlowBitfieldSegment",
-	]
 	for index: int in sources.size():
 		var source: FlowValueSource = sources[index]
 		var schema: FlowChipFieldSchema = _fixed_schema(
@@ -220,12 +213,23 @@ func _test_factory_projection() -> void:
 		)
 		var creation: FlowChipFieldCreationResult = FlowChipFieldFactory.new().create(schema)
 		_check(
-			creation.document != null
-				and creation.document.segments.size() == 1
-				and StringName(creation.document.segments[0].get_class()) == expected_classes[index],
-			"Factory projects %s to its semantic Tok." % String(source.get_source_kind())
+			creation.document != null and creation.document.segments.size() == 1,
+			"Factory creates one semantic complex Tok for %s." % String(source.get_source_kind())
 		)
-
+		if creation.document == null or creation.document.segments.size() != 1:
+			continue
+		var segment: FlowDocumentSegment = creation.document.segments[0]
+		var correct_class: bool = (
+			(index == 0 and segment is FlowArraySegment)
+			or (index == 1 and segment is FlowDictionarySegment)
+			or (index == 2 and segment is FlowResourceRefSegment)
+			or (index == 3 and segment is FlowEnumSegment)
+			or (index == 4 and segment is FlowBitfieldSegment)
+		)
+		_check(
+			correct_class,
+			"Factory projects %s to its dedicated Tok class." % String(source.get_source_kind())
+		)
 
 func _test_deep_duplication() -> void:
 	var graph: FlowGraph = FlowGraph.new()
