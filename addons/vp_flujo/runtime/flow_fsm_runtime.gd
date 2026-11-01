@@ -14,6 +14,8 @@ signal machine_stopped(machine_id: String, state_id: String)
 signal transition_committed(machine_id: String, from_state_id: String, to_state_id: String, trigger_id: String)
 
 const MAX_PENDING_REQUESTS: int = 256
+## Max committed hops inherited through transition lifecycle callbacks.
+const MAX_CHAIN_HOPS: int = 8
 const MAX_DYNAMIC_STATES: int = 128
 
 var _controller: PVController
@@ -21,6 +23,10 @@ var _graph: FlowGraph
 var _active: Dictionary[String, String] = {}
 var _pending_requests: Array[Dictionary] = []
 var _inflight_reserved: int = 0
+var _next_chain_id: int = 1
+var _committing_chain_id: int = 0
+var _committing_chain_hop: int = 0
+var _blocked_chains: Dictionary[int, bool] = {}
 var _dynamic_states: Dictionary[String, Dictionary] = {}
 var _running: bool = false
 var _in_tick: bool = false
@@ -66,6 +72,10 @@ func start(controller: PVController) -> bool:
 	_stop_after_tick = false
 	_pending_requests.clear()
 	_dynamic_states.clear()
+	_next_chain_id = 1
+	_committing_chain_id = 0
+	_committing_chain_hop = 0
+	_blocked_chains.clear()
 	for machine: FlowStateMachineDefinition in graph.state_machines:
 		if machine == null or not machine.enabled or not machine.auto_start or machine.states.is_empty():
 			continue
@@ -102,10 +112,29 @@ func request_transition(machine_id: String, target_state_id: String) -> bool:
 	if _pending_requests.size() + _inflight_reserved >= MAX_PENDING_REQUESTS:
 		request_rejected.emit(machine_id, &"direct", &"queue_full")
 		return false
+	var lineage: Dictionary = _admit_chain_hop(machine_id, &"direct")
+	if lineage.is_empty():
+		return false
 	_pending_requests.append({
-		"kind": &"direct", "machine_id": machine_id, "target_id": target_state_id
+		"kind": &"direct", "machine_id": machine_id, "target_id": target_state_id,
+		"chain_id": lineage["chain_id"], "chain_hop": lineage["chain_hop"]
 	})
 	return true
+
+
+## A root starts a distinct lineage; requests from transition callbacks inherit it.
+## The saturated lineage is blocked without denying unrelated valid roots.
+func _admit_chain_hop(machine_id: String, kind: StringName) -> Dictionary:
+	var chain_id: int = _committing_chain_id
+	var chain_hop: int = _committing_chain_hop + 1 if chain_id != 0 else 1
+	if chain_id != 0 and chain_hop > MAX_CHAIN_HOPS:
+		_blocked_chains[chain_id] = true
+		request_rejected.emit(machine_id, kind, &"chain_budget_exceeded")
+		return {}
+	if chain_id == 0:
+		chain_id = _next_chain_id
+		_next_chain_id += 1
+	return {"chain_id": chain_id, "chain_hop": chain_hop}
 
 
 ## Event delivery is deferred until the machine's next matching tick.
@@ -126,11 +155,15 @@ func emit_event(machine_id: String, event_name: StringName, payload: Dictionary 
 	if _pending_requests.size() + _inflight_reserved >= MAX_PENDING_REQUESTS:
 		request_rejected.emit(machine_id, &"event", &"queue_full")
 		return false
+	var lineage: Dictionary = _admit_chain_hop(machine_id, &"event")
+	if lineage.is_empty():
+		return false
 	_pending_requests.append({
 		"kind": &"event",
 		"machine_id": machine_id,
 		"event_name": event_name,
-		"payload": payload.duplicate(true)
+		"payload": payload.duplicate(true),
+		"chain_id": lineage["chain_id"], "chain_hop": lineage["chain_hop"]
 	})
 	return true
 
@@ -142,6 +175,7 @@ func tick(delta: float, mode: int = FlowStateMachineDefinition.TickMode.PROCESS)
 	if not _controller.can_execute_visual_program() or _controller.flow_graph != _graph:
 		return
 	_in_tick = true
+	_blocked_chains.clear()
 	last_delta = delta
 	var incoming: Array[Dictionary] = _pending_requests
 	_pending_requests = []
@@ -170,7 +204,8 @@ func tick(delta: float, mode: int = FlowStateMachineDefinition.TickMode.PROCESS)
 		# for a future tick, and other-clock packets are not observed here.
 		for request: Dictionary in incoming:
 			if request.get("kind") != &"event" \
-					or String(request.get("machine_id", "")) != machine_id:
+					or String(request.get("machine_id", "")) != machine_id \
+					or _blocked_chains.has(int(request.get("chain_id", 0))):
 				continue
 			var packet: Dictionary = request.get("payload", {})
 			event_consumed.emit(
@@ -181,11 +216,19 @@ func tick(delta: float, mode: int = FlowStateMachineDefinition.TickMode.PROCESS)
 			candidate = _pick_condition(machine, state)
 		var target_id: String = String(candidate.get("target_id", ""))
 		if not target_id.is_empty() and target_id != state_id:
-			_commit_transition(machine, state, target_id, String(candidate.get("trigger_id", "")))
+			_commit_transition(machine, state, target_id,
+				String(candidate.get("trigger_id", "")),
+				int(candidate.get("chain_id", 0)), int(candidate.get("chain_hop", 1)))
 	# Requests raised in Update/Enter/Exit are deferred to the next matching tick.
 	leftovers.append_array(_pending_requests)
-	_pending_requests = leftovers
+	# A saturated chain loses its queued descendants, not unrelated roots.
+	var kept: Array[Dictionary] = []
+	for request: Dictionary in leftovers:
+		if not _blocked_chains.has(int(request.get("chain_id", 0))):
+			kept.append(request)
+	_pending_requests = kept
 	_inflight_reserved = 0
+	_blocked_chains.clear()
 	_in_tick = false
 	if _stop_after_tick:
 		_stop_after_tick = false
@@ -214,6 +257,9 @@ func stop() -> void:
 	_pending_requests.clear()
 	_dynamic_states.clear()
 	_active.clear()
+	_blocked_chains.clear()
+	_committing_chain_id = 0
+	_committing_chain_hop = 0
 	_running = false
 	_controller = null
 	_graph = null
@@ -231,13 +277,18 @@ func _pick_request(
 	var best_order: int = 2147483647
 	for request_index: int in requests.size():
 		var request: Dictionary = requests[request_index]
-		if String(request.get("machine_id", "")) != machine_id:
+		if String(request.get("machine_id", "")) != machine_id \
+				or _blocked_chains.has(int(request.get("chain_id", 0))):
 			continue
 		if request.get("kind") == &"direct":
 			var target_id: String = String(request.get("target_id", ""))
 			var target: FlowStateDefinition = _find_state(machine, target_id)
 			if target != null and target.enabled and target_id != state.get_internal_id():
-				return {"target_id": target_id, "trigger_id": "direct"}
+				return {
+					"target_id": target_id, "trigger_id": "direct",
+					"chain_id": request.get("chain_id", 0),
+					"chain_hop": request.get("chain_hop", 1)
+				}
 		elif request.get("kind") == &"event":
 			for edge_index: int in state.transitions.size():
 				var edge: FlowStateTransitionDefinition = state.transitions[edge_index]
@@ -252,7 +303,12 @@ func _pick_request(
 					continue
 				var order: int = request_index * (state.transitions.size() + 1) + edge_index
 				if edge.priority > best_priority or (edge.priority == best_priority and order < best_order):
-					best = {"target_id": edge.target_state_id, "trigger_id": edge.get_internal_id()}
+					best = {
+						"target_id": edge.target_state_id,
+						"trigger_id": edge.get_internal_id(),
+						"chain_id": request.get("chain_id", 0),
+						"chain_hop": request.get("chain_hop", 1)
+					}
 					best_priority = edge.priority
 					best_order = order
 	return best
@@ -284,11 +340,20 @@ func _commit_transition(
 		machine: FlowStateMachineDefinition,
 		state: FlowStateDefinition,
 		target_id: String,
-		trigger_id: String
+		trigger_id: String,
+		chain_id: int = 0,
+		chain_hop: int = 1
 ) -> void:
 	var target: FlowStateDefinition = _find_state(machine, target_id)
 	if target == null or not target.enabled:
 		return
+	if chain_id == 0:
+		chain_id = _next_chain_id
+		_next_chain_id += 1
+	var previous_chain_id: int = _committing_chain_id
+	var previous_chain_hop: int = _committing_chain_hop
+	_committing_chain_id = chain_id
+	_committing_chain_hop = chain_hop
 	var machine_id: String = machine.get_internal_id()
 	var old_id: String = get_active_state_id(machine_id)
 	_execute_phase(machine, state, state.exit_blocks, &"StateExit")
@@ -297,6 +362,8 @@ func _commit_transition(
 	_execute_phase(machine, target, target.enter_blocks, &"StateEnter")
 	state_entered.emit(machine_id, target_id)
 	transition_committed.emit(machine_id, old_id, target_id, trigger_id)
+	_committing_chain_id = previous_chain_id
+	_committing_chain_hop = previous_chain_hop
 
 
 func _find_machine(machine_id: String) -> FlowStateMachineDefinition:
