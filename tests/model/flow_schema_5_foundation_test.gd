@@ -60,7 +60,7 @@ func _rich(schema: int = FlowGraph.SCHEMA_VERSION_5) -> FlowGraph:
 	method.blocks = [FlowEverythingFlowsBlock.new(), null]
 	if schema == FlowGraph.SCHEMA_VERSION_5:
 		method.outputs = [FlowMethodOutputDefinition.new(), null]
-		for value_type: int in FlowVariableDefinition.ValueType.values():
+		for value_type: int in range(FlowVariableDefinition.ValueType.BOOL, FlowVariableDefinition.ValueType.COLOR + 1):
 			var instance_attribute: FlowAttributeDefinition = _attribute("Instance%d" % value_type, FlowAttributeDefinition.Storage.INSTANCE)
 			instance_attribute.value_type = value_type as FlowVariableDefinition.ValueType
 			graph.constructor.attributes.append(instance_attribute)
