@@ -294,7 +294,7 @@ func _build_resource(source: FlowResourceRefValueSource) -> void:
 	var path_row: HBoxContainer = HBoxContainer.new()
 	var path_input: LineEdit = LineEdit.new()
 	path_input.name = &"ResourcePath"
-	path_input.text = source.resource_path
+	path_input.text = source.referenced_path
 	path_input.placeholder_text = "res://..."
 	path_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	path_input.text_changed.connect(_on_resource_path_changed)
@@ -900,7 +900,7 @@ func _on_resource_type_changed(value: String) -> void:
 func _on_resource_path_changed(value: String) -> void:
 	var source: FlowResourceRefValueSource = _draft as FlowResourceRefValueSource
 	if source != null:
-		source.resource_path = value
+		source.referenced_path = value
 		_refresh_preview_and_confirm()
 
 
@@ -912,7 +912,7 @@ func _browse_resource() -> void:
 func _on_resource_file_selected(path: String) -> void:
 	var source: FlowResourceRefValueSource = _draft as FlowResourceRefValueSource
 	if source != null:
-		source.resource_path = path
+		source.referenced_path = path
 		_rebuild()
 
 

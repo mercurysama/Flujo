@@ -51,7 +51,7 @@ func get_chip_tooltip_data() -> FlowChipTooltipData:
 		return data
 	data.add_field("Preview", source.get_preview())
 	data.add_field("Resource Type", String(source.resource_type_hint))
-	data.add_field("Path", source.resource_path if source.has_path() else "<unbound>")
+	data.add_field("Path", source.referenced_path if source.has_path() else "<unbound>")
 	return data
 
 

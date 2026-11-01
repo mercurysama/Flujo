@@ -7,7 +7,7 @@ extends FlowValueSource
 const SOURCE_KIND: StringName = FlowValueSource.SOURCE_KIND_RESOURCE_REF
 const PRODUCED_TYPE: Variant.Type = Variant.Type.TYPE_OBJECT
 
-@export_storage var resource_path: String = ""
+@export_storage var referenced_path: String = ""
 @export_storage var resource_type_hint: StringName = &"Resource"
 
 
@@ -15,7 +15,7 @@ func _init(
 		new_resource_path: String = "",
 		new_resource_type_hint: StringName = &"Resource"
 ) -> void:
-	resource_path = new_resource_path
+	referenced_path = new_resource_path
 	resource_type_hint = new_resource_type_hint
 
 
@@ -28,7 +28,7 @@ func get_value_type() -> Variant.Type:
 
 
 func has_path() -> bool:
-	return not resource_path.strip_edges().is_empty()
+	return not referenced_path.strip_edges().is_empty()
 
 
 func is_valid() -> bool:
@@ -40,7 +40,7 @@ func get_preview() -> String:
 		return "Resource<%s>" % String(resource_type_hint)
 	return "%s(%s)" % [
 		String(resource_type_hint),
-		resource_path.get_file(),
+		referenced_path.get_file(),
 	]
 
 
@@ -53,7 +53,7 @@ func validate_structure(result: FlowValidationResult, element_path: String) -> v
 			FlowDiagnostic.CODE_RESOURCE_REF_PATH_MISSING,
 			FlowDiagnostic.Severity.WARNING,
 			"ResourceRef is structurally valid but no resource path is selected.",
-			element_path + ".resource_path",
+			element_path + ".referenced_path",
 			_source_id
 		))
 	if String(resource_type_hint).strip_edges().is_empty():
@@ -71,13 +71,13 @@ func resolve(_context: Variant = null) -> FlowValueResult:
 			FlowDiagnostic.CODE_RESOURCE_REF_PATH_MISSING,
 			"ResourceRef has no selected resource path."
 		)
-	if not ResourceLoader.exists(resource_path):
+	if not ResourceLoader.exists(referenced_path):
 		return _failure(
 			FlowDiagnostic.CODE_RESOURCE_REF_MISSING,
 			"ResourceRef path does not exist."
 		)
 	var resource: Resource = ResourceLoader.load(
-		resource_path,
+		referenced_path,
 		"",
 		ResourceLoader.CACHE_MODE_REUSE
 	)

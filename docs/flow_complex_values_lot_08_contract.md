@@ -121,7 +121,7 @@ ResourceRef is a project-resource reference, not an Object literal.
 
 It persists:
 
-- `resource_path`
+- `referenced_path`
 - `resource_type_hint`
 
 The path may reference any loadable project Resource under `res://`; the editor
