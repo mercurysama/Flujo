@@ -5,6 +5,10 @@ var _failures: Array[String] = []
 
 
 func _ready() -> void:
+	get_tree().create_timer(12.0).timeout.connect(func() -> void:
+		push_error("[Flujo] FSM 004 snapshot test timed out before quit.")
+		get_tree().quit(1)
+	)
 	_run.call_deferred()
 
 
