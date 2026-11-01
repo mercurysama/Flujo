@@ -47,3 +47,12 @@
 - Introduces per-controller lineage IDs; synchronous transition callbacks inherit a chain with an eight-commit hop limit. A ninth-hop enqueue is rejected with `chain_budget_exceeded`, pending descendants of the affected chain are filtered, and an unrelated request remains eligible.
 - **Not finished:** independent event-chain/multiple-sibling tests, per-tick CPU budget, all phase-6 direct-request payload/reason work, Potok editor and manual Android verification. See [6C-2 result](fsm_phase6_6c2_result.md) and [contract](fsm_phase6_6c2_chain_budget_contract.md).
 - **Next 6D:** test event-sourced lineages and sibling cancellation; keep commits small and preserve the phase-5 Tok/UI debt.
+
+## 6D — Event lineage, sibling cancellation and controller isolation (2026-11-01)
+
+- **Contract commit:** `435dd379c04669bcf11594ed94d9a89c45de43cc`, `docs/fsm_phase6_6d_contract.md`.
+- **Test:** `19da090c52fa591c364396375aac809b5a1b4c5d`, scene `2644fb16129bf298f5ba43984dbda1288c73b79c`, isolated workflow focal `4c0c37d3ecc5fb6b044f653462ce788425dbf7e6`.
+- [GitHub Actions 41357686834](https://github.com/mercurysama/Flujo/actions/runs/41357686834) **SUCCESS**, including 6D and every preceding Potok/model/Ready/navigation regression step.
+- **Verified:** graph-defined event transitions carry inherited lineage across A↔B clock ticks; an event generated within Enter is delivered on its matching clock, budget is enforced after hop eight, and exactly one ninth-hop direct request is rejected with `chain_budget_exceeded`. A sibling request queued on the seventh hop is removed when its lineage saturates, while an independently seeded request to the same third machine remains queued and later commits. A second controller sharing the identical authored `FlowGraph` starts its own independent root, changes state, and does not change the first controller's state.
+- **Production runtime unchanged.** No graph schema, snapshots, editor or public API changes. These are behavioral characterization assertions, not evidence of a general per-tick CPU budget.
+- **Next micro-lot 6E:** audit the remaining phase-6 scope: explicit reason/payload for direct requests and per-tick processing budget, plus chain-failure fault injection. Separate contractual decision before writing engine code. Potok Condition Tok UI integration and manual Android review remain pending.
