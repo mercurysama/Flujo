@@ -7,6 +7,7 @@ var graph: FlowGraph
 var container: FlowBlockContainer
 var current_block_id: String
 var entry_point: StringName
+var value_resolution_context: FlowValueResolutionContext
 
 
 func _init(
@@ -14,9 +15,12 @@ func _init(
 		new_graph: FlowGraph,
 		new_container: FlowBlockContainer,
 		new_current_block_id: String,
-		new_entry_point: StringName) -> void:
+		new_entry_point: StringName,
+		new_value_resolution_context: FlowValueResolutionContext = null
+) -> void:
 	controller = new_controller
 	graph = new_graph
 	container = new_container
 	current_block_id = new_current_block_id
 	entry_point = new_entry_point
+	value_resolution_context = new_value_resolution_context
