@@ -965,6 +965,8 @@ static func _get_internal_id(resource: Resource) -> String:
 		return (resource as FlowVariableDefinition).get_internal_id()
 	if resource is FlowStateMachineDefinition:
 		return (resource as FlowStateMachineDefinition).get_internal_id()
+	if resource is FlowStateTransitionDefinition:
+		return (resource as FlowStateTransitionDefinition).get_internal_id()
 	return ""
 
 
