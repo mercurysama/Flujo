@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/runtime/flow_akis_runtime_lot_09_test.gd" id="1_lot09_runtime"]
+
+[node name="FlowAkisRuntimeLot09Test" type="Node"]
+script = ExtResource("1_lot09_runtime")
