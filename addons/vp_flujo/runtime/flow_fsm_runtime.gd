@@ -9,6 +9,8 @@ signal state_updated(machine_id: String, state_id: String)
 signal event_consumed(machine_id: String, event_name: StringName, payload: Dictionary)
 ## Stable rejection codes for runtime admission; no payload is leaked.
 signal request_rejected(machine_id: String, kind: StringName, code: StringName)
+## Reports matching-clock packets postponed by the per-machine work budget.
+signal work_budget_deferred(machine_id: String, deferred_count: int)
 signal state_exited(machine_id: String, state_id: String)
 signal machine_stopped(machine_id: String, state_id: String)
 signal transition_committed(machine_id: String, from_state_id: String, to_state_id: String, trigger_id: String)
@@ -16,6 +18,8 @@ signal transition_committed(machine_id: String, from_state_id: String, to_state_
 signal direct_transition_committed(machine_id: String, from_state_id: String, to_state_id: String, reason: StringName, payload: Dictionary)
 
 const MAX_PENDING_REQUESTS: int = 256
+## At most this many queued packets are delivered per machine on each matching tick.
+const MAX_REQUESTS_PER_MACHINE_TICK: int = 32
 ## Max committed hops inherited through transition lifecycle callbacks.
 const MAX_CHAIN_HOPS: int = 8
 const MAX_DYNAMIC_STATES: int = 128
@@ -191,14 +195,29 @@ func tick(delta: float, mode: int = FlowStateMachineDefinition.TickMode.PROCESS)
 	last_delta = delta
 	var incoming: Array[Dictionary] = _pending_requests
 	_pending_requests = []
+	var deliverable: Array[Dictionary] = []
 	var leftovers: Array[Dictionary] = []
-	# Reserve capacity for requests which must survive until another clock ticks.
-	# A callback cannot accept a request that the final queue would silently drop.
+	var per_machine_used: Dictionary[String, int] = {}
+	var per_machine_deferred: Dictionary[String, int] = {}
+	# Keep original queue order, but select at most 32 packets per matching
+	# machine. Other-clock and same-clock surplus both reserve queue capacity.
 	for item: Dictionary in incoming:
-		var target_machine: FlowStateMachineDefinition = _find_machine(String(item.get("machine_id", "")))
-		if target_machine != null and target_machine.tick_mode != mode \
-				and _active.has(target_machine.get_internal_id()):
+		var machine_id: String = String(item.get("machine_id", ""))
+		var target_machine: FlowStateMachineDefinition = _find_machine(machine_id)
+		if target_machine == null or not target_machine.enabled or not _active.has(machine_id):
+			continue
+		if target_machine.tick_mode != mode:
 			leftovers.append(item)
+			continue
+		var used: int = per_machine_used.get(machine_id, 0)
+		if used >= MAX_REQUESTS_PER_MACHINE_TICK:
+			leftovers.append(item)
+			per_machine_deferred[machine_id] = per_machine_deferred.get(machine_id, 0) + 1
+			continue
+		deliverable.append(item)
+		per_machine_used[machine_id] = used + 1
+	# A callback cannot accept an item whose reserved carryover would
+	# subsequently exceed the existing 256-item global queue limit.
 	_inflight_reserved = leftovers.size()
 	for machine: FlowStateMachineDefinition in _graph.state_machines:
 		if machine == null or not machine.enabled or machine.tick_mode != mode:
@@ -212,9 +231,11 @@ func tick(delta: float, mode: int = FlowStateMachineDefinition.TickMode.PROCESS)
 			continue
 		_execute_phase(machine, state, state.blocks, &"StateUpdate")
 		state_updated.emit(machine_id, state_id)
+		if per_machine_deferred.has(machine_id):
+			work_budget_deferred.emit(machine_id, per_machine_deferred[machine_id])
 		# Deliver detached packet data before arbitration; callbacks may enqueue only
 		# for a future tick, and other-clock packets are not observed here.
-		for request: Dictionary in incoming:
+		for request: Dictionary in deliverable:
 			if request.get("kind") != &"event" \
 					or String(request.get("machine_id", "")) != machine_id \
 					or _blocked_chains.has(int(request.get("chain_id", 0))):
@@ -223,7 +244,7 @@ func tick(delta: float, mode: int = FlowStateMachineDefinition.TickMode.PROCESS)
 			event_consumed.emit(
 				machine_id, request.get("event_name", &""), packet.duplicate(true)
 			)
-		var candidate: Dictionary = _pick_request(machine, state, incoming)
+		var candidate: Dictionary = _pick_request(machine, state, deliverable)
 		if candidate.is_empty():
 			candidate = _pick_condition(machine, state)
 		var target_id: String = String(candidate.get("target_id", ""))
