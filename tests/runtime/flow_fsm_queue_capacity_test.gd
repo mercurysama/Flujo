@@ -67,8 +67,15 @@ func _run() -> void:
 		"Overflow callback cannot change the active state.")
 	_check(runtime.pending_request_count() == limit,
 		"All older cross-clock requests are retained; nothing accepted is silently lost.")
-	runtime.tick(0.1, FlowStateMachineDefinition.TickMode.PHYSICS)
-	_check(runtime.pending_request_count() == 0, "Target clock drains its unmatched events.")
+	# 6G: a single machine now delivers 32 accepted packets per matching
+	# tick, so the original 256-capacity admission test drains in eight ticks.
+	for tick_index: int in FlowFSMRuntime.MAX_PENDING_REQUESTS / FlowFSMRuntime.MAX_REQUESTS_PER_MACHINE_TICK:
+		runtime.tick(0.1, FlowStateMachineDefinition.TickMode.PHYSICS)
+		var remaining: int = FlowFSMRuntime.MAX_PENDING_REQUESTS \
+				- (tick_index + 1) * FlowFSMRuntime.MAX_REQUESTS_PER_MACHINE_TICK
+		_check(runtime.pending_request_count() == remaining,
+			"Budgeted cross-clock carryover remains intact at tick %d." % tick_index)
+	_check(runtime.pending_request_count() == 0, "Target clock drains unmatched events without loss.")
 	runtime.tick(0.1, FlowStateMachineDefinition.TickMode.MANUAL)
 	_check(callback_results == [false, true], "Callback is admitted after capacity is freed.")
 	_check(runtime.get_active_state_id(m) == idle.get_internal_id(),
