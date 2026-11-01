@@ -332,6 +332,7 @@ Model focal covers:
 - invalid typed-document shape;
 - Array/Dictionary Variable defaults;
 - per-instance runtime override;
+- Resource Variable rejection of Node runtime overrides;
 - recursive Variable cycle rejection;
 - complex source duplication;
 - nested VariableRef remap inside complex Variables;
@@ -352,6 +353,7 @@ Editor focal covers:
 - automatic structured default creation;
 - shared FlowComplexValueEditor;
 - source_id preservation;
+- complex-to-scalar source cleanup;
 - chronological Undo/Redo across Type and structured-value edits.
 
 ## Verification gate
