@@ -108,7 +108,8 @@ func _execute_blocks(controller: Node, graph: FlowGraph, container: FlowBlockCon
 			graph,
 			container,
 			block.get_internal_id(),
-			entry_point
+			entry_point,
+			resolution_context
 		)
 		var decision: FlowNavigationDecision = block.get_navigation_decision(context)
 		if decision == null or not decision.is_well_formed():
