@@ -126,6 +126,31 @@ func _run() -> void:
 		"Redo reapplies type creation and structured edit in chronological order."
 	)
 
+	type_option = inspector.find_child(
+		"VariableTypeOption",
+		true,
+		false
+	) as OptionButton
+	var int_index: int = _item_index(type_option, "INT")
+	if type_option != null and int_index >= 0:
+		type_option.select(int_index)
+		type_option.item_selected.emit(int_index)
+	await _frames(3)
+	_check(
+		variable.value_type == FlowVariableDefinition.ValueType.INT
+			and variable.complex_value_source == null,
+		"Changing a complex Variable back to scalar clears its active structured source."
+	)
+	history.undo()
+	await _frames(2)
+	edited = variable.complex_value_source as FlowArrayValueSource
+	_check(
+		variable.value_type == FlowVariableDefinition.ValueType.ARRAY
+			and edited != null
+			and edited.elements.size() == 1,
+		"Undo of complex-to-scalar restores the previous structured source."
+	)
+
 	host.queue_free()
 	await _frames(1)
 	_finish()
