@@ -52,6 +52,9 @@ jobs:
           else
             echo 'FSM dynamic test missing; not a PASS'
           fi
+      - name: Potok-6G per-machine tick work budget focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 30s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_tick_work_budget_test.tscn
       - name: Potok-6F-1 direct metadata focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 30s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_direct_request_metadata_test.tscn
