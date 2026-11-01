@@ -86,12 +86,28 @@ func resolve(_context: Variant = null) -> FlowValueResult:
 			FlowDiagnostic.CODE_RESOURCE_REF_MISSING,
 			"ResourceRef could not load its resource."
 		)
-	if not String(resource_type_hint).is_empty() 			and not resource.is_class(String(resource_type_hint)):
+	if not _matches_type_hint(resource):
 		return _failure(
 			FlowDiagnostic.CODE_RESOURCE_REF_TYPE_MISMATCH,
 			"Loaded Resource class does not match the authored type hint."
 		)
 	return FlowValueResult.ok(resource, PRODUCED_TYPE)
+
+
+func _matches_type_hint(resource: Resource) -> bool:
+	if resource == null:
+		return false
+	var expected: String = String(resource_type_hint).strip_edges()
+	if expected.is_empty() or expected == "Resource":
+		return true
+	if resource.is_class(expected):
+		return true
+	var script: Script = resource.get_script() as Script
+	while script != null:
+		if String(script.get_global_name()) == expected:
+			return true
+		script = script.get_base_script()
+	return false
 
 
 func duplicate_with_new_id() -> FlowValueSource:
