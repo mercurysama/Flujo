@@ -211,7 +211,9 @@ func _pick_request(
 						or edge.event_name != request.get("event_name"):
 					continue
 				var target: FlowStateDefinition = _find_state(machine, edge.target_state_id)
-				if target == null or not target.enabled:
+				# A same-state event is a no-op, not an arbitration winner.
+				if target == null or not target.enabled \
+						or edge.target_state_id == get_active_state_id(machine_id):
 					continue
 				var order: int = request_index * (state.transitions.size() + 1) + edge_index
 				if edge.priority > best_priority or (edge.priority == best_priority and order < best_order):
