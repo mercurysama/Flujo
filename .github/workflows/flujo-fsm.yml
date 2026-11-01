@@ -36,6 +36,14 @@ jobs:
         run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_ready_runtime_test.tscn
       - name: Navigation baseline
         run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_navigation_runtime_test.tscn
+      - name: FSM transition focal (when present)
+        shell: bash
+        run: |
+          if test -f tests/runtime/flow_fsm_transitions_test.tscn; then
+            ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_transitions_test.tscn
+          else
+            echo 'FSM transition test not authored yet; not counted as PASS'
+          fi
       - name: FSM runtime focal (when present)
         shell: bash
         run: |
