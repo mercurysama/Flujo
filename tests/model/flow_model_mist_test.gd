@@ -303,7 +303,7 @@ func _test_typed_variable_metadata_validation() -> void:
 		_check(diagnostic.related_id == schema_3_ids[diagnostic_index])
 	_check(invalid_schema_3_variable.scope == -1)
 	_check(invalid_schema_3_variable.binding == 2)
-	_check(invalid_schema_3_variable.value_type == 7)
+	_check(invalid_schema_3_variable.value_type == FlowVariableDefinition.ValueType.RESOURCE + 1)
 	_check(invalid_parameter_negative.value_type == -1)
 	_check(invalid_parameter_upper.value_type == 7)
 	_check(invalid_return.value_type == -1)
