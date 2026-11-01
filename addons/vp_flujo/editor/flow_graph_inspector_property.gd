@@ -1048,7 +1048,7 @@ func _on_variable_complex_edit(variable_id: String, anchor: Control) -> void:
 	if controller == null or controller.flow_graph == null:
 		return
 	var variable: FlowVariableDefinition = _selected_variable(controller.flow_graph)
-	if variable == null or variable.get_internal_id() != variable_id 			or variable.complex_value_source == null:
+	if variable == null 			or variable.get_internal_id() != variable_id 			or variable.complex_value_source == null:
 		return
 	_variable_complex_edit_id = variable_id
 	_ensure_variable_complex_editor().open_for_source(
@@ -1359,6 +1359,9 @@ func get_preferred_interaction_focus_target() -> Control:
 ## Cancels only local transient editor state while preserving the stable-ID selection.
 func close_transient_interfaces() -> void:
 	_close_delete_confirmation()
+	_variable_complex_edit_id = ""
+	if is_instance_valid(_variable_complex_editor) and _variable_complex_editor.visible:
+		_variable_complex_editor.hide()
 	var process_editor: FlowReadyProcessEditor = _content.find_child("ReadyProcessEditor", true, false) as FlowReadyProcessEditor
 	if process_editor != null:
 		process_editor.close_transient_interfaces()
