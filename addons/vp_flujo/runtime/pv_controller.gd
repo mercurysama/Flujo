@@ -19,6 +19,7 @@ var runtime_output: FlowRuntimeOutput = FlowRuntimeOutput.new()
 var value_resolution_context: FlowValueResolutionContext
 var _ready_executed: bool = false
 var _timer_runtime: FlowTimerRuntime
+var _fsm_runtime: FlowFSMRuntime
 ## Transient schema 5 state. These fields are deliberately not exported.
 var instance_runtime_store: FlowInstanceRuntimeStore
 var class_runtime_store: FlowClassRuntimeStore
@@ -32,11 +33,19 @@ var visual_program_enabled: bool = true:
 		visual_program_enabled = value
 		if not value:
 			_stop_timers()
+			_stop_state_machines()
+		elif _ready_executed and is_inside_tree() and not Engine.is_editor_hint():
+			_start_state_machines()
 		visual_program_enabled_changed.emit(value)
 
 
 func can_execute_visual_program() -> bool:
 	return visual_program_enabled and is_inside_tree()
+
+
+## Runtime state is controller-local, never saved into FlowGraph.
+func get_fsm_runtime() -> FlowFSMRuntime:
+	return _fsm_runtime
 
 
 func get_value_resolution_context() -> FlowValueResolutionContext:
@@ -66,6 +75,7 @@ func _ready() -> void:
 	if can_execute_visual_program():
 		FlowReadyExecutor.new().execute(self, flow_graph, runtime_output)
 		_start_timers()
+		_start_state_machines()
 
 
 func _enter_tree() -> void:
@@ -74,9 +84,11 @@ func _enter_tree() -> void:
 		return
 	if not Engine.is_editor_hint() and _ready_executed:
 		_start_timers()
+		_start_state_machines()
 
 
 func _exit_tree() -> void:
+	_stop_state_machines()
 	if instance_runtime_store != null:
 		instance_runtime_store.close()
 	instance_runtime_store = null
@@ -132,3 +144,27 @@ func _stop_timers() -> void:
 		_timer_runtime.stop()
 		_timer_runtime.queue_free()
 	_timer_runtime = null
+
+## Godot clocks drive only the corresponding machine tick mode.
+func _process(delta: float) -> void:
+	if not Engine.is_editor_hint() and _fsm_runtime != null:
+		_fsm_runtime.tick(delta, FlowStateMachineDefinition.TickMode.PROCESS)
+
+
+func _physics_process(delta: float) -> void:
+	if not Engine.is_editor_hint() and _fsm_runtime != null:
+		_fsm_runtime.tick(delta, FlowStateMachineDefinition.TickMode.PHYSICS)
+
+
+func _start_state_machines() -> void:
+	if Engine.is_editor_hint() or not can_execute_visual_program() or _fsm_runtime != null:
+		return
+	var candidate: FlowFSMRuntime = FlowFSMRuntime.new()
+	if candidate.start(self):
+		_fsm_runtime = candidate
+
+
+func _stop_state_machines() -> void:
+	if _fsm_runtime != null:
+		_fsm_runtime.stop()
+	_fsm_runtime = null
