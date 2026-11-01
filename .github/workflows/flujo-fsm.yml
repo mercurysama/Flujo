@@ -52,6 +52,9 @@ jobs:
           else
             echo 'FSM dynamic test missing; not a PASS'
           fi
+      - name: Potok-5F-1 typed event envelope focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 30s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_event_envelope_test.tscn
       - name: FSM-5E self-event arbitration focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 30s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_self_event_test.tscn
