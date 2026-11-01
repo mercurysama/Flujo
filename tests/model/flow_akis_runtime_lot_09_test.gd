@@ -173,6 +173,20 @@ func _test_graph_duplication_remaps_nested_variable_refs() -> void:
 	graph.constructor = FlowConstructorDefinition.new()
 	graph.variables = [source, dependent]
 
+	var print_block: FlowPrintBlock = FlowPrintBlock.new()
+	print_block.content = FlowStructuredDocument.new()
+	print_block.content.segments = [
+		FlowVariableRefSegment.new(
+			FlowVariableRefValueSource.new(
+				source.get_internal_id(),
+				source.value_type
+			)
+		),
+	]
+	var process: FlowProcess = FlowProcess.new()
+	process.blocks = [print_block]
+	graph.processes = [process]
+
 	var copy: FlowGraph = graph.duplicate_with_new_ids()
 	_check(copy != null and copy.variables.size() == 2, "Graph duplicate preserves complex variables.")
 	if copy == null or copy.variables.size() != 2:
@@ -186,6 +200,16 @@ func _test_graph_duplication_remaps_nested_variable_refs() -> void:
 			and copied_dependent.complex_value_source.source_id 				!= dependent.complex_value_source.source_id
 			and nested_ref.variable_id == copied_source.get_internal_id(),
 		"Graph duplication renews owned source IDs and remaps nested VariableRef identity."
+	)
+
+	var copied_print: FlowPrintBlock = copy.processes[0].blocks[0] as FlowPrintBlock
+	var copied_chip: FlowVariableRefSegment = copied_print.content.segments[0] as FlowVariableRefSegment
+	var copied_block_ref: FlowVariableRefValueSource = 		copied_chip.get_value_source() as FlowVariableRefValueSource
+	_check(
+		copied_print != print_block
+			and copied_print.content != print_block.content
+			and copied_block_ref.variable_id == copied_source.get_internal_id(),
+		"Graph duplication deep-copies block Akis and remaps its nested VariableRef."
 	)
 
 
