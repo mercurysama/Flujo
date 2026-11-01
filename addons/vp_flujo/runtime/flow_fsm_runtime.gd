@@ -5,6 +5,8 @@ extends RefCounted
 signal machine_started(machine_id: String, state_id: String)
 signal state_entered(machine_id: String, state_id: String)
 signal state_updated(machine_id: String, state_id: String)
+## Fired for each event consumed by its machine clock, even without a matching edge.
+signal event_consumed(machine_id: String, event_name: StringName, payload: Dictionary)
 signal state_exited(machine_id: String, state_id: String)
 signal machine_stopped(machine_id: String, state_id: String)
 signal transition_committed(machine_id: String, from_state_id: String, to_state_id: String, trigger_id: String)
@@ -145,6 +147,16 @@ func tick(delta: float, mode: int = FlowStateMachineDefinition.TickMode.PROCESS)
 			continue
 		_execute_phase(machine, state, state.blocks, &"StateUpdate")
 		state_updated.emit(machine_id, state_id)
+		# Deliver detached packet data before arbitration; callbacks may enqueue only
+		# for a future tick, and other-clock packets are not observed here.
+		for request: Dictionary in incoming:
+			if request.get("kind") != &"event" \
+					or String(request.get("machine_id", "")) != machine_id:
+				continue
+			var packet: Dictionary = request.get("payload", {})
+			event_consumed.emit(
+				machine_id, request.get("event_name", &""), packet.duplicate(true)
+			)
 		var candidate: Dictionary = _pick_request(machine, state, incoming)
 		if candidate.is_empty():
 			candidate = _pick_condition(machine, state)
