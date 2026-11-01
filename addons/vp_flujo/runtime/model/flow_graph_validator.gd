@@ -266,8 +266,13 @@ static func _validate_variable_metadata(
 			"%s.binding" % variable_path,
 			variable_id
 		)
-	_validate_value_type(variable.value_type, "%s.value_type" % variable_path, variable_id, result)
-	if not FlowVariableDefinition.is_complex_value_type(variable.value_type):
+	_validate_variable_value_type(
+		variable.value_type,
+		"%s.value_type" % variable_path,
+		variable_id,
+		result
+	)
+	if not FlowVariableDefinition.is_valid_variable_value_type(variable.value_type) 			or not FlowVariableDefinition.is_complex_value_type(variable.value_type):
 		return
 	var source: FlowValueSource = variable.complex_value_source
 	if source == null:
@@ -297,6 +302,22 @@ static func _validate_variable_metadata(
 		"%s.complex_value_source" % variable_path,
 		graph
 	)
+
+
+static func _validate_variable_value_type(
+		value_type: int,
+		element_path: String,
+		related_id: String,
+		result: FlowValidationResult
+) -> void:
+	if not FlowVariableDefinition.is_valid_variable_value_type(value_type):
+		_add_error(
+			result,
+			FlowDiagnostic.CODE_INVALID_VALUE_TYPE,
+			"Value type is not supported by FlowVariableDefinition.",
+			element_path,
+			related_id
+		)
 
 
 static func _validate_value_type(
