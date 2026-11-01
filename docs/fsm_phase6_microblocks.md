@@ -64,3 +64,11 @@
 - Stable-ID directed cross-machine scheduling, callback deferral, eight-hop chain isolation and earlier FSM regression matrix are automated-pass. No engine change in this audit.
 - **Not closed:** typed reason/payload metadata on direct requests; per-tick work budget distinct from 256 admission cap and eight-hop lineage limit; negative target-disable/scene-tree permutations and release/manual validation.
 - **Next independent lot 6F-1:** contract-first direct-request reason/payload semantics, preserve two-argument API and original `transition_committed` signal; RED test, minimal GREEN, regression CI. Then 6G per-tick budget, 6H negative/fault tests. Phase-5 Tok/UI and phase-7 Android review remain separate.
+
+## 6F-1 — Typed direct request metadata accepted (2026-11-01)
+
+- **Contract:** `f8630d20f5fd6a2947ad45fbd77e376cce36c617`. **RED test and CI:** `9dac7cefb3140a642d92299a18c9dee7fe6b1393` + `87726b0f8ae3208b5d3855f706800b09b496f426` + workflow `c935d757799ed0f34656c6b4f886b071e550d290` ([Actions 41359653289](https://github.com/mercurysama/Flujo/actions/runs/41359653289) FAIL, expected).
+- **Production GREEN:** `d0e670af2af8dd5f86009d83f7bb5b7e214e2f89` ([Actions 41359760201](https://github.com/mercurysama/Flujo/actions/runs/41359760201) **SUCCESS** all regressions).
+- Existing `request_transition(machine_id,target_state_id)` now optionally takes `reason: StringName` and validated `payload: Dictionary`; old callers and four-argument `transition_committed` remain compatible. A new `direct_transition_committed` signal delivers detached metadata only for committed direct requests.
+- Rejection `invalid_reason` for reason beyond 128 characters; `invalid_payload` for unsafe/unbounded data. FIFO, cross-clock scheduling, lineage and graph immutability remain verified. See [6F-1 result](fsm_phase6_6f1_result.md) and [contract](fsm_phase6_6f1_direct_request_contract.md).
+- **Next 6G:** separate per-tick processing budget and fairness contract/test. This is not equivalent to global 256 queue cap or eight-hop lineage guard; Potok UI/Android and Condition Tok binding remain pending.
