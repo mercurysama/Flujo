@@ -5,7 +5,11 @@ extends Resource
 
 @export_storage var _internal_id: String = FlowId.create()
 
+enum TickMode { PROCESS, PHYSICS, MANUAL }
+
 @export var display_name: String = "State Machine"
+@export var tick_mode: TickMode = TickMode.PROCESS
+@export var auto_start: bool = true
 @export var enabled: bool = true
 @export_multiline var user_note: String = ""
 @export var states: Array[FlowStateDefinition] = []
@@ -58,6 +62,8 @@ func duplicate_with_new_ids() -> FlowStateMachineDefinition:
 
 	copy._internal_id = FlowId.create()
 	copy.display_name = display_name
+	copy.tick_mode = tick_mode
+	copy.auto_start = auto_start
 	copy.enabled = enabled
 	copy.user_note = user_note
 	copy.states = []

@@ -376,8 +376,24 @@ static func _validate_state_machines(
 
 			owner_container_ids[state.get_internal_id()] = true
 			_validate_blocks(state, state_path, graph, result, seen_instances, seen_ids)
+			_validate_fsm_phase(state.enter_blocks, state_path + ".enter", graph, result, seen_instances, seen_ids)
+			_validate_fsm_phase(state.exit_blocks, state_path + ".exit", graph, result, seen_instances, seen_ids)
 
 		_validate_initial_state_reference(state_machine, machine_path, result)
+
+
+## Validate optional phase blocks under the same global identity registry.
+static func _validate_fsm_phase(
+		blocks: Array[FlowBlock],
+		path: String,
+		graph: FlowGraph,
+		result: FlowValidationResult,
+		seen_instances: Dictionary[int, String],
+		seen_ids: Dictionary[String, String]
+) -> void:
+	var phase: FlowBlockContainer = FlowBlockContainer.new()
+	phase.blocks = blocks
+	_validate_blocks(phase, path, graph, result, seen_instances, seen_ids)
 
 
 static func _validate_initial_state_reference(

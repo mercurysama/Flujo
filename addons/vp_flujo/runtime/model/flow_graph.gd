@@ -107,7 +107,21 @@ func _duplicate_state(
 	copy._internal_id = FlowId.create()
 	id_map[state.get_internal_id()] = copy.get_internal_id()
 	_duplicate_blocks(state, copy, id_map)
+	copy.enter_blocks = _duplicate_fsm_phase(state.enter_blocks, id_map)
+	copy.exit_blocks = _duplicate_fsm_phase(state.exit_blocks, id_map)
 	return copy
+
+
+func _duplicate_fsm_phase(source: Array[FlowBlock], id_map: Dictionary[String, String]) -> Array[FlowBlock]:
+	var result: Array[FlowBlock] = []
+	for block: FlowBlock in source:
+		if block == null:
+			result.append(null)
+			continue
+		var copy: FlowBlock = block.duplicate_with_new_id()
+		id_map[block.get_internal_id()] = copy.get_internal_id()
+		result.append(copy)
+	return result
 
 
 func _duplicate_blocks(
@@ -249,6 +263,8 @@ func _remap_method_call_references(
 		for state: FlowStateDefinition in state_machine.states:
 			if state != null:
 				_remap_method_calls_in_blocks(state.blocks, id_map)
+				_remap_method_calls_in_blocks(state.enter_blocks, id_map)
+				_remap_method_calls_in_blocks(state.exit_blocks, id_map)
 
 	if copy.constructor != null:
 		_remap_method_calls_in_blocks(copy.constructor.blocks, id_map)
@@ -281,6 +297,8 @@ func _remap_block_references(copy: FlowGraph, id_map: Dictionary[String, String]
 		for state: FlowStateDefinition in state_machine.states:
 			if state != null:
 				_remap_block_references_in_blocks(state.blocks, id_map)
+				_remap_block_references_in_blocks(state.enter_blocks, id_map)
+				_remap_block_references_in_blocks(state.exit_blocks, id_map)
 	if copy.constructor != null:
 		_remap_block_references_in_blocks(copy.constructor.blocks, id_map)
 	for method: FlowMethodDefinition in copy.methods:
