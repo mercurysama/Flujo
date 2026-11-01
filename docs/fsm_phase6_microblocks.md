@@ -1,0 +1,3 @@
+# Potok 6A — deferred requests between machines
+
+2026-11-01. Contract: machine A (manual clock) requests a transition of machine B (physics clock) from A's Update callback. This must enqueue; B changes only on its own next tick, with Update(old), Exit(old), Enter(new) and delayed Update(new). A recursive tick called inside A's callback must be ignored. Unknown machine and foreign target must be rejected with existing diagnostics without adding queued items. Authored graph stays immutable; old APIs stay intact. This micro-lot adds one isolated headless test before any engine correction. Reason payload, cyclical chains and UI remain for later phase-6 work.
