@@ -34,6 +34,20 @@ Iteration 6 completed the schema 3 structural model, its atomic migration, const
 
 Next UI hardening is Android interaction validation, removal/hiding of the legacy visible dock after acceptance, panel-proportion tuning, and Themes + Motion before the first stable release. Broader runtime execution, debugging, packages, inherited-scene customization, and per-instance runtime-state work continue under their existing contracts.
 
+## UI / accessibility contract (Fluo Preview 1)
+
+The following rules are authoritative for new authoring surfaces, including future State Machines; detailed examples and evidence live in [Fluo Preview 1](docs/fluo_preview_01.md), [Current Iteration](docs/current_iteration.md) and [Project Memory](docs/project_memory.md).
+
+- **Names:** **Fluo** is the whole sliding drawer, **Flow** is the left block/list panel, **Flusso** is the right configuration panel; **Inspector** remains the native Godot Inspector. Keep internal VP/PV identifiers unchanged.
+- **Entry:** Enter or double-click on an existing Inspector container row opens Fluo with Flow visible. Do not duplicate a `Blocks` list in the Inspector. Enter or double-click on a Flow item opens Flusso.
+- **Focus:** Open Flow at its first existing item (or Add button if empty); opening/closing Flusso must preserve and restore selection and actual keyboard focus after UI rebuilds.
+- **Keyboard:** Up/Down moves within Flow; Ctrl+PageUp/PageDown cycles Flow items; plain PageUp/PageDown cycles Inspector container views while keeping Flow focus and visibly syncing Inspector selection; Alt+PageUp/PageDown cycles Flusso controls, and Alt+Shift reverses it; Escape closes Flusso first and Fluo second.
+- **Edits:** Supported Flusso edits persist immediately. Closing does not cancel or commit; **Revertir** restores the configuration snapshot captured at session opening. Deletion is a separate, explicit action. All authored mutations use Undo/Redo, validation, and persistent IDs.
+- **Input and layout:** The entire drawer switches sides; scrolling, target sizes, double-tap, portrait/landscape and external keyboards require dedicated Android checks. Host-owned Theme/Motion must not break logical container layout, input hitboxes, keyboard focus or reduced-motion policy.
+- **Review:** The manual desktop and Android acceptance matrices are distinct; headless/automated success never implies visual or touch acceptance.
+
+The full [FSM implementation plan](docs/fsm_implementation_plan.md) and [FSM iteration learning journal](docs/fsm_iteration_01_learning.md) track State Machine implementation, risks, tests and skill lessons without claiming unfinished features are available.
+
 ## Requirements
 
 - Godot 4.7.2 stable.
