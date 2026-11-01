@@ -71,3 +71,33 @@ The existing `flow_fsm_transitions_test.gd` already verifies direct requests, ev
 - **Next micro-lot:** phase 5 audit of remaining acceptance gaps before calling the phase complete. Specifically inspect ignored self events, disabled targets, conditional ties, and whether any machine-to-machine behavior should remain in phase 6.
 
 **Recovery:** use this file and latest CI run to resume. Next task remains one limited change with dedicated test, followed by a separate commit if production correction is necessary.
+
+## FSM-5E — Phase 5 end audit / self-event mismatch (2026-11-01)
+
+**Start HEAD:** `5192185e63f6fff20a1334d9c12f240289967920`. The audit compared the numbered phase-5 checklist against `docs/fsm_transition_contract_v1.md`, runtime, validator and the 5A–5D tests. Do **not** infer full phase closure from the green automated suite.
+
+**RED:** `a6b75ee44c4a6bdefda32a2a1a4c193c68ab7fab` — adds `tests/runtime/flow_fsm_self_event_test.gd/.tscn`, with two higher-priority unusable edges (one self, one disabled destination) and one lower-priority usable target. [CI 41351598674](https://github.com/mercurysama/Flujo/actions/runs/41351598674) **FAILED** on the new focal. Root cause: the EVENT selector admitted self-target edges as arbitration winners, unlike the CONDITION selector, and `tick()` then discarded the winner as a no-op, shadowing a valid lower-priority candidate.
+
+**GREEN:** `e08c6772b42423ae7a337ec83ff0a3eb055fba18` — one minimal check in `FlowFSMRuntime._pick_request` skips event edges targeting the currently active state; existing disabled-target rejection remains unchanged. [CI 41351659685](https://github.com/mercurysama/Flujo/actions/runs/41351659685) **SUCCESS** for 5E and all existing FSM/Ready/navigation/model regressions. No schema, UI or public API change.
+
+### Explicit phase-5 acceptance audit
+
+| Topic | Status / evidence |
+|---|---|
+| Stable transition ID, same-machine target, trigger, priority, enable flag | Implemented, model/validator and original FSM-002 focal |
+| Condition bool evaluation after Update | Implemented, original 002 and 5B focals |
+| Event emission/consumption, single transition per tick | Implemented, 5A/5D/5E focals |
+| Direct queue deferral, FIFO, event priority/declaration order | Implemented, 5A/5D focals |
+| Atomic Exit→active ID→Enter and next-tick Update | Implemented, original 002, 5A and 5B focals |
+| Invalid target, non-bool condition, malformed event name | Model/runtime rejection in existing validator, 5A/5B; broader negative matrix still useful |
+| Self event target and disabled edge fallback | **Corrected and verified in 5E** |
+| **Typed event payload and declared event scope** | **NOT IMPLEMENTED**; `emit_event(machine_id,event_name)` carries no payload |
+| **Runtime saturation and failure diagnostic policy** | **PARTIAL**; bounded queue returns false but does not expose a dedicated failure diagnostic for overflow |
+| **Condition Tok # authoring surface** | **NOT IMPLEMENTED IN FSM UI**; underlying bool sources supported |
+| **Full human/Android visual acceptance** | **NOT RUN** |
+
+**Decision:** phase 5's bounded deterministic, payload-free transition kernel is automated-pass, but **do not mark all nine numbered phase-5 steps complete**. The contract originally narrowed `emit_event` to a name and no payload. The broader numbered plan explicitly asks for typed payload/scope and stable diagnostics. These are separately implementable follow-ups, with cross-machine payload API naturally shared with phase 6. Do not silently weaken the numbered plan to claim closure.
+
+**Next small lot 5F:** define typed event payload and scope as a narrow, public contract *before* implementation, then implement one small part with its own tests/commit. If maintainer prefers moving those API decisions to phase 6, record that explicit scope decision; do not assume approval.
+
+**Recovery:** current branch `feature/fsm-runtime-flow-flusso`, baseline `e08c6772b42423ae7a337ec83ff0a3eb055fba18` with passing CI above. Preserve historical red run, tests, exact fix commit and checklist. Do not begin large UI-FSM or multi-machine refactors as a side effect of closing phase 5.
