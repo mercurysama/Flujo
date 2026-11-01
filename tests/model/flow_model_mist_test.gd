@@ -220,7 +220,7 @@ func _test_typed_variable_metadata_validation() -> void:
 	var invalid_value_type_negative: FlowVariableDefinition = FlowVariableDefinition.new()
 	invalid_value_type_negative.value_type = -1
 	var invalid_value_type_upper: FlowVariableDefinition = FlowVariableDefinition.new()
-	invalid_value_type_upper.value_type = 7
+	invalid_value_type_upper.value_type = FlowVariableDefinition.ValueType.RESOURCE + 1
 	invalid_schema_2.variables = [invalid_scope_negative, invalid_scope_upper, invalid_binding_negative, invalid_binding_upper, invalid_value_type_negative, invalid_value_type_upper]
 	var schema_2_first: FlowValidationResult = FlowGraphValidator.validate(invalid_schema_2)
 	var schema_2_second: FlowValidationResult = FlowGraphValidator.validate(invalid_schema_2)
