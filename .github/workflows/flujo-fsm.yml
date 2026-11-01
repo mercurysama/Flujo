@@ -52,6 +52,9 @@ jobs:
           else
             echo 'FSM dynamic test missing; not a PASS'
           fi
+      - name: Potok-6C-1 bounded cycle focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 30s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_bounded_cycle_test.tscn
       - name: Potok-6B cross-machine lifecycle focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 30s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_cross_machine_lifecycle_test.tscn
