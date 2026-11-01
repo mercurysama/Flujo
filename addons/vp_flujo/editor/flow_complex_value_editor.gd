@@ -199,6 +199,11 @@ func can_confirm() -> bool:
 	return true
 
 
+## PopupPanel is a Window, not a Control: expose its screen-space anchor.
+func _window_rect() -> Rect2:
+	return Rect2(Vector2(position), Vector2(size))
+
+
 func _rebuild() -> void:
 	if _body == null:
 		return
@@ -520,7 +525,7 @@ func _open_new_complex_source(
 	_ensure_nested_editor().open_for_source(
 		source,
 		_graph,
-		anchor.get_global_rect() if is_instance_valid(anchor) else get_global_rect(),
+		anchor.get_global_rect() if is_instance_valid(anchor) else _window_rect(),
 		child_context
 	)
 
@@ -538,7 +543,7 @@ func _open_variable_source(
 		context["current_variable_id"] = 			(source as FlowVariableRefValueSource).variable_id
 	_variable_selector.open_for_variables(
 		_graph.variables,
-		anchor.get_global_rect() if is_instance_valid(anchor) else get_global_rect(),
+		anchor.get_global_rect() if is_instance_valid(anchor) else _window_rect(),
 		"",
 		context
 	)
@@ -556,7 +561,7 @@ func _open_operation_source(
 	_operation_editor.open_for_operation(
 		operation,
 		_graph,
-		anchor.get_global_rect() if is_instance_valid(anchor) else get_global_rect(),
+		anchor.get_global_rect() if is_instance_valid(anchor) else _window_rect(),
 		context
 	)
 
@@ -570,7 +575,7 @@ func _open_condition_source(
 	_condition_editor.open_for_condition(
 		source as FlowConditionValueSource,
 		_graph,
-		anchor.get_global_rect() if is_instance_valid(anchor) else get_global_rect(),
+		anchor.get_global_rect() if is_instance_valid(anchor) else _window_rect(),
 		_context
 	)
 
@@ -657,7 +662,7 @@ func _open_node_property_source(
 	_pending_replace = replace_action
 	_node_property_picker.open_for_types(
 		CHILD_PROPERTY_TYPES,
-		anchor.get_global_rect() if is_instance_valid(anchor) else get_global_rect()
+		anchor.get_global_rect() if is_instance_valid(anchor) else _window_rect()
 	)
 
 
@@ -763,7 +768,7 @@ func _open_nested_source(source: FlowValueSource, replace_action: Callable) -> v
 	_ensure_nested_editor().open_for_source(
 		source,
 		_graph,
-		get_global_rect(),
+		_window_rect(),
 		child_context
 	)
 
