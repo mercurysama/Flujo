@@ -56,3 +56,11 @@
 - **Verified:** graph-defined event transitions carry inherited lineage across A↔B clock ticks; an event generated within Enter is delivered on its matching clock, budget is enforced after hop eight, and exactly one ninth-hop direct request is rejected with `chain_budget_exceeded`. A sibling request queued on the seventh hop is removed when its lineage saturates, while an independently seeded request to the same third machine remains queued and later commits. A second controller sharing the identical authored `FlowGraph` starts its own independent root, changes state, and does not change the first controller's state.
 - **Production runtime unchanged.** No graph schema, snapshots, editor or public API changes. These are behavioral characterization assertions, not evidence of a general per-tick CPU budget.
 - **Next micro-lot 6E:** audit the remaining phase-6 scope: explicit reason/payload for direct requests and per-tick processing budget, plus chain-failure fault injection. Separate contractual decision before writing engine code. Potok Condition Tok UI integration and manual Android review remain pending.
+
+## 6E — Phase 6 gap audit and planning gate (2026-11-01)
+
+- Full numbered 7-point acceptance matrix: [6E audit](fsm_phase6_6e_audit.md). Documentation-only commit `a3ae38b0004b4d466d1d3a9a9fad1e8d497da4d1`.
+- Pre-audit baseline `499711314c1e11465c0c59fb528eb1f8e95f3a8d` passed [Actions 41357770163](https://github.com/mercurysama/Flujo/actions/runs/41357770163); 6D focal passed [Actions 41357686834](https://github.com/mercurysama/Flujo/actions/runs/41357686834).
+- Stable-ID directed cross-machine scheduling, callback deferral, eight-hop chain isolation and earlier FSM regression matrix are automated-pass. No engine change in this audit.
+- **Not closed:** typed reason/payload metadata on direct requests; per-tick work budget distinct from 256 admission cap and eight-hop lineage limit; negative target-disable/scene-tree permutations and release/manual validation.
+- **Next independent lot 6F-1:** contract-first direct-request reason/payload semantics, preserve two-argument API and original `transition_committed` signal; RED test, minimal GREEN, regression CI. Then 6G per-tick budget, 6H negative/fault tests. Phase-5 Tok/UI and phase-7 Android review remain separate.
