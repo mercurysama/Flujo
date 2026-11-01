@@ -10,11 +10,11 @@ func execute(controller: Node, graph: FlowGraph, output: FlowRuntimeOutput, entr
 	if graph.schema_version != FlowGraph.SCHEMA_VERSION_3:
 		push_warning("[Flujo] Ready requires an explicitly migrated schema 3 FlowGraph.")
 		return
-	var resolution_context: FlowValueResolutionContext = FlowValueResolutionContext.new(
-		graph,
-		controller as PVController,
-		controller.get_tree().current_scene if controller != null and controller.is_inside_tree() else null
-	)
+	var resolution_context: FlowValueResolutionContext = 		(controller as PVController).get_value_resolution_context() 		if controller is PVController 		else FlowValueResolutionContext.new(
+			graph,
+			null,
+			controller.get_tree().current_scene 				if controller != null and controller.is_inside_tree() else null
+		)
 	var invalid_paths: Array[String] = []
 	var validation: FlowValidationResult = FlowGraphValidator.validate(graph)
 	for diagnostic: FlowDiagnostic in validation.diagnostics:
