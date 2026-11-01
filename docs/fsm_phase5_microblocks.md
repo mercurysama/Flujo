@@ -101,3 +101,21 @@ The existing `flow_fsm_transitions_test.gd` already verifies direct requests, ev
 **Next small lot 5F:** define typed event payload and scope as a narrow, public contract *before* implementation, then implement one small part with its own tests/commit. If maintainer prefers moving those API decisions to phase 6, record that explicit scope decision; do not assume approval.
 
 **Recovery:** current branch `feature/fsm-runtime-flow-flusso`, baseline `e08c6772b42423ae7a337ec83ff0a3eb055fba18` with passing CI above. Preserve historical red run, tests, exact fix commit and checklist. Do not begin large UI-FSM or multi-machine refactors as a side effect of closing phase 5.
+
+## Potok / FSM-5F-1 — Typed event payload admission (2026-11-01)
+
+**Public name:** **Potok**, the user-facing name for the State Machine system, selected from the project's multilingual flow glossary. Technical classes and stable serialized names remain unchanged; no FSM editor UI is renamed in this lot.
+
+**Contract-first checkpoint:** `20bd97957ec57ff36f914aa88aa49ea3d19ca255` adds [fsm_5f_event_envelope_contract.md](fsm_5f_event_envelope_contract.md). Scope: machine-ID-directed events, validated JSON-safe `Dictionary` payload, queue isolation and deep copying; no new schema and no public consumer yet.
+
+**RED:** `b4367d69558379400d37da13d7715db26e28a89c` adds `tests/runtime/flow_fsm_event_envelope_test.gd/.tscn` and an isolated CI focal. [Actions 41352181305](https://github.com/mercurysama/Flujo/actions/runs/41352181305) **FAIL**, expected before the optional-argument API existed.
+
+**GREEN:** `f27edb2fb7ec2b64cd14387e8804d0b79ee71efd` updates only `FlowFSMRuntime.emit_event` with optional `payload: Dictionary = {}`, reuses `FlowFSMDataValidator.valid_dictionary`, rejects unsafe/non-JSON/oversized inputs and deep-copies accepted envelopes into the controller-local queue. No registry, graph, storage format or source mutation. [Actions 41352245217](https://github.com/mercurysama/Flujo/actions/runs/41352245217) **SUCCESS** including the focal and all existing FSM/Ready/navigation/model regressions.
+
+**Verified:** existing two-argument event calls remain functional; nested payload is detached; Node/non-string keys/oversized data rejected without queue mutation; valid payload event matches and is consumed; missing machine rejected.
+
+**Pending:** verified public delivery of payload to a handler, typed event consumption/condition binding and runtime diagnostics; event scope remains single-machine only. The name Potok remains documentation-only until the UI-FSM phase. **Phase 5 is not formally complete** and visual/Android acceptance is not claimed.
+
+**Next small lot:** 5F-2 define how a consumed payload becomes available to an observer or compatible Tok at a deterministic tick boundary, independently of cross-machine authoring (phase 6). Maintain RED/GREEN separation and one narrow tested change per commit.
+
+**Recovery:** last runtime-code checkpoint `f27edb2fb7ec2b64cd14387e8804d0b79ee71efd`, then this docs commit. Read `docs/fsm_5f_event_envelope_contract.md` and latest CI run. Do not rename class APIs as a cosmetic consequence of Potok.
