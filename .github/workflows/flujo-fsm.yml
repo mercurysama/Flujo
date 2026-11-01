@@ -52,6 +52,12 @@ jobs:
           else
             echo 'FSM dynamic test missing; not a PASS'
           fi
+      - name: Potok-6H1 negative routing and scene order focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 30s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_negative_routing_test.tscn
+      - name: Potok-6H2 reentrant shutdown focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 30s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_reentrant_stop_test.tscn
       - name: Potok-6G per-machine tick work budget focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 30s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_tick_work_budget_test.tscn
