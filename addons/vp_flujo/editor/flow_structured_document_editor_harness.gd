@@ -128,6 +128,7 @@ func _build_fixture_pages(expression_document: FlowStructuredDocument = null) ->
 	_add_fixture(_tabs, "SCENE NODE", _node_ref_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "SCENE REF", _scene_reference_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "SCENE PROPERTY", _node_property_schema(), _graph, _undo_redo)
+	_add_fixture(_tabs, "STRUCTURED", _structured_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "ARRAY", _array_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "DICTIONARY", _dictionary_schema(), _graph, _undo_redo)
 	_add_fixture(_tabs, "RESOURCE", _resource_schema(), _graph, _undo_redo)
@@ -214,6 +215,8 @@ func _fixture_description(label: String) -> String:
 			return "Type $ and choose a scene node. This field accepts both Node and Node Property, so Flujo asks whether to use $Node or choose $Node.property."
 		"SCENE PROPERTY":
 			return "Type $ to open Scene Nodes, choose or drag a node, then select a property compatible with the field. Escape with \\$ for literal text."
+		"STRUCTURED":
+			return "Flexible structured zone. Use + Structured to insert Array, Dictionary, Resource, Enum, or Bitfield from an empty caret."
 		"ARRAY":
 			return "Structured Array Tok. Edit it to add scalar values or nested Array/Dictionary sources; runtime resolves every child ValueSource in order."
 		"DICTIONARY":
@@ -392,6 +395,38 @@ func _node_property_schema() -> FlowChipFieldSchema:
 	field.variadic_slot_definition = slot
 	field.add_text_part("Scene property: ")
 	field.add_slot_part("scene_value")
+	return field
+
+
+func _structured_schema() -> FlowChipFieldSchema:
+	var field: FlowChipFieldSchema = FlowChipFieldSchema.new()
+	field.mode = FlowChipFieldSchema.Mode.FLEXIBLE
+	field.text_mode = FlowChipFieldSchema.TextMode.RUNTIME_CONTENT
+	field.accepted_value_types = [
+		Variant.Type.TYPE_ARRAY,
+		Variant.Type.TYPE_DICTIONARY,
+		Variant.Type.TYPE_OBJECT,
+		Variant.Type.TYPE_INT,
+	]
+	field.accepted_source_kinds = [
+		FlowValueSource.SOURCE_KIND_ARRAY,
+		FlowValueSource.SOURCE_KIND_DICTIONARY,
+		FlowValueSource.SOURCE_KIND_RESOURCE_REF,
+		FlowValueSource.SOURCE_KIND_ENUM,
+		FlowValueSource.SOURCE_KIND_BITFIELD,
+	]
+	field.flexible_max_count = 5
+	var slot: FlowChipSlotDefinition = FlowChipSlotDefinition.new(
+		"structured",
+		"Structured"
+	)
+	slot.repeatable = true
+	slot.max_count = 5
+	slot.accepted_value_types = field.accepted_value_types.duplicate()
+	slot.accepted_source_kinds = field.accepted_source_kinds.duplicate()
+	field.variadic_slot_definition = slot
+	field.add_text_part("Structured: ")
+	field.add_slot_part("structured")
 	return field
 
 
