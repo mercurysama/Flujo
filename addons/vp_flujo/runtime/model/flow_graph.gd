@@ -57,8 +57,6 @@ func duplicate_with_new_ids() -> FlowGraph:
 			else:
 				copy.state_machines.append(_duplicate_state_machine(state_machine, id_map))
 
-		_remap_variable_references(copy.variables, id_map)
-
 		if schema_version in [SCHEMA_VERSION_3, SCHEMA_VERSION_4]:
 			copy.constructor = _duplicate_constructor(constructor, id_map)
 			for method: FlowMethodDefinition in methods:
@@ -68,6 +66,9 @@ func duplicate_with_new_ids() -> FlowGraph:
 					copy.methods.append(_duplicate_method(method, id_map))
 			_remap_method_call_references(copy, id_map)
 		_remap_state_machine_references(copy.state_machines, id_map)
+		# Wait until constructor Requirements and method/container IDs are known
+		# before remapping nested graph-owned ValueSource references.
+		_remap_variable_references(copy.variables, id_map)
 	_remap_block_references(copy, id_map)
 
 	return copy
@@ -219,7 +220,7 @@ func _remap_variable_references(
 		variable.owner_container_id = _remap_reference(variable.owner_container_id, id_map)
 		variable.global_variable_id = _remap_reference(variable.global_variable_id, id_map)
 		if variable.complex_value_source != null:
-			FlowValueSourceReferenceRemapper.remap_variable_ids(
+			FlowValueSourceReferenceRemapper.remap_graph_ids(
 				variable.complex_value_source,
 				id_map
 			)
