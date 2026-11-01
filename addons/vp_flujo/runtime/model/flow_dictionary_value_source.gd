@@ -122,7 +122,7 @@ func validate_against_graph(
 func resolve(context: Variant = null) -> FlowValueResult:
 	var output: Dictionary = {}
 	for entry: FlowDictionaryEntry in entries:
-		if entry == null or entry.key.strip_edges().is_empty() 				or entry.value_source == null:
+		if entry == null 				or entry.key.strip_edges().is_empty() 				or entry.value_source == null:
 			return _failure(
 				FlowDiagnostic.CODE_COLLECTION_ELEMENT_MISSING,
 				"Dictionary contains an incomplete entry."
