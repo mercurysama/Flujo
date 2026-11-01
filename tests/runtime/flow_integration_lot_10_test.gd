@@ -26,6 +26,9 @@ func _test_schema4_requirement_backed_print() -> void:
 	requirement.expected_node_name = &"Target"
 	requirement.required_class_name = &"Node2D"
 	graph.constructor.requirements = [requirement]
+	var legacy_constructor_print: FlowPrintBlock = FlowPrintBlock.new()
+	legacy_constructor_print.text = "schema4-constructor-must-stay-inert"
+	graph.constructor.blocks = [legacy_constructor_print]
 
 	var print_block: FlowPrintBlock = FlowPrintBlock.new()
 	print_block.content = FlowStructuredDocument.new()
