@@ -48,10 +48,12 @@ func _test_collection_source_composition() -> void:
 		_has_id(popup, FlowComplexValueEditor.CHILD_SOURCE_VARIABLE)
 			and _has_id(popup, FlowComplexValueEditor.CHILD_SOURCE_OPERATION)
 			and _has_id(popup, FlowComplexValueEditor.CHILD_SOURCE_CONDITION)
+			and _has_id(popup, FlowComplexValueEditor.CHILD_SOURCE_NODE)
+			and _has_id(popup, FlowComplexValueEditor.CHILD_SOURCE_NODE_PROPERTY)
 			and _has_id(popup, FlowComplexValueEditor.CHILD_SOURCE_RESOURCE)
 			and _has_id(popup, FlowComplexValueEditor.CHILD_SOURCE_ENUM)
 			and _has_id(popup, FlowComplexValueEditor.CHILD_SOURCE_BITFIELD),
-		"Collection source menu exposes the composed and structured source families."
+		"Collection source menu exposes Variable, Operation, Condition, Node, Node Property and structured source families."
 	)
 
 	popup.id_pressed.emit(FlowComplexValueEditor.CHILD_SOURCE_VARIABLE)
