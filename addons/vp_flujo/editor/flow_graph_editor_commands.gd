@@ -896,7 +896,7 @@ func _is_supported_variable_property(property_name: StringName, value: Variant) 
 		&"binding":
 			return value is int and FlowVariableDefinition.is_valid_binding(value as int)
 		&"value_type":
-			return value is int and FlowVariableDefinition.is_valid_value_type(value as int)
+			return value is int and FlowVariableDefinition.is_valid_variable_value_type(value as int)
 		&"bool_value", &"persistent":
 			return value is bool
 		&"int_value", &"float_value":
