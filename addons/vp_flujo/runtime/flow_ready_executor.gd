@@ -32,6 +32,26 @@ func execute(controller: Node, graph: FlowGraph, output: FlowRuntimeOutput, entr
 			push_warning("[Flujo] %s at %s: %s" % [diagnostic.code, diagnostic.element_path, diagnostic.message])
 	if invalid_paths.has("graph"):
 		return
+	if graph.schema_version == FlowGraph.SCHEMA_VERSION_4 			and controller is PVController:
+		var binding_validation: FlowValidationResult = 			FlowGraphValidator.validate_requirement_bindings(
+				graph,
+				(controller as PVController).requirement_bindings
+			)
+		var binding_invalid: bool = false
+		for diagnostic: FlowDiagnostic in binding_validation.diagnostics:
+			if diagnostic == null:
+				continue
+			push_warning(
+				"[Flujo] %s at %s: %s" % [
+					diagnostic.code,
+					diagnostic.element_path,
+					diagnostic.message,
+				]
+			)
+			if diagnostic.severity == FlowDiagnostic.Severity.ERROR:
+				binding_invalid = true
+		if binding_invalid:
+			return
 	if entry_point == &"Constructor":
 		if graph.constructor != null and graph.constructor.enabled and not invalid_paths.has("constructor"):
 			_execute_blocks(controller, graph, graph.constructor, "constructor", output, entry_point, graph.constructor.get_internal_id(), resolution_context, invalid_paths, false)
