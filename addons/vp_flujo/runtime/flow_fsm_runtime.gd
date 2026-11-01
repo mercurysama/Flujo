@@ -98,14 +98,18 @@ func request_transition(machine_id: String, target_state_id: String) -> bool:
 
 
 ## Event delivery is deferred until the machine's next matching tick.
-func emit_event(machine_id: String, event_name: StringName) -> bool:
+func emit_event(machine_id: String, event_name: StringName, payload: Dictionary = {}) -> bool:
 	if not _running or String(event_name).is_empty() \
 			or _pending_requests.size() + _inflight_reserved >= MAX_PENDING_REQUESTS:
 		return false
-	if not _active.has(machine_id) or _find_machine(machine_id) == null:
+	if not _active.has(machine_id) or _find_machine(machine_id) == null \
+			or not FlowFSMDataValidator.valid_dictionary(payload):
 		return false
 	_pending_requests.append({
-		"kind": &"event", "machine_id": machine_id, "event_name": event_name
+		"kind": &"event",
+		"machine_id": machine_id,
+		"event_name": event_name,
+		"payload": payload.duplicate(true)
 	})
 	return true
 
