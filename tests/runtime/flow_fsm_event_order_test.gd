@@ -20,7 +20,7 @@ func _run() -> void:
 	var a: FlowStateTransitionDefinition = _edge(&"go", first.get_internal_id(), 5)
 	var b: FlowStateTransitionDefinition = _edge(&"go", second.get_internal_id(), 5)
 	var c: FlowStateTransitionDefinition = _edge(&"go", final.get_internal_id(), 1)
-	idle.transitions = [a, b, c]
+	idle.transitions = [a, b, c, _edge(&"priority", first.get_internal_id(), 1), _edge(&"priority", second.get_internal_id(), 8)]
 	var machine: FlowStateMachineDefinition = FlowStateMachineDefinition.new()
 	machine.states = [idle, first, second, final]
 	machine.initial_state_id = idle.get_internal_id()
@@ -62,15 +62,10 @@ func _run() -> void:
 	_check(runtime.request_transition(machine_id, idle.get_internal_id()), "Direct reset queues.")
 	runtime.tick(0.1, FlowStateMachineDefinition.TickMode.MANUAL)
 	_check(runtime.get_active_state_id(machine_id) == idle.get_internal_id(), "Direct reset returns to Idle.")
-	_check(runtime.emit_event(machine_id, &"go"), "Event priority focal enqueues.")
-	a.priority = 1
-	b.priority = 8
+	_check(runtime.emit_event(machine_id, &"priority"), "Event priority focal enqueues.")
 	runtime.tick(0.1, FlowStateMachineDefinition.TickMode.MANUAL)
 	_check(runtime.get_active_state_id(machine_id) == second.get_internal_id(),
 		"Higher priority wins independent of authored order.")
-	# Restore the authored definition: the runtime should never depend on editing during gameplay.
-	a.priority = 5
-	b.priority = 5
 
 	_check(runtime.request_transition(machine_id, idle.get_internal_id()), "Direct return queues again.")
 	runtime.tick(0.1, FlowStateMachineDefinition.TickMode.MANUAL)
