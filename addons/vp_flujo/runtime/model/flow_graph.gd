@@ -120,8 +120,10 @@ func _duplicate_blocks(
 			target.blocks.append(null)
 			continue
 
-		var block_copy: FlowBlock = block.duplicate(false) as FlowBlock
-		block_copy._internal_id = FlowId.create()
+		var block_copy: FlowBlock = block.duplicate_with_new_id()
+		if block_copy == null:
+			target.blocks.append(null)
+			continue
 		id_map[block.get_internal_id()] = block_copy.get_internal_id()
 		target.blocks.append(block_copy)
 
