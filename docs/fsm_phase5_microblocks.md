@@ -55,3 +55,19 @@ The existing `flow_fsm_transitions_test.gd` already verifies direct requests, ev
 **Next micro-lot 5D:** isolate multi-event priority versus FIFO arrival, multiple clocks and request budget under callbacks without changing shared queue semantics unless a failing focal proves a defect. Later phase 6 addresses multi-machine communication comprehensively.
 
 **Recovery:** checkout `feature/fsm-runtime-flow-flusso`, inspect `docs/fsm_phase5_microblocks.md`, compare last CI against this checkpoint; add one focal before any new engine change. Keep RED/GREEN commits separate and preserve the CI failure as evidence.
+
+## FSM-5D — Multi-event priority/FIFO arbitration (2026-11-01)
+
+**Checkpoint before test:** `0eaff0836f1fd01ea0b4569a4bf876bc3aabd29a`.
+
+- **Test commit:** `c5673a2068d2cd0bf9d07c8be7c4cf62c7584963`. New isolated `tests/runtime/flow_fsm_multi_event_arbitration_test.gd/.tscn` and bounded GitHub Actions focal.
+- **Verified:** an event arriving earlier at low priority loses to an event arriving later at high priority; losing events on the same matching clock are consumed after exactly one committed transition; the other clock's event remains queued until its own tick.
+- **Ties:** two different event names with equal priority resolve by the earlier request's arrival order (even if its matching authored edge appears later).
+- **Explicit commands:** requests have precedence over events even when events arrived first; two direct requests resolve FIFO.
+- **Deferred callbacks:** a direct request emitted during an Update observer cannot replace the already selected request; it is delivered on the next matching tick.
+- **Graph:** test confirms the authored graph remains structurally valid after execution.
+- **Evidence:** [GitHub Actions 41351135946](https://github.com/mercurysama/Flujo/actions/runs/41351135946) **SUCCESS**, including 5D and existing model, Ready, navigation, FSM 001–004 and 5A–5C regressions.
+- **Scope:** tests and CI only; no production runtime modification. No Android or manual UI approval implied.
+- **Next micro-lot:** phase 5 audit of remaining acceptance gaps before calling the phase complete. Specifically inspect ignored self events, disabled targets, conditional ties, and whether any machine-to-machine behavior should remain in phase 6.
+
+**Recovery:** use this file and latest CI run to resume. Next task remains one limited change with dedicated test, followed by a separate commit if production correction is necessary.
