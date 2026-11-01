@@ -1288,6 +1288,27 @@
         "docs/flow_akis_tok_lot_10_contract.md"
       ],
       "notes": "Final consolidated review is intentionally pending until Mercury runs the Godot 4.7.2 gate."
+    },
+    {
+      "id": "FLUJO-BHV-AKIS-LOT10-VARIABLE-TYPE-COMPAT-001",
+      "area": "Complex graph Variable extension with scalar type compatibility",
+      "precondition": "The project contains historical scalar Variables/Method signatures/schema 5 typed declarations and may also contain graph Variables using ARRAY, DICTIONARY, or RESOURCE.",
+      "public_action": "Validate scalar declarations, complex graph Variables, VariableRefs, duplication and runtime defaults through their owning type boundaries.",
+      "expected_result": "BOOL through COLOR retain numeric values 0–6 and remain the shared scalar contract; only graph Variables accept ARRAY, DICTIONARY and RESOURCE through the Variable-specific validator and structured default source.",
+      "invariants": [
+        "is_valid_value_type accepts only the historical seven scalar members.",
+        "is_valid_variable_value_type accepts the seven scalars plus ARRAY, DICTIONARY and RESOURCE.",
+        "Method parameter/return and schema 5 Attribute/Output validation does not silently accept the Variable-only complex extension.",
+        "Existing numeric serialization values 0–6 are not renumbered.",
+        "Complex Variables require their exact structured source kind and remain covered by VariableRef/runtime resolution."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/model/flow_model_smoke_test.tscn",
+        "tests/model/flow_akis_runtime_lot_09_test.tscn"
+      ],
+      "notes": "Lote 10F compatibility correction after the Lote 09 complex Variable extension. Fresh Godot 4.7.2 execution is pending."
     }
   ]
 }
