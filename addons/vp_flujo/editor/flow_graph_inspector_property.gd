@@ -1054,7 +1054,11 @@ func _on_variable_complex_edit(variable_id: String, anchor: Control) -> void:
 	_ensure_variable_complex_editor().open_for_source(
 		variable.complex_value_source,
 		controller.flow_graph,
-		anchor.get_global_rect() if is_instance_valid(anchor) else get_global_rect()
+		anchor.get_global_rect() if is_instance_valid(anchor) else get_global_rect(),
+		{
+			"scene_controller": controller,
+			"scene_root": EditorInterface.get_edited_scene_root(),
+		}
 	)
 
 
