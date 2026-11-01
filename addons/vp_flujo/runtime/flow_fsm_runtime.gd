@@ -16,6 +16,7 @@ var _controller: PVController
 var _graph: FlowGraph
 var _active: Dictionary[String, String] = {}
 var _pending_requests: Array[Dictionary] = []
+var _inflight_reserved: int = 0
 var _dynamic_states: Dictionary[String, Dictionary] = {}
 var _running: bool = false
 var _in_tick: bool = false
@@ -83,7 +84,7 @@ func start(controller: PVController) -> bool:
 
 ## Queue one explicit destination; it does not need an authored edge.
 func request_transition(machine_id: String, target_state_id: String) -> bool:
-	if not _running or _pending_requests.size() >= MAX_PENDING_REQUESTS:
+	if not _running or _pending_requests.size() + _inflight_reserved >= MAX_PENDING_REQUESTS:
 		return false
 	var machine: FlowStateMachineDefinition = _find_machine(machine_id)
 	var target: FlowStateDefinition = _find_state(machine, target_state_id)
@@ -99,7 +100,7 @@ func request_transition(machine_id: String, target_state_id: String) -> bool:
 ## Event delivery is deferred until the machine's next matching tick.
 func emit_event(machine_id: String, event_name: StringName) -> bool:
 	if not _running or String(event_name).is_empty() \
-			or _pending_requests.size() >= MAX_PENDING_REQUESTS:
+			or _pending_requests.size() + _inflight_reserved >= MAX_PENDING_REQUESTS:
 		return false
 	if not _active.has(machine_id) or _find_machine(machine_id) == null:
 		return false
@@ -120,6 +121,14 @@ func tick(delta: float, mode: int = FlowStateMachineDefinition.TickMode.PROCESS)
 	var incoming: Array[Dictionary] = _pending_requests
 	_pending_requests = []
 	var leftovers: Array[Dictionary] = []
+	# Reserve capacity for requests which must survive until another clock ticks.
+	# A callback cannot accept a request that the final queue would silently drop.
+	for item: Dictionary in incoming:
+		var target_machine: FlowStateMachineDefinition = _find_machine(String(item.get("machine_id", "")))
+		if target_machine != null and target_machine.tick_mode != mode \
+				and _active.has(target_machine.get_internal_id()):
+			leftovers.append(item)
+	_inflight_reserved = leftovers.size()
 	for machine: FlowStateMachineDefinition in _graph.state_machines:
 		if machine == null or not machine.enabled or machine.tick_mode != mode:
 			continue
@@ -138,13 +147,10 @@ func tick(delta: float, mode: int = FlowStateMachineDefinition.TickMode.PROCESS)
 		var target_id: String = String(candidate.get("target_id", ""))
 		if not target_id.is_empty() and target_id != state_id:
 			_commit_transition(machine, state, target_id, String(candidate.get("trigger_id", "")))
-	for item: Dictionary in incoming:
-		var machine: FlowStateMachineDefinition = _find_machine(String(item.get("machine_id", "")))
-		if machine != null and machine.tick_mode != mode and _active.has(machine.get_internal_id()):
-			leftovers.append(item)
-	# Requests raised in the current Update/Enter/Exit are deferred to the next tick.
+	# Requests raised in Update/Enter/Exit are deferred to the next matching tick.
 	leftovers.append_array(_pending_requests)
-	_pending_requests = leftovers.slice(0, MAX_PENDING_REQUESTS)
+	_pending_requests = leftovers
+	_inflight_reserved = 0
 	_in_tick = false
 	if _stop_after_tick:
 		_stop_after_tick = false
