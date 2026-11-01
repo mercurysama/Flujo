@@ -28,3 +28,14 @@
 - **No runtime/model production changes**. Existing controller-local queue and synchronous signal callbacks already honor the lifecycle boundary. This is evidence for 6B only, not for chain/cycle saturation or phase 6 completion.
 - **Next micro-lot 6C:** define and test cyclic cross-machine ping-pong and saturation/chain budget behavior. Do not modify shared budget without a reproducible failing focal and explicit contract. UI/Android and Condition Tok payload integration remain outside this lot.
 - **Recovery:** resume from CI 41356265134 and the docs checkpoint, inspect latest HEAD, preserve the test and distinct commits.
+
+## 6C-1 — Bounded cyclic delivery characterization (2026-11-01)
+
+**Scope:** characterize finite A → B → A request chains and burst rejection without silently redefining cross-tick chain identity. The approved phase-6 plan calls for chain-local saturation diagnostics, but the existing runtime currently has no chain identifier or full per-chain budget; those require a separate explicit policy and must not be reported as completed by this focal.
+
+- In one controller, machine A (MANUAL) and B (PHYSICS), each with two alternating states, request one transition in the other machine from `state_entered` when a real transition commits.
+- Initial A request triggers A → B → A on successive explicit matching clocks. Each clock commits at most one transition, and recursive calls made by observers are ignored. The other-clock queue remains intact; state IDs, not names, route requests.
+- Test terminates the cyclic producer after a finite number of commits to ensure deterministic, repeatable behavior and queue drainage. No source edits or run-time graph mutations.
+- Fill the pending queue with 256 events destined for B, check that A's request is rejected with `queue_full` without mutation, and that a subsequent B tick drains the burst, freeing capacity. This is a controller-level admission budget, **not** yet a chain-local execution budget.
+- Preserve unrelated machine behavior and all previous CI regression tests.
+- **Decision gate for 6C-2:** specify chain identity/provenance and per-tick budget plus affected-chain cancellation without discarding unrelated work; add a separate RED test before any production changes. A long-running but bounded one-transition-per-tick cycle is legitimate unless such a policy explicitly identifies it as saturated.
