@@ -30,10 +30,8 @@ static func preview(source: FlowValueSource, graph: FlowGraph = null) -> String:
 		return (source as FlowOperationValueSource).get_preview(graph)
 	if source is FlowConditionValueSource:
 		return (source as FlowConditionValueSource).get_preview(graph)
-	if source is FlowArrayValueSource:
-		return (source as FlowArrayValueSource).get_preview(graph)
-	if source is FlowDictionaryValueSource:
-		return (source as FlowDictionaryValueSource).get_preview(graph)
+	if source.get_source_kind() == FlowValueSource.SOURCE_KIND_ARRAY 			or source.get_source_kind() == FlowValueSource.SOURCE_KIND_DICTIONARY:
+		return String(source.call(&"get_preview", graph))
 	if source is FlowResourceRefValueSource:
 		return (source as FlowResourceRefValueSource).get_preview()
 	if source is FlowEnumValueSource:
