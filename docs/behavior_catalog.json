@@ -1245,9 +1245,11 @@
       "coverage": "automatic",
       "baseline_status": "not_run",
       "test_paths": [
-        "tests/editor/flow_integration_lot_10_editor_test.gd"
+        "tests/editor/flow_integration_lot_10_editor_test.gd",
+        "tests/editor/flow_node_ref_lot_07_editor_test.gd",
+        "tests/editor/flow_node_property_lot_04_editor_test.gd"
       ],
-      "notes": "Lot 10C/D editor focal authored for Godot 4.7.2 editor execution."
+      "notes": "Lot 10C/D composes the source menu and depth guard; the existing $ editor focals remain the dedicated Scene Node / Node Property interaction evidence. Fresh Lot 10 execution remains pending."
     },
     {
       "id": "FLUJO-BHV-AKIS-LOT10-TOK-MATRIX-001",
