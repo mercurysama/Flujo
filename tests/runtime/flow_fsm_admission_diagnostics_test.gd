@@ -76,8 +76,15 @@ func _run() -> void:
 		"Callback reservation reports exactly one queue_full.")
 	_check(runtime.pending_request_count() == FlowFSMRuntime.MAX_PENDING_REQUESTS,
 		"Rejected callback preserves carried-over queue.")
-	runtime.tick(0.1, FlowStateMachineDefinition.TickMode.PHYSICS)
-	_check(runtime.pending_request_count() == 0, "Matching physics clock drains queue.")
+	# 6G: each matching PHYSICS tick may consume only 32 events.
+	# Preserve the 5G rejection contract while verifying no accepted data is lost.
+	for tick_index: int in FlowFSMRuntime.MAX_PENDING_REQUESTS / FlowFSMRuntime.MAX_REQUESTS_PER_MACHINE_TICK:
+		runtime.tick(0.1, FlowStateMachineDefinition.TickMode.PHYSICS)
+		var remaining: int = FlowFSMRuntime.MAX_PENDING_REQUESTS \
+				- (tick_index + 1) * FlowFSMRuntime.MAX_REQUESTS_PER_MACHINE_TICK
+		_check(runtime.pending_request_count() == remaining,
+			"Budgeted physics drainage keeps all admitted events at tick %d." % tick_index)
+	_check(runtime.pending_request_count() == 0, "Matching physics clock drains all events without loss.")
 	runtime.stop()
 	_check(not runtime.emit_event(m, &"go"), "Stopped runtime rejects events.")
 	_check(reasons.back() == m + ":event:not_running", "Stopped event diagnostic.")
