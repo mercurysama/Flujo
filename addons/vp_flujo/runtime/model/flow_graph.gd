@@ -130,8 +130,7 @@ func _duplicate_variable(
 		variable: FlowVariableDefinition,
 		id_map: Dictionary[String, String]
 ) -> FlowVariableDefinition:
-	var copy: FlowVariableDefinition = variable.duplicate(false) as FlowVariableDefinition
-	copy._internal_id = FlowId.create()
+	var copy: FlowVariableDefinition = variable.duplicate_with_new_id()
 	id_map[variable.get_internal_id()] = copy.get_internal_id()
 	return copy
 
@@ -217,6 +216,11 @@ func _remap_variable_references(
 
 		variable.owner_container_id = _remap_reference(variable.owner_container_id, id_map)
 		variable.global_variable_id = _remap_reference(variable.global_variable_id, id_map)
+		if variable.complex_value_source != null:
+			FlowValueSourceReferenceRemapper.remap_variable_ids(
+				variable.complex_value_source,
+				id_map
+			)
 
 
 func _remap_state_machine_references(
