@@ -1,0 +1,43 @@
+name: Flujo FSM — remote baseline and regression
+on:
+  push:
+    branches:
+      - feature/fsm-runtime-flow-flusso
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  headless:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot 4.7.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --output godot.zip "https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip"
+          unzip -o godot.zip
+          chmod +x Godot_v4.7.2-stable_linux.x86_64
+          ./Godot_v4.7.2-stable_linux.x86_64 --version | tee godot_version.txt
+          grep -q '^4\.7\.2' godot_version.txt
+      - name: Editor load
+        run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --quit-after 5
+      - name: Behavior catalog validator
+        run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . --script tests/governance/behavior_catalog_validator_test.gd
+      - name: Model baseline
+        run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/model/flow_model_smoke_test.tscn
+      - name: Ready baseline
+        run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_ready_runtime_test.tscn
+      - name: Navigation baseline
+        run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_navigation_runtime_test.tscn
+      - name: FSM runtime focal (when present)
+        shell: bash
+        run: |
+          if test -f tests/runtime/flow_fsm_runtime_test.tscn; then
+            ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_runtime_test.tscn
+          else
+            echo 'FSM test not authored yet; not counted as PASS'
+          fi
