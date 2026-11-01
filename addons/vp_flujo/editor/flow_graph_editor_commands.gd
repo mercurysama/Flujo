@@ -159,6 +159,41 @@ func set_variable_property(
 	var previous_value: Variant = _variable_property_value(variable, property_name)
 	if previous_value == value:
 		return false
+	if property_name == &"value_type":
+		var next_type: int = int(value)
+		var previous_source: FlowValueSource = variable.complex_value_source
+		var next_source: FlowValueSource = previous_source
+		if FlowVariableDefinition.is_complex_value_type(next_type):
+			var expected_kind: StringName = FlowVariableDefinition.expected_complex_source_kind(
+				next_type
+			)
+			if next_source == null 					or next_source.get_source_kind() != expected_kind 					or next_source.get_value_type() != FlowVariableDefinition.to_variant_type(next_type):
+				next_source = FlowVariableDefinition.default_complex_source(next_type)
+		_undo_redo.create_action(
+			"Edit Variable Type",
+			UndoRedo.MERGE_DISABLE,
+			controller,
+			false,
+			true
+		)
+		_undo_redo.add_do_method(
+			self,
+			&"_assign_variable_type",
+			controller,
+			variable,
+			next_type,
+			next_source
+		)
+		_undo_redo.add_undo_method(
+			self,
+			&"_assign_variable_type",
+			controller,
+			variable,
+			variable.value_type,
+			previous_source
+		)
+		_undo_redo.commit_action()
+		return true
 	_undo_redo.create_action(
 		"Edit Variable %s" % _variable_property_label(property_name),
 		UndoRedo.MERGE_DISABLE,
@@ -174,6 +209,51 @@ func set_variable_property(
 		variable,
 		property_name,
 		previous_value
+	)
+	_undo_redo.commit_action()
+	return true
+
+
+func set_variable_complex_source(
+		controller: PVController,
+		internal_id: String,
+		source: FlowValueSource
+) -> bool:
+	var graph: FlowGraph = controller.flow_graph if controller != null else null
+	if not _can_edit_schema_3_variable(graph, Collection.VARIABLES) 			or internal_id.is_empty() or source == null or not source.is_valid():
+		return false
+	var variable: FlowVariableDefinition = _find_resource(
+		graph,
+		Collection.VARIABLES,
+		internal_id
+	) as FlowVariableDefinition
+	if variable == null or not FlowVariableDefinition.is_complex_value_type(variable.value_type):
+		return false
+	if source.get_source_kind() != FlowVariableDefinition.expected_complex_source_kind(variable.value_type) 			or source.get_value_type() != variable.get_declared_variant_type():
+		return false
+	var previous: FlowValueSource = variable.complex_value_source
+	if previous != null:
+		source.source_id = previous.source_id
+	_undo_redo.create_action(
+		"Edit Variable Structured Value",
+		UndoRedo.MERGE_DISABLE,
+		controller,
+		false,
+		true
+	)
+	_undo_redo.add_do_method(
+		self,
+		&"_assign_variable_complex_source",
+		controller,
+		variable,
+		source
+	)
+	_undo_redo.add_undo_method(
+		self,
+		&"_assign_variable_complex_source",
+		controller,
+		variable,
+		previous
 	)
 	_undo_redo.commit_action()
 	return true
@@ -715,6 +795,30 @@ func _assign_collection(controller: PVController, graph: FlowGraph, collection: 
 func _set_display_name(resource: Resource, display_name: String) -> void:
 	_assign_display_name(resource, display_name)
 	_refresh_diagnostics_for_resource(resource)
+	emit_signal(&"changed")
+
+
+func _assign_variable_type(
+		controller: PVController,
+		variable: FlowVariableDefinition,
+		value_type: int,
+		complex_source: FlowValueSource
+) -> void:
+	variable.value_type = value_type
+	variable.complex_value_source = complex_source
+	controller.notify_property_list_changed()
+	_refresh_diagnostics(controller.flow_graph)
+	emit_signal(&"changed")
+
+
+func _assign_variable_complex_source(
+		controller: PVController,
+		variable: FlowVariableDefinition,
+		source: FlowValueSource
+) -> void:
+	variable.complex_value_source = source
+	controller.notify_property_list_changed()
+	_refresh_diagnostics(controller.flow_graph)
 	emit_signal(&"changed")
 
 
