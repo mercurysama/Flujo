@@ -48,6 +48,7 @@ static func validate(graph: FlowGraph) -> FlowValidationResult:
 	)
 	_validate_variables(
 		graph.variables,
+		graph,
 		result,
 		seen_instances,
 		seen_ids,
@@ -207,6 +208,7 @@ static func _validate_processes(
 
 static func _validate_variables(
 		variables: Array[FlowVariableDefinition],
+		graph: FlowGraph,
 		result: FlowValidationResult,
 		seen_instances: Dictionary[int, String],
 		seen_ids: Dictionary[String, String],
@@ -229,7 +231,7 @@ static func _validate_variables(
 		):
 			continue
 
-		_validate_variable_metadata(variable, variable_path, result)
+		_validate_variable_metadata(variable, variable_path, result, graph)
 		variables_to_validate.append(variable)
 		variable_indices.append(variable_index)
 		if variable.scope == FlowVariableDefinition.Scope.GLOBAL:
@@ -239,7 +241,8 @@ static func _validate_variables(
 static func _validate_variable_metadata(
 		variable: FlowVariableDefinition,
 		variable_path: String,
-		result: FlowValidationResult
+		result: FlowValidationResult,
+		graph: FlowGraph
 ) -> void:
 	var variable_id: String = variable.get_internal_id()
 	if not FlowVariableDefinition.is_valid_scope(variable.scope):
@@ -259,6 +262,36 @@ static func _validate_variable_metadata(
 			variable_id
 		)
 	_validate_value_type(variable.value_type, "%s.value_type" % variable_path, variable_id, result)
+	if not FlowVariableDefinition.is_complex_value_type(variable.value_type):
+		return
+	var source: FlowValueSource = variable.complex_value_source
+	if source == null:
+		_add_error(
+			result,
+			FlowDiagnostic.CODE_VARIABLE_COMPLEX_SOURCE_MISSING,
+			"Complex variable requires a default ValueSource.",
+			"%s.complex_value_source" % variable_path,
+			variable_id
+		)
+		return
+	source.validate_structure(result, "%s.complex_value_source" % variable_path)
+	var expected_kind: StringName = FlowVariableDefinition.expected_complex_source_kind(
+		variable.value_type
+	)
+	if source.get_source_kind() != expected_kind 			or source.get_value_type() != variable.get_declared_variant_type():
+		_add_error(
+			result,
+			FlowDiagnostic.CODE_VARIABLE_COMPLEX_SOURCE_TYPE_MISMATCH,
+			"Complex variable default source does not match its declared type.",
+			"%s.complex_value_source" % variable_path,
+			variable_id
+		)
+		return
+	source.validate_against_graph(
+		result,
+		"%s.complex_value_source" % variable_path,
+		graph
+	)
 
 
 static func _validate_value_type(
