@@ -36,3 +36,16 @@
 These lots do not implement a Potok UI or declare the complete numbered phase 5 finished.
 
 Todo es Flujo; todo fluye. 🌊
+
+## 5F-2 — Deterministic event consumption observation (approved micro-lot)
+
+- Add the portable runtime signal `event_consumed(machine_id: String, event_name: StringName, payload: Dictionary)` on `FlowFSMRuntime`. This is a public notification **not** an authoring mutation, interpreter, or state-transition trigger.
+- At the matching machine clock's tick, execute that state's **Update** first, then emit the signal **once for each previously queued event** addressed to this machine, in admission FIFO order, **before** transition arbitration. A missing authored edge still consumes the event and emits the notification.
+- The signal reports *consumption/receipt*, **not** a successfully chosen transition. Any event that loses arbitration is nevertheless consumed, observed once and never replayed. Listeners can inspect validated JSON-safe payload values. Delivery never targets a disabled/unstarted machine.
+- Each signal emission passes a **deep copy** of the stored envelope. A listener may mutate its copy without corrupting the queue or changing the edge selected in that tick. Other listeners sharing the same signal call should treat the argument as transient and make their own copy before mutation; per-listener copy isolation is not guaranteed.
+- Observers who call `emit_event`, `request_transition` or `tick` synchronously cannot force another transition in the same tick: new requests remain deferred and recursive ticks are ignored.
+- Other-clock events remain queued and unobserved until their machine's own clock. No event survives on an already stopped runtime.
+- This micro-lot does not bind payloads to Toks, expose them as variables/conditions, alter schema or serialization, or route across PVControllers. Those are separate authoring/phase-6 decisions.
+- Focused checks: FIFO notifications, deep copy, matched and unmatched events, other-clock deferral, callback-generated events, unchanged event arbitration and existing full FSM regression. Manual acceptance remains independent.
+
+**Recovery substeps:** 5F-2A this contract; 5F-2B focused test and CI (expected RED); 5F-2C minimal signal/emission code; 5F-2D evidence and continuity log.
