@@ -15,6 +15,7 @@ func _run() -> void:
 	get_root().add_child(_host)
 	await _frames(2)
 	await _test_collection_source_composition()
+	await _test_collection_depth_guard()
 	_host.queue_free()
 	await _frames(1)
 	_finish()
@@ -164,6 +165,47 @@ func _test_collection_source_composition() -> void:
 	)
 
 	editor.queue_free()
+
+
+func _test_collection_depth_guard() -> void:
+	var editor: FlowComplexValueEditor = FlowComplexValueEditor.new()
+	_host.add_child(editor)
+	editor.open_for_source(
+		FlowArrayValueSource.new(),
+		null,
+		Rect2(40, 40, 1, 1),
+		{
+			"complex_nesting_depth": FlowComplexValueEditor.MAX_EDITOR_NESTING_DEPTH,
+		}
+	)
+	await _frames(1)
+	var add_source: MenuButton = _menu_with_text(editor, "Add Source…")
+	_check(add_source != null, "Depth-guard fixture exposes Add Source menu.")
+	if add_source != null:
+		var popup: PopupMenu = add_source.get_popup()
+		var array_index: int = popup.get_item_index(
+			FlowComplexValueEditor.CHILD_SOURCE_ARRAY
+		)
+		var dictionary_index: int = popup.get_item_index(
+			FlowComplexValueEditor.CHILD_SOURCE_DICTIONARY
+		)
+		var operation_index: int = popup.get_item_index(
+			FlowComplexValueEditor.CHILD_SOURCE_OPERATION
+		)
+		_check(
+			array_index >= 0
+				and dictionary_index >= 0
+				and popup.is_item_disabled(array_index)
+				and popup.is_item_disabled(dictionary_index),
+			"Complex editor disables deeper Array/Dictionary creation at the nesting limit."
+		)
+		_check(
+			operation_index >= 0 and not popup.is_item_disabled(operation_index),
+			"Depth guard does not disable non-collection composed sources."
+		)
+	editor.hide()
+	editor.queue_free()
+	await _frames(1)
 
 
 func _menu_with_text(root: Node, text_value: String) -> MenuButton:
