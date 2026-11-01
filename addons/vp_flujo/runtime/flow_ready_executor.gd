@@ -7,8 +7,13 @@ extends RefCounted
 func execute(controller: Node, graph: FlowGraph, output: FlowRuntimeOutput, entry_point: StringName = &"Ready", process_id: String = "") -> void:
 	if Engine.is_editor_hint() or graph == null:
 		return
-	if graph.schema_version != FlowGraph.SCHEMA_VERSION_3:
-		push_warning("[Flujo] Ready requires an explicitly migrated schema 3 FlowGraph.")
+	if graph.schema_version not in [
+		FlowGraph.SCHEMA_VERSION_3,
+		FlowGraph.SCHEMA_VERSION_4,
+	]:
+		push_warning(
+			"[Flujo] Ready runtime currently supports FlowGraph schema 3 or 4."
+		)
 		return
 	var resolution_context: FlowValueResolutionContext
 	if controller is PVController:
