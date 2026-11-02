@@ -2179,3 +2179,158 @@ func _resource_id(resource: Resource) -> String:
 	if resource is FlowBlock:
 		return (resource as FlowBlock).get_internal_id()
 	return ""
+
+
+## Potok 7B: read-only Flow hierarchy within the existing Fluo editor.
+func _render_potok_machine(parent: Container, controller: PVController, generation: int) -> void:
+	var view: Dictionary = FlowFSMEditorProjection.new().present(controller.flow_graph, _selected_id)
+	if not bool(view.get("found", false)):
+		_potok_selected_state_id = ""
+		var message := Label.new()
+		message.text = "Select a State Machine in the Godot Inspector."
+		parent.add_child(message)
+		return
+	var machine: Dictionary = view.get("machine", {})
+	var heading := Label.new()
+	heading.name = &"PotokMachineHeading"
+	heading.text = "Potok · " + String(machine.get("name", "State Machine"))
+	parent.add_child(heading)
+	var subheading := Label.new()
+	subheading.text = "Flow · States"
+	parent.add_child(subheading)
+	var list := ItemList.new()
+	list.name = &"PotokStateList"
+	list.focus_mode = Control.FOCUS_ALL
+	list.select_mode = ItemList.SELECT_SINGLE
+	list.allow_reselect = true
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(list)
+	var rows: Array = view.get("states", [])
+	var selected_index: int = -1
+	for index: int in rows.size():
+		var row: Dictionary = rows[index]
+		var id: String = String(row.get("id", ""))
+		var label: String = String(row.get("name", "Empty"))
+		if bool(row.get("is_initial", false)):
+			label += " (Initial)"
+		var item_index: int = list.add_item(label)
+		list.set_item_metadata(item_index, {"id": id})
+		if not id.is_empty() and id == _potok_selected_state_id:
+			selected_index = index
+	if selected_index < 0 and not rows.is_empty():
+		selected_index = 0
+	if selected_index >= 0:
+		list.select(selected_index)
+		var selected: Dictionary = rows[selected_index]
+		_potok_selected_state_id = String(selected.get("id", ""))
+		_render_potok_state_phases(parent, selected)
+	list.item_selected.connect(_on_potok_state_selected.bind(list))
+	call_deferred(&"_fit_list_to_first_row", list, generation)
+	if _flow_entry_focus_pending:
+		_flow_entry_focus_pending = false
+		call_deferred(&"_focus_potok_state_list", list, generation)
+
+
+func _render_potok_state_phases(parent: Container, selected: Dictionary) -> void:
+	var host := VBoxContainer.new()
+	host.name = &"PotokStatePhases"
+	parent.add_child(host)
+	if bool(selected.get("empty", false)):
+		var empty_message := Label.new()
+		empty_message.text = "Empty"
+		host.add_child(empty_message)
+		return
+	var phases: Array = selected.get("phases", [])
+	for phase: Dictionary in phases:
+		var label := Label.new()
+		var phase_name: String = String(phase.get("name", ""))
+		label.name = StringName("PotokPhase" + phase_name)
+		label.text = phase_name
+		host.add_child(label)
+		var blocks: Array = phase.get("blocks", [])
+		if blocks.is_empty():
+			var empty_message := Label.new()
+			empty_message.text = "Empty"
+			host.add_child(empty_message)
+		for block: Dictionary in blocks:
+			var block_label := Label.new()
+			block_label.text = String(block.get("name", "Empty"))
+			host.add_child(block_label)
+
+
+func _on_potok_state_selected(index: int, list: ItemList) -> void:
+	if not is_potok_machine_view() or index < 0 or index >= list.item_count:
+		return
+	var id: String = String((list.get_item_metadata(index) as Dictionary).get("id", ""))
+	if id == _potok_selected_state_id:
+		return
+	_potok_selected_state_id = id
+	_flow_entry_focus_pending = true
+	_request_rebuild()
+
+
+func _focus_potok_state_list(list: ItemList, generation: int) -> void:
+	if generation == _rebuild_generation and _can_grab_focus(list):
+		list.grab_focus()
+
+
+func is_potok_machine_view() -> bool:
+	return _fluo_mode and _selected_collection == FlowGraphEditorCommands.Collection.STATE_MACHINES \
+		and not _selected_id.is_empty()
+
+
+func request_potok_inspector_focus() -> void:
+	if is_potok_machine_view():
+		_request_inspector_variable_list_focus()
+
+
+func navigate_potok_state(direction: int) -> bool:
+	if not is_potok_machine_view() or direction == 0:
+		return false
+	var list: ItemList = _content.find_child("PotokStateList", true, false) as ItemList
+	if list == null or list.item_count <= 1:
+		return false
+	var selected: PackedInt32Array = list.get_selected_items()
+	var current: int = selected[0] if not selected.is_empty() else 0
+	var next_index: int = posmod(current + (1 if direction > 0 else -1), list.item_count)
+	var id: String = String((list.get_item_metadata(next_index) as Dictionary).get("id", ""))
+	if id.is_empty():
+		return false
+	_potok_selected_state_id = id
+	_flow_entry_focus_pending = true
+	_request_rebuild()
+	return true
+
+
+func navigate_potok_machine(direction: int) -> bool:
+	if not is_potok_machine_view() or direction == 0:
+		return false
+	var controller: PVController = _active_controller()
+	if controller == null or controller.flow_graph == null:
+		return false
+	var machines: Array[FlowStateMachineDefinition] = controller.flow_graph.state_machines
+	if machines.size() <= 1:
+		return false
+	var current: int = _selected_view_index_for_id(
+		controller.flow_graph, FlowGraphEditorCommands.Collection.STATE_MACHINES,
+		_selected_id, "State Machines"
+	)
+	if current < 0:
+		return false
+	for offset: int in range(1, machines.size()):
+		var index: int = posmod(current + (1 if direction > 0 else -1) * offset, machines.size())
+		var machine: FlowStateMachineDefinition = machines[index]
+		if machine == null:
+			continue
+		_selected_id = machine.get_internal_id()
+		_selected_view_index = index
+		_potok_selected_state_id = ""
+		_flow_entry_focus_pending = true
+		_clear_deleted_selection_state()
+		_close_delete_confirmation()
+		schema_3_container_navigation_changed.emit(
+			controller, FlowGraphEditorCommands.Collection.STATE_MACHINES, _selected_id
+		)
+		_request_rebuild()
+		return true
+	return false
