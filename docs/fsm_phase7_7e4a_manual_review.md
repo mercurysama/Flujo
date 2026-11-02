@@ -59,7 +59,7 @@ Copiar **una ficha por ID observado** (sin alterar los renglones históricos de 
 ```text
 ID: F__/A__
 Resultado: PENDING | PASS | FAIL | BLOCKED | N/A (con motivo)
-Fecha y hora (con zona): 
+Fecha y hora (con zona):
 Evaluador:
 Rama + SHA verificado:
 Godot (versión completa):
