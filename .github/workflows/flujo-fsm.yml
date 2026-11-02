@@ -71,6 +71,9 @@ jobs:
       - name: Fluo drawer integration baseline
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 100s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/fluo_drawer_integration_test.gd
+      - name: Potok-7E3B scene and controller context lifecycle focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 100s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_fsm_drawer_context_recovery_test.gd
       - name: Potok-7E3A Fluo scroll, overflow and resize focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 100s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_fsm_fluo_scroll_resize_test.gd
