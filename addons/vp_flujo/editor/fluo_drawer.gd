@@ -187,6 +187,7 @@ func close() -> void:
 	_is_open = false
 
 	if _variable_editor != null:
+		_variable_editor.close_potok_phase_block_details()
 		_variable_editor.close_ready_block_details()
 		_variable_editor.close_transient_interfaces()
 
