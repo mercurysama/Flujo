@@ -538,6 +538,178 @@ func _fsm_transition_value_valid(
 	return false
 
 
+## Potok 7C-2B: structural authoring on stable state IDs.
+func add_fsm_state(controller: PVController, machine_id: String) -> String:
+	var machine: FlowStateMachineDefinition = _fsm_structure_machine(controller, machine_id)
+	if machine == null:
+		return ""
+	var state := FlowStateDefinition.new()
+	var updated: Array[FlowStateDefinition] = []
+	updated.assign(machine.states)
+	updated.append(state)
+	var first_id: String = machine.initial_state_id
+	if first_id.is_empty():
+		first_id = state.get_internal_id()
+	if not _fsm_structure_candidate(controller.flow_graph, machine, updated, first_id):
+		return ""
+	_fsm_commit_states(controller, machine, updated, first_id, "Add Potok State")
+	return state.get_internal_id()
+
+
+func duplicate_fsm_state(controller: PVController, machine_id: String, state_id: String) -> String:
+	var machine: FlowStateMachineDefinition = _fsm_structure_machine(controller, machine_id)
+	if machine == null or state_id.is_empty():
+		return ""
+	var index: int = _fsm_state_index(machine.states, state_id)
+	if index < 0:
+		return ""
+	var original: FlowStateDefinition = machine.states[index]
+	var copied: FlowStateDefinition = original.duplicate_state_with_new_ids()
+	if copied == null or copied.get_internal_id() == state_id:
+		return ""
+	# The new source's own self-loop must continue to refer to itself.
+	for edge: FlowStateTransitionDefinition in copied.transitions:
+		if edge != null and edge.target_state_id == state_id:
+			edge.target_state_id = copied.get_internal_id()
+	var updated: Array[FlowStateDefinition] = []
+	updated.assign(machine.states)
+	updated.insert(index + 1, copied)
+	if not _fsm_structure_candidate(controller.flow_graph, machine, updated, machine.initial_state_id):
+		return ""
+	_fsm_commit_states(controller, machine, updated, machine.initial_state_id, "Duplicate Potok State")
+	return copied.get_internal_id()
+
+
+func move_fsm_state(
+		controller: PVController, machine_id: String, state_id: String, direction: int
+) -> bool:
+	var machine: FlowStateMachineDefinition = _fsm_structure_machine(controller, machine_id)
+	if machine == null or direction == 0:
+		return false
+	var index: int = _fsm_state_index(machine.states, state_id)
+	var next: int = index + (1 if direction > 0 else -1)
+	if index < 0 or next < 0 or next >= machine.states.size():
+		return false
+	var updated: Array[FlowStateDefinition] = []
+	updated.assign(machine.states)
+	var displaced: FlowStateDefinition = updated[next]
+	updated[next] = updated[index]
+	updated[index] = displaced
+	if not _fsm_structure_candidate(controller.flow_graph, machine, updated, machine.initial_state_id):
+		return false
+	_fsm_commit_states(controller, machine, updated, machine.initial_state_id, "Move Potok State")
+	return true
+
+
+## Read-only dependency preview: incoming edges from all surviving states,
+## including disabled states or edges. An outgoing self-loop is not a blocker.
+func get_fsm_state_deletion_dependencies(
+		controller: PVController, machine_id: String, state_id: String
+) -> Array[String]:
+	var result: Array[String] = []
+	var machine: FlowStateMachineDefinition = _fsm_structure_machine(controller, machine_id)
+	if machine == null or _fsm_state_index(machine.states, state_id) < 0:
+		return result
+	for owner: FlowStateDefinition in machine.states:
+		if owner == null or owner.get_internal_id() == state_id:
+			continue
+		for edge: FlowStateTransitionDefinition in owner.transitions:
+			if edge != null and edge.target_state_id == state_id:
+				result.append(owner.display_name + " · " + edge.display_name)
+	return result
+
+
+func delete_fsm_state(controller: PVController, machine_id: String, state_id: String) -> bool:
+	var machine: FlowStateMachineDefinition = _fsm_structure_machine(controller, machine_id)
+	if machine == null:
+		return false
+	var index: int = _fsm_state_index(machine.states, state_id)
+	if index < 0 or not get_fsm_state_deletion_dependencies(controller, machine_id, state_id).is_empty():
+		return false
+	var updated: Array[FlowStateDefinition] = []
+	updated.assign(machine.states)
+	updated.remove_at(index)
+	var initial_id: String = machine.initial_state_id
+	if initial_id == state_id:
+		initial_id = ""
+		for survivor: FlowStateDefinition in updated:
+			if survivor != null and survivor.enabled:
+				initial_id = survivor.get_internal_id()
+				break
+		if initial_id.is_empty():
+			for survivor: FlowStateDefinition in updated:
+				if survivor != null:
+					return false
+	if not _fsm_structure_candidate(controller.flow_graph, machine, updated, initial_id):
+		return false
+	_fsm_commit_states(controller, machine, updated, initial_id, "Delete Potok State")
+	return true
+
+
+func _fsm_structure_machine(controller: PVController, machine_id: String) -> FlowStateMachineDefinition:
+	if not _can_edit_fsm_scalar(controller) or machine_id.is_empty():
+		return null
+	return _find_resource(
+		controller.flow_graph, Collection.STATE_MACHINES, machine_id
+	) as FlowStateMachineDefinition
+
+
+func _fsm_state_index(states: Array[FlowStateDefinition], state_id: String) -> int:
+	for index: int in states.size():
+		var state: FlowStateDefinition = states[index]
+		if state != null and state.get_internal_id() == state_id:
+			return index
+	return -1
+
+
+func _fsm_structure_candidate(
+		graph: FlowGraph, machine: FlowStateMachineDefinition,
+		states: Array[FlowStateDefinition], initial_id: String
+) -> bool:
+	var draft: FlowStateMachineDefinition = machine.duplicate(false) as FlowStateMachineDefinition
+	if draft == null or draft.get_internal_id() != machine.get_internal_id():
+		return false
+	draft.states = states
+	draft.initial_state_id = initial_id
+	var machines: Array = graph.state_machines.duplicate()
+	var index: int = _find_index(machines, machine.get_internal_id())
+	if index < 0:
+		return false
+	machines[index] = draft
+	return _fsm_candidate_accepted(graph, machines)
+
+
+func _fsm_commit_states(
+		controller: PVController, machine: FlowStateMachineDefinition,
+		states: Array[FlowStateDefinition], initial_id: String, label: String
+) -> void:
+	var previous: Array[FlowStateDefinition] = []
+	previous.assign(machine.states)
+	var previous_initial: String = machine.initial_state_id
+	_undo_redo.create_action(label, UndoRedo.MERGE_DISABLE, controller, false, true)
+	_undo_redo.add_do_method(
+		self, &"_fsm_assign_states", controller, machine, states, initial_id
+	)
+	_undo_redo.add_undo_method(
+		self, &"_fsm_assign_states", controller, machine, previous, previous_initial
+	)
+	_undo_redo.commit_action()
+
+
+func _fsm_assign_states(
+		controller: PVController, machine: FlowStateMachineDefinition,
+		states: Array[FlowStateDefinition], initial_id: String
+) -> void:
+	if not is_instance_valid(controller) or machine == null:
+		return
+	machine.states = states.duplicate()
+	machine.initial_state_id = initial_id
+	machine.emit_changed()
+	controller.notify_property_list_changed()
+	_refresh_diagnostics(controller.flow_graph)
+	changed.emit()
+
+
 ## Moves a selected resource by one array position, including across deliberate null slots.
 func move_resource(controller: PVController, collection: Collection, internal_id: String, direction: int) -> bool:
 	var graph: FlowGraph = controller.flow_graph if controller != null else null
