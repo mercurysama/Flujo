@@ -236,6 +236,10 @@ func tick(delta: float, mode: int = FlowStateMachineDefinition.TickMode.PROCESS)
 		state_updated.emit(machine_id, state_id)
 		if per_machine_deferred.has(machine_id):
 			work_budget_deferred.emit(machine_id, per_machine_deferred[machine_id])
+		# Each machine sees only packets delivered on its own matching clock.
+		# The context is discarded before transition Exit/Enter/commit callbacks.
+		var packet_context: FlowValueResolutionContext = _controller.get_value_resolution_context()
+		packet_context.begin_event_packet_scope(machine_id)
 		# Deliver detached packet data before arbitration; callbacks may enqueue only
 		# for a future tick, and other-clock packets are not observed here.
 		for request: Dictionary in deliverable:
@@ -244,12 +248,17 @@ func tick(delta: float, mode: int = FlowStateMachineDefinition.TickMode.PROCESS)
 					or _blocked_chains.has(int(request.get("chain_id", 0))):
 				continue
 			var packet: Dictionary = request.get("payload", {})
+			packet_context.record_event_packet(
+				machine_id, request.get("event_name", &""), packet
+			)
 			event_consumed.emit(
 				machine_id, request.get("event_name", &""), packet.duplicate(true)
 			)
 		var candidate: Dictionary = _pick_request(machine, state, deliverable)
 		if candidate.is_empty():
 			candidate = _pick_condition(machine, state)
+		# Packet values never leak to transition lifecycle callbacks or other machines.
+		packet_context.end_event_packet_scope()
 		var target_id: String = String(candidate.get("target_id", ""))
 		if not target_id.is_empty() and target_id != state_id:
 			_commit_transition(machine, state, target_id,
