@@ -407,3 +407,10 @@ Todo es Flujo; todo fluye. 🌊
 - Lesson: phase Move/Duplicate/Delete buttons must be enabled synchronously on ItemList selection without a rebuild, and callbacks require exact controller/machine/state/phase/block plus WeakRef to the still-attached UI control. Delete uses existing modal and commits only after confirmed; Cancel/Escape invalidates session, retains UndoRedo and returns focus to owning phase. Successful Move retains selected stable ID, Duplicate selects new ID; Delete chooses surviving neighbor by ID, respecting null holes.
 - Ready, Timer, Tok, structure dialogs, EditorUndoRedoManager and FSM regressions green. **Next 7F-1C2E** end-to-end scene roundtrip and SDK/host test consolidation. Manual 15 Fedora + 10 Android PENDING; main unchanged; GitHub CI is not a physical worktree audit.
 - [7F-1C2D result](fsm_phase7_7f1c2d_result.md).
+
+## 2026-11-02 — Potok 7F-1C2E end-to-end structural persistence
+
+- Verified baseline `b406c690835aeac054d13d4684cf46f586ece275`, [CI 41516183343](https://github.com/mercurysama/Flujo/actions/runs/41516183343) SUCCESS. Added scene roundtrip focal `a52e00c7396b964f9338a1f2272c6473c1c83cfb` and workflow step `fd9204edd55a5acba163027597c10793884842fe`. [Actions 41517598801](https://github.com/mercurysama/Flujo/actions/runs/41517598801): dedicated 7F-1C2E test passed; total suite completion should be checked at GitHub before claiming GREEN.
+- Lesson: test sequential structural Move/Duplicate/Delete and Undo/Redo through actual `EditorUndoRedoManager`, then serialize the edited graph through `PackedScene` and reload with cache ignored. Compare persistent machine/state/block IDs, exact ordering and null-slot positions, SDK external script and value, unaffected Ready and sibling states, schema and validator.
+- 7F-1C2A–E code and targeted native UI tests now present. Remaining physical acceptance **15 Fedora + 10 Android pending**, SDK special structured document UI excluded, no local Fedora worktree audit or merge to main. **Next 7F-1D** end-to-end user journey; then 7F-2.
+- [7F-1C2E result](fsm_phase7_7f1c2e_result.md).
