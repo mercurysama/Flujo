@@ -51,6 +51,9 @@ jobs:
           else
             echo 'FSM snapshot test missing; not a PASS'
           fi
+      - name: Potok-8B2 dynamic state templates and structured data focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_dynamic_template_data_test.tscn
       - name: Potok-8B1 dynamic state quota ID and ordering focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_dynamic_quota_identity_test.tscn
