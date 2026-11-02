@@ -154,6 +154,42 @@ func _run() -> void:
 	_check(event_field != null, "Event metadata input exists")
 	_check(property.find_child("PotokTransitionConditionStatus", true, false) != null,
 		"Bool condition status is visible without bypassing Tok editor")
+	if event_field != null:
+		event_field.text = "ui_restart"
+		event_field.text_submitted.emit(event_field.text)
+		await _frames(4)
+		_check(event_edge.event_name == &"ui_restart",
+			"Native event field commits StringName without modifying trigger")
+	var trigger: OptionButton = property.find_child("PotokTransitionTrigger", true, false) as OptionButton
+	_check(trigger != null, "Native trigger selector exists")
+	if trigger != null:
+		trigger.select(1)
+		trigger.item_selected.emit(1)
+		await _frames(4)
+		_check(event_edge.trigger == FlowStateTransitionDefinition.Trigger.EVENT,
+			"Native trigger selector switches to prepared EVENT metadata")
+	target = property.find_child("PotokTransitionTarget", true, false) as OptionButton
+	if target != null and target.item_count == 2:
+		target.select(1)
+		target.item_selected.emit(1)
+		await _frames(4)
+		_check(event_edge.target_state_id == running.get_internal_id(),
+			"Native target selector uses owned stable state ID")
+		history.undo()
+		await _frames(3)
+		_check(event_edge.target_state_id == idle.get_internal_id(),
+			"Undo restores target after UI command")
+	var states_list: ItemList = property.find_child("PotokStateList", true, false) as ItemList
+	if states_list != null and states_list.item_count == 2:
+		states_list.select(1)
+		states_list.item_selected.emit(1)
+		await _frames(4)
+		transitions = property.find_child("PotokTransitionList", true, false) as ItemList
+		_check(transitions != null and transitions.item_count == 1 and
+			transitions.get_item_text(0) == "Empty",
+			"State with no transitions shows inert Empty placeholder")
+		_check(property.find_child("PotokTransitionProperties", true, false) == null,
+			"Empty transition does not create an editable edge")
 	_check(not FlowGraphValidator.validate(graph).has_errors(), "Graph valid after UI edits")
 	_check(graph.state_machines[0].states[0].transitions[0].get_internal_id() == original_id,
 		"UI edits preserve authored identity")
