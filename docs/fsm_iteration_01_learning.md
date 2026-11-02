@@ -187,3 +187,11 @@ Todo es Flujo; todo fluye. 🌊
 - [CI 41363216050](https://github.com/mercurysama/Flujo/actions/runs/41363216050) FAIL for nested-stop lifecycle duplicates (6H-1 green); runtime `_stopping` fix `e494bcf39d27aa1ab25b6c31688ceb1287a98887` produced full [CI 41363328505](https://github.com/mercurysama/Flujo/actions/runs/41363328505) SUCCESS.
 - See `docs/fsm_phase6_6h_result.md` and `docs/fsm_phase6_final_audit.md`. FLU-FSM-002 core multi-machine runtime is automated-pass, **not** global CPU-budget guarantee, complete fault fuzzing, phase-5 Tok integration or Potok UI/Android release validation.
 - Resume at 7A authoring contract for Potok UI with explicit Tok payload/condition dependencies, or a separately scoped 6I global-work-SLA lot if necessary. Preserve red/green commits and the GitHub workflow as recovery evidence.
+
+## 2026-11-01 — Potok 7A read-only UI projection green recovery
+
+- Contract `6c44d8614f03269fe9575ef813148c6827aa3440` in `docs/fsm_phase7_7a_contract.md`; RED test `7c55954c76a3585bfb85cefb4e408d172d429c8d`, scene `b5f71ca2a7b2ac04786ddad7b9180321a598db4f`, CI `6467f163e5a6c1aa58bb1db0d3aeaa40ce55b9d2`. [CI 41364627238](https://github.com/mercurysama/Flujo/actions/runs/41364627238) FAIL as expected.
+- GREEN editor-only `FlowFSMEditorProjection` `1afd8e3a90f02e73fbcfd0fc21a60e99f54dcf60`; [CI 41364696760](https://github.com/mercurysama/Flujo/actions/runs/41364696760) SUCCESS all regressions.
+- Projection owns no graph state; returns stable IDs, machine/state order, true initial ID, three phase block IDs and typed transition metadata, Empty draft as inert placeholder. Same names do not confuse machine selection. No runtime or schema changes.
+- Recovery through `docs/fsm_phase7_7a_result.md` and `docs/fsm_phase7_microblocks.md`. **Next lot 7B:** wire Inspector machine activation via existing Fluo/Flow shell and stable-ID list navigation; then 7C property editing, 7D Tok bridge, 7E keyboard/touch/manual Android.
+- Do not assert that 7A provided interactive FSM UI or closed phase-5 Tok binding or Android acceptance. Human tests remain batched for final review.
