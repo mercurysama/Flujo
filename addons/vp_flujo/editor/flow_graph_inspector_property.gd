@@ -2593,25 +2593,255 @@ func _potok_render_phase_block_details(parent: Container, mid: String, sid: Stri
 	var header := Label.new()
 	header.text = "Flusso · " + String(_potok_selected_phase).capitalize() + " Block"
 	panel.add_child(header)
+	var controller: PVController = _active_controller()
+	var controller_ref: WeakRef = weakref(controller)
+	var phase: StringName = _potok_selected_phase
+	var block_id: String = _potok_selected_phase_block_id
 	var name_label := Label.new()
-	name_label.text = "Block Name: " + block.display_name
+	name_label.text = "Block Name"
 	panel.add_child(name_label)
-	var enabled_label := Label.new()
-	enabled_label.text = "Block Enabled: " + str(block.enabled)
-	panel.add_child(enabled_label)
-	# Use the shared authoring catalog for custom property projection, not a new registry.
+	var name_input := LineEdit.new()
+	name_input.name = &"PotokPhaseBlockName"
+	name_input.focus_mode = Control.FOCUS_ALL
+	name_input.text = block.display_name
+	name_input.text_changed.connect(
+		_potok_phase_block_apply.bind(mid, sid, phase, block_id, &"display_name", controller_ref)
+	)
+	panel.add_child(name_input)
+	var enabled := CheckBox.new()
+	enabled.name = &"PotokPhaseBlockEnabled"
+	enabled.text = "Block Enabled"
+	enabled.focus_mode = Control.FOCUS_ALL
+	enabled.button_pressed = block.enabled
+	enabled.toggled.connect(
+		_potok_phase_block_apply.bind(mid, sid, phase, block_id, &"enabled", controller_ref)
+	)
+	panel.add_child(enabled)
+	if block is FlowPrintBlock:
+		var text_label := Label.new()
+		text_label.text = "Print text"
+		panel.add_child(text_label)
+		var print_text := TextEdit.new()
+		print_text.name = &"PotokPhaseBlockPrintText"
+		print_text.focus_mode = Control.FOCUS_ALL
+		print_text.custom_minimum_size.y = 100.0
+		print_text.text = (block as FlowPrintBlock).text
+		print_text.text_changed.connect(
+			_potok_phase_block_apply_text.bind(
+				print_text, mid, sid, phase, block_id, controller_ref
+			)
+		)
+		panel.add_child(print_text)
+	# D4 descriptor catalog is the single authority for external generic controls.
 	if _authoring_context != null and _authoring_context.has_method(&"describe_block_properties"):
 		var raw: Variant = _authoring_context.call(&"describe_block_properties", block)
 		var result: FlowBlockPropertyCatalogResult = raw as FlowBlockPropertyCatalogResult
 		if result != null:
 			for descriptor: FlowBlockPropertyDescriptor in result.descriptors:
-				if descriptor != null and descriptor.is_generic_candidate() and descriptor.editable:
-					var property_label := Label.new()
-					property_label.text = descriptor.label + ": " + str(descriptor.current_value)
-					panel.add_child(property_label)
-	var pending := Label.new()
-	pending.text = "Property editing follows in 7F-1C1C."
-	panel.add_child(pending)
+				if descriptor != null and descriptor.editable and descriptor.is_generic_candidate():
+					_potok_render_phase_generic_property(
+						panel, descriptor, mid, sid, phase, block_id, controller_ref
+					)
+
+
+## 7F-1C1C scalar controls reuse the existing Fluo/Flusso panel.
+## The command rechecks exact ownership and validity before any UndoRedo write.
+func _potok_phase_block_apply(
+		value: Variant, mid: String, sid: String, phase: StringName,
+		block_id: String, property_name: StringName, controller_ref: WeakRef
+) -> void:
+	var controller: PVController = controller_ref.get_ref() as PVController \
+		if controller_ref != null else null
+	if controller == null or controller != _active_controller() \
+			or not is_potok_machine_view() or not _potok_phase_block_details_open \
+			or mid != _selected_id or sid != _potok_selected_state_id \
+			or phase != _potok_selected_phase or block_id != _potok_selected_phase_block_id \
+			or _commands == null:
+		return
+	_commands.set_fsm_phase_block_property_live(
+		controller, mid, sid, phase, block_id, property_name, value
+	)
+
+
+func _potok_phase_block_apply_text(
+		input: TextEdit, mid: String, sid: String, phase: StringName,
+		block_id: String, controller_ref: WeakRef
+) -> void:
+	if is_instance_valid(input):
+		_potok_phase_block_apply(
+			input.text, mid, sid, phase, block_id, &"text", controller_ref
+		)
+
+
+func _potok_render_phase_generic_property(
+		parent: Container, descriptor: FlowBlockPropertyDescriptor,
+		mid: String, sid: String, phase: StringName, block_id: String,
+		controller_ref: WeakRef
+) -> void:
+	var label := Label.new()
+	label.text = descriptor.label
+	parent.add_child(label)
+	var control: Control = null
+	var base_name: String = "PotokPhaseGeneric" + String(descriptor.property_name)
+	match descriptor.presentation_kind:
+		FlowBlockPropertyDescriptor.PRESENTATION_BOOLEAN:
+			var checkbox := CheckBox.new()
+			checkbox.name = StringName(base_name)
+			checkbox.button_pressed = bool(descriptor.current_value)
+			checkbox.toggled.connect(
+				_potok_phase_generic_apply.bind(
+					descriptor, mid, sid, phase, block_id, controller_ref
+				)
+			)
+			control = checkbox
+		FlowBlockPropertyDescriptor.PRESENTATION_TEXT, \
+		FlowBlockPropertyDescriptor.PRESENTATION_STRING_NAME:
+			var input := LineEdit.new()
+			input.name = StringName(base_name)
+			input.text = String(descriptor.current_value)
+			input.text_changed.connect(
+				_potok_phase_generic_text.bind(
+					descriptor, mid, sid, phase, block_id, controller_ref
+				)
+			)
+			control = input
+		FlowBlockPropertyDescriptor.PRESENTATION_MULTILINE:
+			var input := TextEdit.new()
+			input.name = StringName(base_name)
+			input.text = String(descriptor.current_value)
+			input.custom_minimum_size.y = 100.0
+			input.text_changed.connect(
+				_potok_phase_generic_multiline.bind(
+					input, descriptor, mid, sid, phase, block_id, controller_ref
+				)
+			)
+			control = input
+		FlowBlockPropertyDescriptor.PRESENTATION_INTEGER, \
+		FlowBlockPropertyDescriptor.PRESENTATION_FLOAT, \
+		FlowBlockPropertyDescriptor.PRESENTATION_RANGE:
+			var input := SpinBox.new()
+			input.name = StringName(base_name)
+			input.rounded = descriptor.model_type == TYPE_INT
+			input.min_value = -1000000000000000000.0
+			input.max_value = 1000000000000000000.0
+			input.allow_greater = true
+			input.allow_lesser = true
+			input.step = 1.0 if descriptor.model_type == TYPE_INT else 0.01
+			if descriptor.presentation_kind == FlowBlockPropertyDescriptor.PRESENTATION_RANGE:
+				var parts: PackedStringArray = descriptor.hint_string.split(",", false)
+				if parts.size() >= 2 and parts[0].strip_edges().is_valid_float() \
+						and parts[1].strip_edges().is_valid_float():
+					input.min_value = parts[0].strip_edges().to_float()
+					input.max_value = parts[1].strip_edges().to_float()
+					input.allow_lesser = false
+					input.allow_greater = false
+			input.value = clampf(
+				float(descriptor.current_value), input.min_value, input.max_value
+			)
+			input.value_changed.connect(
+				_potok_phase_generic_numeric.bind(
+					descriptor, mid, sid, phase, block_id, controller_ref
+				)
+			)
+			control = input
+		FlowBlockPropertyDescriptor.PRESENTATION_ENUM:
+			var option := OptionButton.new()
+			option.name = StringName(base_name)
+			var parts: PackedStringArray = descriptor.hint_string.split(",", false)
+			var chosen: int = -1
+			for part: String in parts:
+				var item: String = part.strip_edges()
+				var colon: int = item.rfind(":")
+				var option_value: Variant = item
+				if colon >= 0:
+					option_value = item.substr(colon + 1).strip_edges().to_int()
+					item = item.substr(0, colon).strip_edges()
+				elif descriptor.model_type == TYPE_INT:
+					option_value = option.item_count
+				var index: int = option.item_count
+				option.add_item(item)
+				option.set_item_metadata(index, option_value)
+				if option_value == descriptor.current_value:
+					chosen = index
+			if chosen >= 0:
+				option.select(chosen)
+				option.item_selected.connect(
+					_potok_phase_generic_enum.bind(
+						option, descriptor, mid, sid, phase, block_id, controller_ref
+					)
+				)
+				control = option
+			else:
+				option.queue_free()
+	if control != null:
+		control.focus_mode = Control.FOCUS_ALL
+		control.tooltip_text = descriptor.tooltip
+		parent.add_child(control)
+	else:
+		label.queue_free()
+
+
+func _potok_phase_generic_text(
+		value: String, descriptor: FlowBlockPropertyDescriptor,
+		mid: String, sid: String, phase: StringName, block_id: String,
+		controller_ref: WeakRef
+) -> void:
+	_potok_phase_generic_apply(
+		StringName(value) if descriptor.model_type == TYPE_STRING_NAME else value,
+		descriptor, mid, sid, phase, block_id, controller_ref
+	)
+
+
+func _potok_phase_generic_numeric(
+		value: float, descriptor: FlowBlockPropertyDescriptor,
+		mid: String, sid: String, phase: StringName, block_id: String,
+		controller_ref: WeakRef
+) -> void:
+	_potok_phase_generic_apply(
+		int(value) if descriptor.model_type == TYPE_INT else value,
+		descriptor, mid, sid, phase, block_id, controller_ref
+	)
+
+
+func _potok_phase_generic_multiline(
+		input: TextEdit, descriptor: FlowBlockPropertyDescriptor,
+		mid: String, sid: String, phase: StringName, block_id: String,
+		controller_ref: WeakRef
+) -> void:
+	if is_instance_valid(input):
+		_potok_phase_generic_apply(
+			input.text, descriptor, mid, sid, phase, block_id, controller_ref
+		)
+
+
+func _potok_phase_generic_enum(
+		index: int, control: OptionButton, descriptor: FlowBlockPropertyDescriptor,
+		mid: String, sid: String, phase: StringName, block_id: String,
+		controller_ref: WeakRef
+) -> void:
+	if is_instance_valid(control) and index >= 0 and index < control.item_count:
+		_potok_phase_generic_apply(
+			control.get_item_metadata(index), descriptor,
+			mid, sid, phase, block_id, controller_ref
+		)
+
+
+func _potok_phase_generic_apply(
+		value: Variant, descriptor: FlowBlockPropertyDescriptor,
+		mid: String, sid: String, phase: StringName, block_id: String,
+		controller_ref: WeakRef
+) -> void:
+	var controller: PVController = controller_ref.get_ref() as PVController \
+		if controller_ref != null else null
+	if controller == null or controller != _active_controller() \
+			or not is_potok_machine_view() or not _potok_phase_block_details_open \
+			or mid != _selected_id or sid != _potok_selected_state_id \
+			or phase != _potok_selected_phase or block_id != _potok_selected_phase_block_id \
+			or _commands == null:
+		return
+	_commands.set_fsm_phase_block_descriptor_live(
+		controller, mid, sid, phase, block_id, descriptor, value
+	)
 
 
 func _potok_clear_phase_selection() -> void:
