@@ -71,6 +71,9 @@ jobs:
       - name: Fluo drawer integration baseline
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 100s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/fluo_drawer_integration_test.gd
+      - name: Potok-7F1D2B SDK typed Revertir and cross-owner isolation
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 110s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_fsm_sdk_owner_revert_journey_test.gd
       - name: Potok-7F1D2A SDK three-phase native journey and stale state
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 110s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_fsm_sdk_three_phase_journey_test.gd
