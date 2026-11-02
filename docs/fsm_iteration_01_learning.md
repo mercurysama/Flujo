@@ -475,3 +475,8 @@ Todo es Flujo; todo fluye. 🌊
 
 - Starting HEAD `e3e0ccca79bc7be6aba03118f763da89f08a5b5f`, [CI 41535467283](https://github.com/mercurysama/Flujo/actions/runs/41535467283) completed SUCCESS. Added [Android A01–A05 guide](fsm_phase7_7f2d_android_loading_touch_orientation.md) at `5333a8ea0bdb4fc48659a71ca5b01da729d0afcf` for project loading, Fluo/Flow/Flusso, vertical/horizontal layouts, double-tap activation and touch Add of Print plus SDK.
 - Evidence stays separated: October Fluo Preview 1 Android screenshot is historical load/render only; 7F-2 Android acceptance remains **0/10**, Fedora **0/15**. No Android device operated from GitHub, and no production, runtime, schema, scene or `main` edits. Next 7F-2E A06–A10 then actual device evidence, defect triage and human sign-off.
+
+## 2026-11-02 — Potok 7F-2E Android A06–A10; manual protocol set prepared
+
+- Baseline `9daac620c1fc913c84d6afbdda1b0e5d60246401`, [Actions 41536419194](https://github.com/mercurysama/Flujo/actions/runs/41536419194) completed SUCCESS. Added [Android A06–A10 guide](fsm_phase7_7f2e_android_edit_persistence.md), commit `9b7cf2ae16f759e16742afba1df564f90a640822`: touchscreen/virtual keyboard SDK fields, Revertir and available UndoRedo, Move/Duplicate/Delete Cancel/Confirm, scroll/orientation and save/reopen with owner isolation.
+- All five review guides now cover **F01–F15 and A01–A10 (25/25 procedures documented)**. **Physical execution remains 0/25; 25 PENDING**, so 7F-2 cannot be accepted or merged. Next: actual Fedora first batch F01–F05 and subsequent Android hands-on results, followed by bug triage if observed. No production, schema, demo, or `main` changes.
