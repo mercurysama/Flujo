@@ -7,7 +7,7 @@
 - `3b6540bf43b6d41216b0ac9149d5b6291a6ed0f6`: nuevo focal `tests/runtime/flow_fsm_dynamic_quota_identity_test.gd`.
 - `7cfda8e1831811f2b87a92ec784384339d855c27`: nueva escena de prueba `tests/runtime/flow_fsm_dynamic_quota_identity_test.tscn`.
 - `7c1fefc3a2c64ad46cf063b69557dfd412a31210`: añade el paso `Potok-8B1 dynamic state quota ID and ordering focal` a `.github/workflows/flujo-fsm.yml`.
-- [Actions 41547536522](https://github.com/mercurysama/Flujo/actions/runs/41547536522): focal 8B1, focal original FSM dynamic y validador de catálogo terminaron SUCCESS; verificar la conclusión global completa de la ejecución antes de declarar toda la regresión GREEN.
+- **GREEN global confirmado:** [Actions 41547536522](https://github.com/mercurysama/Flujo/actions/runs/41547536522), **completed SUCCESS 77/77 pasos**, cero fallos, sobre `7c1fefc3a2c64ad46cf063b69557dfd412a31210`; incluye focal 8B1, focal original FSM dynamic y validador de catálogo.
 
 ## Prueba existente caracterizada
 
