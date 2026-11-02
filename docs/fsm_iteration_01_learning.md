@@ -254,3 +254,11 @@ Todo es Flujo; todo fluye. 🌊
 - Existing validated editor commands can be composed into a structurally complex authored scene: duplicating a state copies phase/edges with new IDs and self-loop remap; deleting initial state repairs its ID, while foreign incoming targets block deletion. Two full ten-action Undo/Redo cycles and a `PackedScene` reopen preserve exact state/edge order, IDs and references.
 - No production changes, so no model migration. `$flujo-baseline` and `$flujo-prove` instructions were read and followed as remote verification; **no direct Skill invocation or formal READY/PASA** was performed in this session. Human Godot desktop/Android acceptance remains pending.
 - Next 7E-1C verifies saved nested Bool Condition Tok `#` and typed Event field source semantics without writing ephemeral payload values. Preserve focused standalone tests and incremental checkpoints.
+
+
+## 2026-11-01 — Potok 7E-1C typed event source persistence
+
+- Contract `docs/fsm_phase7_7e1c_contract.md` at `839b4cc508b3a3b60e6faf4bbff25bbef52d6d61` and test `tests/editor/flow_fsm_condition_tok_scene_roundtrip_test.gd` at `4064115ddd7fbe340934d0b63a33efd8d8305015`. [Full CI 41393859434](https://github.com/mercurysama/Flujo/actions/runs/41393859434) **SUCCESS**, 48 steps.
+- Authored Bool Condition Tok with four typed event fields (INT/BOOL/FLOAT/STRING), comparison IDs, literal/operand IDs, three AND connectors and outer NOT survives a real saved-scene cycle after validated property commands and Undo/Redo. No source ID changes were needed.
+- Distinguish declared event/key/type stored in the graph from machine-tick payload held in `FlowValueResolutionContext`: a private packet sentinel stays out of `.tscn`, freshly reopened sources initially have no packet, and explicit fresh packets resolve with exact type diagnostics. Never persist event packet snapshots as a convenience.
+- Repository Skills `$flujo-baseline` and `$flujo-prove` were **read and followed remotely but not invoked as standalone gates**; no formal READY/PASA or human GUI/Android claim. Next 7E-1D repeated saves and instance isolation.
