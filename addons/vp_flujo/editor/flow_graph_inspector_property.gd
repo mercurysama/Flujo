@@ -2705,6 +2705,105 @@ func _potok_on_edge_structure(action: StringName) -> void:
 	_request_rebuild()
 
 
+## Deletion never executes on button press: only ConfirmationDialog.confirmed
+## can commit it. Cancel/Escape and window-close invalidate every pending ID.
+func _potok_request_delete(for_edge: bool) -> void:
+	if not is_potok_machine_view() or _commands == null:
+		return
+	var controller: PVController = _active_controller()
+	if controller == null or controller.flow_graph == null:
+		return
+	var mid: String = _selected_id
+	var sid: String = _potok_selected_state_id
+	var eid: String = _potok_selected_transition_id if for_edge else ""
+	if sid.is_empty() or (for_edge and eid.is_empty()):
+		return
+	var view: Dictionary = FlowFSMEditorProjection.new().present(controller.flow_graph, mid)
+	if not bool(view.get("found", false)):
+		return
+	var label: String = ""
+	for state: Dictionary in view.get("states", []):
+		if String(state.get("id", "")) != sid:
+			continue
+		label = String(state.get("name", "State"))
+		if for_edge:
+			label = ""
+			for edge: Dictionary in state.get("transitions", []):
+				if String(edge.get("id", "")) == eid:
+					label = String(edge.get("name", "Transition"))
+					break
+		break
+	if label.is_empty():
+		return
+	if not for_edge:
+		var deps: Array[String] = _commands.get_fsm_state_deletion_dependencies(
+			controller, mid, sid
+		)
+		if not deps.is_empty():
+			_potok_structure_feedback = "Cannot delete this state: incoming transitions from " \
+				+ ", ".join(deps) + ". Reassign or delete them first."
+			_request_rebuild()
+			return
+	_potok_close_delete_dialog()
+	_potok_delete_kind = &"edge" if for_edge else &"state"
+	_potok_delete_machine_id = mid
+	_potok_delete_state_id = sid
+	_potok_delete_transition_id = eid
+	_potok_delete_controller_ref = weakref(controller)
+	var dialog := ConfirmationDialog.new()
+	dialog.name = &"PotokStructureDeleteDialog"
+	dialog.title = "Delete Potok %s?" % ("transition" if for_edge else "state")
+	dialog.dialog_text = "Delete \"%s\"? The change can be undone." % label
+	dialog.get_ok_button().text = "Delete"
+	dialog.confirmed.connect(_potok_confirm_delete)
+	dialog.canceled.connect(_potok_close_delete_dialog)
+	dialog.close_requested.connect(_potok_close_delete_dialog)
+	add_child(dialog)
+	_potok_delete_dialog = dialog
+	dialog.popup_centered()
+
+
+func _potok_confirm_delete() -> void:
+	var kind: StringName = _potok_delete_kind
+	var mid: String = _potok_delete_machine_id
+	var sid: String = _potok_delete_state_id
+	var eid: String = _potok_delete_transition_id
+	var controller: PVController = _potok_delete_controller_ref.get_ref() as PVController \
+		if _potok_delete_controller_ref != null else null
+	var same_context: bool = is_instance_valid(controller) \
+		and controller == _active_controller() \
+		and mid == _selected_id and sid == _potok_selected_state_id \
+		and (kind == &"state" or eid == _potok_selected_transition_id)
+	_potok_close_delete_dialog()
+	if not same_context or _commands == null:
+		return
+	var deleted: bool = false
+	if kind == &"edge":
+		deleted = _commands.delete_fsm_transition(controller, mid, sid, eid)
+		if deleted:
+			_potok_selected_transition_id = ""
+	elif kind == &"state":
+		deleted = _commands.delete_fsm_state(controller, mid, sid)
+		if deleted:
+			_potok_selected_state_id = ""
+			_potok_selected_transition_id = ""
+	_potok_structure_feedback = "" if deleted else "Deletion blocked: references or context changed."
+	_request_rebuild()
+
+
+func _potok_close_delete_dialog() -> void:
+	_potok_delete_kind = &""
+	_potok_delete_machine_id = ""
+	_potok_delete_state_id = ""
+	_potok_delete_transition_id = ""
+	_potok_delete_controller_ref = null
+	var dialog: ConfirmationDialog = _potok_delete_dialog
+	_potok_delete_dialog = null
+	if is_instance_valid(dialog):
+		dialog.hide()
+		dialog.queue_free()
+
+
 func _on_potok_state_selected(index: int, list: ItemList) -> void:
 	if not is_potok_machine_view() or index < 0 or index >= list.item_count:
 		return
