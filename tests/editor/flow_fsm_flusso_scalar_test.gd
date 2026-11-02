@@ -111,6 +111,37 @@ func _run() -> void:
 			await process_frame
 		_check(machine.display_name == "Edited in Flusso",
 			"Machine name committed via Flusso")
+	var clock: OptionButton = property.find_child("PotokMachineTickMode", true, false) as OptionButton
+	_check(clock != null, "Machine tick selector exists")
+	if clock != null:
+		clock.select(2)
+		clock.item_selected.emit(2)
+		for i: int in 4:
+			await process_frame
+		_check(machine.tick_mode == FlowStateMachineDefinition.TickMode.MANUAL,
+			"Flusso tick selection uses validated command")
+	var initial: OptionButton = property.find_child("PotokMachineInitialState", true, false) as OptionButton
+	_check(initial != null and initial.item_count == 2, "Initial-state selector shows stable owned states")
+	if initial != null and initial.item_count == 2:
+		initial.select(1)
+		initial.item_selected.emit(1)
+		for i: int in 4:
+			await process_frame
+		_check(machine.initial_state_id == sid, "Initial dropdown commits owned state ID")
+		initial = property.find_child("PotokMachineInitialState", true, false) as OptionButton
+		initial.select(0)
+		initial.item_selected.emit(0)
+		for i: int in 4:
+			await process_frame
+		_check(machine.initial_state_id == idle.get_internal_id(), "Initial dropdown restores ID")
+	var note: LineEdit = property.find_child("PotokMachineNote", true, false) as LineEdit
+	_check(note != null, "Machine note input exists")
+	if note != null:
+		note.text = "Machine note"
+		note.text_submitted.emit(note.text)
+		for i: int in 4:
+			await process_frame
+		_check(machine.user_note == "Machine note", "Machine note commits on Enter")
 	var list: ItemList = property.find_child("PotokStateList", true, false) as ItemList
 	if list != null and list.item_count == 2:
 		list.select(1)
@@ -119,6 +150,14 @@ func _run() -> void:
 		await process_frame
 	_check(property.find_child("PotokStateProperties", true, false) != null,
 		"Selected state has native Flusso controls")
+	var state_name: LineEdit = property.find_child("PotokStateName", true, false) as LineEdit
+	_check(state_name != null, "State name input exists")
+	if state_name != null:
+		state_name.text = "Sprint in Flusso"
+		state_name.text_submitted.emit(state_name.text)
+		for i: int in 4:
+			await process_frame
+		_check(run.display_name == "Sprint in Flusso", "State name Flusso edit is committed")
 	var active: CheckBox = property.find_child("PotokStateEnabled", true, false) as CheckBox
 	_check(active != null, "State Enabled input exists")
 	if active != null:
