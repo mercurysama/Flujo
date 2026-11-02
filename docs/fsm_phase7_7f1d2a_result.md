@@ -6,7 +6,7 @@
 
 - Commit `2be0fc54b092047c221c4c2986dd153ae944a8a3`: `tests/editor/flow_fsm_sdk_three_phase_journey_test.gd`.
 - Commit `dd55fce5ba2a419505d8669c8168f7409602c52b`: nueva entrada focal en `.github/workflows/flujo-fsm.yml`.
-- [Actions 41522433103](https://github.com/mercurysama/Flujo/actions/runs/41522433103): prueba focal 7F-1D2A aprobada; confirmar conclusión global y número real de pasos antes de declarar GREEN de la suite.
+- **GREEN confirmado:** [Actions 41522433103](https://github.com/mercurysama/Flujo/actions/runs/41522433103), **completed SUCCESS 73/73 pasos, cero fallos**, commit `dd55fce5ba2a419505d8669c8168f7409602c52b`, incluida la prueba focal SDK y regresiones Godot 4.7.2.
 
 ## Recorrido
 
