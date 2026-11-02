@@ -101,6 +101,20 @@ func _run() -> void:
 		await _frames(4)
 		_check(property.get("_potok_selected_state_id") == running.get_internal_id(),
 			"Native state selection retains stable ID")
+		# An external Undo/Redo reorder must not change the selected state identity.
+		machine.states = [running, idle]
+		property.refresh_dock_controller()
+		await _frames(4)
+		states = _drawer.find_child("PotokStateList", true, false) as ItemList
+		_check(states != null and states.item_count == 2 and
+			(states.get_item_metadata(0) as Dictionary).get("id") == running.get_internal_id(),
+			"Reordered view reflects authored state order")
+		_check(property.get("_potok_selected_state_id") == running.get_internal_id() and
+			states.get_selected_items().size() == 1 and states.get_selected_items()[0] == 0,
+			"Stable state selection follows ID across reorder")
+		machine.states = [idle, running]
+		property.refresh_dock_controller()
+		await _frames(4)
 		_check(property.call("navigate_potok_state", -1), "Ctrl+PageUp state navigation")
 		await _frames(4)
 		_check(property.get("_potok_selected_state_id") == idle.get_internal_id(),
@@ -132,6 +146,10 @@ func _run() -> void:
 	_check(_drawer.find_child("PotokStateList", true, false) == null,
 		"Process editor does not duplicate Potok tree")
 	_drawer.close()
+	_drawer.set_controller(null)
+	await _frames(3)
+	_check(_drawer.find_child("PotokStateList", true, false) == null,
+		"Controller removal clears previous machine navigation")
 	_check(graph.state_machines[0].states.size() == 2 and
 		graph.state_machines[0].initial_state_id == idle.get_internal_id() and
 		not FlowGraphValidator.validate(graph).has_errors(),
