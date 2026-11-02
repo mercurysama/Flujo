@@ -246,3 +246,11 @@ Todo es Flujo; todo fluye. 🌊
 - Lesson: `git show --check HEAD` with GitHub Actions default shallow checkout may reinterpret the current commit as a root and report unrelated historical whitespace; first [CI 41390202530](https://github.com/mercurysama/Flujo/actions/runs/41390202530) FAIL in this new gate and skipped the focal. Fix by `fetch-depth: 2`, `git diff --check HEAD^ HEAD`; second CI passed. Do not edit unrelated historical Markdown merely to get green.
 - Repo Skills `$flujo-baseline` and `$flujo-prove` can be consulted and their checks followed through GitHub + Actions, **but they cannot be invoked as standalone agent tools** in this session; record procedure-applied vs direct-invocation-not-run, without claiming formal READY/PASA. Manual UI remains separate.
 - Next: 7E-1B2 structural/edge command Undo/Redo persistence regression; stay within editor tests and existing commands unless failing evidence identifies a real production defect.
+
+
+## 2026-11-01 — Potok 7E-1B2 structural scene history
+
+- Contract `docs/fsm_phase7_7e1b2_contract.md` in `839c490aafede1b1e69f20fb517b2ef4afa4c681`; focused regression `tests/editor/flow_fsm_structural_scene_roundtrip_test.gd` and CI wiring in `4984b6c39b0062676e99b268b31a8528daf99aac`. [GitHub Actions 41392544536](https://github.com/mercurysama/Flujo/actions/runs/41392544536) **SUCCESS**, 47 steps.
+- Existing validated editor commands can be composed into a structurally complex authored scene: duplicating a state copies phase/edges with new IDs and self-loop remap; deleting initial state repairs its ID, while foreign incoming targets block deletion. Two full ten-action Undo/Redo cycles and a `PackedScene` reopen preserve exact state/edge order, IDs and references.
+- No production changes, so no model migration. `$flujo-baseline` and `$flujo-prove` instructions were read and followed as remote verification; **no direct Skill invocation or formal READY/PASA** was performed in this session. Human Godot desktop/Android acceptance remains pending.
+- Next 7E-1C verifies saved nested Bool Condition Tok `#` and typed Event field source semantics without writing ephemeral payload values. Preserve focused standalone tests and incremental checkpoints.
