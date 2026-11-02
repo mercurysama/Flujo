@@ -6,7 +6,7 @@
 
 - `da1b51afd303f2781add27cde6a0d7b4de07fa1f`: focal `tests/editor/flow_fsm_sdk_delete_journey_test.gd`.
 - `a551de763dbf4ec8be6bb7b5492efab517b7ce58`: paso añadido en `.github/workflows/flujo-fsm.yml`.
-- [Actions 41525063836](https://github.com/mercurysama/Flujo/actions/runs/41525063836): focal de SDK Delete superado; la suite global completa requiere comprobación de conclusión y recuento final.
+- **GREEN confirmado:** [Actions 41525063836](https://github.com/mercurysama/Flujo/actions/runs/41525063836), **completed SUCCESS: 75/75 pasos**, sin fallos, sobre `a551de763dbf4ec8be6bb7b5492efab517b7ce58`; incluye focal 7F-1D2C y regresiones Godot 4.7.2.
 
 ## Recorrido y contrato comprobado
 
