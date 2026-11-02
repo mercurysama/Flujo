@@ -107,8 +107,10 @@ func _run() -> void:
 		var states: ItemList = property.find_child("PotokStateList", true, false) as ItemList
 		states.select(1)
 		states.item_selected.emit(1)
-		await _frames(4)
-		popup.call("_confirm")
+		# Simulate a late Confirm callback during the same frame, before
+		# queue_free() reclaims the invalidated popup.
+		if is_instance_valid(popup):
+			popup.call("_confirm")
 	await _frames(4)
 	_check(edge.condition == stored, "Stale popup after state selection cannot commit")
 	_check(property.find_child("FlowConditionEditor", true, false) == null,
