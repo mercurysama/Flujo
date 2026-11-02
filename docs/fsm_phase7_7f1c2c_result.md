@@ -8,7 +8,7 @@
 - Contrato [`fsm_phase7_7f1c2_contract.md`](fsm_phase7_7f1c2_contract.md), fase Delete 7F-1C2C.
 - Prueba `tests/editor/flow_fsm_phase_block_delete_commands_test.gd`, commit `32e6e6ced2f3b0043ba39a93955cf804cfc86bb5`; workflow `abc98c60321d011bba665a982cb7ea9d77eeeab4`; [CI RED 41512635281](https://github.com/mercurysama/Flujo/actions/runs/41512635281): falló en el test nuevo porque no existía el comando.
 - Implementación `b5b5643607fd621280414f1af5455c5db934e0cd` en `addons/vp_flujo/editor/flow_graph_editor_commands.gd`.
-- Evidencia GREEN de integración: [Actions 41512783269](https://github.com/mercurysama/Flujo/actions/runs/41512783269); verificar conclusión de este run antes de marcar aprobación global.
+- **GREEN confirmado:** [Actions 41512783269](https://github.com/mercurysama/Flujo/actions/runs/41512783269), **completed SUCCESS: 69/69 pasos**, cero fallos, código en `b5b5643607fd621280414f1af5455c5db934e0cd`. Incluye test focal Delete y regresiones Godot 4.7.2.
 
 ## Comportamiento
 
