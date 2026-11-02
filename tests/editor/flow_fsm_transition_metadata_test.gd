@@ -190,6 +190,36 @@ func _run() -> void:
 			"State with no transitions shows inert Empty placeholder")
 		_check(property.find_child("PotokTransitionProperties", true, false) == null,
 			"Empty transition does not create an editable edge")
+	# On a CONDITION edge with no stored event name, switching to EVENT must
+	# visibly refuse the change instead of silently inventing a default event.
+	_check(command.set_fsm_transition_property(controller, mid, sid, cid,
+		&"trigger", FlowStateTransitionDefinition.Trigger.CONDITION),
+		"Prepared condition edge restores CONDITION")
+	_check(command.set_fsm_transition_property(controller, mid, sid, cid,
+		&"event_name", &""), "Condition edge may omit unused event metadata")
+	states_list = property.find_child("PotokStateList", true, false) as ItemList
+	if states_list != null and states_list.item_count == 2:
+		states_list.select(0)
+		states_list.item_selected.emit(0)
+		await _frames(4)
+		transitions = property.find_child("PotokTransitionList", true, false) as ItemList
+		if transitions != null and transitions.item_count == 2:
+			transitions.select(1)
+			transitions.item_selected.emit(1)
+			await _frames(4)
+			var unavailable: OptionButton = property.find_child(
+				"PotokTransitionTrigger", true, false) as OptionButton
+			if unavailable != null:
+				unavailable.select(1)
+				unavailable.item_selected.emit(1)
+				await _frames(4)
+				_check(condition_edge.trigger == FlowStateTransitionDefinition.Trigger.CONDITION,
+					"Invalid UI trigger never changes authored edge")
+				var reason: Label = property.find_child(
+					"PotokTransitionFeedback", true, false) as Label
+				_check(reason != null and reason.visible and
+					reason.text.contains("nonempty event name"),
+					"Flusso explains why unavailable EVENT trigger was refused")
 	_check(not FlowGraphValidator.validate(graph).has_errors(), "Graph valid after UI edits")
 	_check(graph.state_machines[0].states[0].transitions[0].get_internal_id() == original_id,
 		"UI edits preserve authored identity")
