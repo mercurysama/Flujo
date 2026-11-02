@@ -71,6 +71,9 @@ jobs:
       - name: Fluo drawer integration baseline
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 100s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/fluo_drawer_integration_test.gd
+      - name: Potok-7F1D1 native Add Edit Close Move user journey
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 110s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_fsm_phase_user_journey_test.gd
       - name: Potok-7F1C2E phase structural scene save and reload
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 110s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_fsm_phase_structure_roundtrip_test.gd
