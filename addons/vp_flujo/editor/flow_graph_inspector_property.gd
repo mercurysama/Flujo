@@ -2611,6 +2611,100 @@ func _on_potok_transition_selected(index: int, list: ItemList) -> void:
 	_potok_transition_feedback = ""
 	_request_rebuild()
 
+## Potok 7C-2B: structural controls share the existing Flow view.
+func _potok_render_structure_actions(parent: Container, for_edge: bool) -> void:
+	var actions := HFlowContainer.new()
+	actions.name = &"PotokTransitionActions" if for_edge else &"PotokStateActions"
+	parent.add_child(actions)
+	var prefix: String = "PotokTransition" if for_edge else "PotokState"
+	var selected_id: String = _potok_selected_transition_id if for_edge else _potok_selected_state_id
+	for action: String in ["Add", "Duplicate", "MoveUp", "MoveDown", "Delete"]:
+		var button := Button.new()
+		button.name = StringName(prefix + action)
+		button.text = {
+			"Add": "+", "Duplicate": "Duplicate",
+			"MoveUp": "↑", "MoveDown": "↓", "Delete": "Delete"
+		}[action]
+		button.focus_mode = Control.FOCUS_ALL
+		button.disabled = action != "Add" and selected_id.is_empty()
+		if for_edge:
+			button.pressed.connect(_potok_on_edge_structure.bind(StringName(action)))
+		else:
+			button.pressed.connect(_potok_on_state_structure.bind(StringName(action)))
+		actions.add_child(button)
+	if not for_edge:
+		var feedback := Label.new()
+		feedback.name = &"PotokStructureFeedback"
+		feedback.text = _potok_structure_feedback
+		feedback.visible = not _potok_structure_feedback.is_empty()
+		feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		parent.add_child(feedback)
+
+
+func _potok_on_state_structure(action: StringName) -> void:
+	if not is_potok_machine_view() or _commands == null:
+		return
+	var controller: PVController = _active_controller()
+	if controller == null or controller.flow_graph == null:
+		return
+	var mid: String = _selected_id
+	var sid: String = _potok_selected_state_id
+	var created: String = ""
+	var changed_model: bool = false
+	match action:
+		&"Add":
+			created = _commands.add_fsm_state(controller, mid)
+		&"Duplicate":
+			if not sid.is_empty():
+				created = _commands.duplicate_fsm_state(controller, mid, sid)
+		&"MoveUp":
+			changed_model = _commands.move_fsm_state(controller, mid, sid, -1)
+		&"MoveDown":
+			changed_model = _commands.move_fsm_state(controller, mid, sid, 1)
+		&"Delete":
+			_potok_request_delete(false)
+			return
+	if not created.is_empty():
+		_potok_selected_state_id = created
+		_potok_selected_transition_id = ""
+		changed_model = true
+	if changed_model:
+		_potok_structure_feedback = ""
+	_request_rebuild()
+
+
+func _potok_on_edge_structure(action: StringName) -> void:
+	if not is_potok_machine_view() or _commands == null:
+		return
+	var controller: PVController = _active_controller()
+	if controller == null or controller.flow_graph == null or _potok_selected_state_id.is_empty():
+		return
+	var mid: String = _selected_id
+	var sid: String = _potok_selected_state_id
+	var eid: String = _potok_selected_transition_id
+	var created: String = ""
+	var changed_model: bool = false
+	match action:
+		&"Add":
+			created = _commands.add_fsm_transition(controller, mid, sid)
+		&"Duplicate":
+			if not eid.is_empty():
+				created = _commands.duplicate_fsm_transition(controller, mid, sid, eid)
+		&"MoveUp":
+			changed_model = _commands.move_fsm_transition(controller, mid, sid, eid, -1)
+		&"MoveDown":
+			changed_model = _commands.move_fsm_transition(controller, mid, sid, eid, 1)
+		&"Delete":
+			_potok_request_delete(true)
+			return
+	if not created.is_empty():
+		_potok_selected_transition_id = created
+		changed_model = true
+	if changed_model:
+		_potok_structure_feedback = ""
+	_request_rebuild()
+
+
 func _on_potok_state_selected(index: int, list: ItemList) -> void:
 	if not is_potok_machine_view() or index < 0 or index >= list.item_count:
 		return
