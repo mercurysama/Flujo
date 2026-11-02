@@ -1,0 +1,25 @@
+# Potok 7C-2B — Structural state and transition authoring
+
+Date: 2026-11-01; branch `feature/fsm-runtime-flow-flusso`, baseline `456c10b3beb24ecd2d606bb964306cad2181837d`.
+
+## Model commands (machine, state and edge IDs only)
+
+- Reuse `FlowGraphEditorCommands`, the owning `PVController`/FlowGraph, `FlowGraphValidator`, and one `EditorUndoRedoManager` action per accepted change. No runtime, graph-schema or implicit cross-controller writes.
+- `add_fsm_state(controller,machine_id)` returns new state ID or `""`. Insert at the end of the authored machine. The first state becomes `initial_state_id` atomically; later new states do not change it. `duplicate_fsm_state(controller,machine_id,state_id)` returns a new ID and inserts immediately after its source; state and phase block IDs and edge IDs are new, but references to other existing states remain. An outgoing self-loop targets the duplicate, not its source. Initial ID remains unchanged. Preserve relative order.
+- `move_fsm_state(controller,machine_id,state_id,direction)` swaps exactly one neighboring authored slot (no wrap), preserving the initial ID and all transition target IDs. `delete_fsm_state(controller,machine_id,state_id)` may delete only when there are **no incoming edges from surviving states** (including disabled edges). A state with outgoing edges can be deleted because those owned edges are removed with it. Deleting the initial state selects the earliest **enabled** remaining state by authored order; deleting the only state sets initial ID to `""`; if no enabled survivor exists, reject. Never silently rewrite other states' incoming target IDs. The UI explains blocked inbound dependencies before confirmation.
+- `add_fsm_transition(controller,machine_id,state_id)` returns new edge ID or `""`. Newly authored edge is valid immediately: EVENT trigger with explicit starter name `"event"` and target source state ID (a valid self-loop); caller can customize event/target/priority using existing 7C-2A Flusso. `duplicate_fsm_transition(controller,machine_id,state_id,transition_id)` copies with new edge/condition IDs and inserts immediately after source, retaining target and metadata. `move_fsm_transition(...,direction)` swaps neighbor and preserves identities. `delete_fsm_transition(...)` removes only the selected edge from its owning state. All operations validate detached candidates before commit.
+- Reject stale IDs, cross-machine owners, out-of-bounds moves, missing controller, invalid graph mutations and unsafe inbound dependencies without editing the graph or creating undo actions. Return stable IDs for created/duplicated resources. A successful operation emits normal changed/diagnostics, including Undo and Redo.
+- One atomic action must restore **both** states array and initial ID when necessary. Transition structure changes replace the original state's transitions array; no replacement of the graph or original machine/state identities. Undo/Redo reapplies the same created IDs, never minting new ones.
+
+## UI / Cancel
+
+- Add small Flow controls to the existing Potok machine panel (add/duplicate/move up/move down/delete state), and to the selected state's transition panel (add/duplicate/move/delete edge). All actions use the stable ID selected in 7B/7C-2A; disabled/Empty selection cannot duplicate/move/delete. UI updates selection by returned stable ID when a new state/edge is created.
+- Deletion is **two-phase**: a `ConfirmationDialog` displays the exact selected entity and, for state deletion, inbound dependencies if any. Before clicking **Delete**, there is **no model mutation**. **Cancel**, Escape, close button and dismissal must discard the pending deletion. Revalidate selection/ownership and dependencies at confirmation time; no action on stale source or different controller/machine.
+- Blocked state deletion should not open a misleading confirmation; display the reason instead. Reuse the existing Fluo view and its current keyboard routes. Do not duplicate the Inspector state machine list or insert resources from the pure `FlowFSMEditorProjection`.
+- A new state should become selected; after deletion, select a valid surviving state/edge by stable ID or Empty. On Undo/Redo, stale selection must recover to the nearest existing authored ID without mutating the graph.
+
+## Evidence
+
+Headless `--editor --script` focal: add/duplicate/move/delete state and event transitions; verify IDs and authored order, duplicated self-loop and phase blocks, initial repair on first/last deletion, dependency refusal and no Undo growth on invalid moves, Undo/Redo structural roundtrip, dialog Cancel path and only confirmed deletion. Full Godot 4.7.2 CI must remain green.
+
+**Boundaries:** no destructive cross-reference rewriting; complex transition condition Tok `#` editing is future 7D, not in 7C-2B. Save/reopen and manual Android visual testing are 7E. If model contract needs several CI rounds, do not mark the lot complete until both commands and user-facing confirmation work.
