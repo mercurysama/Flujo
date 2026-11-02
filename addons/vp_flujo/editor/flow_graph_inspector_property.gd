@@ -92,6 +92,8 @@ var _potok_delete_kind: StringName = &""
 var _potok_delete_machine_id: String = ""
 var _potok_delete_state_id: String = ""
 var _potok_delete_transition_id: String = ""
+var _potok_delete_phase: StringName = &""
+var _potok_delete_block_id: String = ""
 var _potok_delete_controller_ref: WeakRef = null
 var _potok_condition_editor: FlowConditionEditor = null
 var _potok_condition_owner: WeakRef = null
@@ -2424,6 +2426,22 @@ func _render_potok_state_phases(parent: Container, selected: Dictionary) -> void
 				mid, sid, phase_id, entry.authoring_id, weakref(controller)
 			))
 			actions.add_child(add_button)
+		# Structural operations belong to the selected block in this exact phase.
+		var block_actions := HFlowContainer.new()
+		block_actions.name = StringName("PotokPhase" + phase_name + "BlockActions")
+		host.add_child(block_actions)
+		for action: StringName in [&"MoveUp", &"MoveDown", &"Duplicate", &"Delete"]:
+			var button := Button.new()
+			button.name = StringName("PotokPhase" + phase_name + String(action))
+			button.text = String(action).replace("Move", "Move ")
+			button.focus_mode = Control.FOCUS_ALL
+			button.custom_minimum_size.y = 44.0
+			button.disabled = not (phase_id == _potok_selected_phase
+				and not _potok_selected_phase_block_id.is_empty())
+			button.pressed.connect(_potok_on_phase_structure.bind(
+				mid, sid, phase_id, action, weakref(controller)
+			))
+			block_actions.add_child(button)
 	if not selected_found:
 		_potok_selected_phase_block_id = ""
 		_potok_phase_block_details_open = false
@@ -2468,6 +2486,97 @@ func _potok_on_phase_block_selected(
 			previous_panel.queue_free()
 	_potok_selected_phase = phase
 	_potok_selected_phase_block_id = block_id
+
+
+## 7F-1C2D: native structure actions revalidate full ownership at click time.
+func _potok_on_phase_structure(
+		mid: String, sid: String, phase: StringName, action: StringName,
+		controller_ref: WeakRef
+) -> void:
+	var controller: PVController = controller_ref.get_ref() as PVController \
+		if controller_ref != null else null
+	var block_id: String = _potok_selected_phase_block_id
+	if not is_instance_valid(controller) or controller != _active_controller() \
+			or not is_potok_machine_view() or _commands == null \
+			or mid != _selected_id or sid != _potok_selected_state_id \
+			or phase != _potok_selected_phase or block_id.is_empty() \
+			or _potok_find_owned_phase_block(controller, mid, sid, phase, block_id) == null:
+		return
+	if action == &"Delete":
+		_potok_request_phase_block_delete(mid, sid, phase, block_id, controller)
+		return
+	var selected_id: String = block_id
+	var changed_model: bool = false
+	match action:
+		&"MoveUp":
+			changed_model = _commands.move_fsm_phase_block(
+				controller, mid, sid, phase, block_id, -1
+			)
+		&"MoveDown":
+			changed_model = _commands.move_fsm_phase_block(
+				controller, mid, sid, phase, block_id, 1
+			)
+		&"Duplicate":
+			selected_id = _commands.duplicate_fsm_phase_block(
+				controller, mid, sid, phase, block_id
+			)
+			changed_model = not selected_id.is_empty()
+		_:
+			return
+	if not changed_model:
+		return
+	_potok_phase_block_details_open = false
+	_potok_phase_block_session.clear()
+	_potok_selected_phase_block_id = selected_id
+	_potok_phase_focus_pending = {
+		"controller_ref": weakref(controller), "machine": mid,
+		"state": sid, "phase": phase, "block": selected_id
+	}
+	_request_rebuild()
+
+
+func _potok_request_phase_block_delete(
+		mid: String, sid: String, phase: StringName,
+		block_id: String, controller: PVController
+) -> void:
+	var block: FlowBlock = _potok_find_owned_phase_block(
+		controller, mid, sid, phase, block_id
+	)
+	if block == null:
+		return
+	_potok_close_delete_dialog()
+	_potok_delete_kind = &"phase_block"
+	_potok_delete_machine_id = mid
+	_potok_delete_state_id = sid
+	_potok_delete_phase = phase
+	_potok_delete_block_id = block_id
+	_potok_delete_controller_ref = weakref(controller)
+	var dialog := ConfirmationDialog.new()
+	dialog.name = &"PotokStructureDeleteDialog"
+	dialog.title = "Delete Potok phase block?"
+	dialog.dialog_text = "Delete \"%s\" from %s? This change can be undone." % [
+		block.display_name, String(phase).capitalize()
+	]
+	dialog.get_ok_button().text = "Delete"
+	dialog.confirmed.connect(_potok_confirm_delete)
+	dialog.canceled.connect(_potok_cancel_delete_dialog)
+	dialog.close_requested.connect(_potok_cancel_delete_dialog)
+	add_child(dialog)
+	_potok_delete_dialog = dialog
+	dialog.popup_centered()
+
+
+func _potok_cancel_delete_dialog() -> void:
+	var phase: StringName = _potok_delete_phase
+	var block_id: String = _potok_delete_block_id
+	_potok_close_delete_dialog()
+	if not is_potok_machine_view() or phase.is_empty() or block_id.is_empty():
+		return
+	var list: ItemList = _content.find_child(
+		"PotokPhase" + String(phase).capitalize() + "BlocksList", true, false
+	) as ItemList
+	if _can_grab_focus(list):
+		list.grab_focus()
 
 
 func _potok_on_phase_add(
@@ -3557,17 +3666,66 @@ func _potok_confirm_delete() -> void:
 	var mid: String = _potok_delete_machine_id
 	var sid: String = _potok_delete_state_id
 	var eid: String = _potok_delete_transition_id
+	var phase: StringName = _potok_delete_phase
+	var block_id: String = _potok_delete_block_id
 	var controller: PVController = _potok_delete_controller_ref.get_ref() as PVController \
 		if _potok_delete_controller_ref != null else null
 	var same_context: bool = is_instance_valid(controller) \
 		and controller == _active_controller() \
 		and mid == _selected_id and sid == _potok_selected_state_id \
-		and (kind == &"state" or eid == _potok_selected_transition_id)
+		and (kind == &"state" or (kind == &"phase_block"
+			and phase == _potok_selected_phase
+			and block_id == _potok_selected_phase_block_id)
+			or eid == _potok_selected_transition_id)
 	_potok_close_delete_dialog()
 	if not same_context or _commands == null:
 		return
 	var deleted: bool = false
-	if kind == &"edge":
+	if kind == &"phase_block":
+		var next_id: String = ""
+		var state_resource: FlowStateDefinition = null
+		for owned_machine: FlowStateMachineDefinition in controller.flow_graph.state_machines:
+			if owned_machine != null and owned_machine.get_internal_id() == mid:
+				for candidate_state: FlowStateDefinition in owned_machine.states:
+					if candidate_state != null and candidate_state.get_internal_id() == sid:
+						state_resource = candidate_state
+						break
+				break
+		if state_resource != null:
+			var phase_values: Array[FlowBlock] = state_resource.blocks
+			match phase:
+				&"enter":
+					phase_values = state_resource.enter_blocks
+				&"exit":
+					phase_values = state_resource.exit_blocks
+			for index: int in phase_values.size():
+				var current: FlowBlock = phase_values[index]
+				if current != null and current.get_internal_id() == block_id:
+					for other_index: int in range(index + 1, phase_values.size()):
+						if phase_values[other_index] != null:
+							next_id = phase_values[other_index].get_internal_id()
+							break
+					if next_id.is_empty():
+						for other_index: int in range(index - 1, -1, -1):
+							if phase_values[other_index] != null:
+								next_id = phase_values[other_index].get_internal_id()
+								break
+					break
+		deleted = _commands.delete_fsm_phase_block(
+			controller, mid, sid, phase, block_id
+		)
+		if deleted:
+			_potok_phase_block_details_open = false
+			_potok_phase_block_session.clear()
+			_potok_selected_phase_block_id = next_id
+			if not next_id.is_empty():
+				_potok_phase_focus_pending = {
+					"controller_ref": weakref(controller), "machine": mid,
+					"state": sid, "phase": phase, "block": next_id
+				}
+			else:
+				_flow_entry_focus_pending = true
+	elif kind == &"edge":
 		deleted = _commands.delete_fsm_transition(controller, mid, sid, eid)
 		if deleted:
 			_potok_selected_transition_id = ""
@@ -3577,7 +3735,7 @@ func _potok_confirm_delete() -> void:
 			_potok_selected_state_id = ""
 			_potok_selected_transition_id = ""
 	_potok_structure_feedback = "" if deleted else "Deletion blocked: references or context changed."
-	if deleted:
+	if deleted and kind != &"phase_block":
 		_flow_entry_focus_pending = true
 	_request_rebuild()
 
@@ -3587,6 +3745,8 @@ func _potok_close_delete_dialog() -> void:
 	_potok_delete_machine_id = ""
 	_potok_delete_state_id = ""
 	_potok_delete_transition_id = ""
+	_potok_delete_phase = &""
+	_potok_delete_block_id = ""
 	_potok_delete_controller_ref = null
 	var dialog: ConfirmationDialog = _potok_delete_dialog
 	_potok_delete_dialog = null
