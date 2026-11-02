@@ -721,6 +721,61 @@ func add_fsm_phase_block_by_authoring_id(
 	return new_block.get_internal_id()
 
 
+## Potok 7F-1C2C: delete exactly one owned phase block.
+## Null holes are preserved as authored slots; a deletion does not replace
+## its target with a new hole. No UI confirmation is bypassed here: the caller
+## must obtain that confirmation in the later Fluo integration microblock.
+func delete_fsm_phase_block(
+		controller: PVController, machine_id: String, state_id: String,
+		phase: StringName, block_id: String
+) -> bool:
+	var property_name: StringName = _fsm_phase_property(phase)
+	if property_name.is_empty() or block_id.is_empty():
+		return false
+	var context: Dictionary = _fsm_edge_context(controller, machine_id, state_id)
+	if context.is_empty():
+		return false
+	var machine: FlowStateMachineDefinition = context["machine"]
+	var state: FlowStateDefinition = context["state"]
+	var original: Array[FlowBlock] = []
+	original.assign(state.get(property_name))
+	var index: int = -1
+	for i: int in original.size():
+		var candidate: FlowBlock = original[i]
+		if candidate != null and candidate.get_internal_id() == block_id:
+			index = i
+			break
+	if index < 0:
+		return false
+	var updated: Array[FlowBlock] = original.duplicate()
+	updated.remove_at(index)
+	# Validate a detached candidate before registering an undo action or
+	# changing the live state. Only one phase array can be affected.
+	var draft: FlowStateDefinition = state.duplicate(false) as FlowStateDefinition
+	if draft == null or draft.get_internal_id() != state_id:
+		return false
+	draft.set(property_name, updated)
+	var states: Array[FlowStateDefinition] = []
+	states.assign(machine.states)
+	states[int(context["state_index"])] = draft
+	if not _fsm_structure_candidate(
+			controller.flow_graph, machine, states, machine.initial_state_id
+	):
+		return false
+	_undo_redo.create_action(
+		"Delete Potok %s Block" % String(phase).capitalize(),
+		UndoRedo.MERGE_DISABLE, controller, false, true
+	)
+	_undo_redo.add_do_method(
+		self, &"_fsm_assign_phase_blocks", controller, state, property_name, updated
+	)
+	_undo_redo.add_undo_method(
+		self, &"_fsm_assign_phase_blocks", controller, state, property_name, original
+	)
+	_undo_redo.commit_action()
+	return true
+
+
 ## Potok 7F-1C2B: duplicate one block within its exact owner phase.
 ## Uses the model's deep copy with a fresh persistent ID and retains SDK script.
 func duplicate_fsm_phase_block(
