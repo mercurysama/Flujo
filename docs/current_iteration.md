@@ -1,5 +1,14 @@
 # Current Iteration
 
+## Potok — FSM feature branch Phase 7F-1D4 audit (2026-11-02)
+
+- **Scope-specific branch:** `feature/fsm-runtime-flow-flusso`. This Potok track is distinct from the earlier `feature/block-builder-fprint-dogfood` Fluo-preview and Akis tracks documented below; those histories are not replaced or reclassified.
+- **Last functionally validated milestone:** **7F-1D3**, [CI 41526101676](https://github.com/mercurysama/Flujo/actions/runs/41526101676) completed **SUCCESS 76/76** on `4ee94e7bf88238e4215665b7312628dafae4aa2e`. Scope covers native Fluo/Flusso Add/Edit/Revertir/Close/Move/Duplicate/Delete and the SDK editor-to-PackedScene persistence journey. Latest documentation-only commits require independent verification.
+- **Phase 7F-1D4:** audit + [traceability report](fsm_phase7_7f1d4_audit.md) and [manual test matrix](fsm_phase7_7f2_manual_acceptance_matrix.md); catalog adds `FLUJO-BHV-POTOK-{PHASE-UI,SDK,PERSIST,MANUAL}-001` so previous automated milestones and unapproved manual tests are separately tracked.
+- **Remaining gate:** **15 Fedora + 10 Android** physical interaction scenarios `PENDING`; complete matrix before claiming 7F-2 or accepting a stable release. Fluo Preview 1 historical Android load/render is earlier evidence, not Potok manual acceptance. No `main` merge, runtime/schema migration, demo mutation or new Godot release.
+- **Continuity:** original [7F-1D contract](fsm_phase7_7f1d_contract.md), [7F-1D3 result](fsm_phase7_7f1d3_result.md), [FSM journal](fsm_iteration_01_learning.md), and current [manual matrix](fsm_phase7_7f2_manual_acceptance_matrix.md). The next work unit is formal audit closure/CI and **7F-2** manual validation on actual devices.
+
+
 ## Active UI delivery — Fluo Preview 1
 
 - **Branch:** `feature/block-builder-fprint-dogfood`.
