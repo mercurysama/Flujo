@@ -131,6 +131,28 @@ func _run() -> void:
 	var session: Dictionary = editor.get("_potok_phase_block_session")
 	_check((session.get("values", {}) as Dictionary).has(&"message"),
 		"Session captured SDK multiline field")
+	_check(drawer.find_child("PotokPhaseGenericunsupported_vector", true, false) == null
+		and drawer.find_child("PotokPhaseGenericstorage_only", true, false) == null,
+		"Ineligible SDK properties are not exposed to authoring")
+	var revert: Button = drawer.find_child("PotokPhaseBlockRevert", true, false) as Button
+	if _check(revert != null, "SDK phase shares the original Revertir button"):
+		var revision: int = history.get_version()
+		revert.pressed.emit()
+		await _frames(5)
+		_check(history.get_version() == revision + 1,
+			"SDK Revertir is one UndoRedo action")
+		_check(String(external.get("message")) == "Hello from the manual SDK"
+			and bool(external.get("boolean_value"))
+			and int(external.get("ranged_int")) == previous_int
+			and int(external.get("enum_value")) == 1,
+			"SDK Revertir restores only its opening authored properties")
+		history.undo()
+		await _frames(4)
+		_check(String(external.get("message")) == "SDK edited through Flusso"
+			and not bool(external.get("boolean_value"))
+			and int(external.get("ranged_int")) == 7
+			and int(external.get("enum_value")) == 0,
+			"Undo SDK Revertir restores all accepted typed edits")
 	var original_sid: String = state.get_internal_id()
 	var original_mid: String = machine.get_internal_id()
 	_check(state.enter_blocks[0] == null and state.enter_blocks[1] == external
