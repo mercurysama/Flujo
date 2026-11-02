@@ -81,6 +81,61 @@ func _run() -> void:
 									and state.enter_blocks[2] == existing
 									and added.text == "Journey edit",
 									"Close and Move preserve edit, null and instances")
+	# Continue the same session through Duplicate and guarded Delete.
+	var duplicate: Button = drawer.find_child(
+		"PotokPhaseEnterDuplicate", true, false) as Button
+	if _check(duplicate != null, "Native Duplicate available after Move"):
+		duplicate.pressed.emit()
+		await _frames(5)
+		if _check(state.enter_blocks.size() == 4 and state.enter_blocks[1] == added
+				and state.enter_blocks[3] == existing,
+				"Duplicate inserts copy between original and existing"):
+			var copied: FlowBlock = state.enter_blocks[2]
+			var copy_id: String = copied.get_internal_id()
+			_check(copy_id != added.get_internal_id()
+				and (copied as FlowPrintBlock).text == "Journey edit",
+				"Duplicate carries edited content with new persistent ID")
+			var delete_button: Button = drawer.find_child(
+				"PotokPhaseEnterDelete", true, false) as Button
+			if _check(delete_button != null, "Native Delete available"):
+				var before_cancel: int = manager.get_history_undo_redo(
+					manager.get_object_history_id(controller)).get_version()
+				delete_button.pressed.emit()
+				await _frames(3)
+				var dialog: ConfirmationDialog = drawer.find_child(
+					"PotokStructureDeleteDialog", true, false) as ConfirmationDialog
+				if _check(dialog != null and dialog.visible,
+						"Delete requires a modal confirmation"):
+					dialog.canceled.emit()
+				await _frames(3)
+				_check(state.enter_blocks.size() == 4 and manager.get_history_undo_redo(
+					manager.get_object_history_id(controller)).get_version() == before_cancel,
+					"Cancel performs no deletion and registers no history")
+				delete_button = drawer.find_child(
+					"PotokPhaseEnterDelete", true, false) as Button
+				if delete_button != null:
+					delete_button.pressed.emit()
+					await _frames(3)
+					dialog = drawer.find_child(
+						"PotokStructureDeleteDialog", true, false) as ConfirmationDialog
+					if _check(dialog != null, "Confirm dialog opens again"):
+						dialog.confirmed.emit()
+						await _frames(5)
+						_check(state.enter_blocks.size() == 3
+							and state.enter_blocks[1] == added
+							and state.enter_blocks[2] == existing,
+							"Confirm deletes only selected duplicated resource")
+						var history: UndoRedo = manager.get_history_undo_redo(
+							manager.get_object_history_id(controller))
+						history.undo()
+						_check(state.enter_blocks.size() == 4
+							and state.enter_blocks[2] == copied
+							and copied.get_internal_id() == copy_id,
+							"Undo Delete restores identical copied resource")
+						history.redo()
+						_check(state.enter_blocks.size() == 3
+							and state.enter_blocks[1] == added,
+							"Redo Delete restores final authored arrangement")
 	_check(state.blocks.size() == 1 and not FlowGraphValidator.validate(graph).has_errors(),
 		"Update and graph remain valid")
 	drawer.close()
