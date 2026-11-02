@@ -321,3 +321,11 @@ Todo es Flujo; todo fluye. 🌊
 - Distinguish **normal user close** (restores valid external Inspector-like focus) from **forced controller/scene context invalidation** (clear `_focus_reference`, close before rebinding to new controller or on selected `tree_exited`; never steal an unrelated focus control). Same-controller Potok→Ready Process switching stays open, left/right position persists, and stale refresh never reopens old content. Test actual node detachment in live SceneTree, not the Godot editor's scene tab UI.
 - Versioned `$flujo-baseline`, `$flujo-prove`, `$flujo-fluo-maintenance` read as remote procedures; no direct standalone Skill invocation, formal READY/PASA or Fedora staged/worktree inspection. Manual desktop/Android UI and full phase-7 Add-block flow still pending.
 - **Next:** 7E-4A reproducible manual QA matrix, 7E-4B consolidation, then original phase-7 authoring gap audit. No merge to `main`.
+
+
+## 2026-11-02 — Potok 7E-4A matriz de revisión manual, sin ejecución
+
+- Contrato y guía `docs/fsm_phase7_7e4a_contract.md`, `docs/fsm_phase7_7e4a_manual_review.md`; 15 escenarios Fedora Godot 4.7.2 y 10 escenarios Android en dos orientaciones, cada uno estrictamente **PENDING** hasta observación. Plantilla por ID para versión, SHA, entrada, resultado observado y prueba audiovisual.
+- Se distinguió carga/render antiguo Android (Fluo preview 2026-10-27), CI headless 7E-3B [41404376030](https://github.com/mercurysama/Flujo/actions/runs/41404376030) 59/59 y aceptación humana actual, que **no existe todavía**. Ningún PASS inferido.
+- **Gates funcionales:** F03/F04/F14/F15 y A10; en especial revisar si el usuario puede añadir bloques desde UI en las fases Enter/Update/Exit. La existencia de etiquetas/proyección de fases no es evidencia de autoría; si la UI carece de Add, registrar BLOCKED y subdividir su implementación en otro microbloque.
+- `$flujo-baseline`, `$flujo-prove`, `$flujo-fluo-maintenance` consultados como procedimientos remotos; no se ejecutaron autónomamente. Fase 7 NO está cerrada. **Siguiente: 7E-4B** consolidación y auditoría de requisitos, sin publicar/merging.
