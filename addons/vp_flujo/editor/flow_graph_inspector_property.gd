@@ -2486,6 +2486,17 @@ func _potok_on_phase_block_selected(
 			previous_panel.queue_free()
 	_potok_selected_phase = phase
 	_potok_selected_phase_block_id = block_id
+	# ItemList selection does not rebuild: enable newly selected actions now.
+	for phase_name: String in ["Enter", "Update", "Exit"]:
+		var actions: HFlowContainer = _content.find_child(
+			"PotokPhase" + phase_name + "BlockActions", true, false
+		) as HFlowContainer
+		if actions == null:
+			continue
+		for child: Node in actions.get_children():
+			var button: Button = child as Button
+			if button != null:
+				button.disabled = phase_name.to_lower() != String(phase)
 
 
 ## 7F-1C2D: native structure actions revalidate full ownership at click time.
