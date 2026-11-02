@@ -721,6 +721,139 @@ func add_fsm_phase_block_by_authoring_id(
 	return new_block.get_internal_id()
 
 
+## 7F-1C1C: edit a single authored FSM block in its exact owned phase.
+## Reuse the existing property restrictions and UndoRedo boundary, never Ready lookup.
+func set_fsm_phase_block_property_live(
+		controller: PVController, machine_id: String, state_id: String,
+		phase: StringName, block_id: String, property_name: StringName,
+		value: Variant
+) -> bool:
+	var target: FlowBlock = _fsm_owned_phase_block(
+		controller, machine_id, state_id, phase, block_id
+	)
+	if target == null:
+		return false
+	var supported: bool = (property_name == &"display_name" and value is String
+		and not String(value).strip_edges().is_empty()) \
+		or (property_name == &"enabled" and value is bool) \
+		or (target is FlowPrintBlock and property_name == &"text" and value is String)
+	if not supported:
+		return false
+	return _fsm_commit_phase_block_property(
+		controller, machine_id, state_id, phase, target, property_name, value
+	)
+
+
+func set_fsm_phase_block_descriptor_live(
+		controller: PVController, machine_id: String, state_id: String,
+		phase: StringName, block_id: String, descriptor: FlowBlockPropertyDescriptor,
+		value: Variant
+) -> bool:
+	var block: FlowBlock = _fsm_owned_phase_block(
+		controller, machine_id, state_id, phase, block_id
+	)
+	if block == null or descriptor == null or not descriptor.editable \
+			or not descriptor.is_generic_candidate() \
+			or not _descriptor_matches_target(block, descriptor, value):
+		return false
+	if _authoring_context == null:
+		_authoring_context = FLOW_EDITOR_BLOCK_AUTHORING_CONTEXT_SCRIPT.new() as RefCounted
+	if not _authoring_context.has_method(&"describe_block_properties"):
+		return false
+	var projection: FlowBlockPropertyCatalogResult = _authoring_context.call(
+		&"describe_block_properties", block
+	) as FlowBlockPropertyCatalogResult
+	if projection == null:
+		return false
+	var approved: bool = false
+	for current: FlowBlockPropertyDescriptor in projection.descriptors:
+		if current != null and current.property_name == descriptor.property_name \
+				and current.model_type == descriptor.model_type \
+				and current.presentation_kind == descriptor.presentation_kind \
+				and current.editable and current.is_generic_candidate():
+			approved = true
+			break
+	if not approved:
+		return false
+	return _fsm_commit_phase_block_property(
+		controller, machine_id, state_id, phase, block, descriptor.property_name, value
+	)
+
+
+func _fsm_owned_phase_block(
+		controller: PVController, machine_id: String, state_id: String,
+		phase: StringName, block_id: String
+) -> FlowBlock:
+	if not _can_edit_fsm_scalar(controller) or block_id.is_empty() \
+			or _fsm_phase_property(phase).is_empty():
+		return null
+	var context: Dictionary = _fsm_edge_context(controller, machine_id, state_id)
+	if context.is_empty():
+		return null
+	var state: FlowStateDefinition = context["state"]
+	var blocks: Array[FlowBlock] = []
+	blocks.assign(state.get(_fsm_phase_property(phase)))
+	for candidate: FlowBlock in blocks:
+		if candidate != null and candidate.get_internal_id() == block_id:
+			return candidate
+	return null
+
+
+func _fsm_commit_phase_block_property(
+		controller: PVController, machine_id: String, state_id: String,
+		phase: StringName, block: FlowBlock, property_name: StringName,
+		value: Variant
+) -> bool:
+	if block.get(property_name) == value:
+		return false
+	var context: Dictionary = _fsm_edge_context(controller, machine_id, state_id)
+	if context.is_empty():
+		return false
+	var machine: FlowStateMachineDefinition = context["machine"]
+	var state: FlowStateDefinition = context["state"]
+	var property_of_phase: StringName = _fsm_phase_property(phase)
+	var candidate_block: FlowBlock = block.duplicate(false) as FlowBlock
+	var candidate_state: FlowStateDefinition = state.duplicate(false) as FlowStateDefinition
+	if candidate_block == null or candidate_state == null \
+			or candidate_block.get_internal_id() != block.get_internal_id() \
+			or candidate_state.get_internal_id() != state_id:
+		return false
+	candidate_block.set(property_name, value)
+	var blocks: Array[FlowBlock] = []
+	blocks.assign(state.get(property_of_phase))
+	var found: bool = false
+	for index: int in blocks.size():
+		if blocks[index] == block:
+			blocks[index] = candidate_block
+			found = true
+			break
+	if not found:
+		return false
+	candidate_state.set(property_of_phase, blocks)
+	var states: Array[FlowStateDefinition] = []
+	states.assign(machine.states)
+	states[int(context["state_index"])] = candidate_state
+	if not _fsm_structure_candidate(
+			controller.flow_graph, machine, states, machine.initial_state_id
+	):
+		return false
+	# Each accepted edit is a single atomic action. No stale callback may author
+	# a sibling state because identity and ownership were resolved above.
+	_undo_redo.create_action(
+		"Edit Potok Block %s" % String(property_name),
+		UndoRedo.MERGE_DISABLE, controller, false, true
+	)
+	_undo_redo.add_do_method(
+		self, &"_assign_ready_property_live", controller, block, property_name, value
+	)
+	_undo_redo.add_undo_method(
+		self, &"_assign_ready_property_live", controller, block, property_name,
+		block.get(property_name)
+	)
+	_undo_redo.commit_action()
+	return true
+
+
 func _fsm_phase_property(phase: StringName) -> StringName:
 	match phase:
 		&"enter":
