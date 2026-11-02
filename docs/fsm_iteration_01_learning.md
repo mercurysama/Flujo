@@ -238,3 +238,11 @@ Todo es Flujo; todo fluye. 🌊
 - Reused the established normal `PackedScene` / `ResourceSaver` pattern to verify exact persisted graph, machine, ordered state, transition and phase block IDs, initial/target references, block content and valid reopen. No runtime, model schema or editor production change.
 - Lesson: separate authored-scene serializability from command Undo/Redo and Condition Tok semantic-payload persistence; these belong in their own fail-localized microblocks 7E-1B and 7E-1C.
 - Formal local skill gates, `git diff --check` and manual Android/desktop review NOT RUN here; remote green CI cannot approve them. Next: 7E-1B contract → test → CI → result checkpoint.
+
+
+## 2026-11-01 — Potok 7E-1B1 skill-guided remote testing
+
+- Contract `docs/fsm_phase7_7e1b1_contract.md`, test `tests/editor/flow_fsm_edited_scene_roundtrip_test.gd`, code commit `5e956b28a9587c3a96617f06ea613bc8b6d4a2f0`, CI gate fix `a0dc7f97ff07470b2ef909d4ab12b68fb13bba84`; [full CI 41390280243](https://github.com/mercurysama/Flujo/actions/runs/41390280243) SUCCESS. Two repeated Undo/Redo cycles plus save/reopen preserve IDs, state order, initial and event target.
+- Lesson: `git show --check HEAD` with GitHub Actions default shallow checkout may reinterpret the current commit as a root and report unrelated historical whitespace; first [CI 41390202530](https://github.com/mercurysama/Flujo/actions/runs/41390202530) FAIL in this new gate and skipped the focal. Fix by `fetch-depth: 2`, `git diff --check HEAD^ HEAD`; second CI passed. Do not edit unrelated historical Markdown merely to get green.
+- Repo Skills `$flujo-baseline` and `$flujo-prove` can be consulted and their checks followed through GitHub + Actions, **but they cannot be invoked as standalone agent tools** in this session; record procedure-applied vs direct-invocation-not-run, without claiming formal READY/PASA. Manual UI remains separate.
+- Next: 7E-1B2 structural/edge command Undo/Redo persistence regression; stay within editor tests and existing commands unless failing evidence identifies a real production defect.
