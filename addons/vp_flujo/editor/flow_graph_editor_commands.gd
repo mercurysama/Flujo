@@ -854,6 +854,109 @@ func _fsm_commit_phase_block_property(
 	return true
 
 
+## 7F-1C1D: atomic Revertir for properties actually owned by the phase Flusso.
+func restore_fsm_phase_block_snapshot(
+		controller: PVController, machine_id: String, state_id: String,
+		phase: StringName, block_id: String, snapshot: Dictionary
+) -> bool:
+	var block: FlowBlock = _fsm_owned_phase_block(
+		controller, machine_id, state_id, phase, block_id
+	)
+	if block == null or snapshot.is_empty():
+		return false
+	var owned: Dictionary = {}
+	owned[&"display_name"] = true
+	owned[&"enabled"] = true
+	if block is FlowPrintBlock:
+		owned[&"text"] = true
+	if _authoring_context == null:
+		_authoring_context = FLOW_EDITOR_BLOCK_AUTHORING_CONTEXT_SCRIPT.new() as RefCounted
+	if _authoring_context.has_method(&"describe_block_properties"):
+		var result: FlowBlockPropertyCatalogResult = _authoring_context.call(
+			&"describe_block_properties", block
+		) as FlowBlockPropertyCatalogResult
+		if result != null:
+			for descriptor: FlowBlockPropertyDescriptor in result.descriptors:
+				if descriptor != null and descriptor.editable \
+						and descriptor.is_generic_candidate() \
+						and not descriptor.is_structured_document_candidate():
+					owned[descriptor.property_name] = true
+	var original: Dictionary = {}
+	var candidate: FlowBlock = block.duplicate(false) as FlowBlock
+	if candidate == null or candidate.get_internal_id() != block_id:
+		return false
+	var different: bool = false
+	for key: Variant in snapshot:
+		var property_name: StringName = StringName(key)
+		var value: Variant = snapshot[key]
+		if not owned.has(property_name):
+			return false
+		var supported: bool = (property_name == &"display_name"
+			and value is String and not String(value).strip_edges().is_empty()) \
+			or (property_name == &"enabled" and value is bool) \
+			or (property_name == &"text" and block is FlowPrintBlock and value is String)
+		if not supported:
+			var descriptor_ok: bool = false
+			if _authoring_context.has_method(&"describe_block_properties"):
+				var result: FlowBlockPropertyCatalogResult = _authoring_context.call(
+					&"describe_block_properties", block
+				) as FlowBlockPropertyCatalogResult
+				if result != null:
+					for descriptor: FlowBlockPropertyDescriptor in result.descriptors:
+						if descriptor != null and descriptor.property_name == property_name \
+								and descriptor.editable and descriptor.is_generic_candidate() \
+								and not descriptor.is_structured_document_candidate() \
+								and _descriptor_matches_target(block, descriptor, value):
+							descriptor_ok = true
+							break
+			if not descriptor_ok:
+				return false
+		original[property_name] = block.get(property_name)
+		candidate.set(property_name, value)
+		if original[property_name] != value:
+			different = true
+	if not different:
+		return false
+	var context: Dictionary = _fsm_edge_context(controller, machine_id, state_id)
+	if context.is_empty():
+		return false
+	var machine: FlowStateMachineDefinition = context["machine"]
+	var state: FlowStateDefinition = context["state"]
+	var candidate_state: FlowStateDefinition = state.duplicate(false) as FlowStateDefinition
+	if candidate_state == null:
+		return false
+	var blocks: Array[FlowBlock] = []
+	var phase_property: StringName = _fsm_phase_property(phase)
+	blocks.assign(state.get(phase_property))
+	var found: bool = false
+	for i: int in blocks.size():
+		if blocks[i] == block:
+			blocks[i] = candidate
+			found = true
+			break
+	if not found:
+		return false
+	candidate_state.set(phase_property, blocks)
+	var states: Array[FlowStateDefinition] = []
+	states.assign(machine.states)
+	states[int(context["state_index"])] = candidate_state
+	if not _fsm_structure_candidate(
+			controller.flow_graph, machine, states, machine.initial_state_id
+	):
+		return false
+	_undo_redo.create_action(
+		"Revert Potok Phase Block", UndoRedo.MERGE_DISABLE, controller, false, true
+	)
+	_undo_redo.add_do_method(
+		self, &"_assign_ready_snapshot", controller, block, snapshot
+	)
+	_undo_redo.add_undo_method(
+		self, &"_assign_ready_snapshot", controller, block, original
+	)
+	_undo_redo.commit_action()
+	return true
+
+
 func _fsm_phase_property(phase: StringName) -> StringName:
 	match phase:
 		&"enter":
