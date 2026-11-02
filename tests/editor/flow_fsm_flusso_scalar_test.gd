@@ -87,6 +87,10 @@ func _run() -> void:
 		"Machine autostart flag edited")
 	_check(not commands.set_fsm_machine_property(controller, mid, &"auto_start", false),
 		"Unchanged value is a no-op")
+	_check(not commands.set_fsm_state_property(controller, mid, sid, &"enabled", false),
+		"An initial state cannot be disabled")
+	_check(commands.set_fsm_machine_property(controller, mid, &"initial_state_id",
+		idle.get_internal_id()), "Initial state moved before disabling former initial")
 	var property := FlowGraphInspectorProperty.new()
 	property.configure(manager)
 	property.configure_for_fluo()
