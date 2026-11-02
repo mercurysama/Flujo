@@ -2195,6 +2195,7 @@ func _render_potok_machine(parent: Container, controller: PVController, generati
 	heading.name = &"PotokMachineHeading"
 	heading.text = "Potok · " + String(machine.get("name", "State Machine"))
 	parent.add_child(heading)
+	_render_potok_machine_properties(parent, machine, view.get("states", []))
 	var subheading := Label.new()
 	subheading.text = "Flow · States"
 	parent.add_child(subheading)
@@ -2224,6 +2225,8 @@ func _render_potok_machine(parent: Container, controller: PVController, generati
 		var selected: Dictionary = rows[selected_index]
 		_potok_selected_state_id = String(selected.get("id", ""))
 		_render_potok_state_phases(parent, selected)
+		if not bool(selected.get("empty", false)):
+			_render_potok_state_properties(parent, selected)
 	list.item_selected.connect(_on_potok_state_selected.bind(list))
 	call_deferred(&"_fit_list_to_first_row", list, generation)
 	if _flow_entry_focus_pending:
@@ -2257,6 +2260,138 @@ func _render_potok_state_phases(parent: Container, selected: Dictionary) -> void
 			block_label.text = String(block.get("name", "Empty"))
 			host.add_child(block_label)
 
+
+
+
+## Flusso 7C-1: native scalar controls owned by existing Fluo Flow editor.
+func _render_potok_machine_properties(parent: Container, machine: Dictionary, rows: Array) -> void:
+	var form := VBoxContainer.new()
+	form.name = &"PotokMachineProperties"
+	parent.add_child(form)
+	var heading := Label.new()
+	heading.text = "Flusso · Machine"
+	form.add_child(heading)
+	var mid: String = String(machine.get("id", ""))
+	_potok_text_field(form, "Name", "PotokMachineName", String(machine.get("name", "")),
+		mid, "", &"display_name")
+	_potok_boolean_field(form, "Enabled", "PotokMachineEnabled",
+		bool(machine.get("enabled", true)), mid, "", &"enabled")
+	_potok_boolean_field(form, "Auto start", "PotokMachineAutoStart",
+		bool(machine.get("auto_start", true)), mid, "", &"auto_start")
+	var clock := OptionButton.new()
+	clock.name = &"PotokMachineTickMode"
+	clock.focus_mode = Control.FOCUS_ALL
+	for entry: String in ["Process", "Physics", "Manual"]:
+		clock.add_item(entry)
+	clock.select(clampi(int(machine.get("tick_mode", 0)), 0, 2))
+	clock.item_selected.connect(_on_potok_tick_selected.bind(mid))
+	form.add_child(clock)
+	var initial := OptionButton.new()
+	initial.name = &"PotokMachineInitialState"
+	initial.focus_mode = Control.FOCUS_ALL
+	for row: Dictionary in rows:
+		if bool(row.get("empty", false)) or not bool(row.get("enabled", true)):
+			continue
+		var id: String = String(row.get("id", ""))
+		var index: int = initial.item_count
+		initial.add_item(String(row.get("name", "State")))
+		initial.set_item_metadata(index, id)
+		if id == String(machine.get("initial_state_id", "")):
+			initial.select(index)
+	if initial.item_count == 0:
+		initial.add_item("Empty")
+		initial.disabled = true
+	initial.item_selected.connect(_on_potok_initial_selected.bind(initial, mid))
+	form.add_child(initial)
+	_potok_text_field(form, "Note", "PotokMachineNote", String(machine.get("note", "")),
+		mid, "", &"user_note")
+
+
+func _render_potok_state_properties(parent: Container, state: Dictionary) -> void:
+	var form := VBoxContainer.new()
+	form.name = &"PotokStateProperties"
+	parent.add_child(form)
+	var heading := Label.new()
+	heading.text = "Flusso · State"
+	form.add_child(heading)
+	var sid: String = String(state.get("id", ""))
+	_potok_text_field(form, "Name", "PotokStateName", String(state.get("name", "")),
+		_selected_id, sid, &"display_name")
+	_potok_boolean_field(form, "Enabled", "PotokStateEnabled",
+		bool(state.get("enabled", true)), _selected_id, sid, &"enabled")
+	_potok_text_field(form, "Note", "PotokStateNote", String(state.get("note", "")),
+		_selected_id, sid, &"user_note")
+
+
+func _potok_text_field(
+		parent: Container, label_text: String, control_name: String,
+		value: String, machine_id: String, state_id: String, property_name: StringName
+) -> void:
+	var label := Label.new()
+	label.text = label_text
+	parent.add_child(label)
+	var field := LineEdit.new()
+	field.name = StringName(control_name)
+	field.focus_mode = Control.FOCUS_ALL
+	field.text = value
+	field.text_submitted.connect(
+		_on_potok_text_submitted.bind(machine_id, state_id, property_name)
+	)
+	parent.add_child(field)
+
+
+func _potok_boolean_field(
+		parent: Container, label_text: String, control_name: String,
+		value: bool, machine_id: String, state_id: String, property_name: StringName
+) -> void:
+	var field := CheckBox.new()
+	field.name = StringName(control_name)
+	field.text = label_text
+	field.focus_mode = Control.FOCUS_ALL
+	field.set_pressed_no_signal(value)
+	field.toggled.connect(
+		_on_potok_bool_toggled.bind(machine_id, state_id, property_name)
+	)
+	parent.add_child(field)
+
+
+func _on_potok_text_submitted(
+		value: String, machine_id: String, state_id: String, property_name: StringName
+) -> void:
+	_potok_commit_scalar(machine_id, state_id, property_name, value)
+
+
+func _on_potok_bool_toggled(
+		value: bool, machine_id: String, state_id: String, property_name: StringName
+) -> void:
+	_potok_commit_scalar(machine_id, state_id, property_name, value)
+
+
+func _on_potok_tick_selected(index: int, machine_id: String) -> void:
+	_potok_commit_scalar(machine_id, "", &"tick_mode", index)
+
+
+func _on_potok_initial_selected(index: int, control: OptionButton, machine_id: String) -> void:
+	if not is_instance_valid(control) or index < 0 or index >= control.item_count:
+		return
+	var state_id: String = String(control.get_item_metadata(index))
+	_potok_commit_scalar(machine_id, "", &"initial_state_id", state_id)
+
+
+func _potok_commit_scalar(
+		machine_id: String, state_id: String, property_name: StringName, value: Variant
+) -> void:
+	if not is_potok_machine_view() or machine_id != _selected_id or _commands == null:
+		return
+	var controller: PVController = _active_controller()
+	if controller == null or controller.flow_graph == null:
+		return
+	if state_id.is_empty():
+		_commands.set_fsm_machine_property(controller, machine_id, property_name, value)
+	elif state_id == _potok_selected_state_id:
+		_commands.set_fsm_state_property(controller, machine_id, state_id, property_name, value)
+	# Re-present the authoritative resource after success, cancellation or rejection.
+	_request_rebuild()
 
 func _on_potok_state_selected(index: int, list: ItemList) -> void:
 	if not is_potok_machine_view() or index < 0 or index >= list.item_count:
