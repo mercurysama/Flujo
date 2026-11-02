@@ -1,0 +1,20 @@
+# Potok 7F-1B — Native Flow per-phase Add controls
+
+**Date:** 2026-11-02. **Branch:** `feature/fsm-runtime-flow-flusso`. **Pre-task green baseline:** `887593e3348c728a186e6afc8cded8db083279b8`, [CI 41409492088](https://github.com/mercurysama/Flujo/actions/runs/41409492088) **SUCCESS 60/60**. **Prerequisite:** 7F-1A validated `add_fsm_phase_block_by_authoring_id(controller, machine_id, state_id, phase, authoring_id)`.
+
+## Acceptance contract
+
+1. In the existing Godot Inspector → Fluo → `FluoFlowEditor` Potok state view, each **real selected state** exposes exactly one **Enter**, **Update**, and **Exit** `ItemList` with stable block-ID metadata, and its own native `HFlowContainer` with one focusable `Add <catalog display name>` button per authoring entry from the **same injected or production authoring context** as FlowReadyProcessEditor. Names are unique per phase (`PotokPhaseEnterBlocksList`, `PotokPhaseEnterAddActions`, etc.). The original phase labels remain; no duplicate Inspector Blocks list or second Fluo.
+2. A truly empty phase still exposes its Add controls. An authored **null slot** appears as a disabled `Empty` ItemList row; a missing/empty machine has **no phantom phase Add**. Buttons carry only stable catalog authoring IDs as metadata; never derive package identity from visible label or row index. Factory command uses explicit `machine_id + state_id + phase`; preserve strict `&"enter"/&"update"/&"exit"`.
+3. Press an integrated Print/Everything Flows button in Enter, an external/package button in Exit (fixture external catalog), and an Update button: the new `7F-1A` command edits the **correct phase only**, validates before committing, and records one UndoRedo action. Rebuilt Flow reselects the **new block by ID** within the same phase ItemList and gives that *new* list real keyboard focus. Repeated Add creates distinct IDs and unique phase-local names. Other phases, sibling state, Ready, transition IDs remain unchanged.
+4. Selecting another valid block by native ItemList `item_selected` keeps its exact block ID/phase without rebuilding or editing it. During Undo/Redo or outside refresh, if the selected block no longer exists, clear its transient selection instead of selecting a deleted/renamed row. Entering another state or machine discards the prior phase-specific selected block/deferral; stale callbacks from detached UI may **not edit a different selected state** or old scene/controller. If a foreign editor control acquires focus during rebuild, the deferred callback may not steal it. Standard Potok key and Revertir contracts remain.
+5. Catalog failures must not create phantom blocks or history, change phase selection, or falsely focus a missing item. This lot is Add + selection/focus only: **no editor for block properties** (7F-1C1); no Move/Duplicate/Delete (7F-1C2); no model/runtime/schema changes, no new standalone modal, no new release.
+6. Add one Godot 4.7.2 headless `--editor --path . --script` focal `tests/editor/flow_fsm_phase_add_ui_test.gd` to existing 60-step workflow; use test-first characterization then smallest editor-only change in `addons/vp_flujo/editor/flow_graph_inspector_property.gd`. Preserve all existing tests including Ready, FSM 7E keyboard/focus, UndoRedo, fluo scroll, scene-context, catalog and validator. Human Fedora/Android acceptance 25/25 **PENDING**.
+
+## Engineering limits
+
+The editor code will reuse existing `FlowEditorBlockCatalogEntry` and `FlowGraphEditorCommands` rather than proliferating duplicate catalogs. Manual widget accessibility, responsive mobile and touchscreen interaction are not approved by headless assertions. The versioned repository `$flujo-baseline`, `$flujo-prove`, `$flujo-fluo-maintenance` can be consulted as instructions via GitHub but cannot be invoked as autonomous local Skills or audit Fedora untracked/index state; no formal READY/PASA claimed.
+
+**Next:** 7F-1C1 native Flusso block property editing; 7F-1C2 per-phase structure; 7F-1D UI persistence/runtime; 7F-2 manual gate. No merge to main.
+
+Todo es Flujo; todo fluye. 🌊
