@@ -77,6 +77,7 @@ var _flusso_snapshots: Dictionary = {}
 var _flusso_owned_properties: Dictionary = {}
 var _flow_entry_focus_pending: bool = false
 var _potok_revert_sessions: Dictionary = {}
+var _potok_rebuild_focus: Dictionary = {}
 var _potok_selected_state_id: String = ""
 var _potok_selected_transition_id: String = ""
 var _potok_transition_feedback: String = ""
@@ -162,6 +163,7 @@ func _reset_dock_context() -> void:
 	_selected_id = ""
 	_potok_selected_state_id = ""
 	_potok_selected_transition_id = ""
+	_potok_rebuild_focus.clear()
 	_potok_revert_sessions.clear()
 	_potok_transition_feedback = ""
 	_potok_structure_feedback = ""
@@ -315,9 +317,63 @@ func _dock_controller_instance() -> PVController:
 
 
 func _request_rebuild() -> void:
+	# Recover the semantic Potok target, not the old freed Control instance.
+	_potok_rebuild_focus = _potok_capture_rebuild_focus()
 	_rebuild_generation += 1
 	if not _rebuild_queued:
 		_queue_rebuild(_rebuild_generation)
+
+
+## Snapshot focused Potok control name and stable selection before removing UI nodes.
+func _potok_capture_rebuild_focus() -> Dictionary:
+	if not is_potok_machine_view() or _flow_entry_focus_pending:
+		return {}
+	var viewport: Viewport = get_viewport()
+	var owner: Control = viewport.gui_get_focus_owner() as Control if viewport != null else null
+	if owner == null or owner == _content or not _content.is_ancestor_of(owner):
+		return {}
+	var target: Control = owner
+	while target != null and target != _content:
+		if String(target.name).begins_with("Potok"):
+			break
+		target = target.get_parent() as Control
+	if target == null or target == _content:
+		return {}
+	var controller: PVController = _active_controller()
+	if controller == null or controller.flow_graph == null:
+		return {}
+	return {
+		"name": String(target.name), "controller_ref": weakref(controller),
+		"machine": _selected_id, "state": _potok_selected_state_id,
+		"edge": _potok_selected_transition_id
+	}
+
+
+## Deferred restoration runs only against the latest still-visible rebuilt form.
+func _potok_restore_rebuild_focus(info: Dictionary, generation: int) -> void:
+	if generation != _rebuild_generation or not is_potok_machine_view() \
+			or not is_visible_in_tree():
+		return
+	var controller_ref: WeakRef = info.get("controller_ref") as WeakRef
+	if controller_ref == null or controller_ref.get_ref() != _active_controller() \
+			or String(info.get("machine", "")) != _selected_id:
+		return
+	var viewport: Viewport = get_viewport()
+	var owner: Control = viewport.gui_get_focus_owner() as Control if viewport != null else null
+	if owner != null and owner.is_inside_tree() \
+			and owner != _content and not _content.is_ancestor_of(owner):
+		# A foreign editor has intentionally acquired keyboard focus meanwhile.
+		return
+	var changed_target: bool = String(info.get("state", "")) != _potok_selected_state_id \
+		or String(info.get("edge", "")) != _potok_selected_transition_id
+	var name: String = "PotokStateList" if changed_target else String(info.get("name", ""))
+	var target: Control = _content.find_child(name, true, false) as Control
+	if not _can_grab_focus(target):
+		target = _content.find_child("PotokStateList", true, false) as Control
+	if _can_grab_focus(target):
+		target.grab_focus()
+
+
 
 
 func _queue_rebuild(generation: int) -> void:
@@ -2270,7 +2326,12 @@ func _render_potok_machine(parent: Container, controller: PVController, generati
 	call_deferred(&"_fit_list_to_first_row", list, generation)
 	if _flow_entry_focus_pending:
 		_flow_entry_focus_pending = false
+		_potok_rebuild_focus.clear()
 		call_deferred(&"_focus_potok_state_list", list, generation)
+	elif not _potok_rebuild_focus.is_empty():
+		var recovery: Dictionary = _potok_rebuild_focus.duplicate()
+		_potok_rebuild_focus.clear()
+		call_deferred(&"_potok_restore_rebuild_focus", recovery, generation)
 
 
 func _render_potok_state_phases(parent: Container, selected: Dictionary) -> void:
@@ -2919,6 +2980,8 @@ func _potok_confirm_delete() -> void:
 			_potok_selected_state_id = ""
 			_potok_selected_transition_id = ""
 	_potok_structure_feedback = "" if deleted else "Deletion blocked: references or context changed."
+	if deleted:
+		_flow_entry_focus_pending = true
 	_request_rebuild()
 
 
