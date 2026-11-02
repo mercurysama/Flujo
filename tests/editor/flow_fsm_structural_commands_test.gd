@@ -117,7 +117,7 @@ func _run() -> void:
 	_check(commands.delete_fsm_state(controller, mid, bid), "Now unreferenced B can be deleted")
 	_check(machine.states.size() == 3 and machine.initial_state_id == aid, "No initial change for noninitial deletion")
 	history.undo()
-	_check(machine.states.size() == 4 and machine.states[2].get_internal_id() == bid,
+	_check(machine.states.size() == 4 and machine.states[1].get_internal_id() == bid,
 		"Undo restores deleted B with same ID and position")
 	history.redo()
 	_check(machine.states.size() == 3, "Redo removes B again")
