@@ -105,6 +105,11 @@ func set_controller(controller: PVController) -> void:
 			and (next_controller != null or _controller_reference == null):
 		return
 
+	# Selection/scene ownership changed: hide the old editor without restoring
+	# a focus target belonging to the abandoned Inspector context.
+	if _is_open:
+		_focus_reference = null
+		close()
 	_reset_motion_state()
 	_disconnect_controller(current_controller)
 	_controller_reference = weakref(next_controller) if next_controller != null else null
@@ -556,6 +561,11 @@ func _on_controller_property_list_changed() -> void:
 
 
 func _on_controller_tree_exited() -> void:
+	# A removed scene node cannot remain the target of an open Fluo surface.
+	# Do not restore old Inspector focus while its owner is being detached.
+	if _is_open:
+		_focus_reference = null
+		close()
 	var controller := _controller_instance()
 	if controller != null:
 		_disconnect_controller(controller)
