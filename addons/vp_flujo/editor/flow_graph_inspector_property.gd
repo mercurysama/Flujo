@@ -79,6 +79,13 @@ var _flow_entry_focus_pending: bool = false
 var _potok_selected_state_id: String = ""
 var _potok_selected_transition_id: String = ""
 var _potok_transition_feedback: String = ""
+var _potok_structure_feedback: String = ""
+var _potok_delete_dialog: ConfirmationDialog = null
+var _potok_delete_kind: StringName = &""
+var _potok_delete_machine_id: String = ""
+var _potok_delete_state_id: String = ""
+var _potok_delete_transition_id: String = ""
+var _potok_delete_controller_ref: WeakRef = null
 var _preserve_deleted_block_selection_state: bool = false
 var _deleted_resource_id: String = ""
 var _deleted_resource_replacement_id: String = ""
@@ -150,6 +157,8 @@ func _reset_dock_context() -> void:
 	_potok_selected_state_id = ""
 	_potok_selected_transition_id = ""
 	_potok_transition_feedback = ""
+	_potok_structure_feedback = ""
+	_potok_close_delete_dialog()
 	_selected_view_title = "Processes"
 	_selected_view_index = -1
 	_ready_block_id = ""
@@ -225,6 +234,8 @@ func set_dock_variable_selection(
 	_potok_selected_state_id = ""
 	_potok_selected_transition_id = ""
 	_potok_transition_feedback = ""
+	_potok_structure_feedback = ""
+	_potok_close_delete_dialog()
 	_ready_block_id = ""
 	_ready_block_details_open = false
 	_flusso_snapshots.clear()
@@ -1377,6 +1388,7 @@ func get_preferred_interaction_focus_target() -> Control:
 
 ## Cancels only local transient editor state while preserving the stable-ID selection.
 func close_transient_interfaces() -> void:
+	_potok_close_delete_dialog()
 	_close_delete_confirmation()
 	_variable_complex_edit_id = ""
 	if is_instance_valid(_variable_complex_editor) and _variable_complex_editor.visible:
@@ -2213,6 +2225,7 @@ func _render_potok_machine(parent: Container, controller: PVController, generati
 	list.allow_reselect = true
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(list)
+	_potok_render_structure_actions(parent, false)
 	var rows: Array = view.get("states", [])
 	var selected_index: int = -1
 	for index: int in rows.size():
@@ -2418,6 +2431,7 @@ func _render_potok_transitions(parent: Container, state: Dictionary, states: Arr
 	list.select_mode = ItemList.SELECT_SINGLE
 	list.allow_reselect = true
 	parent.add_child(list)
+	_potok_render_structure_actions(parent, true)
 	var edges: Array = state.get("transitions", [])
 	if edges.is_empty():
 		var item_index: int = list.add_item("Empty")
