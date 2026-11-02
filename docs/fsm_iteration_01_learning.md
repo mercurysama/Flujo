@@ -296,3 +296,11 @@ Todo es Flujo; todo fluye. 🌊
 - A **single** validated detached graph candidate protects an atomic multi-field revert, avoiding partial restore across dependent transition fields. Undo restores edited pre-revert values; Redo restores opening values. No-op and invalid or stale snapshot calls have no effects or Undo steps.
 - Expanding a form's focusable controls alters Alt wrap destination: distinguish an intentional new field in test expectations from a broken shortcut. Add stronger adjacent-field assertions instead of deleting tests.
 - Repo Skills procedures consulted remotely; no direct standalone `$flujo-baseline`, `$flujo-prove` or `$flujo-fluo-maintenance` invocation, no formal READY/PASA. Manual Fedora/Android visual acceptance remains pending. Next 7E-2C cross-context UndoRedo focus recovery.
+
+
+## 2026-11-02 — Potok 7E-2C UndoRedo semantic focus recovery
+
+- Frozen contract `e3461a79b9abef581f44aa66f1de348cb5bc2c49`. Test-first `b31c41672dec5845127dd1705fd176bc4fd3d4f5` exposed real loss of native focus after deferred editor rebuild ([CI 41399398547](https://github.com/mercurysama/Flujo/actions/runs/41399398547) expected RED). Minimal editor fix `3f5286c721d1c2e39df2b4d4ca238b3e6a4144cc`; [CI 41399683013](https://github.com/mercurysama/Flujo/actions/runs/41399683013) **SUCCESS 57/57**.
+- Never store references to a Potok native Control across `_content` teardown. Capture semantic control name, WeakRef to owner controller and stable machine/state/edge IDs before the rebuild; only on the latest generation, and only while the same visible Fluo/controller/machine holds, find the freshly rendered matching control and grant focus. If state/edge changed, fall back to live State list.
+- A foreign focused editor or explicit `_flow_entry_focus_pending` navigation wins over deferred recovery. Deletion/UndoRedo must leave valid state/edge IDs; stale detached form callbacks cannot edit the new selected resource. Test two Undo/Redo loops, transition edit, deletion/undo/redo, foreign focus, and closure.
+- Remote repo Skills `$flujo-baseline`, `$flujo-prove` and `$flujo-fluo-maintenance` consulted/applied; **not directly executable here**, no formal READY/PASA or manual desktop/Android acceptance. Next 7E-3A scroll/disposition.
