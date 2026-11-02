@@ -1,0 +1,20 @@
+# Potok 7D-2 — Typed event-field Condition Tok resolution, automated checkpoint
+
+**Date:** 2026-11-01 (Actions UTC 2026-11-02). **Branch:** `feature/fsm-runtime-flow-flusso`. **Contract:** [7D-2 event field contract](fsm_phase7_7d2_event_payload_contract.md) commit `106354de39cdea1cfdaf7870c3be9814005dbc7e`.
+
+## RED → GREEN
+
+- **RED runtime focal:** `tests/runtime/flow_fsm_event_payload_condition_test.gd` commit `99244abd16397ca974899ab7901d9e1644a483b8` (corrected seven consumed-event count in `f5637ed0089e15d4c4648ee83187fb6de4ec7760`); scene `ad9852cfffad25baa2a2f5ee8862a660eab3e530`; CI `c9f37d77bee38c44ac8e7fcfcb7a7e39ad305fe1`. [Actions 41381729820](https://github.com/mercurysama/Flujo/actions/runs/41381729820) FAIL before the new typed source existed; [Actions 41381838803](https://github.com/mercurysama/Flujo/actions/runs/41381838803) FAIL with a modeled source but no per-tick runtime binding yet.
+- **Value source:** `086a1a00a249ce947a60b8c6d0b797c2eddf0ddf` introduces `FlowEventPayloadValueSource` with persistent **event name, top-level field name and exact declared BOOL/INT/FLOAT/STRING type**, but no packet values. Stable source ID and structured `event_payload_missing`, `event_payload_type_mismatch` diagnostics. `FlowValueResolutionContext` adds an ephemeral machine-scoped, same-tick copied event packet map in `b483f3f549ca62eeb3e3c6bd985638346c6c995f`. `FlowConditionValueSource` supports this operand, validation and preview in `ba590913cbd9781d27e0af4611271e9dfd290b8d`.
+- **Runtime GREEN:** `2dfb9a22f89a1567a554bf6468e8b5705a1ae941`. Each matching machine's delivery records the **latest event payload by exact event name** within that machine and current tick. When no direct/EVENT transition wins, condition fallback may evaluate the typed operand. Event scope is erased **before Exit/Enter/commit**, and on context clear. Unmatched names, absent keys or mismatched exact types safely fail without default coercion. 6G deferred packets appear only in a later matching clock, not the current one.
+- **Visual editor RED/GREEN:** test `tests/editor/flow_fsm_event_payload_tok_test.gd` `b755c47fe0fe403d07ce801a01154a44cf86b845`, CI `a49e4835a467fda1e0c9407ec5f1e61679b13dd8`. `FlowConditionEditor` receives Event field operand controls (event name, key, exact type), added by `67b636cec08e6357531f58f5a731d7b72e0b8d58`; the selected Potok Flusso invokes popup with the specific context flag in `ad5c1127db045ef82254dab4223cdae23e627535`. The option is **not** shown in unrelated generic Condition Tok instances. Incomplete drafts cannot be confirmed, and preview identifies the authored names without reading a runtime packet.
+- **Expanded safety test:** `3a7c92f6e71d3d2072c9e1d7d01557b254be0762` verifies explicit missing/type-mismatch diagnostics and deep detachment from sender and reader dictionaries.
+- **Full GREEN:** [GitHub Actions 41382298522](https://github.com/mercurysama/Flujo/actions/runs/41382298522) **COMPLETED SUCCESS**. Both 7D-2 focal tests, 7D-1 Tok popup test, all 7C structural/metadata tests, phase-6 FSM runtime and model/Ready/navigation regressions passed.
+
+## Scope and limits
+
+**7D-2 accepted for deterministic headless tests.** This gives a user-authored Condition Tok Bool comparison an event field input at the same clock tick. EVENT transitions retain precedence; event-payload conditions are **fallback** checks, not implicit guards on authored EVENT edges. Latest packet per exact event name wins only within that machine's matching tick. No event data survives between ticks, crosses controllers, leaks between machines, or becomes available in Exit/Enter phases. No nested dictionary path, arrays, implicit numeric conversion or whole-packet expression is authored. This does not promise human UI/Android validation or a global CPU-time budget.
+
+**Next 7E:** save/reopen scene, persistence of condition sources and IDs, focus/keyboard interaction, visual/touch Android QA at the consolidated end. Keep 7D-1/2 documentation plus [phase-7 roadmap](fsm_phase7_microblocks.md) as recovery entrypoints.
+
+Todo es Flujo; todo fluye. 🌊
