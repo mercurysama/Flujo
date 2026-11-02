@@ -1,5 +1,13 @@
 # Current Iteration
 
+## Potok — Phase 8 active; Phase 7 physical acceptance explicitly deferred (2026-11-02)
+
+- Maintainer authorized moving to **Phase 8** without performing the 25 physical acceptance tests now. **Phase 7 implementation and automatic coverage finished, but final visual acceptance remains deferred/PENDING**, not a signed-off release. F01–F15 Fedora and A01–A10 Android must be revisited before a stable merge/release; see [manual matrix](fsm_phase7_7f2_manual_acceptance_matrix.md).
+- **8A dynamic-state audit launched:** [contract and gap inventory](fsm_phase8_8a_gap_audit.md). Existing FSM-003 runtime already includes dynamic registration, lookup, activation, deletion, lifetime/data access and a runtime focal; avoid restarting it. Audit identifies narrow tests needed for quota, determinism, re-registration, edge cases and SDK capability boundary.
+- **Next microblock 8B1:** tests-first on dynamic-state identity/quota/re-registration/deterministic listing. Preserve existing API and schema; no changes to runtime without proven defect. Branch `feature/fsm-runtime-flow-flusso`; no merge to `main`.
+- Baseline before 8A: `30bb62256f09c50ec195f9ff01b23635c2fc9394`, [GitHub Actions 41538641710](https://github.com/mercurysama/Flujo/actions/runs/41538641710) completed SUCCESS. Audit documentation CI must be verified separately.
+
+
 ## Potok — FSM feature branch Phase 7F-1D4 audit (2026-11-02)
 
 - **Scope-specific branch:** `feature/fsm-runtime-flow-flusso`. This Potok track is distinct from the earlier `feature/block-builder-fprint-dogfood` Fluo-preview and Akis tracks documented below; those histories are not replaced or reclassified.
