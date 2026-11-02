@@ -710,6 +710,154 @@ func _fsm_assign_states(
 	changed.emit()
 
 
+## Potok 7C-2B: transition structure belongs to one authored state.
+func add_fsm_transition(controller: PVController, machine_id: String, state_id: String) -> String:
+	var context: Dictionary = _fsm_edge_context(controller, machine_id, state_id)
+	if context.is_empty():
+		return ""
+	var source: FlowStateDefinition = context["state"]
+	var machine: FlowStateMachineDefinition = context["machine"]
+	var edge := FlowStateTransitionDefinition.new()
+	edge.trigger = FlowStateTransitionDefinition.Trigger.EVENT
+	edge.event_name = &"event"
+	edge.target_state_id = state_id
+	var updated: Array[FlowStateTransitionDefinition] = []
+	updated.assign(source.transitions)
+	updated.append(edge)
+	if not _fsm_edge_candidate(controller.flow_graph, machine, source, updated):
+		return ""
+	_fsm_commit_edges(controller, source, updated, "Add Potok Transition")
+	return edge.get_internal_id()
+
+
+func duplicate_fsm_transition(
+		controller: PVController, machine_id: String, state_id: String, transition_id: String
+) -> String:
+	var context: Dictionary = _fsm_edge_context(controller, machine_id, state_id)
+	if context.is_empty():
+		return ""
+	var source: FlowStateDefinition = context["state"]
+	var index: int = _fsm_edge_index(source.transitions, transition_id)
+	if index < 0:
+		return ""
+	var copied: FlowStateTransitionDefinition = source.transitions[index].duplicate_with_new_id()
+	if copied == null or copied.get_internal_id() == transition_id:
+		return ""
+	var updated: Array[FlowStateTransitionDefinition] = []
+	updated.assign(source.transitions)
+	updated.insert(index + 1, copied)
+	if not _fsm_edge_candidate(controller.flow_graph, context["machine"], source, updated):
+		return ""
+	_fsm_commit_edges(controller, source, updated, "Duplicate Potok Transition")
+	return copied.get_internal_id()
+
+
+func move_fsm_transition(
+		controller: PVController, machine_id: String, state_id: String,
+		transition_id: String, direction: int
+) -> bool:
+	var context: Dictionary = _fsm_edge_context(controller, machine_id, state_id)
+	if context.is_empty() or direction == 0:
+		return false
+	var source: FlowStateDefinition = context["state"]
+	var index: int = _fsm_edge_index(source.transitions, transition_id)
+	var next: int = index + (1 if direction > 0 else -1)
+	if index < 0 or next < 0 or next >= source.transitions.size():
+		return false
+	var updated: Array[FlowStateTransitionDefinition] = []
+	updated.assign(source.transitions)
+	var displaced: FlowStateTransitionDefinition = updated[next]
+	updated[next] = updated[index]
+	updated[index] = displaced
+	if not _fsm_edge_candidate(controller.flow_graph, context["machine"], source, updated):
+		return false
+	_fsm_commit_edges(controller, source, updated, "Move Potok Transition")
+	return true
+
+
+func delete_fsm_transition(
+		controller: PVController, machine_id: String, state_id: String, transition_id: String
+) -> bool:
+	var context: Dictionary = _fsm_edge_context(controller, machine_id, state_id)
+	if context.is_empty():
+		return false
+	var source: FlowStateDefinition = context["state"]
+	var index: int = _fsm_edge_index(source.transitions, transition_id)
+	if index < 0:
+		return false
+	var updated: Array[FlowStateTransitionDefinition] = []
+	updated.assign(source.transitions)
+	updated.remove_at(index)
+	if not _fsm_edge_candidate(controller.flow_graph, context["machine"], source, updated):
+		return false
+	_fsm_commit_edges(controller, source, updated, "Delete Potok Transition")
+	return true
+
+
+func _fsm_edge_context(
+		controller: PVController, machine_id: String, state_id: String
+) -> Dictionary:
+	var machine: FlowStateMachineDefinition = _fsm_structure_machine(controller, machine_id)
+	if machine == null or state_id.is_empty():
+		return {}
+	var index: int = _fsm_state_index(machine.states, state_id)
+	if index < 0:
+		return {}
+	return {"machine": machine, "state": machine.states[index], "state_index": index}
+
+
+func _fsm_edge_index(edges: Array[FlowStateTransitionDefinition], edge_id: String) -> int:
+	if edge_id.is_empty():
+		return -1
+	for index: int in edges.size():
+		var edge: FlowStateTransitionDefinition = edges[index]
+		if edge != null and edge.get_internal_id() == edge_id:
+			return index
+	return -1
+
+
+func _fsm_edge_candidate(
+		graph: FlowGraph, machine: FlowStateMachineDefinition,
+		source: FlowStateDefinition, edges: Array[FlowStateTransitionDefinition]
+) -> bool:
+	var source_draft: FlowStateDefinition = source.duplicate(false) as FlowStateDefinition
+	if source_draft == null or source_draft.get_internal_id() != source.get_internal_id():
+		return false
+	source_draft.transitions = edges
+	var states: Array[FlowStateDefinition] = []
+	states.assign(machine.states)
+	var index: int = _fsm_state_index(states, source.get_internal_id())
+	if index < 0:
+		return false
+	states[index] = source_draft
+	return _fsm_structure_candidate(graph, machine, states, machine.initial_state_id)
+
+
+func _fsm_commit_edges(
+		controller: PVController, source: FlowStateDefinition,
+		edges: Array[FlowStateTransitionDefinition], label: String
+) -> void:
+	var previous: Array[FlowStateTransitionDefinition] = []
+	previous.assign(source.transitions)
+	_undo_redo.create_action(label, UndoRedo.MERGE_DISABLE, controller, false, true)
+	_undo_redo.add_do_method(self, &"_fsm_assign_edges", controller, source, edges)
+	_undo_redo.add_undo_method(self, &"_fsm_assign_edges", controller, source, previous)
+	_undo_redo.commit_action()
+
+
+func _fsm_assign_edges(
+		controller: PVController, source: FlowStateDefinition,
+		edges: Array[FlowStateTransitionDefinition]
+) -> void:
+	if not is_instance_valid(controller) or source == null:
+		return
+	source.transitions = edges.duplicate()
+	source.emit_changed()
+	controller.notify_property_list_changed()
+	_refresh_diagnostics(controller.flow_graph)
+	changed.emit()
+
+
 ## Moves a selected resource by one array position, including across deliberate null slots.
 func move_resource(controller: PVController, collection: Collection, internal_id: String, direction: int) -> bool:
 	var graph: FlowGraph = controller.flow_graph if controller != null else null
