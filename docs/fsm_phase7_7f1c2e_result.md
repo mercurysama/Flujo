@@ -6,7 +6,7 @@
 
 - `a52e00c7396b964f9338a1f2272c6473c1c83cfb`: test de regresión `tests/editor/flow_fsm_phase_structure_roundtrip_test.gd`, ejecutado con Godot 4.7.2 headless + EditorUndoRedoManager.
 - `fd9204edd55a5acba163027597c10793884842fe`: entrada de prueba en `.github/workflows/flujo-fsm.yml`; se conserva todo el catálogo de tests precedentes.
-- [Actions 41517598801](https://github.com/mercurysama/Flujo/actions/runs/41517598801): ejecución que debe confirmar el cierre GREEN completo. La prueba focal de persistencia pasó; consultar conclusión y conteo final para registrar suite total.
+- **GREEN confirmado:** [Actions 41517598801](https://github.com/mercurysama/Flujo/actions/runs/41517598801), **completed SUCCESS, 71/71 pasos**, cero fallos, en el commit de CI `fd9204edd55a5acba163027597c10793884842fe`. Incluye el test focal de persistencia y regresiones Godot 4.7.2.
 
 ## Cobertura
 
