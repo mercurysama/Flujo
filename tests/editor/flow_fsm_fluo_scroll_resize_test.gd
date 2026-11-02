@@ -120,12 +120,12 @@ func _run() -> void:
 		"Native scrollbars exist without substituting manual scroll controls")
 
 	await _check_geometry("wide-left", WIDE, false)
-	_check(_can_scroll_vertical(), "Wide view can reach long authored content vertically")
+	_check(await _can_scroll_vertical(), "Wide view can reach long authored content vertically")
 
 	await _resize(NARROW)
 	await _check_geometry("narrow-left", NARROW, false)
-	_check(_can_scroll_vertical(), "Portrait-width view retains real vertical scroll range")
-	_check(_can_scroll_horizontal(), "Portrait-width view scrolls overflowing content horizontally")
+	_check(await _can_scroll_vertical(), "Portrait-width view retains real vertical scroll range")
+	_check(await _can_scroll_horizontal(), "Portrait-width view scrolls overflowing content horizontally")
 	var content: VBoxContainer = _drawer.find_child(
 		"FluoEditorScrollContent", true, false
 	) as VBoxContainer
@@ -150,7 +150,7 @@ func _run() -> void:
 	_drawer.set_right_side(true)
 	await _frames(4)
 	await _check_geometry("narrow-right", NARROW, true)
-	_check(_can_scroll_vertical() and _can_scroll_horizontal(),
+	_check(await _can_scroll_vertical() and _can_scroll_horizontal(),
 		"Right-side placement retains horizontal/vertical scroll reachability")
 	await _resize(WIDE)
 	await _check_geometry("wide-right", WIDE, true)
