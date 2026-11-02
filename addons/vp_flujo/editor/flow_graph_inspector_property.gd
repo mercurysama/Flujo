@@ -77,6 +77,7 @@ var _flusso_snapshots: Dictionary = {}
 var _flusso_owned_properties: Dictionary = {}
 var _flow_entry_focus_pending: bool = false
 var _potok_selected_state_id: String = ""
+var _potok_selected_transition_id: String = ""
 var _preserve_deleted_block_selection_state: bool = false
 var _deleted_resource_id: String = ""
 var _deleted_resource_replacement_id: String = ""
@@ -146,6 +147,7 @@ func set_dock_controller(controller: PVController) -> void:
 func _reset_dock_context() -> void:
 	_selected_id = ""
 	_potok_selected_state_id = ""
+	_potok_selected_transition_id = ""
 	_selected_view_title = "Processes"
 	_selected_view_index = -1
 	_ready_block_id = ""
@@ -219,6 +221,7 @@ func set_dock_variable_selection(
 	_selected_collection = collection
 	_selected_id = next_id
 	_potok_selected_state_id = ""
+	_potok_selected_transition_id = ""
 	_ready_block_id = ""
 	_ready_block_details_open = false
 	_flusso_snapshots.clear()
@@ -2186,6 +2189,7 @@ func _render_potok_machine(parent: Container, controller: PVController, generati
 	var view: Dictionary = FlowFSMEditorProjection.new().present(controller.flow_graph, _selected_id)
 	if not bool(view.get("found", false)):
 		_potok_selected_state_id = ""
+		_potok_selected_transition_id = ""
 		var message := Label.new()
 		message.text = "Select a State Machine in the Godot Inspector."
 		parent.add_child(message)
@@ -2223,10 +2227,14 @@ func _render_potok_machine(parent: Container, controller: PVController, generati
 	if selected_index >= 0:
 		list.select(selected_index)
 		var selected: Dictionary = rows[selected_index]
-		_potok_selected_state_id = String(selected.get("id", ""))
+		var new_state_id: String = String(selected.get("id", ""))
+		if _potok_selected_state_id != new_state_id:
+			_potok_selected_transition_id = ""
+		_potok_selected_state_id = new_state_id
 		_render_potok_state_phases(parent, selected)
 		if not bool(selected.get("empty", false)):
 			_render_potok_state_properties(parent, selected)
+			_render_potok_transitions(parent, selected, rows)
 	list.item_selected.connect(_on_potok_state_selected.bind(list))
 	call_deferred(&"_fit_list_to_first_row", list, generation)
 	if _flow_entry_focus_pending:
@@ -2393,6 +2401,54 @@ func _potok_commit_scalar(
 	# Re-present the authoritative resource after success, cancellation or rejection.
 	_request_rebuild()
 
+
+
+## Potok 7C-2A — authored transition list, selected only by stable edge ID.
+func _render_potok_transitions(parent: Container, state: Dictionary, states: Array) -> void:
+	var title := Label.new()
+	title.text = "Flow · Transitions"
+	parent.add_child(title)
+	var list := ItemList.new()
+	list.name = &"PotokTransitionList"
+	list.focus_mode = Control.FOCUS_ALL
+	list.select_mode = ItemList.SELECT_SINGLE
+	list.allow_reselect = true
+	parent.add_child(list)
+	var edges: Array = state.get("transitions", [])
+	if edges.is_empty():
+		var item_index: int = list.add_item("Empty")
+		list.set_item_metadata(item_index, {"id": ""})
+		_potok_selected_transition_id = ""
+		return
+	var selected_index: int = -1
+	for i: int in edges.size():
+		var edge: Dictionary = edges[i]
+		var id: String = String(edge.get("id", ""))
+		var text_value: String = String(edge.get("name", "Transition"))
+		var index: int = list.add_item(text_value)
+		list.set_item_metadata(index, {"id": id})
+		if not id.is_empty() and id == _potok_selected_transition_id:
+			selected_index = i
+	if selected_index < 0:
+		selected_index = 0
+	list.select(selected_index)
+	var selected: Dictionary = edges[selected_index]
+	_potok_selected_transition_id = String(selected.get("id", ""))
+	if not _potok_selected_transition_id.is_empty():
+		_render_potok_transition_properties(parent, selected, states)
+	list.item_selected.connect(_on_potok_transition_selected.bind(list))
+
+
+func _on_potok_transition_selected(index: int, list: ItemList) -> void:
+	if not is_potok_machine_view() or not is_instance_valid(list) \
+			or index < 0 or index >= list.item_count:
+		return
+	var id: String = String((list.get_item_metadata(index) as Dictionary).get("id", ""))
+	if id.is_empty() or id == _potok_selected_transition_id:
+		return
+	_potok_selected_transition_id = id
+	_request_rebuild()
+
 func _on_potok_state_selected(index: int, list: ItemList) -> void:
 	if not is_potok_machine_view() or index < 0 or index >= list.item_count:
 		return
@@ -2400,6 +2456,7 @@ func _on_potok_state_selected(index: int, list: ItemList) -> void:
 	if id == _potok_selected_state_id:
 		return
 	_potok_selected_state_id = id
+	_potok_selected_transition_id = ""
 	_flow_entry_focus_pending = true
 	_request_rebuild()
 
@@ -2432,6 +2489,7 @@ func navigate_potok_state(direction: int) -> bool:
 	if id.is_empty():
 		return false
 	_potok_selected_state_id = id
+	_potok_selected_transition_id = ""
 	_flow_entry_focus_pending = true
 	_request_rebuild()
 	return true
@@ -2460,6 +2518,7 @@ func navigate_potok_machine(direction: int) -> bool:
 		_selected_id = machine.get_internal_id()
 		_selected_view_index = index
 		_potok_selected_state_id = ""
+		_potok_selected_transition_id = ""
 		_flow_entry_focus_pending = true
 		_clear_deleted_selection_state()
 		_close_delete_confirmation()
