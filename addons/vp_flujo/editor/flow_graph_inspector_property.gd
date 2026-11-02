@@ -81,6 +81,7 @@ var _potok_rebuild_focus: Dictionary = {}
 var _potok_selected_phase: StringName = &""
 var _potok_selected_phase_block_id: String = ""
 var _potok_phase_block_details_open: bool = false
+var _potok_phase_block_session: Dictionary = {}
 var _potok_phase_focus_pending: Dictionary = {}
 var _potok_selected_state_id: String = ""
 var _potok_selected_transition_id: String = ""
@@ -2459,6 +2460,7 @@ func _potok_on_phase_block_selected(
 		return
 	if _potok_selected_phase != phase or _potok_selected_phase_block_id != block_id:
 		_potok_phase_block_details_open = false
+		_potok_phase_block_session.clear()
 		var previous_panel: Control = _content.find_child(
 			"PotokPhaseBlockProperties", true, false) as Control
 		if previous_panel != null:
@@ -2484,6 +2486,7 @@ func _potok_on_phase_add(
 	if new_id.is_empty():
 		return
 	_potok_phase_block_details_open = false
+	_potok_phase_block_session.clear()
 	_potok_selected_phase = phase
 	_potok_selected_phase_block_id = new_id
 	_potok_phase_focus_pending = {
@@ -2541,6 +2544,8 @@ func _potok_on_phase_block_activated(
 	)
 	if _potok_find_owned_phase_block(controller, mid, sid, phase, block_id) == null:
 		return
+	if _potok_selected_phase != phase or _potok_selected_phase_block_id != block_id:
+		_potok_phase_block_session.clear()
 	_potok_selected_phase = phase
 	_potok_selected_phase_block_id = block_id
 	_potok_phase_block_details_open = true
@@ -2597,6 +2602,19 @@ func _potok_render_phase_block_details(parent: Container, mid: String, sid: Stri
 	var controller_ref: WeakRef = weakref(controller)
 	var phase: StringName = _potok_selected_phase
 	var block_id: String = _potok_selected_phase_block_id
+	_potok_capture_phase_block_session(controller, mid, sid, phase, block)
+	var action_row := HBoxContainer.new()
+	panel.add_child(action_row)
+	var revert_button := Button.new()
+	revert_button.name = &"PotokPhaseBlockRevert"
+	revert_button.text = "Revertir"
+	revert_button.pressed.connect(_potok_revert_phase_block)
+	action_row.add_child(revert_button)
+	var close_button := Button.new()
+	close_button.name = &"PotokPhaseBlockClose"
+	close_button.text = "Close"
+	close_button.pressed.connect(close_potok_phase_block_details)
+	action_row.add_child(close_button)
 	var name_label := Label.new()
 	name_label.text = "Block Name"
 	panel.add_child(name_label)
@@ -2844,8 +2862,99 @@ func _potok_phase_generic_apply(
 	)
 
 
+## 7F-1C1D: capture only actual Flusso-owned properties when opening.
+func _potok_capture_phase_block_session(
+		controller: PVController, mid: String, sid: String,
+		phase: StringName, block: FlowBlock
+) -> void:
+	var previous: Dictionary = _potok_phase_block_session
+	var owner: WeakRef = previous.get("controller_ref") as WeakRef
+	var target: WeakRef = previous.get("block_ref") as WeakRef
+	if owner != null and target != null and owner.get_ref() == controller \
+			and target.get_ref() == block and previous.get("machine", "") == mid \
+			and previous.get("state", "") == sid and previous.get("phase", &"") == phase:
+		return
+	var values: Dictionary = {
+		&"display_name": block.display_name, &"enabled": block.enabled
+	}
+	if block is FlowPrintBlock:
+		values[&"text"] = (block as FlowPrintBlock).text
+	if _authoring_context != null and _authoring_context.has_method(&"describe_block_properties"):
+		var result: FlowBlockPropertyCatalogResult = _authoring_context.call(
+			&"describe_block_properties", block
+		) as FlowBlockPropertyCatalogResult
+		if result != null:
+			for descriptor: FlowBlockPropertyDescriptor in result.descriptors:
+				if descriptor != null and descriptor.editable \
+						and descriptor.is_generic_candidate() \
+						and not descriptor.is_structured_document_candidate() \
+						and descriptor.presentation_kind in [
+							FlowBlockPropertyDescriptor.PRESENTATION_BOOLEAN,
+							FlowBlockPropertyDescriptor.PRESENTATION_TEXT,
+							FlowBlockPropertyDescriptor.PRESENTATION_STRING_NAME,
+							FlowBlockPropertyDescriptor.PRESENTATION_MULTILINE,
+							FlowBlockPropertyDescriptor.PRESENTATION_INTEGER,
+							FlowBlockPropertyDescriptor.PRESENTATION_FLOAT,
+							FlowBlockPropertyDescriptor.PRESENTATION_RANGE,
+							FlowBlockPropertyDescriptor.PRESENTATION_ENUM
+						]:
+					values[descriptor.property_name] = descriptor.current_value
+	_potok_phase_block_session = {
+		"controller_ref": weakref(controller), "block_ref": weakref(block),
+		"machine": mid, "state": sid, "phase": phase,
+		"block": block.get_internal_id(), "values": values
+	}
+
+
+func _potok_revert_phase_block() -> void:
+	if not is_potok_machine_view() or not _potok_phase_block_details_open \
+			or _commands == null:
+		return
+	var session: Dictionary = _potok_phase_block_session
+	var reference: WeakRef = session.get("controller_ref") as WeakRef
+	var block_reference: WeakRef = session.get("block_ref") as WeakRef
+	var controller: PVController = _active_controller()
+	var mid: String = String(session.get("machine", ""))
+	var sid: String = String(session.get("state", ""))
+	var phase: StringName = session.get("phase", &"")
+	var block_id: String = String(session.get("block", ""))
+	if reference == null or block_reference == null \
+			or reference.get_ref() != controller or mid != _selected_id \
+			or sid != _potok_selected_state_id or phase != _potok_selected_phase \
+			or block_id != _potok_selected_phase_block_id \
+			or block_reference.get_ref() != _potok_find_owned_phase_block(
+				controller, mid, sid, phase, block_id
+			):
+		return
+	if _commands.restore_fsm_phase_block_snapshot(
+			controller, mid, sid, phase, block_id,
+			session.get("values", {}) as Dictionary
+	):
+		_request_rebuild()
+
+
+func close_potok_phase_block_details() -> bool:
+	if not is_potok_machine_view() or not _potok_phase_block_details_open:
+		return false
+	var controller: PVController = _active_controller()
+	var phase: StringName = _potok_selected_phase
+	var block_id: String = _potok_selected_phase_block_id
+	_potok_phase_block_details_open = false
+	_potok_phase_block_session.clear()
+	if controller != null and _potok_find_owned_phase_block(
+			controller, _selected_id, _potok_selected_state_id, phase, block_id
+	) != null:
+		_potok_phase_focus_pending = {
+			"controller_ref": weakref(controller), "machine": _selected_id,
+			"state": _potok_selected_state_id, "phase": phase, "block": block_id
+		}
+	_request_rebuild()
+	return true
+
+
 func _potok_clear_phase_selection() -> void:
 	_potok_phase_block_details_open = false
+	_potok_phase_block_session.clear()
 	_potok_selected_phase = &""
 	_potok_selected_phase_block_id = ""
 	_potok_phase_focus_pending.clear()
