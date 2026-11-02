@@ -470,3 +470,8 @@ Todo es Flujo; todo fluye. 🌊
 
 - Baseline `9092577253a6cc8bf5ffaf233088463ed904c559`; prior CI [41534699129](https://github.com/mercurysama/Flujo/actions/runs/41534699129) completed SUCCESS, and [41534739699](https://github.com/mercurysama/Flujo/actions/runs/41534739699) was still running at initial check. [Manual guide for Fedora F11–F15](fsm_phase7_7f2c_fedora_sdk_navigation_persistence.md) committed as `0c7dd8c8293335c2815848027d4e0f5f9ccba473`; it covers SDK all-phase editing, stale controller/state context, keyboard/focus/Escape, actual saved/reopened scenes and responsive drawer/scroll. Documentation only; no runtime/editor code or demo changes.
 - Remaining acceptance: **15 Fedora + 10 Android cases still PENDING** until direct human evidence; 7F-2D/2E next for Android preparation. No physical Fedora workstation or Android app execution claimed.
+
+## 2026-11-02 — Potok 7F-2D Android acceptance preparation A01–A05
+
+- Starting HEAD `e3e0ccca79bc7be6aba03118f763da89f08a5b5f`, [CI 41535467283](https://github.com/mercurysama/Flujo/actions/runs/41535467283) completed SUCCESS. Added [Android A01–A05 guide](fsm_phase7_7f2d_android_loading_touch_orientation.md) at `5333a8ea0bdb4fc48659a71ca5b01da729d0afcf` for project loading, Fluo/Flow/Flusso, vertical/horizontal layouts, double-tap activation and touch Add of Print plus SDK.
+- Evidence stays separated: October Fluo Preview 1 Android screenshot is historical load/render only; 7F-2 Android acceptance remains **0/10**, Fedora **0/15**. No Android device operated from GitHub, and no production, runtime, schema, scene or `main` edits. Next 7F-2E A06–A10 then actual device evidence, defect triage and human sign-off.
