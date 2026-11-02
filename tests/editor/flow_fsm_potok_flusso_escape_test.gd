@@ -91,8 +91,13 @@ func _run() -> void:
 		"Alt+Shift+PageDown moves backwards to prior Potok scalar control")
 	_key(KEY_PAGEUP, false, true)
 	await _frames(2)
+	var edge_revert: Button = _field("PotokTransitionRevert") as Button
+	_check(edge_revert != null and edge_revert.has_focus(),
+		"Alt+PageUp wraps backwards to new final Transition Revertir control")
+	_key(KEY_PAGEUP, false, true)
+	await _frames(2)
 	_check(edge_note.has_focus(),
-		"Alt+PageUp wraps backwards from first machine control to last transition control")
+		"Further Alt+PageUp reaches preceding Transition Note without skipping it")
 	_check(_selected_state() == _state_id and
 		(_drawer.find_child("FluoFlowEditor", true, false) as FlowGraphInspectorProperty).get(
 			"_selected_id") == _machine_id,
