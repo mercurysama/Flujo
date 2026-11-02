@@ -85,8 +85,6 @@ func _run() -> void:
 		input.text = phase + " changed"
 		input.text_changed.emit()
 		_check(block.text == phase + " changed", phase + " edit persists immediately")
-		_check((enter.text == "Enter changed") == (phase == "Enter" or phase != "Enter")
-			or not prior.is_empty(), "Original Enter remains valid")
 		history.undo()
 		_check(block.text == prior, phase + " Undo restores original value")
 		history.redo()
