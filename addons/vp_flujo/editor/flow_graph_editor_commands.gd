@@ -669,6 +669,82 @@ func _assign_fsm_snapshot(
 	changed.emit()
 
 
+## Potok 7F-1A: add one catalog block to an explicitly named authored phase.
+## Update is the inherited FlowBlockContainer.blocks property; Enter and Exit
+## are distinct stored arrays. Never infer phase from position or display name.
+func add_fsm_phase_block_by_authoring_id(
+		controller: PVController, machine_id: String, state_id: String,
+		phase: StringName, authoring_id: String
+) -> String:
+	var property_name: StringName = _fsm_phase_property(phase)
+	if property_name.is_empty() or authoring_id.is_empty():
+		return ""
+	# Resolve ownership before invoking the catalog factory or registering Undo.
+	var context: Dictionary = _fsm_edge_context(controller, machine_id, state_id)
+	if context.is_empty():
+		return ""
+	var machine: FlowStateMachineDefinition = context["machine"]
+	var state: FlowStateDefinition = context["state"]
+	var current: Array[FlowBlock] = []
+	current.assign(state.get(property_name))
+	var new_block: FlowBlock = _create_authoring_block(authoring_id)
+	if new_block == null:
+		return ""
+	new_block.display_name = _first_available_block_display_name(current, new_block)
+	var updated: Array[FlowBlock] = current.duplicate()
+	updated.append(new_block)
+
+	# Detached state -> machine -> graph candidate, no mutation of the live model.
+	var draft: FlowStateDefinition = state.duplicate(false) as FlowStateDefinition
+	if draft == null or draft.get_internal_id() != state_id:
+		return ""
+	draft.set(property_name, updated)
+	var states: Array[FlowStateDefinition] = []
+	states.assign(machine.states)
+	states[int(context["state_index"])] = draft
+	if not _fsm_structure_candidate(
+			controller.flow_graph, machine, states, machine.initial_state_id
+	):
+		return ""
+
+	_undo_redo.create_action(
+		"Add Potok %s Block" % String(phase).capitalize(),
+		UndoRedo.MERGE_DISABLE, controller, false, true
+	)
+	_undo_redo.add_do_method(
+		self, &"_fsm_assign_phase_blocks", controller, state, property_name, updated
+	)
+	_undo_redo.add_undo_method(
+		self, &"_fsm_assign_phase_blocks", controller, state, property_name, current
+	)
+	_undo_redo.commit_action()
+	return new_block.get_internal_id()
+
+
+func _fsm_phase_property(phase: StringName) -> StringName:
+	match phase:
+		&"enter":
+			return &"enter_blocks"
+		&"update":
+			return &"blocks"
+		&"exit":
+			return &"exit_blocks"
+	return &""
+
+
+func _fsm_assign_phase_blocks(
+		controller: PVController, state: FlowStateDefinition,
+		property_name: StringName, blocks: Array[FlowBlock]
+) -> void:
+	if not is_instance_valid(controller) or state == null:
+		return
+	state.set(property_name, blocks.duplicate())
+	state.emit_changed()
+	controller.notify_property_list_changed()
+	_refresh_diagnostics(controller.flow_graph)
+	changed.emit()
+
+
 ## Potok 7C-2B: structural authoring on stable state IDs.
 func add_fsm_state(controller: PVController, machine_id: String) -> String:
 	var machine: FlowStateMachineDefinition = _fsm_structure_machine(controller, machine_id)
