@@ -222,11 +222,12 @@ func _validate_operand(
 		or operand is FlowVariableRefValueSource
 		or operand is FlowNodePropertyRefValueSource
 		or operand is FlowOperationValueSource
+		or operand is FlowEventPayloadValueSource
 	):
 		_add_condition_error(
 			result,
 			FlowDiagnostic.CODE_CONDITION_SOURCE_KIND_INVALID,
-			"Condition operands accept Literal, VariableRef, NodePropertyRef, or Operation sources.",
+			"Condition operands accept Literal, VariableRef, NodePropertyRef, Operation or Event Payload sources.",
 			operand_path,
 			operand.get_source_id()
 		)
@@ -285,6 +286,8 @@ static func preview_source(source: FlowValueSource, variable_graph: FlowGraph = 
 			if variable != null:
 				return variable.display_name
 		return "<missing>"
+	if source is FlowEventPayloadValueSource:
+		return (source as FlowEventPayloadValueSource).get_preview()
 	if source is FlowNodePropertyRefValueSource:
 		return (source as FlowNodePropertyRefValueSource).get_preview()
 	if source is FlowOperationValueSource:
