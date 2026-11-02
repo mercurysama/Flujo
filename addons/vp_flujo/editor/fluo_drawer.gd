@@ -399,6 +399,10 @@ func _input(event: InputEvent) -> void:
 		return
 
 	if key_event.keycode == KEY_ESCAPE:
+		# Potok popup/confirmation takes the first Escape before the drawer.
+		if _variable_editor != null and _variable_editor.close_potok_transient_dialog():
+			_mark_input_handled()
+			return
 		if _variable_editor != null and _variable_editor.close_ready_block_details():
 			_mark_input_handled()
 			return
@@ -416,6 +420,9 @@ func _input(event: InputEvent) -> void:
 	if not _focus_is_inside_drawer():
 		return
 
+	# Ctrl+Alt+Page is not a Flujo navigation gesture.
+	if key_event.ctrl_pressed and key_event.alt_pressed:
+		return
 	var direction: int = -1 if key_event.keycode == KEY_PAGEUP else 1
 	var handled: bool = false
 
@@ -434,6 +441,8 @@ func _input(event: InputEvent) -> void:
 			direction *= -1
 		if _variable_editor != null:
 			handled = _variable_editor.cycle_ready_block_option_focus(direction)
+			if not handled:
+				handled = _variable_editor.cycle_potok_option_focus(direction)
 	elif not _focus_is_text_editing():
 		if _variable_editor != null:
 			# Plain PageUp/PageDown moves one level out: between the

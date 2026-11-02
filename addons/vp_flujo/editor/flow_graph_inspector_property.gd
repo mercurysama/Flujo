@@ -2935,6 +2935,58 @@ func request_potok_inspector_focus() -> void:
 		_request_inspector_variable_list_focus()
 
 
+## Potok 7E-2B1: focus visible scalar fields without creating an editor session.
+## Ready block Flusso retains priority in the drawer; this path is FSM-only.
+func cycle_potok_option_focus(direction: int) -> bool:
+	if not is_potok_machine_view() or direction == 0:
+		return false
+	var controls: Array[Control] = []
+	for name: String in [
+		"PotokMachineProperties", "PotokStateProperties", "PotokTransitionProperties"
+	]:
+		var form: Control = _content.find_child(name, true, false) as Control
+		if form == null or not form.is_visible_in_tree():
+			continue
+		for child: Node in form.get_children():
+			var control: Control = child as Control
+			if not _can_grab_focus(control):
+				continue
+			if control is BaseButton and (control as BaseButton).disabled:
+				continue
+			controls.append(control)
+	if controls.is_empty():
+		return false
+
+	var viewport: Viewport = get_viewport()
+	var owner: Control = viewport.gui_get_focus_owner() as Control if viewport != null else null
+	var current: int = -1
+	for i: int in controls.size():
+		if controls[i] == owner or (owner != null and controls[i].is_ancestor_of(owner)):
+			current = i
+			break
+	var next_index: int = posmod(current + (1 if direction > 0 else -1), controls.size()) \
+		if current >= 0 else (0 if direction > 0 else controls.size() - 1)
+	controls[next_index].grab_focus()
+	return true
+
+
+## Potok owns its popups; Escape must cancel them before closing Fluo.
+## Cancel does not run any model command and restores focus to the owned Flow list.
+func close_potok_transient_dialog() -> bool:
+	if not is_potok_machine_view():
+		return false
+	if is_instance_valid(_potok_condition_editor) and _potok_condition_editor.visible:
+		_potok_close_condition_editor()
+	elif is_instance_valid(_potok_delete_dialog) and _potok_delete_dialog.visible:
+		_potok_close_delete_dialog()
+	else:
+		return false
+	var list: ItemList = _content.find_child("PotokStateList", true, false) as ItemList
+	if _can_grab_focus(list):
+		list.grab_focus()
+	return true
+
+
 func navigate_potok_state(direction: int) -> bool:
 	if not is_potok_machine_view() or direction == 0:
 		return false
