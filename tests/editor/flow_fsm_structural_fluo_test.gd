@@ -114,6 +114,15 @@ func _run() -> void:
 	await _frames(3)
 	dialog = property.find_child("PotokStructureDeleteDialog", true, false) as ConfirmationDialog
 	if dialog != null:
+		dialog.close_requested.emit()
+	await _frames(4)
+	_check(a.transitions.size() == before_cancel
+		and property.find_child("PotokStructureDeleteDialog", true, false) == null,
+		"Window close also cancels pending deletion")
+	_click(property, "PotokTransitionDelete")
+	await _frames(3)
+	dialog = property.find_child("PotokStructureDeleteDialog", true, false) as ConfirmationDialog
+	if dialog != null:
 		dialog.confirmed.emit()
 	await _frames(6)
 	_check(a.transitions.size() == before_cancel - 1,
@@ -133,6 +142,19 @@ func _run() -> void:
 	dialog = property.find_child("PotokStructureDeleteDialog", true, false) as ConfirmationDialog
 	_check(dialog != null and machine.states.size() == states_before,
 		"Initial state deletion waits for affirmative confirmation")
+	_select_state(property, b.get_internal_id())
+	await _frames(3)
+	if dialog != null:
+		dialog.confirmed.emit()
+	await _frames(5)
+	_check(machine.states.size() == states_before
+		and machine.initial_state_id == a.get_internal_id(),
+		"Stale confirmation cannot delete state after selection changes")
+	_select_state(property, a.get_internal_id())
+	await _frames(4)
+	_click(property, "PotokStateDelete")
+	await _frames(3)
+	dialog = property.find_child("PotokStructureDeleteDialog", true, false) as ConfirmationDialog
 	if dialog != null:
 		dialog.confirmed.emit()
 	await _frames(6)
