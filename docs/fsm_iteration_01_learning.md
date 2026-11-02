@@ -439,3 +439,10 @@ Todo es Flujo; todo fluye. 🌊
 - Lesson: test an actual SDK `manual_output:output` Flusso message edit, Close, native Duplicate preserving SDK script with new ID, modal Delete Cancel without any history mutation, Confirm/Delete as one action, Undo reusing the identical resource, Redo removing it, and reopening the original SDK block with unchanged ID/script/edited message. Keep null slots, Ready and sibling state intact. No production code needed.
 - **Next 7F-1D3**: combine Flusso SDK edits and phase UI actions with a true saved/reloaded scene; **7F-1D4** audit. Manual matrix 15 Fedora + 10 Android remains PENDING. `main` unchanged.
 - [7F-1D2C checkpoint](fsm_phase7_7f1d2c_result.md).
+
+## 2026-11-02 — Potok 7F-1D3 native SDK UI scene save/reload
+
+- Baseline `d58174698f8e9d79c66e28d407f184daf0ca6d71`, [CI 41525575708](https://github.com/mercurysama/Flujo/actions/runs/41525575708) SUCCESS. New integrated test `de43009c0702647674487741de7468ad5deab43f`, CI registration `4ee94e7bf88238e4215665b7312628dafae4aa2e`. [GREEN Actions 41526101676](https://github.com/mercurysama/Flujo/actions/runs/41526101676): **76/76 SUCCESS**, zero failures.
+- Learning: combine true native Fluo/Flusso SDK property edits with Duplicate, modal Cancel/Confirm Delete, UndoRedo and real `PackedScene` persistence in one continuous test. A save/reload boundary uses `ResourceLoader.CACHE_MODE_IGNORE` and compares machine/state/block IDs, original SDK script and edited message, null slots, Update/Exit, Ready, sibling state, schema 3 and validator. No production code changes; no new runtime behavior.
+- **Next 7F-1D4**: audit integration, docs/behavior_catalog.json, reproduce 25 manual acceptance tests, plan 7F-2. Manual 15 Fedora + 10 Android PENDING, no local worktree audit or main merge.
+- [7F-1D3 result](fsm_phase7_7f1d3_result.md).
