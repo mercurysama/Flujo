@@ -33,3 +33,11 @@
 **Next approved micro-lot on 🙆🏻: 7B.** Recheck latest HEAD, preserve 7A baseline, write a narrow activation contract before implementation.
 
 Todo es Flujo; todo fluye. 🌊
+
+## 7B — Existing Inspector → Fluo machine navigation: AUTOMATED PASS
+
+- Contract `70360ab9069e0d34f90088118966c834505ea57d`, editor focal `e902c52a2de9f25192d8fa05a087471958743ceb`, CI `7c4fa7ec9ddd1b0be64f589f8f5c45c0619ea3df`. [RED 41365606656](https://github.com/mercurysama/Flujo/actions/runs/41365606656) expected.
+- Native State Machines activation via existing `PVControllerInspectorPlugin` and `FluoDrawer.open_container`: `d9f5eb66f7cad98e1754a7a121dfb71747451cf5`; Flow state tree/Enter-Update-Exit projection `1bbfb56dc735c242ca70e2729f58dd04f442b1be`; Escape/keyboard routing `ba8fb88caecb0001b9f2e780a2bf808bb89ce2f9`; reorder/controller-removal focal `1956397ce8cda4d74ea1153afae389611518222c`.
+- [Full GREEN 41365966187](https://github.com/mercurysama/Flujo/actions/runs/41365966187) includes all prior Potok/runtime regressions. [7B result](fsm_phase7_7b_result.md) explains exact acceptance.
+- No new Inspector list, no authored graph mutation, existing Ready editor remains operational. **Not yet editable:** Flusso state/machine fields, phase blocks, transitions, Undo/Redo, Condition Tok, or Android.
+- **Next 7C-1:** one recoverable lot for machine/state scalar property commands and Flusso integration. Follow with 7C-2 transition editing and dependency-aware actions, 7D Tok condition/payload authoring, 7E keyboard/touch/persistence verification.
