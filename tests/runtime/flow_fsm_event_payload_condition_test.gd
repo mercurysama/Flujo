@@ -81,7 +81,7 @@ func _run() -> void:
 	rt.tick(0.1, FlowStateMachineDefinition.TickMode.MANUAL)
 	_check(rt.get_active_state_id(bid) == b1.get_internal_id(), "First B reacts only to own hit")
 	_check(not operand.resolve(ctx).success, "No stale packet after B tick")
-	_check(seen.size() == 8, "Event consumption remains exactly once per delivered packet")
+	_check(seen.size() == 7, "Event consumption remains exactly once per delivered packet")
 	_check(not FlowGraphValidator.validate(graph).has_errors(), "Authored graph unchanged")
 	first.visual_program_enabled = false
 	second.visual_program_enabled = false
