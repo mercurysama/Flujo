@@ -8,7 +8,7 @@
 - Prueba de contrato `tests/editor/flow_fsm_phase_block_duplicate_commands_test.gd`, commit `9521b0694d2b263ca3030614c665481225b49996`.
 - Workflow añadió la focal en `6b19511ffbe25d0de5502176b1f6e6e82ec2713b`; [Actions 41508412591](https://github.com/mercurysama/Flujo/actions/runs/41508412591) produjo el fallo RED esperado del método inexistente.
 - Implementación del comando `duplicate_fsm_phase_block` en `addons/vp_flujo/editor/flow_graph_editor_commands.gd`, commit `fea73dfbf784d0e8f52486d147a71598f5f066a2`.
-- Ejecución GREEN: [Actions 41508625773](https://github.com/mercurysama/Flujo/actions/runs/41508625773). **Antes de declarar finalizada la suite global, comprobar conclusión y cantidad real de pasos.**
+- **GREEN confirmado:** [Actions 41508625773](https://github.com/mercurysama/Flujo/actions/runs/41508625773), **completed SUCCESS: 68/68 pasos**, cero fallos, commit `fea73dfbf784d0e8f52486d147a71598f5f066a2`. Incluye prueba focal Duplicate SDK y regresiones Godot 4.7.2.
 
 ## Comportamiento
 
