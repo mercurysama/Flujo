@@ -9,6 +9,9 @@ var controller: PVController = null
 var scene_root: Node = null
 var _variable_values: Dictionary = {}
 var _resolving_variable_ids: Dictionary[String, bool] = {}
+## Ephemeral events, always cleared between machine tick arbitration scopes.
+var _event_scope_machine_id: String = ""
+var _event_payloads: Dictionary[String, Dictionary] = {}
 
 
 func _init(
@@ -43,6 +46,7 @@ func get_variable_value(variable_id: String) -> Variant:
 
 func clear_runtime_values() -> void:
 	_variable_values.clear()
+	end_event_packet_scope()
 
 
 func begin_variable_resolution(variable_id: String) -> bool:
@@ -78,3 +82,29 @@ func resolve_scene_node(requirement_id: String, fallback_path: NodePath) -> Node
 	if scene_root != null and not fallback_path.is_empty():
 		return scene_root.get_node_or_null(fallback_path)
 	return null
+
+## This map is never saved and is not an ambient last-event snapshot.
+func begin_event_packet_scope(machine_id: String) -> void:
+	_event_scope_machine_id = machine_id
+	_event_payloads.clear()
+
+
+func record_event_packet(machine_id: String, name: StringName, packet: Dictionary) -> void:
+	if _event_scope_machine_id.is_empty() or machine_id != _event_scope_machine_id:
+		return
+	if name.is_empty():
+		return
+	_event_payloads[String(name)] = packet.duplicate(true)
+
+
+func has_event_payload(name: StringName) -> bool:
+	return not _event_scope_machine_id.is_empty() and _event_payloads.has(String(name))
+
+
+func get_event_payload(name: StringName) -> Dictionary:
+	return _event_payloads.get(String(name), {}).duplicate(true) if has_event_payload(name) else {}
+
+
+func end_event_packet_scope() -> void:
+	_event_scope_machine_id = ""
+	_event_payloads.clear()
