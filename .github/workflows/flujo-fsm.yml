@@ -52,6 +52,9 @@ jobs:
           else
             echo 'FSM dynamic test missing; not a PASS'
           fi
+      - name: Potok-7C2B structural state and transition commands focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 80s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_fsm_structural_commands_test.gd
       - name: Potok-7C2A transition metadata and Flusso focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 75s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_fsm_transition_metadata_test.gd
