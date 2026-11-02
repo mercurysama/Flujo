@@ -59,6 +59,9 @@ jobs:
           else
             echo 'FSM dynamic test missing; not a PASS'
           fi
+      - name: Potok-7E1B2 structural UndoRedo scene roundtrip focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 80s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_fsm_structural_scene_roundtrip_test.gd
       - name: Potok-7E1B1 edited scene UndoRedo persistence focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_fsm_edited_scene_roundtrip_test.gd
