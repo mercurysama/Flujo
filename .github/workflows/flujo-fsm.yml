@@ -14,11 +14,13 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - name: Git whitespace gate (latest committed diff)
         shell: bash
         run: |
           git diff --check
-          git show --format= --check HEAD
+          git diff --check HEAD^ HEAD
       - name: Install Godot 4.7.2
         shell: bash
         run: |
