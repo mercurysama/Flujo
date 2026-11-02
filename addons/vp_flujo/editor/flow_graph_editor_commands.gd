@@ -721,6 +721,62 @@ func add_fsm_phase_block_by_authoring_id(
 	return new_block.get_internal_id()
 
 
+## Potok 7F-1C2A: adjacent Move in one explicitly owned phase.
+## Deliberate null slots are barriers, never silently compacted or skipped.
+func move_fsm_phase_block(
+		controller: PVController, machine_id: String, state_id: String,
+		phase: StringName, block_id: String, direction: int
+) -> bool:
+	var property_name: StringName = _fsm_phase_property(phase)
+	if property_name.is_empty() or block_id.is_empty() \
+			or direction not in [-1, 1]:
+		return false
+	var context: Dictionary = _fsm_edge_context(controller, machine_id, state_id)
+	if context.is_empty():
+		return false
+	var machine: FlowStateMachineDefinition = context["machine"]
+	var state: FlowStateDefinition = context["state"]
+	var original: Array[FlowBlock] = []
+	original.assign(state.get(property_name))
+	var index: int = -1
+	for i: int in original.size():
+		var block: FlowBlock = original[i]
+		if block != null and block.get_internal_id() == block_id:
+			index = i
+			break
+	if index < 0:
+		return false
+	var neighbor: int = index + direction
+	if neighbor < 0 or neighbor >= original.size() or original[neighbor] == null:
+		return false
+	var updated: Array[FlowBlock] = original.duplicate()
+	updated[index] = original[neighbor]
+	updated[neighbor] = original[index]
+	var draft: FlowStateDefinition = state.duplicate(false) as FlowStateDefinition
+	if draft == null or draft.get_internal_id() != state_id:
+		return false
+	draft.set(property_name, updated)
+	var states: Array[FlowStateDefinition] = []
+	states.assign(machine.states)
+	states[int(context["state_index"])] = draft
+	if not _fsm_structure_candidate(
+			controller.flow_graph, machine, states, machine.initial_state_id
+	):
+		return false
+	_undo_redo.create_action(
+		"Move Potok %s Block" % String(phase).capitalize(),
+		UndoRedo.MERGE_DISABLE, controller, false, true
+	)
+	_undo_redo.add_do_method(
+		self, &"_fsm_assign_phase_blocks", controller, state, property_name, updated
+	)
+	_undo_redo.add_undo_method(
+		self, &"_fsm_assign_phase_blocks", controller, state, property_name, original
+	)
+	_undo_redo.commit_action()
+	return true
+
+
 ## 7F-1C1C: edit a single authored FSM block in its exact owned phase.
 ## Reuse the existing property restrictions and UndoRedo boundary, never Ready lookup.
 func set_fsm_phase_block_property_live(
