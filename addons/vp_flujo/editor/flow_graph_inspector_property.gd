@@ -78,6 +78,7 @@ var _flusso_owned_properties: Dictionary = {}
 var _flow_entry_focus_pending: bool = false
 var _potok_selected_state_id: String = ""
 var _potok_selected_transition_id: String = ""
+var _potok_transition_feedback: String = ""
 var _preserve_deleted_block_selection_state: bool = false
 var _deleted_resource_id: String = ""
 var _deleted_resource_replacement_id: String = ""
@@ -148,6 +149,7 @@ func _reset_dock_context() -> void:
 	_selected_id = ""
 	_potok_selected_state_id = ""
 	_potok_selected_transition_id = ""
+	_potok_transition_feedback = ""
 	_selected_view_title = "Processes"
 	_selected_view_index = -1
 	_ready_block_id = ""
@@ -222,6 +224,7 @@ func set_dock_variable_selection(
 	_selected_id = next_id
 	_potok_selected_state_id = ""
 	_potok_selected_transition_id = ""
+	_potok_transition_feedback = ""
 	_ready_block_id = ""
 	_ready_block_details_open = false
 	_flusso_snapshots.clear()
@@ -2230,6 +2233,7 @@ func _render_potok_machine(parent: Container, controller: PVController, generati
 		var new_state_id: String = String(selected.get("id", ""))
 		if _potok_selected_state_id != new_state_id:
 			_potok_selected_transition_id = ""
+			_potok_transition_feedback = ""
 		_potok_selected_state_id = new_state_id
 		_render_potok_state_phases(parent, selected)
 		if not bool(selected.get("empty", false)):
@@ -2499,6 +2503,12 @@ func _render_potok_transition_properties(
 	status.text = "Condition: configured (Tok editor in 7D)" \
 		if bool(edge.get("condition_present", false)) else "Condition: not configured (Tok editor in 7D)"
 	form.add_child(status)
+	var feedback := Label.new()
+	feedback.name = &"PotokTransitionFeedback"
+	feedback.text = _potok_transition_feedback
+	feedback.visible = not _potok_transition_feedback.is_empty()
+	feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	form.add_child(feedback)
 	_potok_transition_text_field(form, "Note", "PotokTransitionNote",
 		String(edge.get("note", "")), mid, sid, eid, &"user_note")
 
@@ -2564,7 +2574,14 @@ func _potok_commit_transition(
 	var controller: PVController = _active_controller()
 	if controller == null or controller.flow_graph == null:
 		return
-	_commands.set_fsm_transition_property(controller, mid, sid, eid, field, value)
+	var committed: bool = _commands.set_fsm_transition_property(
+		controller, mid, sid, eid, field, value
+	)
+	_potok_transition_feedback = ""
+	if not committed and field == &"trigger":
+		_potok_transition_feedback = "Select a valid Bool condition in Tok (7D) before using Condition." \
+			if value == FlowStateTransitionDefinition.Trigger.CONDITION \
+			else "Enter a nonempty event name before using Event."
 	# Revert the control from the authoritative graph on rejection or no-op.
 	_request_rebuild()
 
@@ -2577,6 +2594,7 @@ func _on_potok_transition_selected(index: int, list: ItemList) -> void:
 	if id.is_empty() or id == _potok_selected_transition_id:
 		return
 	_potok_selected_transition_id = id
+	_potok_transition_feedback = ""
 	_request_rebuild()
 
 func _on_potok_state_selected(index: int, list: ItemList) -> void:
@@ -2587,6 +2605,7 @@ func _on_potok_state_selected(index: int, list: ItemList) -> void:
 		return
 	_potok_selected_state_id = id
 	_potok_selected_transition_id = ""
+	_potok_transition_feedback = ""
 	_flow_entry_focus_pending = true
 	_request_rebuild()
 
@@ -2649,6 +2668,7 @@ func navigate_potok_machine(direction: int) -> bool:
 		_selected_view_index = index
 		_potok_selected_state_id = ""
 		_potok_selected_transition_id = ""
+		_potok_transition_feedback = ""
 		_flow_entry_focus_pending = true
 		_clear_deleted_selection_state()
 		_close_delete_confirmation()
