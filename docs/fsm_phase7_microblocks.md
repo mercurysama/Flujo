@@ -41,3 +41,10 @@ Todo es Flujo; todo fluye. 🌊
 - [Full GREEN 41365966187](https://github.com/mercurysama/Flujo/actions/runs/41365966187) includes all prior Potok/runtime regressions. [7B result](fsm_phase7_7b_result.md) explains exact acceptance.
 - No new Inspector list, no authored graph mutation, existing Ready editor remains operational. **Not yet editable:** Flusso state/machine fields, phase blocks, transitions, Undo/Redo, Condition Tok, or Android.
 - **Next 7C-1:** one recoverable lot for machine/state scalar property commands and Flusso integration. Follow with 7C-2 transition editing and dependency-aware actions, 7D Tok condition/payload authoring, 7E keyboard/touch/persistence verification.
+
+## 7C-1 — Validated machine/state scalar Flusso editing: AUTOMATED PASS
+
+- Contract `92eb751db2d115144f71da8a05f4c8d8bd6e4c05`; RED focal `70d5189ba3a9c01569bdc07cac6c2be0048f0c5b`, CI wiring `436ae51cee8ab871e973c98277a0d534e11aebc0`; expected RED [41368002884](https://github.com/mercurysama/Flujo/actions/runs/41368002884).
+- Commands `d4e69b297ac34c524ac08b1870b7d5035535bbd3` validate detached candidate graph and write via `EditorUndoRedoManager`; Flusso controls `816e2a1115c4b68dcccb8bb36e5734ed59f61d36`. Test correction `5f7c38566d46495040c8aa46ea873948962ab29d` enforces no disabling of an initial state; expanded UI coverage `5089266f20c1ec568692922fa3e75ee5cf4953ca`.
+- [Full GREEN 41368408164](https://github.com/mercurysama/Flujo/actions/runs/41368408164) confirms valid machine/state scalar edits, denied foreign initial IDs and unsupported fields, Undo/Redo, all native Flusso fields and prior regression suite. [7C-1 result](fsm_phase7_7c1_result.md) records exact scope.
+- No schema/runtime changes, no creation/removal or transition authoring yet. Text edits commit on Enter only; Escape without submission leaves the resource unchanged. **Next 7C-2A:** transition property/trigger editing and Undo/Redo; then 7C-2B structural state/transition actions, 7D Condition Tok, 7E persistence and human Android acceptance.
