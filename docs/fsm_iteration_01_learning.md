@@ -455,3 +455,8 @@ Todo es Flujo; todo fluye. 🌊
 - **Next 7F-2:** maintainer performs F01–F15 Fedora and A01–A10 Android, with real OS/Godot version, images/logs, PASS/FAIL/BLOCKED, patches for regressions, and explicit acceptance. This remains **0/25 physical acceptance**, not automatic GREEN.
 
 - 7F-1D4 audit follow-up: the updated 73-behavior catalog and current iteration passed [Actions 41528630526](https://github.com/mercurysama/Flujo/actions/runs/41528630526), completed SUCCESS 76/76, including validator. The 25 physical test cases remain PENDING; no Fedora worktree or Android acceptance was executed in GitHub CI.
+
+## 2026-11-02 — Potok 7F-2A Fedora physical acceptance preflight
+
+- Latest 7F-1D4 source: `1b65f06370a02a84fe5bc080428e683c015300e0`; historical catalog/CI baseline [41528630526](https://github.com/mercurysama/Flujo/actions/runs/41528630526) completed SUCCESS 76/76. A new [Fedora preflight and F01–F05 evidence guide](fsm_phase7_7f2a_fedora_preflight.md) was committed as `67be60407e46aaee898fb2392228c6a0d85710f3` without modifying runtime, editor, schema or test semantics.
+- Preflight keeps `git status`, worktree checks and Godot executor version read-only; it disallows guessing Fedora paths, overwriting `demo/main.tscn` or marking a test PASS without maintainer interaction. **Physical acceptance remains 0/25**, F01–F15 and A01–A10 PENDING. Next: collect F01–F05 real evidence and only then diagnose visual defects, then next batches.
