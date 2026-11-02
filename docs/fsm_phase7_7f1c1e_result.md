@@ -8,7 +8,7 @@
 - Test focal `d4bcca55053ea30ff196be2b3d8ed97a86ec33f1`: `tests/editor/flow_fsm_phase_sdk_roundtrip_test.gd`.
 - CI `048ef4f728a8c6c9190c7b2a02f3584b0d458244` incorpora test con timeout 110 s y conserva todos los test anteriores.
 - Ampliación focal `e4dded207ab8a5a54b4ed3555f646e89a1be443f`: captura y reversión de sesión SDK y campos no elegibles.
-- Ejecución final exigida: [Actions 41495516898](https://github.com/mercurysama/Flujo/actions/runs/41495516898). Confirmar conclusión y número de pasos desde GitHub antes de marcar el checkpoint técnico como GREEN.
+- **GREEN confirmado:** [Actions 41495516898](https://github.com/mercurysama/Flujo/actions/runs/41495516898), **completed SUCCESS, 66/66 pasos**, 0 fallos en el commit `e4dded207ab8a5a54b4ed3555f646e89a1be443f`. Incluyó prueba de SDK ampliada, carga de editor, catálogo, Ready/Timer y regresiones históricas de Potok.
 
 ## Evidencia focal
 
