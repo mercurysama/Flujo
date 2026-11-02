@@ -9,7 +9,7 @@
 - Prueba nativa inicial `tests/editor/flow_fsm_phase_user_journey_test.gd` en commit `d92b786160938b556892265f5293f253758a2288`; registro CI `f55cb6b32b74a75d7dbe2beeeb992252ccdc8e47`; versión inicial de Add/Edit/Close/Move pasó focalmente.
 - Ampliación `2d3ed5ca3a099726d0451ac8b8c2d30d9a4bc732`: añade Duplicate, Delete con Cancel/Confirm y Undo/Redo; [Actions 41521035360](https://github.com/mercurysama/Flujo/actions/runs/41521035360) falló por **alcance de variable en el propio test**, no por aserción de código productivo.
 - Fix mínimo de test `822cf9bae3e824310d964b8b8f41920e98b14215`: declara el bloque `added` antes del contexto condicional para acceder a él al continuar el mismo recorrido.
-- CI ampliado: [Actions 41521212041](https://github.com/mercurysama/Flujo/actions/runs/41521212041); **consultar el resultado final antes de declarar GREEN integral**.
+- **GREEN confirmado:** [Actions 41521212041](https://github.com/mercurysama/Flujo/actions/runs/41521212041), **completed SUCCESS 72/72 pasos, 0 fallos**, sobre commit `822cf9bae3e824310d964b8b8f41920e98b14215`. Incluye el recorrido completo ampliado y regresiones Godot 4.7.2.
 
 ## Prueba y comportamiento
 
