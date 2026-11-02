@@ -150,7 +150,7 @@ func _run() -> void:
 	_drawer.set_right_side(true)
 	await _frames(4)
 	await _check_geometry("narrow-right", NARROW, true)
-	_check(await _can_scroll_vertical() and _can_scroll_horizontal(),
+	_check(await _can_scroll_vertical() and await _can_scroll_horizontal(),
 		"Right-side placement retains horizontal/vertical scroll reachability")
 	await _resize(WIDE)
 	await _check_geometry("wide-right", WIDE, true)
