@@ -71,6 +71,9 @@ jobs:
       - name: Fluo drawer integration baseline
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 100s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/fluo_drawer_integration_test.gd
+      - name: Potok-7F1C1C native Flusso phase live editing UI focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 100s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_fsm_phase_block_property_ui_test.gd
       - name: Potok-7F1C1C per-phase live property UndoRedo focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 100s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_fsm_phase_block_property_commands_test.gd
