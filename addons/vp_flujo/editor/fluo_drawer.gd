@@ -402,6 +402,11 @@ func _input(event: InputEvent) -> void:
 		if _variable_editor != null and _variable_editor.close_ready_block_details():
 			_mark_input_handled()
 			return
+		if _variable_editor != null and _variable_editor.is_potok_machine_view():
+			close()
+			_variable_editor.request_potok_inspector_focus()
+			_mark_input_handled()
+			return
 		close()
 		_mark_input_handled()
 		return
@@ -419,6 +424,8 @@ func _input(event: InputEvent) -> void:
 	if key_event.ctrl_pressed and not key_event.alt_pressed:
 		if _variable_editor != null:
 			handled = _variable_editor.navigate_ready_block(direction)
+			if not handled:
+				handled = _variable_editor.navigate_potok_state(direction)
 		_mark_input_handled()
 		return
 
@@ -432,6 +439,8 @@ func _input(event: InputEvent) -> void:
 			# Plain PageUp/PageDown moves one level out: between the
 			# Inspector container rows represented by the current Fluo view.
 			handled = _variable_editor.navigate_process(direction)
+			if not handled:
+				handled = _variable_editor.navigate_potok_machine(direction)
 
 	if handled:
 		_mark_input_handled()
