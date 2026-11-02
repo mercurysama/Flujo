@@ -2439,7 +2439,7 @@ func _render_potok_state_phases(parent: Container, selected: Dictionary) -> void
 			button.disabled = not (phase_id == _potok_selected_phase
 				and not _potok_selected_phase_block_id.is_empty())
 			button.pressed.connect(_potok_on_phase_structure.bind(
-				mid, sid, phase_id, action, weakref(controller)
+				mid, sid, phase_id, action, weakref(controller), weakref(button)
 			))
 			block_actions.add_child(button)
 	if not selected_found:
@@ -2502,10 +2502,13 @@ func _potok_on_phase_block_selected(
 ## 7F-1C2D: native structure actions revalidate full ownership at click time.
 func _potok_on_phase_structure(
 		mid: String, sid: String, phase: StringName, action: StringName,
-		controller_ref: WeakRef
+		controller_ref: WeakRef, button_ref: WeakRef
 ) -> void:
 	var controller: PVController = controller_ref.get_ref() as PVController \
 		if controller_ref != null else null
+	var button: Button = button_ref.get_ref() as Button if button_ref != null else null
+	if not is_instance_valid(button) or not _content.is_ancestor_of(button):
+		return
 	var block_id: String = _potok_selected_phase_block_id
 	if not is_instance_valid(controller) or controller != _active_controller() \
 			or not is_potok_machine_view() or _commands == null \
