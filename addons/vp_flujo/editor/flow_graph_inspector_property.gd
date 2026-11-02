@@ -86,6 +86,11 @@ var _potok_delete_machine_id: String = ""
 var _potok_delete_state_id: String = ""
 var _potok_delete_transition_id: String = ""
 var _potok_delete_controller_ref: WeakRef = null
+var _potok_condition_editor: FlowConditionEditor = null
+var _potok_condition_owner: WeakRef = null
+var _potok_condition_machine_id: String = ""
+var _potok_condition_state_id: String = ""
+var _potok_condition_edge_id: String = ""
 var _preserve_deleted_block_selection_state: bool = false
 var _deleted_resource_id: String = ""
 var _deleted_resource_replacement_id: String = ""
@@ -158,6 +163,7 @@ func _reset_dock_context() -> void:
 	_potok_selected_transition_id = ""
 	_potok_transition_feedback = ""
 	_potok_structure_feedback = ""
+	_potok_close_condition_editor()
 	_potok_close_delete_dialog()
 	_selected_view_title = "Processes"
 	_selected_view_index = -1
@@ -235,6 +241,7 @@ func set_dock_variable_selection(
 	_potok_selected_transition_id = ""
 	_potok_transition_feedback = ""
 	_potok_structure_feedback = ""
+	_potok_close_condition_editor()
 	_potok_close_delete_dialog()
 	_ready_block_id = ""
 	_ready_block_details_open = false
@@ -1388,6 +1395,7 @@ func get_preferred_interaction_focus_target() -> Control:
 
 ## Cancels only local transient editor state while preserving the stable-ID selection.
 func close_transient_interfaces() -> void:
+	_potok_close_condition_editor()
 	_potok_close_delete_dialog()
 	_close_delete_confirmation()
 	_variable_complex_edit_id = ""
@@ -2517,9 +2525,15 @@ func _render_potok_transition_properties(
 		String(edge.get("event_name", "")), mid, sid, eid, &"event_name")
 	var status := Label.new()
 	status.name = &"PotokTransitionConditionStatus"
-	status.text = "Condition: configured (Tok editor in 7D)" \
-		if bool(edge.get("condition_present", false)) else "Condition: not configured (Tok editor in 7D)"
+	status.text = "Condition: configured · Edit Condition #" \
+		if bool(edge.get("condition_present", false)) else "Condition: not configured"
 	form.add_child(status)
+	var edit_condition := Button.new()
+	edit_condition.name = &"PotokTransitionConditionEdit"
+	edit_condition.text = "Edit Condition #"
+	edit_condition.focus_mode = Control.FOCUS_ALL
+	edit_condition.pressed.connect(_potok_open_condition_editor.bind(mid, sid, eid, edit_condition))
+	form.add_child(edit_condition)
 	var feedback := Label.new()
 	feedback.name = &"PotokTransitionFeedback"
 	feedback.text = _potok_transition_feedback
@@ -2610,6 +2624,7 @@ func _on_potok_transition_selected(index: int, list: ItemList) -> void:
 	var id: String = String((list.get_item_metadata(index) as Dictionary).get("id", ""))
 	if id.is_empty() or id == _potok_selected_transition_id:
 		return
+	_potok_close_condition_editor()
 	_potok_selected_transition_id = id
 	_potok_transition_feedback = ""
 	_request_rebuild()
@@ -2807,12 +2822,96 @@ func _potok_close_delete_dialog() -> void:
 		dialog.queue_free()
 
 
+## Potok 7D-1: use the reusable visual Condition Tok popup on a detached draft.
+func _potok_open_condition_editor(
+		mid: String, sid: String, eid: String, anchor: Button
+) -> void:
+	if not is_potok_machine_view() or mid != _selected_id \
+			or sid != _potok_selected_state_id or eid != _potok_selected_transition_id:
+		return
+	var controller: PVController = _active_controller()
+	if controller == null or controller.flow_graph == null or _commands == null:
+		return
+	var edge: FlowStateTransitionDefinition = _potok_find_authored_edge(
+		controller, mid, sid, eid
+	)
+	if edge == null:
+		return
+	_potok_close_condition_editor()
+	var popup := FlowConditionEditor.new()
+	add_child(popup)
+	_potok_condition_editor = popup
+	_potok_condition_owner = weakref(controller)
+	_potok_condition_machine_id = mid
+	_potok_condition_state_id = sid
+	_potok_condition_edge_id = eid
+	popup.condition_confirmed.connect(_potok_condition_confirmed)
+	popup.cancelled.connect(_potok_close_condition_editor)
+	var existing: FlowConditionValueSource = edge.condition as FlowConditionValueSource
+	var anchor_rect: Rect2 = anchor.get_global_rect() if is_instance_valid(anchor) else Rect2()
+	popup.open_for_condition(existing, controller.flow_graph, anchor_rect, {
+		"scene_controller": controller, "scene_root": controller.get_tree().current_scene
+	})
+
+
+func _potok_find_authored_edge(
+		controller: PVController, mid: String, sid: String, eid: String
+) -> FlowStateTransitionDefinition:
+	if not is_instance_valid(controller) or controller.flow_graph == null:
+		return null
+	for machine: FlowStateMachineDefinition in controller.flow_graph.state_machines:
+		if machine == null or machine.get_internal_id() != mid:
+			continue
+		for state: FlowStateDefinition in machine.states:
+			if state == null or state.get_internal_id() != sid:
+				continue
+			for edge: FlowStateTransitionDefinition in state.transitions:
+				if edge != null and edge.get_internal_id() == eid:
+					return edge
+	return null
+
+
+func _potok_condition_confirmed(source: FlowConditionValueSource) -> void:
+	var controller: PVController = _potok_condition_owner.get_ref() as PVController \
+		if _potok_condition_owner != null else null
+	var mid: String = _potok_condition_machine_id
+	var sid: String = _potok_condition_state_id
+	var eid: String = _potok_condition_edge_id
+	var authorized: bool = is_instance_valid(controller) \
+		and controller == _active_controller() and is_potok_machine_view() \
+		and mid == _selected_id and sid == _potok_selected_state_id \
+		and eid == _potok_selected_transition_id
+	_potok_close_condition_editor()
+	if not authorized or source == null or _commands == null:
+		return
+	if _potok_find_authored_edge(controller, mid, sid, eid) == null:
+		return
+	_commands.set_fsm_transition_property(
+		controller, mid, sid, eid, &"condition", source.duplicate_with_new_id()
+	)
+	_request_rebuild()
+
+
+func _potok_close_condition_editor() -> void:
+	_potok_condition_owner = null
+	_potok_condition_machine_id = ""
+	_potok_condition_state_id = ""
+	_potok_condition_edge_id = ""
+	var popup: FlowConditionEditor = _potok_condition_editor
+	_potok_condition_editor = null
+	if is_instance_valid(popup):
+		popup.hide()
+		popup.queue_free()
+
+
 func _on_potok_state_selected(index: int, list: ItemList) -> void:
 	if not is_potok_machine_view() or index < 0 or index >= list.item_count:
 		return
 	var id: String = String((list.get_item_metadata(index) as Dictionary).get("id", ""))
 	if id == _potok_selected_state_id:
 		return
+	_potok_close_condition_editor()
+	_potok_close_condition_editor()
 	_potok_selected_state_id = id
 	_potok_selected_transition_id = ""
 	_potok_transition_feedback = ""
