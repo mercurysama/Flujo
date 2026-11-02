@@ -7,7 +7,7 @@
 - `727459addf18861f900e225a1cf1f39dfd01cdd4`: `tests/runtime/flow_fsm_dynamic_template_data_test.gd`.
 - `7e12fd611a223a73f0774e0c2a55c91f622ccd3a`: escena `tests/runtime/flow_fsm_dynamic_template_data_test.tscn`.
 - `5a1528dc995039560aacd66b8c27f63618da819c`: paso `Potok-8B2 dynamic state templates and structured data focal` en `.github/workflows/flujo-fsm.yml`.
-- [Actions 41548395878](https://github.com/mercurysama/Flujo/actions/runs/41548395878): focal 8B2 y focal 8B1 completados SUCCESS; confirmar conclusión global del workflow antes de certificar la regresión completa.
+- **GREEN global confirmado:** [Actions 41548395878](https://github.com/mercurysama/Flujo/actions/runs/41548395878), **completed SUCCESS 78/78 pasos**, cero fallos, sobre `5a1528dc995039560aacd66b8c27f63618da819c`; incluye focales 8B2 y 8B1 y las regresiones previas.
 
 ## Cobertura focal verificada
 
