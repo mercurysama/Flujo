@@ -103,6 +103,13 @@ func _run() -> void:
 					and button.get_meta(&"authoring_id", "") == expected_ids[i]
 					and button.get_meta(&"phase", "") == phase.to_lower(),
 					phase + " catalogs exact authoring ID " + expected_ids[i])
+	if not _check(_phase_list("Enter") != null
+			and _phase_list("Update") != null and _phase_list("Exit") != null
+			and _button("Enter", "print") != null
+			and _button("Exit", "manual_output:output") != null,
+			"7F-1B native phase lists and catalog buttons must exist (test-first gate)"):
+		await _finish()
+		return
 	_check(_phase_list("Enter").item_count == 2
 		and _phase_list("Enter").is_item_disabled(0)
 		and String((_phase_list("Enter").get_item_metadata(0) as Dictionary).get("id", "")) == ""
@@ -172,8 +179,9 @@ func _run() -> void:
 	_history.redo()
 	await _frames(6)
 	_check(_first.exit_blocks.size() == 1 and _first.exit_blocks[0] == external
-		and _selected_row_id("Exit") == external_id,
-		"Redo restores exact external resource with stable item metadata ID")
+		and String((_phase_list("Exit").get_item_metadata(0) as Dictionary).get("id", "")) == external_id
+		and _selected_phase_block_id().is_empty(),
+		"Redo restores the same external resource while keeping removed selection cleared")
 	var saved_enter: FlowBlock = enter_block
 	var saved_exit: FlowBlock = external
 

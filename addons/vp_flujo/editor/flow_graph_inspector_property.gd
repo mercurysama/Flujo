@@ -78,6 +78,9 @@ var _flusso_owned_properties: Dictionary = {}
 var _flow_entry_focus_pending: bool = false
 var _potok_revert_sessions: Dictionary = {}
 var _potok_rebuild_focus: Dictionary = {}
+var _potok_selected_phase: StringName = &""
+var _potok_selected_phase_block_id: String = ""
+var _potok_phase_focus_pending: Dictionary = {}
 var _potok_selected_state_id: String = ""
 var _potok_selected_transition_id: String = ""
 var _potok_transition_feedback: String = ""
@@ -163,6 +166,7 @@ func _reset_dock_context() -> void:
 	_selected_id = ""
 	_potok_selected_state_id = ""
 	_potok_selected_transition_id = ""
+	_potok_clear_phase_selection()
 	_potok_rebuild_focus.clear()
 	_potok_revert_sessions.clear()
 	_potok_transition_feedback = ""
@@ -241,6 +245,7 @@ func set_dock_variable_selection(
 		return
 	_selected_collection = collection
 	_selected_id = next_id
+	_potok_clear_phase_selection()
 	_potok_selected_state_id = ""
 	_potok_selected_transition_id = ""
 	_potok_revert_sessions.clear()
@@ -2312,6 +2317,7 @@ func _render_potok_machine(parent: Container, controller: PVController, generati
 		var selected: Dictionary = rows[selected_index]
 		var new_state_id: String = String(selected.get("id", ""))
 		if _potok_selected_state_id != new_state_id:
+			_potok_clear_phase_selection()
 			_potok_selected_transition_id = ""
 			_potok_transition_feedback = ""
 		_potok_selected_state_id = new_state_id
@@ -2326,8 +2332,14 @@ func _render_potok_machine(parent: Container, controller: PVController, generati
 	call_deferred(&"_fit_list_to_first_row", list, generation)
 	if _flow_entry_focus_pending:
 		_flow_entry_focus_pending = false
+		_potok_phase_focus_pending.clear()
 		_potok_rebuild_focus.clear()
 		call_deferred(&"_focus_potok_state_list", list, generation)
+	elif not _potok_phase_focus_pending.is_empty():
+		var phase_recovery: Dictionary = _potok_phase_focus_pending.duplicate()
+		_potok_phase_focus_pending.clear()
+		_potok_rebuild_focus.clear()
+		call_deferred(&"_potok_focus_added_phase_block", phase_recovery, generation)
 	elif not _potok_rebuild_focus.is_empty():
 		var recovery: Dictionary = _potok_rebuild_focus.duplicate()
 		_potok_rebuild_focus.clear()
@@ -2343,24 +2355,163 @@ func _render_potok_state_phases(parent: Container, selected: Dictionary) -> void
 		empty_message.text = "Empty"
 		host.add_child(empty_message)
 		return
+	var mid: String = _selected_id
+	var sid: String = String(selected.get("id", ""))
+	var controller: PVController = _active_controller()
+	if sid.is_empty() or controller == null:
+		return
+	var catalog: Array[FlowEditorBlockCatalogEntry] = _potok_authoring_entries()
 	var phases: Array = selected.get("phases", [])
+	var selected_found: bool = false
 	for phase: Dictionary in phases:
-		var label := Label.new()
 		var phase_name: String = String(phase.get("name", ""))
+		if not phase_name in ["Enter", "Update", "Exit"]:
+			continue
+		var phase_id: StringName = StringName(phase_name.to_lower())
+		var label := Label.new()
 		label.name = StringName("PotokPhase" + phase_name)
 		label.text = phase_name
 		host.add_child(label)
+
+		var list := ItemList.new()
+		list.name = StringName("PotokPhase" + phase_name + "BlocksList")
+		list.focus_mode = Control.FOCUS_ALL
+		list.select_mode = ItemList.SELECT_SINGLE
+		list.allow_reselect = true
+		list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		host.add_child(list)
 		var blocks: Array = phase.get("blocks", [])
 		if blocks.is_empty():
-			var empty_message := Label.new()
-			empty_message.text = "Empty"
-			host.add_child(empty_message)
-		for block: Dictionary in blocks:
-			var block_label := Label.new()
-			block_label.text = String(block.get("name", "Empty"))
-			host.add_child(block_label)
+			list.add_item("Empty")
+			list.set_item_metadata(0, {"id": ""})
+			list.set_item_disabled(0, true)
+		for row: Dictionary in blocks:
+			var block_id: String = String(row.get("id", ""))
+			var index: int = list.add_item(String(row.get("name", "Empty")))
+			list.set_item_metadata(index, {"id": block_id})
+			if block_id.is_empty():
+				list.set_item_disabled(index, true)
+			elif phase_id == _potok_selected_phase \
+					and block_id == _potok_selected_phase_block_id:
+				list.select(index)
+				selected_found = true
+		list.item_selected.connect(
+			_potok_on_phase_block_selected.bind(list, mid, sid, phase_id)
+		)
+		# Each phase list scrolls its own authored rows without expanding the drawer.
+		list.custom_minimum_size.y = 74.0
+
+		var actions := HFlowContainer.new()
+		actions.name = StringName("PotokPhase" + phase_name + "AddActions")
+		host.add_child(actions)
+		for entry: FlowEditorBlockCatalogEntry in catalog:
+			var add_button := Button.new()
+			add_button.name = StringName(
+				"PotokPhase" + phase_name + "Add" + str(actions.get_child_count())
+			)
+			add_button.text = "Add " + entry.display_name
+			add_button.tooltip_text = "Add " + entry.display_name + " to " + phase_name
+			add_button.focus_mode = Control.FOCUS_ALL
+			add_button.custom_minimum_size.y = 44.0
+			add_button.set_meta(&"authoring_id", entry.authoring_id)
+			add_button.set_meta(&"phase", String(phase_id))
+			add_button.pressed.connect(_potok_on_phase_add.bind(
+				mid, sid, phase_id, entry.authoring_id, weakref(controller)
+			))
+			actions.add_child(add_button)
+	if not selected_found:
+		_potok_selected_phase_block_id = ""
 
 
+func _potok_authoring_entries() -> Array[FlowEditorBlockCatalogEntry]:
+	var entries: Array[FlowEditorBlockCatalogEntry] = []
+	if _authoring_context == null or not _authoring_context.has_method(&"get_entries"):
+		return entries
+	var raw: Variant = _authoring_context.call(&"get_entries")
+	if not raw is Array:
+		return entries
+	for value: Variant in raw as Array:
+		var entry: FlowEditorBlockCatalogEntry = value as FlowEditorBlockCatalogEntry
+		if entry != null and not entry.authoring_id.is_empty():
+			entries.append(entry)
+	return entries
+
+
+func _potok_on_phase_block_selected(
+		index: int, list: ItemList, mid: String, sid: String, phase: StringName
+) -> void:
+	if not is_potok_machine_view() or mid != _selected_id \
+			or sid != _potok_selected_state_id or not is_instance_valid(list) \
+			or list != _content.find_child(String(list.name), true, false) \
+			or index < 0 or index >= list.item_count:
+		return
+	var block_id: String = String(
+		(list.get_item_metadata(index) as Dictionary).get("id", "")
+	)
+	if block_id.is_empty():
+		return
+	_potok_selected_phase = phase
+	_potok_selected_phase_block_id = block_id
+
+
+func _potok_on_phase_add(
+		mid: String, sid: String, phase: StringName,
+		authoring_id: String, controller_ref: WeakRef
+) -> void:
+	var controller: PVController = controller_ref.get_ref() as PVController \
+		if controller_ref != null else null
+	if not is_instance_valid(controller) or controller != _active_controller() \
+			or not is_potok_machine_view() or _commands == null \
+			or mid != _selected_id or sid != _potok_selected_state_id:
+		return
+	var new_id: String = _commands.add_fsm_phase_block_by_authoring_id(
+		controller, mid, sid, phase, authoring_id
+	)
+	if new_id.is_empty():
+		return
+	_potok_selected_phase = phase
+	_potok_selected_phase_block_id = new_id
+	_potok_phase_focus_pending = {
+		"controller_ref": weakref(controller), "machine": mid,
+		"state": sid, "phase": phase, "block": new_id
+	}
+	_request_rebuild()
+
+
+func _potok_focus_added_phase_block(info: Dictionary, generation: int) -> void:
+	if generation != _rebuild_generation or not is_potok_machine_view() \
+			or not is_visible_in_tree():
+		return
+	var reference: WeakRef = info.get("controller_ref") as WeakRef
+	var phase: StringName = info.get("phase", &"")
+	var block_id: String = String(info.get("block", ""))
+	if reference == null or reference.get_ref() != _active_controller() \
+			or String(info.get("machine", "")) != _selected_id \
+			or String(info.get("state", "")) != _potok_selected_state_id \
+			or phase != _potok_selected_phase or block_id != _potok_selected_phase_block_id:
+		return
+	var viewport: Viewport = get_viewport()
+	var owner: Control = viewport.gui_get_focus_owner() as Control if viewport != null else null
+	if owner != null and owner.is_inside_tree() \
+			and owner != _content and not _content.is_ancestor_of(owner):
+		return
+	var phase_name: String = String(phase).capitalize()
+	var list: ItemList = _content.find_child(
+		"PotokPhase" + phase_name + "BlocksList", true, false
+	) as ItemList
+	if not _can_grab_focus(list):
+		return
+	for index: int in list.item_count:
+		if String((list.get_item_metadata(index) as Dictionary).get("id", "")) == block_id:
+			list.select(index)
+			list.grab_focus()
+			return
+
+
+func _potok_clear_phase_selection() -> void:
+	_potok_selected_phase = &""
+	_potok_selected_phase_block_id = ""
+	_potok_phase_focus_pending.clear()
 
 
 ## Flusso 7C-1: native scalar controls owned by existing Fluo Flow editor.
@@ -3091,6 +3242,7 @@ func _on_potok_state_selected(index: int, list: ItemList) -> void:
 	_potok_close_condition_editor()
 	_potok_revert_sessions.erase("state")
 	_potok_revert_sessions.erase("transition")
+	_potok_clear_phase_selection()
 	_potok_selected_state_id = id
 	_potok_selected_transition_id = ""
 	_potok_transition_feedback = ""
@@ -3179,6 +3331,7 @@ func navigate_potok_state(direction: int) -> bool:
 		return false
 	_potok_revert_sessions.erase("state")
 	_potok_revert_sessions.erase("transition")
+	_potok_clear_phase_selection()
 	_potok_selected_state_id = id
 	_potok_selected_transition_id = ""
 	_flow_entry_focus_pending = true
