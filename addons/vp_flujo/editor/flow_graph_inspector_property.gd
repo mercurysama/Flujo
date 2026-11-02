@@ -2850,7 +2850,8 @@ func _potok_open_condition_editor(
 	var existing: FlowConditionValueSource = edge.condition as FlowConditionValueSource
 	var anchor_rect: Rect2 = anchor.get_global_rect() if is_instance_valid(anchor) else Rect2()
 	popup.open_for_condition(existing, controller.flow_graph, anchor_rect, {
-		"scene_controller": controller, "scene_root": controller.get_tree().current_scene
+		"scene_controller": controller, "scene_root": controller.get_tree().current_scene,
+		"potok_event_payload": true
 	})
 
 
