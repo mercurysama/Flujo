@@ -1,6 +1,6 @@
 # Potok 7E-4A — Resultado documental de la matriz de revisión
 
-**Fecha:** 2026-11-02. **Tipo:** documentación, sin cambio a código, esquema, runtime, UI o tests. **Estado de entrega de guía:** COMPLETADO cuando el commit de esta nota pase CI; **estado de aceptación humana:** todas las filas **PENDING**.
+**Fecha:** 2026-11-02. **Tipo:** documentación, sin cambio a código, esquema, runtime, UI o tests. **Estado de entrega de guía:** COMPLETADO — [CI 41406266525](https://github.com/mercurysama/Flujo/actions/runs/41406266525) **SUCCESS 59/59** sobre `c192254344c8fc9704f2e858c39acb7af208a589`; **estado de aceptación humana:** todas las filas **PENDING**.
 
 ## Alcance
 
@@ -10,6 +10,13 @@
 - Modelo de recolección: una ficha por ID con SHA, Godot, plataforma, orientación, pasos, esperado, observado, evidencias, incidencia y aceptación explícita.
 - **Gates:** F03, F04, F14, F15 y A10 permanecen PENDING; en particular no afirmar que la presentación de fases Enter/Update/Exit equivale a poder añadir bloques visualmente.
 - Ningún archivo `.tscn`, modelo, editor o test se modificó; ninguna prueba visual real se realizó ni se recibió nueva evidencia durante este microbloque.
+
+## Evidencia final del microbloque
+
+- Contrato `c155a563eb5fe2d36a9c68d9de651c0ce174f73e` — [CI 41405917863](https://github.com/mercurysama/Flujo/actions/runs/41405917863) **SUCCESS 59/59**.
+- Primera matriz `e1b39b654ab4e77580fbf13c467303921023be6c` — [CI 41406161805](https://github.com/mercurysama/Flujo/actions/runs/41406161805) **FAILURE solo en Git whitespace gate**: un espacio final en plantilla, línea 62; pruebas posteriores no ejecutadas.
+- Corrección exclusivamente documental `c192254344c8fc9704f2e858c39acb7af208a589` — [CI 41406266525](https://github.com/mercurysama/Flujo/actions/runs/41406266525) **COMPLETED SUCCESS 59/59** (catalog/whitespace, Fluo/Ready, Potok y runtime). Este resultado acredita los tests automatizados, **ninguna prueba manual**.
+- No hay cambios de código, modelo, UI, scripts de test ni workflow en 7E-4A. Los 25 escenarios siguen PENDING.
 
 ## Evidencia anterior y límites
 
