@@ -270,3 +270,12 @@ Todo es Flujo; todo fluye. 🌊
 - Two actual successive `PackedScene` saves/reopens retain authored graph/machine/state/edge/phase block IDs, order, metadata and valid references. Two instances from the second saved scene begin separately; their `FlowFSMRuntime` and `FlowValueResolutionContext` are distinct. A's queued event, variable and event packet do not reach B; stopping A does not stop B. Authored graph definitions may be shared without violating runtime instance isolation.
 - No changes to schema, runtime or editor production; the code test is separate from 7E-1C typed event field serialization. The `$flujo-baseline` and `$flujo-prove` instructions were consulted and applied remotely through GitHub CI, **not directly executed as Skills**; do not claim formal READY/PASA or manual visual approval.
 - **Next:** 7E-2A keyboard/selection behavior. Keep the original phase-7 Add-phase-block UI and manual Android matrix open for closure audit.
+
+
+## 2026-11-01 — Potok 7E-2A FSM keyboard and focus characterization
+
+- Contract commit `8acbb823e260440aecdc19cde847231e772596a6`, test `tests/editor/flow_fsm_keyboard_navigation_test.gd` and CI wiring `9a7b6358b3a3351e13332683e7321a75ec3c9e9c`; [full CI 41395513992](https://github.com/mercurysama/Flujo/actions/runs/41395513992) **SUCCESS (50 steps)**, new focal prints a passing marker with successful process termination.
+- Inspector activation relay and Potok Flow stable IDs remain correct even with duplicate names and authored reorder; Ctrl+Page cycles states, plain Page cycles machines with Inspector synchronization; focus recovers after rebuild, plain Page from text editor does not navigate, foreign control Page keys remain unclaimed. No production/UI code changed.
+- Test uses real key event objects handed to the existing drawer handler and native ItemList selection signal, but **does not simulate real physical keyboard/Android display**. Do not claim visual approval.
+- Godot headless editor shutdown prints RID/ObjectDB leak diagnostics in this and prior baseline CI, despite successful job exit; the existing invalid JSON negative snapshot focal also logs its expected parser error. Record separately rather than claiming completely clean stderr.
+- Repo Skills `$flujo-baseline`, `$flujo-prove`, `$flujo-fluo-maintenance` **read and applied as remote procedures only**; no direct Skill invocation or formal READY/PASA. Next: 7E-2B focus, Alt traversal, Revertir/Escape.
