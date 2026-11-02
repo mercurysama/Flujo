@@ -76,6 +76,7 @@ var _fluo_mode: bool = false
 var _flusso_snapshots: Dictionary = {}
 var _flusso_owned_properties: Dictionary = {}
 var _flow_entry_focus_pending: bool = false
+var _potok_selected_state_id: String = ""
 var _preserve_deleted_block_selection_state: bool = false
 var _deleted_resource_id: String = ""
 var _deleted_resource_replacement_id: String = ""
@@ -144,6 +145,7 @@ func set_dock_controller(controller: PVController) -> void:
 
 func _reset_dock_context() -> void:
 	_selected_id = ""
+	_potok_selected_state_id = ""
 	_selected_view_title = "Processes"
 	_selected_view_index = -1
 	_ready_block_id = ""
@@ -216,6 +218,7 @@ func set_dock_variable_selection(
 		return
 	_selected_collection = collection
 	_selected_id = next_id
+	_potok_selected_state_id = ""
 	_ready_block_id = ""
 	_ready_block_details_open = false
 	_flusso_snapshots.clear()
@@ -393,6 +396,9 @@ func _render_dock_schema_3_variable_options(controller: PVController, generation
 		message.text = "Select a Schema 3 Variable in the Godot Inspector to edit its options."
 		message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_content.add_child(message)
+		return
+	if _selected_collection == FlowGraphEditorCommands.Collection.STATE_MACHINES:
+		_render_potok_machine(_content, controller, generation)
 		return
 	if _is_block_collection():
 		_render_ready_process_editor(_content)
@@ -1351,6 +1357,9 @@ func focus_selected_variable_editor(controller: PVController, variable_id: Strin
 func get_preferred_interaction_focus_target() -> Control:
 	if not _dock_mode or _selected_id.is_empty():
 		return null
+	if is_potok_machine_view():
+		var list: Control = _content.find_child("PotokStateList", true, false) as Control
+		return list if _can_grab_focus(list) else null
 	var requested: Control = null
 	if not _variable_focus_control.is_empty():
 		requested = _content.find_child(String(_variable_focus_control), true, false) as Control
@@ -1577,6 +1586,7 @@ func _on_schema_3_variable_item_activated(item_index: int, list: ItemList) -> vo
 			FlowGraphEditorCommands.Collection.PROCESSES,
 			FlowGraphEditorCommands.Collection.CONSTRUCTOR,
 			FlowGraphEditorCommands.Collection.METHODS,
+			FlowGraphEditorCommands.Collection.STATE_MACHINES,
 		]:
 		schema_3_container_activated.emit(controller, collection, variable_id)
 		return
@@ -1585,7 +1595,9 @@ func _on_schema_3_variable_item_activated(item_index: int, list: ItemList) -> vo
 
 func _is_schema_3_variable_list(list: ItemList) -> bool:
 	return not _dock_mode and list != null and _is_schema_3_graph() \
-		and (_selected_collection == FlowGraphEditorCommands.Collection.VARIABLES or _is_block_collection())
+		and (_selected_collection == FlowGraphEditorCommands.Collection.VARIABLES \
+			or _selected_collection == FlowGraphEditorCommands.Collection.STATE_MACHINES \
+			or _is_block_collection())
 
 
 func _is_block_collection() -> bool:
