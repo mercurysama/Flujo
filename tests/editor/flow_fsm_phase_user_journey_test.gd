@@ -37,6 +37,7 @@ func _run() -> void:
 	drawer.open_container(controller, FlowGraphEditorCommands.Collection.STATE_MACHINES,
 		machine.get_internal_id())
 	await _frames(6)
+	var added: FlowPrintBlock = null
 	var add: Button = drawer.find_child("PotokPhaseEnterAdd0", true, false) as Button
 	if _check(add != null and String(add.get_meta(&"authoring_id", "")) == "print",
 			"Existing catalog exposes native Add Print"):
@@ -45,7 +46,7 @@ func _run() -> void:
 		if _check(state.enter_blocks.size() == 3 and state.enter_blocks[0] == null
 				and state.enter_blocks[2] is FlowPrintBlock,
 				"Native Add preserves null slot and inserts Print"):
-			var added: FlowPrintBlock = state.enter_blocks[2] as FlowPrintBlock
+			added = state.enter_blocks[2] as FlowPrintBlock
 			var block_id: String = added.get_internal_id()
 			var list: ItemList = drawer.find_child(
 				"PotokPhaseEnterBlocksList", true, false) as ItemList
