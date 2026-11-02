@@ -52,6 +52,9 @@ jobs:
           else
             echo 'FSM dynamic test missing; not a PASS'
           fi
+      - name: Potok-7C1 Flusso scalar and undo redo focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 75s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_fsm_flusso_scalar_test.gd
       - name: Potok-7B Inspector to Fluo state navigation focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_fsm_fluo_navigation_test.gd
