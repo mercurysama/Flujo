@@ -435,7 +435,7 @@ Todo es Flujo; todo fluye. 🌊
 
 ## 2026-11-02 — Potok 7F-1D2C native SDK Delete/Undo recovery
 
-- Baseline `a578e1bb854f43f1d1ee1b1e1af25ab406d5533d`; native test `da1b51afd303f2781add27cde6a0d7b4de07fa1f`, registered to GitHub Actions in `a551de763dbf4ec8be6bb7b5492efab517b7ce58`. [Run 41525063836](https://github.com/mercurysama/Flujo/actions/runs/41525063836): 7F-1D2C focal passed; check complete conclusion before certifying global GREEN.
+- Baseline `a578e1bb854f43f1d1ee1b1e1af25ab406d5533d`; native test `da1b51afd303f2781add27cde6a0d7b4de07fa1f`, registered to GitHub Actions in `a551de763dbf4ec8be6bb7b5492efab517b7ce58`. [GREEN Actions 41525063836](https://github.com/mercurysama/Flujo/actions/runs/41525063836): completed **75/75 SUCCESS**, 0 failures, including focal and all Godot 4.7.2 regressions.
 - Lesson: test an actual SDK `manual_output:output` Flusso message edit, Close, native Duplicate preserving SDK script with new ID, modal Delete Cancel without any history mutation, Confirm/Delete as one action, Undo reusing the identical resource, Redo removing it, and reopening the original SDK block with unchanged ID/script/edited message. Keep null slots, Ready and sibling state intact. No production code needed.
 - **Next 7F-1D3**: combine Flusso SDK edits and phase UI actions with a true saved/reloaded scene; **7F-1D4** audit. Manual matrix 15 Fedora + 10 Android remains PENDING. `main` unchanged.
 - [7F-1D2C checkpoint](fsm_phase7_7f1d2c_result.md).
