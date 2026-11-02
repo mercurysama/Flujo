@@ -262,3 +262,11 @@ Todo es Flujo; todo fluye. 🌊
 - Authored Bool Condition Tok with four typed event fields (INT/BOOL/FLOAT/STRING), comparison IDs, literal/operand IDs, three AND connectors and outer NOT survives a real saved-scene cycle after validated property commands and Undo/Redo. No source ID changes were needed.
 - Distinguish declared event/key/type stored in the graph from machine-tick payload held in `FlowValueResolutionContext`: a private packet sentinel stays out of `.tscn`, freshly reopened sources initially have no packet, and explicit fresh packets resolve with exact type diagnostics. Never persist event packet snapshots as a convenience.
 - Repository Skills `$flujo-baseline` and `$flujo-prove` were **read and followed remotely but not invoked as standalone gates**; no formal READY/PASA or human GUI/Android claim. Next 7E-1D repeated saves and instance isolation.
+
+
+## 2026-11-01 — Potok 7E-1D repeated PackedScene and runtime isolation
+
+- 7E-1D contract `c4e7d129f79babe26d3a464718137146e2dd3b33`; test `tests/model/flow_fsm_double_roundtrip_instance_isolation_test.gd` and CI step `7b1e53b8f6cc84669aed254e70cf8e14aeac07cd`. [Full CI 41394604235](https://github.com/mercurysama/Flujo/actions/runs/41394604235) **SUCCESS, 49 steps**.
+- Two actual successive `PackedScene` saves/reopens retain authored graph/machine/state/edge/phase block IDs, order, metadata and valid references. Two instances from the second saved scene begin separately; their `FlowFSMRuntime` and `FlowValueResolutionContext` are distinct. A's queued event, variable and event packet do not reach B; stopping A does not stop B. Authored graph definitions may be shared without violating runtime instance isolation.
+- No changes to schema, runtime or editor production; the code test is separate from 7E-1C typed event field serialization. The `$flujo-baseline` and `$flujo-prove` instructions were consulted and applied remotely through GitHub CI, **not directly executed as Skills**; do not claim formal READY/PASA or manual visual approval.
+- **Next:** 7E-2A keyboard/selection behavior. Keep the original phase-7 Add-phase-block UI and manual Android matrix open for closure audit.
