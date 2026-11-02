@@ -2459,6 +2459,11 @@ func _potok_on_phase_block_selected(
 		return
 	if _potok_selected_phase != phase or _potok_selected_phase_block_id != block_id:
 		_potok_phase_block_details_open = false
+		var previous_panel: Control = _content.find_child(
+			"PotokPhaseBlockProperties", true, false) as Control
+		if previous_panel != null:
+			previous_panel.get_parent().remove_child(previous_panel)
+			previous_panel.queue_free()
 	_potok_selected_phase = phase
 	_potok_selected_phase_block_id = block_id
 
