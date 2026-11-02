@@ -2225,7 +2225,6 @@ func _render_potok_machine(parent: Container, controller: PVController, generati
 	list.allow_reselect = true
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(list)
-	_potok_render_structure_actions(parent, false)
 	var rows: Array = view.get("states", [])
 	var selected_index: int = -1
 	for index: int in rows.size():
@@ -2248,10 +2247,13 @@ func _render_potok_machine(parent: Container, controller: PVController, generati
 			_potok_selected_transition_id = ""
 			_potok_transition_feedback = ""
 		_potok_selected_state_id = new_state_id
+		_potok_render_structure_actions(parent, false)
 		_render_potok_state_phases(parent, selected)
 		if not bool(selected.get("empty", false)):
 			_render_potok_state_properties(parent, selected)
 			_render_potok_transitions(parent, selected, rows)
+	if selected_index < 0:
+		_potok_render_structure_actions(parent, false)
 	list.item_selected.connect(_on_potok_state_selected.bind(list))
 	call_deferred(&"_fit_list_to_first_row", list, generation)
 	if _flow_entry_focus_pending:
@@ -2431,12 +2433,12 @@ func _render_potok_transitions(parent: Container, state: Dictionary, states: Arr
 	list.select_mode = ItemList.SELECT_SINGLE
 	list.allow_reselect = true
 	parent.add_child(list)
-	_potok_render_structure_actions(parent, true)
 	var edges: Array = state.get("transitions", [])
 	if edges.is_empty():
 		var item_index: int = list.add_item("Empty")
 		list.set_item_metadata(item_index, {"id": ""})
 		_potok_selected_transition_id = ""
+		_potok_render_structure_actions(parent, true)
 		return
 	var selected_index: int = -1
 	for i: int in edges.size():
@@ -2452,6 +2454,7 @@ func _render_potok_transitions(parent: Container, state: Dictionary, states: Arr
 	list.select(selected_index)
 	var selected: Dictionary = edges[selected_index]
 	_potok_selected_transition_id = String(selected.get("id", ""))
+	_potok_render_structure_actions(parent, true)
 	if not _potok_selected_transition_id.is_empty():
 		_render_potok_transition_properties(parent, selected, states)
 	list.item_selected.connect(_on_potok_transition_selected.bind(list))
