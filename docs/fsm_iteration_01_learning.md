@@ -373,3 +373,10 @@ Todo es Flujo; todo fluye. 🌊
 - Lesson: phase-block configuration session must own weak controller and resource references, plus machine/state/phase/block IDs, and capture only currently presented editable properties. Revertir validates snapshot and restores as one UndoRedo action without resetting unrelated fields. Escape closes the phase Flusso before closing Fluo, and close retains live edits; focus restoration targets exact phase and persistent block ID after rebuild.
 - No runtime or persistent schema changes. SDK/structured-document completeness, further stale callback/scene persistence coverage and phase 7 manual Fedora 15 + Android 10 remain pending. Versioned skills were consulted, not invoked autonomously; local worktree and physical input were not audited. **Next 7F-1C1E**.
 - [7F-1C1D result](fsm_phase7_7f1c1d_result.md).
+
+## 2026-11-02 — Potok 7F-1C1E SDK/scene regression checkpoint
+
+- Baseline `be5b736cf87ae181651febad9e3a354116c081aa`, [CI 41492174870](https://github.com/mercurysama/Flujo/actions/runs/41492174870) SUCCESS. New SDK integration and scene persistence test `d4bcca55053ea30ff196be2b3d8ed97a86ec33f1`; CI focal `048ef4f728a8c6c9190c7b2a02f3584b0d458244`; extended SDK Revertir/non-authorable property checks `e4dded207ab8a5a54b4ed3555f646e89a1be443f`. [GREEN 41495516898](https://github.com/mercurysama/Flujo/actions/runs/41495516898): **66/66 CI steps SUCCESS**, zero failed.
+- Evidence: real external SDK `manual_output:output` with property presentation JSON, edited typed message/boolean/range/enum through native phase Flusso, UndoRedo, Revertir and Undo of Revertir; no unsupported Vector2 or storage-only property exposure; ID, null slot, Update, Exit, Ready untouched; saved and reopened .tscn retained values/IDs.
+- **Limit:** structured document editing is still unsupported for phase Flusso and this SDK fixture does not cover all extension variants. Manual review 15 Fedora + 10 Android = 25 outstanding; no main merge; GitHub CI not Fedora local test or formal autonomous Skills.
+- [7F-1C1E result](fsm_phase7_7f1c1e_result.md). **Next:** 7F-1C2A small-test-first Move/Duplicate/Delete ownership contract.
