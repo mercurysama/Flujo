@@ -75,11 +75,11 @@ Todo es Flujo; todo fluye. 🌊
 
 ## 7E — Recovery-safe acceptance lots (supersedes earlier 7B next-step note)
 
-The original **nine** phase-7 items remain required. 7A–7D cover items 1–6 with automated evidence, while 7E closes persistence (item 9), keyboard/focus (item 7) and manual touch/layout (item 8); successful headless editor tests do not certify human UI.
+The original **nine** phase-7 items remain required. 7A–7D give automated evidence toward items 1–6; complete phase-block Add and the full visual journey still require an explicit closure audit, while 7E closes persistence (item 9), keyboard/focus (item 7) and manual touch/layout (item 8); successful headless editor tests do not certify human UI.
 
-- **7E-1A — saved-scene identity baseline (CURRENT):** contract \`fsm_phase7_7e1a_contract.md\`; one \`PVController\` in \`.tscn\`, one machine, two ordered states, stable graph/machine/state/transition/phase IDs, initial and transition target, phase order. Focal \`tests/model/flow_fsm_authored_scene_roundtrip_test.gd\`. No production code/schema changes; CI evidence pending.
-- **7E-1B — edited-model save cycle:** rename, reorder and structural operations via existing \`FlowGraphEditorCommands\`; repeated Undo/Redo before save, compare state/edge IDs and order on reopen; distinct editor test.
-- **7E-1C — Tok source persistence:** Bool Condition Tok \`#\`, nested operand types and typed Event field names/source IDs retain semantic values through save/reopen, and do not contain ephemeral payloads.
+- **7E-1A — saved-scene identity baseline: AUTOMATED PASS.** [Contract](fsm_phase7_7e1a_contract.md), [result](fsm_phase7_7e1a_result.md), implementation `96322e705475c3fd80e944935136332a28f0785a`, [CI 41389274900](https://github.com/mercurysama/Flujo/actions/runs/41389274900) SUCCESS. One schema-3 `PVController` scene saves/reopens with same graph, machine, ordered states, initial ID, phase blocks, event edge ID/target/trigger/priority. No UI/manual claim. **Next 7E-1B** edited command history before persistence.
+- **7E-1B — edited-model save cycle:** rename, reorder and structural operations via existing `FlowGraphEditorCommands`; repeated Undo/Redo before save, compare state/edge IDs and order on reopen; distinct editor test.
+- **7E-1C — Tok source persistence:** Bool Condition Tok `#`, nested operand types and typed Event field names/source IDs retain semantic values through save/reopen, and do not contain ephemeral payloads.
 - **7E-1D — repeated reopen and instance safety:** second save/reopen cycle and independent scene instances; assert no unexpected ID rewrite or mutable-state leakage.
 - **7E-2A — keyboard/FSM selection:** Enter/double-click, Up/Down, PageUp/PageDown and Ctrl variants, stable-ID selection, foreign editor shortcut preservation.
 - **7E-2B — Flusso focus/Revertir/Escape:** Alt and Alt+Shift traversal, focused control restoration after closing, Escape hierarchy, Cancel/stale selection and no unintended edits.
@@ -89,4 +89,4 @@ The original **nine** phase-7 items remain required. 7A–7D cover items 1–6 w
 - **7E-4A — desktop and Android review instructions:** reproducible Fedora Godot 4.7.2 and Android portrait/landscape scenarios; mark all manual slots PENDING until observed.
 - **7E-4B — consolidated human matrix handoff:** evidence templates, known limits and ready-to-review scope; release/pre-release packaging belongs to phase 11 and does not itself prove touch acceptance.
 
-Each lot has a narrow contract, focal test(s), applicable prior regression/CI, independent commit, result note and next lot. More splits (e.g. \`7E-1B1\`) are allowed if needed. Do **not** change phase-8/9 implementation without gap audits. Original phase-7 closure requires a functional one-state visual journey and a second-state transition through Inspector→Fluo→Flow/Flusso, plus manual review.
+Each lot has a narrow contract, focal test(s), applicable prior regression/CI, independent commit, result note and next lot. More splits (e.g. `7E-1B1`) are allowed if needed. Do **not** change phase-8/9 implementation without gap audits. Original phase-7 closure requires a functional one-state visual journey and a second-state transition through Inspector→Fluo→Flow/Flusso, plus manual review.

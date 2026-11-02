@@ -230,3 +230,11 @@ Todo es Flujo; todo fluye. 🌊
 - **7D-2 event field typed condition operand:** contract `106354de39cdea1cfdaf7870c3be9814005dbc7e`, source `086a1a00a249ce947a60b8c6d0b797c2eddf0ddf`, context `b483f3f549ca62eeb3e3c6bd985638346c6c995f`, model `ba590913cbd9781d27e0af4611271e9dfd290b8d`, runtime `2dfb9a22f89a1567a554bf6468e8b5705a1ae941`, Tok UI `67b636cec08e6357531f58f5a731d7b72e0b8d58` and Potok context `ad5c1127db045ef82254dab4223cdae23e627535`, final test `3a7c92f6e71d3d2072c9e1d7d01557b254be0762`. [Full CI 41382298522](https://github.com/mercurysama/Flujo/actions/runs/41382298522) SUCCESS. Documentation `docs/fsm_phase7_7d2_result.md`.
 - Condition Tok # now edits via detached popup + validated Undo/Redo. Typed event payload source holds only event name, field and exact type, not packet values. An unmatched event can feed a fallback condition on that machine's matching clock, never a stale other-machine/controller scope; missing/mismatched types fail. Event edge arbitration still has precedence; event-field values are not accessible in StateEnter/Exit.
 - **Next 7E:** saved scene roundtrips, focus/keyboard/touch and consolidated manual Android visual pass. Do not claim full phase 7 release/manual acceptance solely from green headless CI.
+
+
+## 2026-11-01 — Potok 7E-1A authored scene persistence regression
+
+- Source [7E-1A contract](fsm_phase7_7e1a_contract.md); implementation `96322e705475c3fd80e944935136332a28f0785a`; [Actions 41389274900](https://github.com/mercurysama/Flujo/actions/runs/41389274900) SUCCESS (new focal and existing CI regressions).
+- Reused the established normal `PackedScene` / `ResourceSaver` pattern to verify exact persisted graph, machine, ordered state, transition and phase block IDs, initial/target references, block content and valid reopen. No runtime, model schema or editor production change.
+- Lesson: separate authored-scene serializability from command Undo/Redo and Condition Tok semantic-payload persistence; these belong in their own fail-localized microblocks 7E-1B and 7E-1C.
+- Formal local skill gates, `git diff --check` and manual Android/desktop review NOT RUN here; remote green CI cannot approve them. Next: 7E-1B contract → test → CI → result checkpoint.
