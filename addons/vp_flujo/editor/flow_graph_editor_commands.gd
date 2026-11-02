@@ -538,6 +538,137 @@ func _fsm_transition_value_valid(
 	return false
 
 
+## Potok 7E-2B2: validate an entire machine/state/edge scalar snapshot
+## before creating one atomic UndoRedo action. Existing live editors remain unchanged.
+func restore_fsm_properties_snapshot(
+		controller: PVController, machine_id: String, state_id: String,
+		transition_id: String, snapshot: Dictionary
+) -> bool:
+	if not _can_edit_fsm_scalar(controller) or machine_id.is_empty():
+		return false
+	if not transition_id.is_empty() and state_id.is_empty():
+		return false
+	var graph: FlowGraph = controller.flow_graph
+	var machine: FlowStateMachineDefinition = _find_resource(
+		graph, Collection.STATE_MACHINES, machine_id
+	) as FlowStateMachineDefinition
+	if machine == null:
+		return false
+	var machine_draft: FlowStateMachineDefinition = machine.duplicate(false) as FlowStateMachineDefinition
+	if machine_draft == null or machine_draft.get_internal_id() != machine_id:
+		return false
+
+	var kind: StringName = &"machine"
+	var target: Resource = machine
+	var draft: Resource = machine_draft
+	var state: FlowStateDefinition = null
+	var state_draft: FlowStateDefinition = null
+	if not state_id.is_empty():
+		var state_index: int = _fsm_state_index(machine.states, state_id)
+		if state_index < 0:
+			return false
+		state = machine.states[state_index]
+		state_draft = state.duplicate(false) as FlowStateDefinition
+		if state_draft == null or state_draft.get_internal_id() != state_id:
+			return false
+		var states: Array[FlowStateDefinition] = []
+		states.assign(machine.states)
+		states[state_index] = state_draft
+		machine_draft.states = states
+		kind = &"state"
+		target = state
+		draft = state_draft
+		if not transition_id.is_empty():
+			var edge_index: int = _fsm_edge_index(state.transitions, transition_id)
+			if edge_index < 0:
+				return false
+			var edge: FlowStateTransitionDefinition = state.transitions[edge_index]
+			var edge_draft: FlowStateTransitionDefinition = edge.duplicate(false) as FlowStateTransitionDefinition
+			if edge_draft == null or edge_draft.get_internal_id() != transition_id:
+				return false
+			var edges: Array[FlowStateTransitionDefinition] = []
+			edges.assign(state.transitions)
+			edges[edge_index] = edge_draft
+			state_draft.transitions = edges
+			kind = &"transition"
+			target = edge
+			draft = edge_draft
+
+	var fields: Array[StringName] = []
+	match kind:
+		&"machine":
+			fields = [&"display_name", &"enabled", &"auto_start", &"tick_mode",
+				&"user_note", &"initial_state_id"]
+		&"state":
+			fields = [&"display_name", &"enabled", &"user_note"]
+		&"transition":
+			fields = [&"display_name", &"enabled", &"priority",
+				&"target_state_id", &"trigger", &"event_name", &"user_note"]
+	if snapshot.size() != fields.size():
+		return false
+	var current: Dictionary = {}
+	var changed: bool = false
+	for field: StringName in fields:
+		if not snapshot.has(field):
+			return false
+		var value: Variant = snapshot[field]
+		if kind == &"machine" and not _fsm_scalar_valid(field, value, true):
+			return false
+		if kind == &"state" and not _fsm_scalar_valid(field, value, false):
+			return false
+		current[field] = target.get(field)
+		if current[field] != value:
+			changed = true
+		draft.set(field, value)
+	if kind == &"machine" and not _fsm_valid_initial(
+			machine_draft, machine_draft.initial_state_id
+	):
+		return false
+	if kind == &"state" and not state_draft.enabled \
+			and machine_draft.initial_state_id == state_id:
+		return false
+	if kind == &"transition":
+		var proposed: FlowStateTransitionDefinition = draft as FlowStateTransitionDefinition
+		for field: StringName in fields:
+			if not _fsm_transition_value_valid(machine_draft, proposed, field, snapshot[field]):
+				return false
+	if not changed:
+		return false
+	var machines: Array = graph.state_machines.duplicate()
+	var machine_index: int = _find_index(machines, machine_id)
+	if machine_index < 0:
+		return false
+	machines[machine_index] = machine_draft
+	if not _fsm_candidate_accepted(graph, machines):
+		return false
+
+	_undo_redo.create_action(
+		"Revert Potok %s" % String(kind).capitalize(),
+		UndoRedo.MERGE_DISABLE, controller, false, true
+	)
+	_undo_redo.add_do_method(
+		self, &"_assign_fsm_snapshot", controller, target, snapshot.duplicate(true)
+	)
+	_undo_redo.add_undo_method(
+		self, &"_assign_fsm_snapshot", controller, target, current
+	)
+	_undo_redo.commit_action()
+	return true
+
+
+func _assign_fsm_snapshot(
+		controller: PVController, target: Resource, values: Dictionary
+) -> void:
+	if not is_instance_valid(controller) or target == null:
+		return
+	for field: Variant in values:
+		target.set(StringName(field), values[field])
+	target.emit_changed()
+	controller.notify_property_list_changed()
+	_refresh_diagnostics(controller.flow_graph)
+	changed.emit()
+
+
 ## Potok 7C-2B: structural authoring on stable state IDs.
 func add_fsm_state(controller: PVController, machine_id: String) -> String:
 	var machine: FlowStateMachineDefinition = _fsm_structure_machine(controller, machine_id)

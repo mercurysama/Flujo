@@ -76,6 +76,7 @@ var _fluo_mode: bool = false
 var _flusso_snapshots: Dictionary = {}
 var _flusso_owned_properties: Dictionary = {}
 var _flow_entry_focus_pending: bool = false
+var _potok_revert_sessions: Dictionary = {}
 var _potok_selected_state_id: String = ""
 var _potok_selected_transition_id: String = ""
 var _potok_transition_feedback: String = ""
@@ -161,6 +162,7 @@ func _reset_dock_context() -> void:
 	_selected_id = ""
 	_potok_selected_state_id = ""
 	_potok_selected_transition_id = ""
+	_potok_revert_sessions.clear()
 	_potok_transition_feedback = ""
 	_potok_structure_feedback = ""
 	_potok_close_condition_editor()
@@ -239,6 +241,7 @@ func set_dock_variable_selection(
 	_selected_id = next_id
 	_potok_selected_state_id = ""
 	_potok_selected_transition_id = ""
+	_potok_revert_sessions.clear()
 	_potok_transition_feedback = ""
 	_potok_structure_feedback = ""
 	_potok_close_condition_editor()
@@ -1395,6 +1398,7 @@ func get_preferred_interaction_focus_target() -> Control:
 
 ## Cancels only local transient editor state while preserving the stable-ID selection.
 func close_transient_interfaces() -> void:
+	_potok_revert_sessions.clear()
 	_potok_close_condition_editor()
 	_potok_close_delete_dialog()
 	_close_delete_confirmation()
@@ -2340,6 +2344,7 @@ func _render_potok_machine_properties(parent: Container, machine: Dictionary, ro
 	form.add_child(initial)
 	_potok_text_field(form, "Note", "PotokMachineNote", String(machine.get("note", "")),
 		mid, "", &"user_note")
+	_potok_add_revert_button(form, &"machine", mid, "", "")
 
 
 func _render_potok_state_properties(parent: Container, state: Dictionary) -> void:
@@ -2356,6 +2361,7 @@ func _render_potok_state_properties(parent: Container, state: Dictionary) -> voi
 		bool(state.get("enabled", true)), _selected_id, sid, &"enabled")
 	_potok_text_field(form, "Note", "PotokStateNote", String(state.get("note", "")),
 		_selected_id, sid, &"user_note")
+	_potok_add_revert_button(form, &"state", _selected_id, sid, "")
 
 
 func _potok_text_field(
@@ -2542,6 +2548,7 @@ func _render_potok_transition_properties(
 	form.add_child(feedback)
 	_potok_transition_text_field(form, "Note", "PotokTransitionNote",
 		String(edge.get("note", "")), mid, sid, eid, &"user_note")
+	_potok_add_revert_button(form, &"transition", mid, sid, eid)
 
 
 func _potok_transition_text_field(
@@ -2625,9 +2632,115 @@ func _on_potok_transition_selected(index: int, list: ItemList) -> void:
 	if id.is_empty() or id == _potok_selected_transition_id:
 		return
 	_potok_close_condition_editor()
+	_potok_revert_sessions.erase("transition")
 	_potok_selected_transition_id = id
 	_potok_transition_feedback = ""
 	_request_rebuild()
+
+## Native FSM scalar session: never reuse Ready block's Flusso snapshot.
+## Same machine/state/edge object across ordinary rebuilds retains its opening values.
+func _potok_add_revert_button(
+		parent: Container, kind: StringName,
+		mid: String, sid: String, eid: String
+) -> void:
+	var target: Resource = _potok_revert_target(mid, sid, eid)
+	if target == null:
+		return
+	var controller: PVController = _active_controller()
+	if controller == null or controller.flow_graph == null:
+		return
+	var fields: Array[StringName] = _potok_revert_fields(kind)
+	var key: String = String(kind)
+	var entry: Dictionary = _potok_revert_sessions.get(key, {})
+	var controller_ref: WeakRef = entry.get("controller_ref") as WeakRef
+	var graph_ref: WeakRef = entry.get("graph_ref") as WeakRef
+	var target_ref: WeakRef = entry.get("target_ref") as WeakRef
+	if entry.is_empty() or controller_ref == null or graph_ref == null \
+			or target_ref == null or controller_ref.get_ref() != controller \
+			or graph_ref.get_ref() != controller.flow_graph \
+			or target_ref.get_ref() != target \
+			or entry.get("mid", "") != mid or entry.get("sid", "") != sid \
+			or entry.get("eid", "") != eid:
+		var opening_values: Dictionary = {}
+		for field: StringName in fields:
+			opening_values[field] = target.get(field)
+		_potok_revert_sessions[key] = {
+			"controller_ref": weakref(controller), "graph_ref": weakref(controller.flow_graph),
+			"target_ref": weakref(target), "mid": mid, "sid": sid, "eid": eid,
+			"values": opening_values
+		}
+	var button := Button.new()
+	button.name = StringName("Potok%sRevert" % String(kind).capitalize())
+	button.text = "Revertir"
+	button.tooltip_text = "Restore this Potok %s configuration to when this session opened." % key
+	button.focus_mode = Control.FOCUS_ALL
+	button.pressed.connect(_potok_revert_current.bind(kind, mid, sid, eid))
+	parent.add_child(button)
+
+
+func _potok_revert_fields(kind: StringName) -> Array[StringName]:
+	match kind:
+		&"machine":
+			return [&"display_name", &"enabled", &"auto_start", &"tick_mode",
+				&"user_note", &"initial_state_id"]
+		&"state":
+			return [&"display_name", &"enabled", &"user_note"]
+		&"transition":
+			return [&"display_name", &"enabled", &"priority",
+				&"target_state_id", &"trigger", &"event_name", &"user_note"]
+	return []
+
+
+func _potok_revert_target(mid: String, sid: String, eid: String) -> Resource:
+	var controller: PVController = _active_controller()
+	if controller == null or controller.flow_graph == null or mid.is_empty():
+		return null
+	for machine: FlowStateMachineDefinition in controller.flow_graph.state_machines:
+		if machine == null or machine.get_internal_id() != mid:
+			continue
+		if sid.is_empty():
+			return machine
+		for state: FlowStateDefinition in machine.states:
+			if state == null or state.get_internal_id() != sid:
+				continue
+			if eid.is_empty():
+				return state
+			for edge: FlowStateTransitionDefinition in state.transitions:
+				if edge != null and edge.get_internal_id() == eid:
+					return edge
+		return null
+	return null
+
+
+func _potok_revert_current(
+		kind: StringName, mid: String, sid: String, eid: String
+) -> void:
+	if not is_potok_machine_view() or _commands == null or mid != _selected_id:
+		return
+	if not sid.is_empty() and sid != _potok_selected_state_id:
+		return
+	if not eid.is_empty() and eid != _potok_selected_transition_id:
+		return
+	var controller: PVController = _active_controller()
+	if controller == null or controller.flow_graph == null:
+		return
+	var entry: Dictionary = _potok_revert_sessions.get(String(kind), {})
+	var controller_ref: WeakRef = entry.get("controller_ref") as WeakRef
+	var graph_ref: WeakRef = entry.get("graph_ref") as WeakRef
+	var target_ref: WeakRef = entry.get("target_ref") as WeakRef
+	if controller_ref == null or graph_ref == null or target_ref == null \
+			or controller_ref.get_ref() != controller \
+			or graph_ref.get_ref() != controller.flow_graph \
+			or target_ref.get_ref() != _potok_revert_target(mid, sid, eid) \
+			or entry.get("mid", "") != mid or entry.get("sid", "") != sid \
+			or entry.get("eid", "") != eid:
+		return
+	if _commands.restore_fsm_properties_snapshot(
+			controller, mid, sid, eid, entry.get("values", {}) as Dictionary
+	):
+		_flow_entry_focus_pending = true
+		_request_rebuild()
+
 
 ## Potok 7C-2B: structural controls share the existing Flow view.
 func _potok_render_structure_actions(parent: Container, for_edge: bool) -> void:
@@ -2913,6 +3026,8 @@ func _on_potok_state_selected(index: int, list: ItemList) -> void:
 		return
 	_potok_close_condition_editor()
 	_potok_close_condition_editor()
+	_potok_revert_sessions.erase("state")
+	_potok_revert_sessions.erase("transition")
 	_potok_selected_state_id = id
 	_potok_selected_transition_id = ""
 	_potok_transition_feedback = ""
@@ -2999,6 +3114,8 @@ func navigate_potok_state(direction: int) -> bool:
 	var id: String = String((list.get_item_metadata(next_index) as Dictionary).get("id", ""))
 	if id.is_empty():
 		return false
+	_potok_revert_sessions.erase("state")
+	_potok_revert_sessions.erase("transition")
 	_potok_selected_state_id = id
 	_potok_selected_transition_id = ""
 	_flow_entry_focus_pending = true
@@ -3028,6 +3145,7 @@ func navigate_potok_machine(direction: int) -> bool:
 			continue
 		_selected_id = machine.get_internal_id()
 		_selected_view_index = index
+		_potok_revert_sessions.clear()
 		_potok_selected_state_id = ""
 		_potok_selected_transition_id = ""
 		_potok_transition_feedback = ""
