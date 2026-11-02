@@ -50,6 +50,24 @@ func _run() -> void:
 	var bid: String = b.get_internal_id()
 	var ctx: FlowValueResolutionContext = first.get_value_resolution_context()
 	_check(not operand.resolve(ctx).success, "No ambient event packet available")
+	ctx.begin_event_packet_scope(aid)
+	ctx.record_event_packet(aid, &"hit", {"not_hp": 9})
+	var missing: FlowValueResult = operand.resolve(ctx)
+	_check(not missing.success and missing.diagnostic.code == &"event_payload_missing",
+		"Missing field returns exact stable diagnostic")
+	ctx.record_event_packet(aid, &"hit", {"hp": "9"})
+	var mismatch: FlowValueResult = operand.resolve(ctx)
+	_check(not mismatch.success and mismatch.diagnostic.code == &"event_payload_type_mismatch",
+		"Runtime string is never coerced to declared int")
+	var original_packet: Dictionary = {"hp": 9}
+	ctx.record_event_packet(aid, &"hit", original_packet)
+	original_packet["hp"] = 1
+	var detached: Dictionary = ctx.get_event_payload(&"hit")
+	detached["hp"] = -1
+	_check(operand.resolve(ctx).success and operand.resolve(ctx).value == 9,
+		"Stored event value is deep-copied from caller and reader")
+	ctx.end_event_packet_scope()
+	_check(not operand.resolve(ctx).success, "Scope exit clears all event data")
 	var seen: Array[String] = []
 	rt.event_consumed.connect(func(mid: String, event_name: StringName, _payload: Dictionary) -> void:
 		seen.append(mid + ":" + String(event_name))
