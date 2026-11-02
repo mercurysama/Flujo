@@ -71,6 +71,9 @@ jobs:
       - name: Fluo drawer integration baseline
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 100s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/fluo_drawer_integration_test.gd
+      - name: Potok-7F1C2B phase Duplicate SDK and UndoRedo focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 100s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_fsm_phase_block_duplicate_commands_test.gd
       - name: Potok-7F1C2A phase Move adjacent null and UndoRedo focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 100s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_fsm_phase_block_move_commands_test.gd
