@@ -260,6 +260,173 @@ func set_variable_complex_source(
 	return true
 
 
+
+
+## Potok 7C-1: explicit scalar authoring through immutable validation candidates.
+func set_fsm_machine_property(
+		controller: PVController, machine_id: String,
+		property_name: StringName, value: Variant
+) -> bool:
+	if not _can_edit_fsm_scalar(controller) or machine_id.is_empty():
+		return false
+	var graph: FlowGraph = controller.flow_graph
+	var machine: FlowStateMachineDefinition = _find_resource(
+		graph, Collection.STATE_MACHINES, machine_id
+	) as FlowStateMachineDefinition
+	if machine == null or not _fsm_scalar_valid(property_name, value, true):
+		return false
+	if property_name == &"initial_state_id" and not _fsm_valid_initial(machine, String(value)):
+		return false
+	var previous: Variant = machine.get(property_name)
+	if previous == value:
+		return false
+	var draft: FlowStateMachineDefinition = machine.duplicate(false) as FlowStateMachineDefinition
+	if draft == null or draft.get_internal_id() != machine_id:
+		return false
+	draft.set(property_name, value)
+	var replacements: Array = graph.state_machines.duplicate()
+	var machine_index: int = _find_index(replacements, machine_id)
+	if machine_index < 0:
+		return false
+	replacements[machine_index] = draft
+	if not _fsm_candidate_accepted(graph, replacements):
+		return false
+	_fsm_commit_scalar(controller, machine, property_name, value, previous)
+	return true
+
+
+func set_fsm_state_property(
+		controller: PVController, machine_id: String, state_id: String,
+		property_name: StringName, value: Variant
+) -> bool:
+	if not _can_edit_fsm_scalar(controller) or machine_id.is_empty() or state_id.is_empty():
+		return false
+	var graph: FlowGraph = controller.flow_graph
+	var machine: FlowStateMachineDefinition = _find_resource(
+		graph, Collection.STATE_MACHINES, machine_id
+	) as FlowStateMachineDefinition
+	if machine == null or not _fsm_scalar_valid(property_name, value, false):
+		return false
+	var state: FlowStateDefinition = null
+	var state_index: int = -1
+	for index: int in machine.states.size():
+		var candidate: FlowStateDefinition = machine.states[index]
+		if candidate != null and candidate.get_internal_id() == state_id:
+			state = candidate
+			state_index = index
+			break
+	if state == null:
+		return false
+	# Never disable the state currently selected by the owning initial-state ID.
+	if property_name == &"enabled" and value == false and machine.initial_state_id == state_id:
+		return false
+	var previous: Variant = state.get(property_name)
+	if previous == value:
+		return false
+	var state_draft: FlowStateDefinition = state.duplicate(false) as FlowStateDefinition
+	var machine_draft: FlowStateMachineDefinition = machine.duplicate(false) as FlowStateMachineDefinition
+	if state_draft == null or machine_draft == null or state_draft.get_internal_id() != state_id:
+		return false
+	state_draft.set(property_name, value)
+	var state_replacements: Array[FlowStateDefinition] = []
+	state_replacements.assign(machine.states)
+	state_replacements[state_index] = state_draft
+	machine_draft.states = state_replacements
+	var replacements: Array = graph.state_machines.duplicate()
+	var machine_index: int = _find_index(replacements, machine_id)
+	if machine_index < 0:
+		return false
+	replacements[machine_index] = machine_draft
+	if not _fsm_candidate_accepted(graph, replacements):
+		return false
+	_fsm_commit_scalar(controller, state, property_name, value, previous)
+	return true
+
+
+func _can_edit_fsm_scalar(controller: PVController) -> bool:
+	return is_instance_valid(controller) and _undo_redo != null \
+		and controller.flow_graph != null \
+		and controller.flow_graph.schema_version == FlowGraph.SCHEMA_VERSION_3 \
+		and controller.flow_graph.containers.is_empty()
+
+
+func _fsm_scalar_valid(property_name: StringName, value: Variant, machine: bool) -> bool:
+	match property_name:
+		&"display_name":
+			return value is String and not String(value).strip_edges().is_empty()
+		&"user_note":
+			return value is String
+		&"enabled":
+			return value is bool
+		&"auto_start":
+			return machine and value is bool
+		&"tick_mode":
+			return machine and value is int and value in [
+				FlowStateMachineDefinition.TickMode.PROCESS,
+				FlowStateMachineDefinition.TickMode.PHYSICS,
+				FlowStateMachineDefinition.TickMode.MANUAL
+			]
+		&"initial_state_id":
+			return machine and value is String
+	return false
+
+
+func _fsm_valid_initial(machine: FlowStateMachineDefinition, target_id: String) -> bool:
+	if target_id.is_empty():
+		return machine.states.is_empty()
+	for state: FlowStateDefinition in machine.states:
+		if state != null and state.enabled and state.get_internal_id() == target_id:
+			return true
+	return false
+
+
+func _fsm_candidate_accepted(graph: FlowGraph, replacements: Array) -> bool:
+	var existing: Dictionary[String, int] = _diagnostic_counts(
+		FlowGraphValidator.validate(graph).diagnostics
+	)
+	var candidate: FlowGraph = _candidate_with_collection(
+		graph, Collection.STATE_MACHINES, replacements
+	)
+	var validation: FlowValidationResult = FlowGraphValidator.validate(candidate)
+	_last_diagnostics = validation.diagnostics.duplicate()
+	for diagnostic: FlowDiagnostic in validation.diagnostics:
+		if diagnostic.severity != FlowDiagnostic.Severity.ERROR:
+			continue
+		var identity: String = _diagnostic_identity(diagnostic)
+		var existing_count: int = existing.get(identity, 0)
+		if existing_count > 0:
+			existing[identity] = existing_count - 1
+			continue
+		changed.emit()
+		return false
+	return true
+
+
+func _fsm_commit_scalar(
+		controller: PVController, resource: Resource,
+		property_name: StringName, value: Variant, previous: Variant
+) -> void:
+	_undo_redo.create_action(
+		"Edit Potok %s" % String(property_name),
+		UndoRedo.MERGE_DISABLE, controller, false, true
+	)
+	_undo_redo.add_do_method(self, &"_assign_fsm_scalar", controller, resource, property_name, value)
+	_undo_redo.add_undo_method(self, &"_assign_fsm_scalar", controller, resource, property_name, previous)
+	_undo_redo.commit_action()
+
+
+func _assign_fsm_scalar(
+		controller: PVController, resource: Resource,
+		property_name: StringName, value: Variant
+) -> void:
+	if not is_instance_valid(controller) or resource == null:
+		return
+	resource.set(property_name, value)
+	resource.emit_changed()
+	controller.notify_property_list_changed()
+	_refresh_diagnostics(controller.flow_graph)
+	changed.emit()
+
 ## Moves a selected resource by one array position, including across deliberate null slots.
 func move_resource(controller: PVController, collection: Collection, internal_id: String, direction: int) -> bool:
 	var graph: FlowGraph = controller.flow_graph if controller != null else null
