@@ -71,3 +71,22 @@ Todo es Flujo; todo fluye. 🌊
 - **7D-2:** [contract](fsm_phase7_7d2_event_payload_contract.md) `106354de39cdea1cfdaf7870c3be9814005dbc7e`. RED runtime/model `99244abd16397ca974899ab7901d9e1644a483b8`, `ad9852cfffad25baa2a2f5ee8862a660eab3e530`, workflow `c9f37d77bee38c44ac8e7fcfcb7a7e39ad305fe1`; new typed event field source `086a1a00a249ce947a60b8c6d0b797c2eddf0ddf`, ephemeral context `b483f3f549ca62eeb3e3c6bd985638346c6c995f`, condition validation `ba590913cbd9781d27e0af4611271e9dfd290b8d`, runtime scope `2dfb9a22f89a1567a554bf6468e8b5705a1ae941`, visual Tok input `67b636cec08e6357531f58f5a731d7b72e0b8d58`, Potok-only mode `ad5c1127db045ef82254dab4223cdae23e627535`, isolation/mismatch test `3a7c92f6e71d3d2072c9e1d7d01557b254be0762`.
 - [**Full GREEN 41382298522**](https://github.com/mercurysama/Flujo/actions/runs/41382298522) covers both 7D-1/2, 7C-2B and previous regressions. See [7D-1 result](fsm_phase7_7d1_result.md), [7D-2 result](fsm_phase7_7d2_result.md). Typed Event field is available within Potok Condition Tok, uses explicit event/key/type, exact BOOL/INT/FLOAT/STRING, last packet per named event on matching machine tick, and clears before Exit/Enter and other machines. No generic Tok popup behavior change.
 - **Next 7E:** integration persistence, save/reopen, focus/keyboard and final visual/Android human acceptance. Do not claim human QA, global CPU-time budget or that EVENT edges themselves evaluate payload conditions: payload conditions are fallback.
+
+
+## 7E — Recovery-safe acceptance lots (supersedes earlier 7B next-step note)
+
+The original **nine** phase-7 items remain required. 7A–7D cover items 1–6 with automated evidence, while 7E closes persistence (item 9), keyboard/focus (item 7) and manual touch/layout (item 8); successful headless editor tests do not certify human UI.
+
+- **7E-1A — saved-scene identity baseline (CURRENT):** contract \`fsm_phase7_7e1a_contract.md\`; one \`PVController\` in \`.tscn\`, one machine, two ordered states, stable graph/machine/state/transition/phase IDs, initial and transition target, phase order. Focal \`tests/model/flow_fsm_authored_scene_roundtrip_test.gd\`. No production code/schema changes; CI evidence pending.
+- **7E-1B — edited-model save cycle:** rename, reorder and structural operations via existing \`FlowGraphEditorCommands\`; repeated Undo/Redo before save, compare state/edge IDs and order on reopen; distinct editor test.
+- **7E-1C — Tok source persistence:** Bool Condition Tok \`#\`, nested operand types and typed Event field names/source IDs retain semantic values through save/reopen, and do not contain ephemeral payloads.
+- **7E-1D — repeated reopen and instance safety:** second save/reopen cycle and independent scene instances; assert no unexpected ID rewrite or mutable-state leakage.
+- **7E-2A — keyboard/FSM selection:** Enter/double-click, Up/Down, PageUp/PageDown and Ctrl variants, stable-ID selection, foreign editor shortcut preservation.
+- **7E-2B — Flusso focus/Revertir/Escape:** Alt and Alt+Shift traversal, focused control restoration after closing, Escape hierarchy, Cancel/stale selection and no unintended edits.
+- **7E-2C — Undo/Redo interaction regressions:** repeated edits plus selection/focus recovery across Inspector → Fluo → Flow/Flusso, no callbacks into freed controls.
+- **7E-3A — scroll/disposition:** real Fluo scroll containers, vertical/horizontal overflow, long settings and editor resizes; headless measurable assertions only.
+- **7E-3B — close and context restoration:** drawer placement, parent Inspector selection, scene change/controller removal, prior Process/Timer routes retained.
+- **7E-4A — desktop and Android review instructions:** reproducible Fedora Godot 4.7.2 and Android portrait/landscape scenarios; mark all manual slots PENDING until observed.
+- **7E-4B — consolidated human matrix handoff:** evidence templates, known limits and ready-to-review scope; release/pre-release packaging belongs to phase 11 and does not itself prove touch acceptance.
+
+Each lot has a narrow contract, focal test(s), applicable prior regression/CI, independent commit, result note and next lot. More splits (e.g. \`7E-1B1\`) are allowed if needed. Do **not** change phase-8/9 implementation without gap audits. Original phase-7 closure requires a functional one-state visual journey and a second-state transition through Inspector→Fluo→Flow/Flusso, plus manual review.

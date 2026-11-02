@@ -52,6 +52,9 @@ jobs:
           else
             echo 'FSM dynamic test missing; not a PASS'
           fi
+      - name: Potok-7E1A authored scene persistence focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 45s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . --script tests/model/flow_fsm_authored_scene_roundtrip_test.gd
       - name: Potok-7D2 Event field Condition Tok authoring focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 80s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_fsm_event_payload_tok_test.gd
