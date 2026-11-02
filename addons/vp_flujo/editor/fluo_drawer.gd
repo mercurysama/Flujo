@@ -323,7 +323,7 @@ func _build_interface() -> void:
 
 	_editor_scroll = ScrollContainer.new()
 	_editor_scroll.name = &"FluoEditorScroll"
-	_editor_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_editor_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	_editor_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	_editor_scroll.follow_focus = true
 	_editor_scroll.focus_mode = Control.FOCUS_ALL
@@ -334,6 +334,8 @@ func _build_interface() -> void:
 
 	_editor_scroll_content = VBoxContainer.new()
 	_editor_scroll_content.name = &"FluoEditorScrollContent"
+	# Keep native scalar fields readable in narrow drawers; overflow stays inside ScrollContainer.
+	_editor_scroll_content.custom_minimum_size.x = 320.0
 	_editor_scroll_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_editor_scroll_content.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_editor_scroll.add_child(_editor_scroll_content)
