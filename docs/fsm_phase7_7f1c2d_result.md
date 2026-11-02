@@ -11,7 +11,7 @@
 - `a382ee55293631ac9f80914601f4dee744c9749c`: Escape al cerrar diálogo devuelve foco a la lista exacta de fase, con guardas de grafo/callback.
 - `ae0c3e14422d5873eed9845c1d4f2adf1e2a2bd6`: extiende prueba con Escape sin borrado, sin cerrar drawer ni registrar UndoRedo.
 - `25c53e758cf7542fc45b7505adbbf62fdfe7aa7b`: callbacks de botones antiguos bloqueados cuando la UI ha sido reconstruida mediante WeakRef de control.
-- **CI consolidado:** [Actions 41515628731](https://github.com/mercurysama/Flujo/actions/runs/41515628731). Confirmar status y número total de pasos antes de declararlo GREEN.
+- **GREEN consolidado confirmado:** [Actions 41515628731](https://github.com/mercurysama/Flujo/actions/runs/41515628731) **completed SUCCESS, 70/70 pasos**, cero fallos, en commit `25c53e758cf7542fc45b7505adbbf62fdfe7aa7b`. La prueba focal UI incluyó confirmación, Escape, Cancel, UndoRedo y regresiones nativas Godot 4.7.2.
 
 ## Comportamiento
 
