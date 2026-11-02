@@ -460,3 +460,8 @@ Todo es Flujo; todo fluye. 🌊
 
 - Latest 7F-1D4 source: `1b65f06370a02a84fe5bc080428e683c015300e0`; historical catalog/CI baseline [41528630526](https://github.com/mercurysama/Flujo/actions/runs/41528630526) completed SUCCESS 76/76. A new [Fedora preflight and F01–F05 evidence guide](fsm_phase7_7f2a_fedora_preflight.md) was committed as `67be60407e46aaee898fb2392228c6a0d85710f3` without modifying runtime, editor, schema or test semantics.
 - Preflight keeps `git status`, worktree checks and Godot executor version read-only; it disallows guessing Fedora paths, overwriting `demo/main.tscn` or marking a test PASS without maintainer interaction. **Physical acceptance remains 0/25**, F01–F15 and A01–A10 PENDING. Next: collect F01–F05 real evidence and only then diagnose visual defects, then next batches.
+
+## 2026-11-02 — Potok 7F-2B Fedora F06–F10 manual checklist
+
+- Baseline `2ccb8133ea4fea3548d18e4a98716c6e7596d905`; [CI 41530251175](https://github.com/mercurysama/Flujo/actions/runs/41530251175) completed SUCCESS, confirming prior documentation checkpoint. [7F-2B Fedora guide](fsm_phase7_7f2b_fedora_edit_operations.md) added in `7d7be1119b96442889f055f862ba783bf51115ac` for live Flusso editing/closing, Revertir plus UndoRedo, adjacent Move/null boundary, independent Duplicate, modal Delete Cancel/Escape/Confirm and UndoRedo, with step-by-step expected evidence. No editor, runtime, schema or demo changes were made.
+- Test-status invariant: the guide prepares physical evaluation but performs none. **All 15 Fedora + 10 Android cases remain PENDING**, including F01–F05. Next human gate: recorded Fedora evidence, or next document microblock F11–F15 if preparing the remaining procedures. Never infer visual approval from green CI.
