@@ -103,6 +103,22 @@ func _run() -> void:
 	delete_button = _button("Enter", "Delete")
 	delete_button.pressed.emit()
 	await _frames(3)
+	var escape_key := InputEventKey.new()
+	escape_key.pressed = true
+	escape_key.keycode = KEY_ESCAPE
+	drawer.call("_input", escape_key)
+	await _frames(3)
+	_check(drawer.is_open() and state.enter_blocks.size() == 4
+		and history.get_version() == old_version + 2
+		and not is_instance_valid(editor.find_child(
+			"PotokStructureDeleteDialog", true, false)),
+		"Escape cancels phase deletion without exiting Fluo")
+	list = _list("Enter")
+	_check(list != null and list.has_focus(),
+		"Cancel by Escape returns keyboard focus to owning phase list")
+	delete_button = _button("Enter", "Delete")
+	delete_button.pressed.emit()
+	await _frames(3)
 	dialog = editor.find_child("PotokStructureDeleteDialog", true, false) as ConfirmationDialog
 	if dialog != null:
 		dialog.confirmed.emit()
