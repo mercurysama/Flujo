@@ -57,6 +57,9 @@ func _run() -> void:
 		and _button(property, "PotokTransitionMoveDown") != null
 		and _button(property, "PotokTransitionDelete") != null,
 		"All native edge structure controls visible")
+	_check(not _button(property, "PotokStateDuplicate").disabled
+		and not _button(property, "PotokTransitionDuplicate").disabled,
+		"Initially selected state and edge enable their structural actions")
 	var count_before: int = machine.states.size()
 	_click(property, "PotokStateAdd")
 	await _frames(6)
