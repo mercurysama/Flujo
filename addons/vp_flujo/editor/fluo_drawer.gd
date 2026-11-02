@@ -410,6 +410,9 @@ func _input(event: InputEvent) -> void:
 		if _variable_editor != null and _variable_editor.close_potok_transient_dialog():
 			_mark_input_handled()
 			return
+		if _variable_editor != null and _variable_editor.close_potok_phase_block_details():
+			_mark_input_handled()
+			return
 		if _variable_editor != null and _variable_editor.close_ready_block_details():
 			_mark_input_handled()
 			return
