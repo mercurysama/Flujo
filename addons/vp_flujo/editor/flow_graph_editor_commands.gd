@@ -427,6 +427,117 @@ func _assign_fsm_scalar(
 	_refresh_diagnostics(controller.flow_graph)
 	changed.emit()
 
+## Potok 7C-2A: edit one existing transition without touching authored identities.
+func set_fsm_transition_property(
+		controller: PVController, machine_id: String, state_id: String,
+		transition_id: String, property_name: StringName, value: Variant
+) -> bool:
+	if not _can_edit_fsm_scalar(controller) or machine_id.is_empty() \
+			or state_id.is_empty() or transition_id.is_empty():
+		return false
+	var graph: FlowGraph = controller.flow_graph
+	var machine: FlowStateMachineDefinition = _find_resource(
+		graph, Collection.STATE_MACHINES, machine_id
+	) as FlowStateMachineDefinition
+	if machine == null:
+		return false
+	var source: FlowStateDefinition = null
+	var source_index: int = -1
+	for i: int in machine.states.size():
+		var state: FlowStateDefinition = machine.states[i]
+		if state != null and state.get_internal_id() == state_id:
+			source = state
+			source_index = i
+			break
+	if source == null:
+		return false
+	var edge: FlowStateTransitionDefinition = null
+	var edge_index: int = -1
+	for i: int in source.transitions.size():
+		var item: FlowStateTransitionDefinition = source.transitions[i]
+		if item != null and item.get_internal_id() == transition_id:
+			edge = item
+			edge_index = i
+			break
+	if edge == null or not _fsm_transition_value_valid(machine, edge, property_name, value):
+		return false
+	var previous: Variant = edge.get(property_name)
+	if previous == value:
+		return false
+	# Shallow detached copies preserve IDs and references to unedited children.
+	# The validator sees the proposed change without mutating the live graph.
+	var edge_draft: FlowStateTransitionDefinition = edge.duplicate(false) as FlowStateTransitionDefinition
+	var source_draft: FlowStateDefinition = source.duplicate(false) as FlowStateDefinition
+	var machine_draft: FlowStateMachineDefinition = machine.duplicate(false) as FlowStateMachineDefinition
+	if edge_draft == null or source_draft == null or machine_draft == null:
+		return false
+	if edge_draft.get_internal_id() != transition_id \
+			or source_draft.get_internal_id() != state_id \
+			or machine_draft.get_internal_id() != machine_id:
+		return false
+	edge_draft.set(property_name, value)
+	var edges: Array[FlowStateTransitionDefinition] = []
+	edges.assign(source.transitions)
+	edges[edge_index] = edge_draft
+	source_draft.transitions = edges
+	var states: Array[FlowStateDefinition] = []
+	states.assign(machine.states)
+	states[source_index] = source_draft
+	machine_draft.states = states
+	var machines: Array = graph.state_machines.duplicate()
+	var machine_index: int = _find_index(machines, machine_id)
+	if machine_index < 0:
+		return false
+	machines[machine_index] = machine_draft
+	if not _fsm_candidate_accepted(graph, machines):
+		return false
+	_fsm_commit_scalar(controller, edge, property_name, value, previous)
+	return true
+
+
+func _fsm_transition_value_valid(
+		machine: FlowStateMachineDefinition, edge: FlowStateTransitionDefinition,
+		property_name: StringName, value: Variant
+) -> bool:
+	match property_name:
+		&"display_name":
+			return value is String and not String(value).strip_edges().is_empty()
+		&"user_note":
+			return value is String
+		&"enabled":
+			return value is bool
+		&"priority":
+			return value is int
+		&"target_state_id":
+			if not value is String:
+				return false
+			for state: FlowStateDefinition in machine.states:
+				if state != null and state.get_internal_id() == value:
+					return true
+			return false
+		&"event_name":
+			return value is StringName and (
+				edge.trigger != FlowStateTransitionDefinition.Trigger.EVENT
+				or not String(value).strip_edges().is_empty()
+			)
+		&"condition":
+			return value is FlowValueSource \
+				and (value as FlowValueSource).get_value_type() == Variant.Type.TYPE_BOOL \
+				and (value as FlowValueSource).is_valid()
+		&"trigger":
+			if not value is int or value not in [
+				FlowStateTransitionDefinition.Trigger.EVENT,
+				FlowStateTransitionDefinition.Trigger.CONDITION
+			]:
+				return false
+			if value == FlowStateTransitionDefinition.Trigger.EVENT:
+				return not String(edge.event_name).strip_edges().is_empty()
+			return edge.condition != null \
+				and edge.condition.get_value_type() == Variant.Type.TYPE_BOOL \
+				and edge.condition.is_valid()
+	return false
+
+
 ## Moves a selected resource by one array position, including across deliberate null slots.
 func move_resource(controller: PVController, collection: Collection, internal_id: String, direction: int) -> bool:
 	var graph: FlowGraph = controller.flow_graph if controller != null else null
