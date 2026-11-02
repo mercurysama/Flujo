@@ -85,6 +85,10 @@ func _run() -> void:
 		"Moving first state out of bounds is rejected")
 	_check(not commands.delete_fsm_state(controller, mid, bid),
 		"Incoming references prevent deletion of target state")
+	toward_b.enabled = false
+	_check(not commands.delete_fsm_state(controller, mid, bid),
+		"Disabled inbound edges also protect state IDs from orphaning")
+	toward_b.enabled = true
 	_check(machine.states.size() == 4 and machine.initial_state_id == aid,
 		"Denied deletion leaves state order and initial state intact")
 	var created_edge: String = commands.add_fsm_transition(controller, mid, duplicated)
