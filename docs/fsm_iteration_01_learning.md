@@ -313,3 +313,11 @@ Todo es Flujo; todo fluye. 🌊
 - [**CI 41402796226**](https://github.com/mercurysama/Flujo/actions/runs/41402796226) **SUCCESS 58/58**. Native long-content FSM test exercises 25 states/12 transitions, real geometry at 1200×800 and 480×640, both sides, scroll range, focus-follow, retained IDs, graph validation. Prior Ready Revertir/Fluo drawer and Potok keyboard/UndoRedo/runtimes remain green.
 - Do not confuse native headless scroll range with desktop/Android touch/accessibility approval. Repository `$flujo-baseline`, `$flujo-prove` and `$flujo-fluo-maintenance` read as procedures only, not executable standalone Skills, so formal READY/PASA and local Fedora worktree status remain unverified.
 - **Next:** 7E-3B context restoration and scene/controller changes; retain 7E-4 manual matrix and original phase-block Add visual authoring closure audit.
+
+
+## 2026-11-02 — Potok 7E-3B controller and scene context close
+
+- Contract `decc47054f915676e6b9455bf59d78f7f7ba357c`; test-first `3af7cc149b7b1a0436b192e4774c1bd7c5b53c35`, [CI 41403809934](https://github.com/mercurysama/Flujo/actions/runs/41403809934) **RED** characterized four stale open/context cases, without script parse problems. Minimal `fluo_drawer.gd` fix `9240aa06651bc600d18bfb99d06f3ec0b8b2e73f`; [CI 41403989846](https://github.com/mercurysama/Flujo/actions/runs/41403989846) **SUCCESS 59/59**.
+- Distinguish **normal user close** (restores valid external Inspector-like focus) from **forced controller/scene context invalidation** (clear `_focus_reference`, close before rebinding to new controller or on selected `tree_exited`; never steal an unrelated focus control). Same-controller Potok→Ready Process switching stays open, left/right position persists, and stale refresh never reopens old content. Test actual node detachment in live SceneTree, not the Godot editor's scene tab UI.
+- Versioned `$flujo-baseline`, `$flujo-prove`, `$flujo-fluo-maintenance` read as remote procedures; no direct standalone Skill invocation, formal READY/PASA or Fedora staged/worktree inspection. Manual desktop/Android UI and full phase-7 Add-block flow still pending.
+- **Next:** 7E-4A reproducible manual QA matrix, 7E-4B consolidation, then original phase-7 authoring gap audit. No merge to `main`.
