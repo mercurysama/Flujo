@@ -202,3 +202,10 @@ Todo es Flujo; todo fluye. 🌊
 - Inspector stable-ID activation `d9f5eb66f7cad98e1754a7a121dfb71747451cf5`, Fluo state hierarchy `1bbfb56dc735c242ca70e2729f58dd04f442b1be`, keyboard/Escape focus `ba8fb88caecb0001b9f2e780a2bf808bb89ce2f9`, reorder/removed-controller test `1956397ce8cda4d74ea1153afae389611518222c`. [Full CI 41365966187](https://github.com/mercurysama/Flujo/actions/runs/41365966187) SUCCESS.
 - Existing Fluo and Flow view, state list, initial marker and Enter/Update/Exit presentation are read-only. Current editor focus, machine-ID synchronization and unchanged Ready paths proven by automated editor focal. Human Android UI acceptance remains batched.
 - Resume using `docs/fsm_phase7_7b_result.md` and `docs/fsm_phase7_microblocks.md`. Next 7C-1 small property-editing commands/Flusso, then 7C-2 transitions and deletion, 7D Condition Tok/payload bridge and 7E manual/persistence checks; no full phase-7 closure yet.
+
+## 2026-11-01 — Potok 7C-1 validated Flusso scalar forms and Undo/Redo
+
+- Contract `92eb751db2d115144f71da8a05f4c8d8bd6e4c05`; RED test `70d5189ba3a9c01569bdc07cac6c2be0048f0c5b`, workflow `436ae51cee8ab871e973c98277a0d534e11aebc0`; expected [RED CI 41368002884](https://github.com/mercurysama/Flujo/actions/runs/41368002884).
+- Commands `d4e69b297ac34c524ac08b1870b7d5035535bbd3`, Flusso editor `816e2a1115c4b68dcccb8bb36e5734ed59f61d36`, guard-test `5f7c38566d46495040c8aa46ea873948962ab29d`, enhanced UI test `5089266f20c1ec568692922fa3e75ee5cf4953ca`. [GREEN CI 41368408164](https://github.com/mercurysama/Flujo/actions/runs/41368408164) all FSM/model/editor regressions.
+- Machine fields name/enabled/autostart/tick/note/initial ID; state fields name/enabled/note. Detached candidate validation, exact ID ownership and `EditorUndoRedoManager` single-action edits. Native Flusso widgets, texts committed via Enter (not on typing); unchanged legacy state `is_initial`. Current initial state cannot be disabled.
+- Read `docs/fsm_phase7_7c1_result.md` before **7C-2A** transition metadata authoring and **7C-2B** structural state/edge commands. Condition Tok/event payload integration and Android manual QA not complete.
