@@ -6,7 +6,7 @@
 
 - `8981530f143bc48c75fba9d2fb0ad3d216c5a29c`: prueba `tests/editor/flow_fsm_sdk_owner_revert_journey_test.gd`.
 - `a996b60d4a97f13b363668ec44290e3f9a66cee5`: registro de test focal en `.github/workflows/flujo-fsm.yml`.
-- [GitHub Actions 41523995815](https://github.com/mercurysama/Flujo/actions/runs/41523995815): el focal SDK 7F-1D2B pasó; la conclusión global del workflow debe verificarse y anotarse antes de marcar la suite GREEN.
+- La prueba focal 7F-1D2B pasó en [Actions 41523995815](https://github.com/mercurysama/Flujo/actions/runs/41523995815); ese run permaneció marcado `in_progress` al consultarlo aunque mostraba 73/73 pasos completados. **GREEN global confirmado independientemente** en [Actions 41524160884](https://github.com/mercurysama/Flujo/actions/runs/41524160884): `completed SUCCESS`, **74/74 pasos**, cero fallos, commit documental `6546216178bceb560cd7e0021f2f6859116fffeb` sobre la misma implementación y test.
 
 ## Qué comprueba
 
