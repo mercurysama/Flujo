@@ -3682,7 +3682,7 @@ func _potok_confirm_delete() -> void:
 	var controller: PVController = _potok_delete_controller_ref.get_ref() as PVController \
 		if _potok_delete_controller_ref != null else null
 	var same_context: bool = is_instance_valid(controller) \
-		and controller == _active_controller() \
+		and controller.flow_graph != null and controller == _active_controller() \
 		and mid == _selected_id and sid == _potok_selected_state_id \
 		and (kind == &"state" or (kind == &"phase_block"
 			and phase == _potok_selected_phase
@@ -3925,6 +3925,9 @@ func close_potok_transient_dialog() -> bool:
 	if is_instance_valid(_potok_condition_editor) and _potok_condition_editor.visible:
 		_potok_close_condition_editor()
 	elif is_instance_valid(_potok_delete_dialog) and _potok_delete_dialog.visible:
+		if _potok_delete_kind == &"phase_block":
+			_potok_cancel_delete_dialog()
+			return true
 		_potok_close_delete_dialog()
 	else:
 		return false
