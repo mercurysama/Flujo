@@ -410,7 +410,7 @@ Todo es Flujo; todo fluye. 🌊
 
 ## 2026-11-02 — Potok 7F-1C2E end-to-end structural persistence
 
-- Verified baseline `b406c690835aeac054d13d4684cf46f586ece275`, [CI 41516183343](https://github.com/mercurysama/Flujo/actions/runs/41516183343) SUCCESS. Added scene roundtrip focal `a52e00c7396b964f9338a1f2272c6473c1c83cfb` and workflow step `fd9204edd55a5acba163027597c10793884842fe`. [Actions 41517598801](https://github.com/mercurysama/Flujo/actions/runs/41517598801): dedicated 7F-1C2E test passed; total suite completion should be checked at GitHub before claiming GREEN.
+- Verified baseline `b406c690835aeac054d13d4684cf46f586ece275`, [CI 41516183343](https://github.com/mercurysama/Flujo/actions/runs/41516183343) SUCCESS. Added scene roundtrip focal `a52e00c7396b964f9338a1f2272c6473c1c83cfb` and workflow step `fd9204edd55a5acba163027597c10793884842fe`. [GREEN Actions 41517598801](https://github.com/mercurysama/Flujo/actions/runs/41517598801) completed **71/71 SUCCESS**, zero failed; native Godot 4.7.2 test and historical regressions passed.
 - Lesson: test sequential structural Move/Duplicate/Delete and Undo/Redo through actual `EditorUndoRedoManager`, then serialize the edited graph through `PackedScene` and reload with cache ignored. Compare persistent machine/state/block IDs, exact ordering and null-slot positions, SDK external script and value, unaffected Ready and sibling states, schema and validator.
 - 7F-1C2A–E code and targeted native UI tests now present. Remaining physical acceptance **15 Fedora + 10 Android pending**, SDK special structured document UI excluded, no local Fedora worktree audit or merge to main. **Next 7F-1D** end-to-end user journey; then 7F-2.
 - [7F-1C2E result](fsm_phase7_7f1c2e_result.md).
