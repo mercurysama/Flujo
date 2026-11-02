@@ -117,6 +117,20 @@ func _run() -> void:
 	var session: Dictionary = editor.get("_potok_phase_block_session")
 	_check((session.get("values", {}) as Dictionary).get(&"text", "") == "persist",
 		"Reopening captures the new opening state")
+	var escape_key := InputEventKey.new()
+	escape_key.pressed = true
+	escape_key.keycode = KEY_ESCAPE
+	drawer.call("_input", escape_key)
+	await _frames(6)
+	_check(drawer.is_open() and drawer.find_child(
+		"PotokPhaseBlockProperties", true, false) == null and block.text == "persist",
+		"First Escape closes only phase Flusso and preserves live edits")
+	list = _list("Enter")
+	_check(list != null and list.has_focus(),
+		"Escape restores keyboard focus to exact Enter phase list")
+	if list != null:
+		list.item_activated.emit(1)
+	await _frames(5)
 	var exit_list: ItemList = _list("Exit")
 	if exit_list != null:
 		exit_list.select(0)
