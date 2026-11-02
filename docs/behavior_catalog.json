@@ -1309,6 +1309,88 @@
         "tests/model/flow_akis_runtime_lot_09_test.tscn"
       ],
       "notes": "Lote 10F compatibility correction after the Lote 09 complex Variable extension. Fresh Godot 4.7.2 execution is pending."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-PHASE-UI-001",
+      "area": "Potok phase editor and structural native Fluo journey",
+      "precondition": "A schema 3 PVController machine/state is selected in the existing Fluo drawer with Enter, Update and Exit phase lists.",
+      "public_action": "Add/activate phase blocks, edit in Flusso, close, Move, Duplicate, Delete through Cancel/Confirm and Undo/Redo.",
+      "expected_result": "Phase-owned block IDs, edited text, physical ordering and deliberate null slots remain consistent; Delete only commits after confirmation and undo restores exact resources.",
+      "invariants": [
+        "One existing Fluo/Flusso surface; no duplicated Inspector Blocks list.",
+        "Stable phase/block IDs and controller/state ownership guard all actions.",
+        "Cancel and Escape do not write to persistent resources or history.",
+        "Ready, sibling state and other phases remain isolated."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/editor/flow_fsm_phase_user_journey_test.gd",
+        "tests/editor/flow_fsm_phase_block_actions_ui_test.gd",
+        "tests/editor/flow_fsm_phase_block_move_commands_test.gd",
+        "tests/editor/flow_fsm_phase_block_duplicate_commands_test.gd",
+        "tests/editor/flow_fsm_phase_block_delete_commands_test.gd"
+      ],
+      "notes": "Potok 7F-1D1 and 7F-1C2 automated evidence: GitHub Actions 41521212041 SUCCESS 72/72; still requires physical review for focus and touch."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SDK-001",
+      "area": "Potok external block SDK phase authoring, typed editing and stale ownership",
+      "precondition": "An approved manual_output:output SDK package is registered and a schema 3 Potok machine/state is opened in Fluo.",
+      "public_action": "Add external block to Enter, Update and Exit, edit typed Flusso properties, Revertir, Duplicate/Delete with modal, UndoRedo, and switch state/machine/controller.",
+      "expected_result": "External block script, generated unique IDs and supported typed values survive operations; callbacks retained from old contexts cannot mutate unrelated resources or create UndoRedo entries.",
+      "invariants": [
+        "Never replace SDK FlowBlock with a built-in block or duplicate a generic editor.",
+        "Render and write only approved descriptor properties.",
+        "Revertir uses the session opening snapshot and one atomic UndoRedo action.",
+        "Null slots and other controllers' graphs remain untouched."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/editor/flow_fsm_sdk_three_phase_journey_test.gd",
+        "tests/editor/flow_fsm_sdk_owner_revert_journey_test.gd",
+        "tests/editor/flow_fsm_sdk_delete_journey_test.gd"
+      ],
+      "notes": "Potok 7F-1D2A/B/C; GitHub Actions 41525063836 completed SUCCESS 75/75. SDK scope is the tested fixture, not every possible external package."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-PERSIST-001",
+      "area": "Potok editor UI phase edits and external SDK scene roundtrip",
+      "precondition": "A schema 3 scene contains a PVController, Potok machine, SDK block, sibling state, Ready and phase collections with deliberate null positions.",
+      "public_action": "Edit external Flusso properties and perform structural phase actions in Fluo; save PackedScene, reopen with ResourceLoader cache ignored and validate graph.",
+      "expected_result": "Machine/state/block IDs, exact null slots, edited SDK script/message, Update/Exit, Ready and sibling state survive actual .tscn serialization and re-instantiation.",
+      "invariants": [
+        "No runtime/editor boundary is crossed in serialized output.",
+        "Schema version remains 3; no migration is triggered.",
+        "Temporary scenes are cleaned and do not overwrite user scenes."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": [
+        "tests/editor/flow_fsm_sdk_ui_scene_roundtrip_test.gd",
+        "tests/editor/flow_fsm_phase_structure_roundtrip_test.gd",
+        "tests/editor/flow_fsm_phase_sdk_roundtrip_test.gd"
+      ],
+      "notes": "Potok 7F-1D3 GitHub Actions 41526101676 completed SUCCESS 76/76; does not imply visual acceptance on devices."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-MANUAL-001",
+      "area": "Potok Phase 7 Fedora and Android final visual acceptance",
+      "precondition": "A maintainer opens the exact audited Potok feature-branch revision in Godot 4.7.2 and uses the 7F-2 acceptance fixtures.",
+      "public_action": "Execute 15 Fedora desktop and 10 Android editor scenarios for activation, focus, navigation, SDK fields, structural mutations, keyboard/touch, orientation and scene persistence.",
+      "expected_result": "Each of 25 scenarios is independently marked PASS with a reproducible evidence record, and the maintainer explicitly approves the visual experience before release.",
+      "invariants": [
+        "GitHub headless CI cannot change manual acceptance from PENDING to approved.",
+        "Android prior preview load/render evidence does not complete its 10 scenarios.",
+        "The main branch is untouched until separately authorized."
+      ],
+      "coverage": "manual",
+      "baseline_status": "manual_pending",
+      "test_paths": [
+        "docs/fsm_phase7_7f2_manual_acceptance_matrix.md"
+      ],
+      "notes": "7F-1D4 acceptance matrix created 2026-11-02; 15 Fedora + 10 Android all PENDING."
     }
   ]
 }
