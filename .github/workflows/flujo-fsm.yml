@@ -59,6 +59,18 @@ jobs:
           else
             echo 'FSM dynamic test missing; not a PASS'
           fi
+      - name: Fluo Process Timer Inspector and Revertir baseline
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 150s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_process_timer_editor_test.gd
+      - name: Fluo owned-property Revertir baseline
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 100s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_revert_owned_properties_editor_test.gd
+      - name: Fluo drawer focus and Escape baseline
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 100s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/fluo_drawer_test.gd
+      - name: Fluo drawer integration baseline
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 100s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/fluo_drawer_integration_test.gd
       - name: Potok-7E2B1 Potok Alt traversal and modal Escape focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 80s ./Godot_v4.7.2-stable_linux.x86_64 --headless --editor --path . --script tests/editor/flow_fsm_potok_flusso_escape_test.gd
