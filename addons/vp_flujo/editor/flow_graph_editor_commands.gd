@@ -721,6 +721,78 @@ func add_fsm_phase_block_by_authoring_id(
 	return new_block.get_internal_id()
 
 
+## Potok 7F-1C2B: duplicate one block within its exact owner phase.
+## Uses the model's deep copy with a fresh persistent ID and retains SDK script.
+func duplicate_fsm_phase_block(
+		controller: PVController, machine_id: String, state_id: String,
+		phase: StringName, block_id: String
+) -> String:
+	var property_name: StringName = _fsm_phase_property(phase)
+	if property_name.is_empty() or block_id.is_empty():
+		return ""
+	var context: Dictionary = _fsm_edge_context(controller, machine_id, state_id)
+	if context.is_empty():
+		return ""
+	var machine: FlowStateMachineDefinition = context["machine"]
+	var state: FlowStateDefinition = context["state"]
+	var original: Array[FlowBlock] = []
+	original.assign(state.get(property_name))
+	var index: int = -1
+	for i: int in original.size():
+		var candidate: FlowBlock = original[i]
+		if candidate != null and candidate.get_internal_id() == block_id:
+			index = i
+			break
+	if index < 0:
+		return ""
+	var source: FlowBlock = original[index]
+	var copied: FlowBlock = source.duplicate_with_new_id()
+	if copied == null or copied == source or copied.get_internal_id().is_empty() \
+			or copied.get_internal_id() == block_id:
+		return ""
+	# Preserve user-supplied names as the base and choose a unique local copy name.
+	var base_name: String = _block_display_name(source).strip_edges() + " Copy"
+	var candidate_name: String = base_name
+	var suffix: int = 2
+	var used: Dictionary[String, bool] = {}
+	for block: FlowBlock in original:
+		if block != null:
+			used[_block_display_name(block)] = true
+	while used.has(candidate_name):
+		candidate_name = "%s %d" % [base_name, suffix]
+		suffix += 1
+	copied.display_name = candidate_name
+	# Deep copy must not retain the original object's external script pointer as
+	# a different package. Resource.duplicate(true) already preserves the script.
+	if source.get_script() != copied.get_script():
+		return ""
+	var updated: Array[FlowBlock] = original.duplicate()
+	updated.insert(index + 1, copied)
+	var draft: FlowStateDefinition = state.duplicate(false) as FlowStateDefinition
+	if draft == null or draft.get_internal_id() != state_id:
+		return ""
+	draft.set(property_name, updated)
+	var states: Array[FlowStateDefinition] = []
+	states.assign(machine.states)
+	states[int(context["state_index"])] = draft
+	if not _fsm_structure_candidate(
+			controller.flow_graph, machine, states, machine.initial_state_id
+	):
+		return ""
+	_undo_redo.create_action(
+		"Duplicate Potok %s Block" % String(phase).capitalize(),
+		UndoRedo.MERGE_DISABLE, controller, false, true
+	)
+	_undo_redo.add_do_method(
+		self, &"_fsm_assign_phase_blocks", controller, state, property_name, updated
+	)
+	_undo_redo.add_undo_method(
+		self, &"_fsm_assign_phase_blocks", controller, state, property_name, original
+	)
+	_undo_redo.commit_action()
+	return copied.get_internal_id()
+
+
 ## Potok 7F-1C2A: adjacent Move in one explicitly owned phase.
 ## Deliberate null slots are barriers, never silently compacted or skipped.
 func move_fsm_phase_block(
