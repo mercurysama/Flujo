@@ -2439,6 +2439,136 @@ func _render_potok_transitions(parent: Container, state: Dictionary, states: Arr
 	list.item_selected.connect(_on_potok_transition_selected.bind(list))
 
 
+## Flusso fields bind only to an existing selected transition; no implicit creation.
+func _render_potok_transition_properties(
+		parent: Container, edge: Dictionary, states: Array
+) -> void:
+	var form := VBoxContainer.new()
+	form.name = &"PotokTransitionProperties"
+	parent.add_child(form)
+	var title := Label.new()
+	title.text = "Flusso · Transition"
+	form.add_child(title)
+	var mid: String = _selected_id
+	var sid: String = _potok_selected_state_id
+	var eid: String = String(edge.get("id", ""))
+	_potok_transition_text_field(form, "Name", "PotokTransitionName",
+		String(edge.get("name", "")), mid, sid, eid, &"display_name")
+	var enabled := CheckBox.new()
+	enabled.name = &"PotokTransitionEnabled"
+	enabled.text = "Enabled"
+	enabled.focus_mode = Control.FOCUS_ALL
+	enabled.set_pressed_no_signal(bool(edge.get("enabled", true)))
+	enabled.toggled.connect(_on_potok_transition_bool.bind(mid, sid, eid, &"enabled"))
+	form.add_child(enabled)
+	var priority := SpinBox.new()
+	priority.name = &"PotokTransitionPriority"
+	priority.focus_mode = Control.FOCUS_ALL
+	priority.min_value = -1000000
+	priority.max_value = 1000000
+	priority.step = 1
+	priority.value = int(edge.get("priority", 0))
+	priority.value_changed.connect(_on_potok_transition_priority.bind(mid, sid, eid))
+	form.add_child(priority)
+	var target := OptionButton.new()
+	target.name = &"PotokTransitionTarget"
+	target.focus_mode = Control.FOCUS_ALL
+	for row: Dictionary in states:
+		var id: String = String(row.get("id", ""))
+		if id.is_empty():
+			continue
+		var item: int = target.item_count
+		target.add_item(String(row.get("name", "State")))
+		target.set_item_metadata(item, id)
+		if id == String(edge.get("target_state_id", "")):
+			target.select(item)
+	target.item_selected.connect(_on_potok_transition_target.bind(target, mid, sid, eid))
+	form.add_child(target)
+	var trigger := OptionButton.new()
+	trigger.name = &"PotokTransitionTrigger"
+	trigger.focus_mode = Control.FOCUS_ALL
+	trigger.add_item("Condition")
+	trigger.add_item("Event")
+	trigger.select(clampi(int(edge.get("trigger", 0)), 0, 1))
+	trigger.item_selected.connect(_on_potok_transition_trigger.bind(mid, sid, eid))
+	form.add_child(trigger)
+	_potok_transition_text_field(form, "Event", "PotokTransitionEvent",
+		String(edge.get("event_name", "")), mid, sid, eid, &"event_name")
+	var status := Label.new()
+	status.name = &"PotokTransitionConditionStatus"
+	status.text = "Condition: configured (Tok editor in 7D)" \
+		if bool(edge.get("condition_present", false)) else "Condition: not configured (Tok editor in 7D)"
+	form.add_child(status)
+	_potok_transition_text_field(form, "Note", "PotokTransitionNote",
+		String(edge.get("note", "")), mid, sid, eid, &"user_note")
+
+
+func _potok_transition_text_field(
+		parent: Container, label_text: String, control_name: String, value: String,
+		mid: String, sid: String, eid: String, property_name: StringName
+) -> void:
+	var label := Label.new()
+	label.text = label_text
+	parent.add_child(label)
+	var input := LineEdit.new()
+	input.name = StringName(control_name)
+	input.focus_mode = Control.FOCUS_ALL
+	input.text = value
+	input.text_submitted.connect(
+		_on_potok_transition_text.bind(mid, sid, eid, property_name)
+	)
+	parent.add_child(input)
+
+
+func _on_potok_transition_text(
+		value: String, mid: String, sid: String, eid: String, field: StringName
+) -> void:
+	var typed_value: Variant = StringName(value) if field == &"event_name" else value
+	_potok_commit_transition(mid, sid, eid, field, typed_value)
+
+
+func _on_potok_transition_bool(
+		value: bool, mid: String, sid: String, eid: String, field: StringName
+) -> void:
+	_potok_commit_transition(mid, sid, eid, field, value)
+
+
+func _on_potok_transition_priority(
+		value: float, mid: String, sid: String, eid: String
+) -> void:
+	_potok_commit_transition(mid, sid, eid, &"priority", int(round(value)))
+
+
+func _on_potok_transition_target(
+		index: int, control: OptionButton, mid: String, sid: String, eid: String
+) -> void:
+	if not is_instance_valid(control) or index < 0 or index >= control.item_count:
+		return
+	_potok_commit_transition(
+		mid, sid, eid, &"target_state_id", String(control.get_item_metadata(index))
+	)
+
+
+func _on_potok_transition_trigger(
+		index: int, mid: String, sid: String, eid: String
+) -> void:
+	_potok_commit_transition(mid, sid, eid, &"trigger", index)
+
+
+func _potok_commit_transition(
+		mid: String, sid: String, eid: String, field: StringName, value: Variant
+) -> void:
+	if not is_potok_machine_view() or _commands == null or mid != _selected_id \
+			or sid != _potok_selected_state_id or eid != _potok_selected_transition_id:
+		return
+	var controller: PVController = _active_controller()
+	if controller == null or controller.flow_graph == null:
+		return
+	_commands.set_fsm_transition_property(controller, mid, sid, eid, field, value)
+	# Revert the control from the authoritative graph on rejection or no-op.
+	_request_rebuild()
+
+
 func _on_potok_transition_selected(index: int, list: ItemList) -> void:
 	if not is_potok_machine_view() or not is_instance_valid(list) \
 			or index < 0 or index >= list.item_count:
