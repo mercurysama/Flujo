@@ -302,16 +302,59 @@ func _build_operand_controls(
 	kind.set_item_metadata(3, FlowValueSource.SOURCE_KIND_NODE_PROPERTY_REF)
 	kind.add_item("Operation")
 	kind.set_item_metadata(4, FlowValueSource.SOURCE_KIND_OPERATION)
+	if bool(_context.get("potok_event_payload", false)) or source is FlowEventPayloadValueSource:
+		kind.add_item("Event field")
+		kind.set_item_metadata(kind.item_count - 1, FlowEventPayloadValueSource.SOURCE_KIND)
+	var is_event_field: bool = source is FlowEventPayloadValueSource
 	var is_variable: bool = source is FlowVariableRefValueSource
 	var is_literal: bool = source is FlowLiteralValueSource
 	var is_node_property: bool = source is FlowNodePropertyRefValueSource
 	var is_operation: bool = source is FlowOperationValueSource
-	kind.select(1 if is_variable else (2 if is_literal else (3 if is_node_property else (4 if is_operation else 0))))
+	kind.select(5 if is_event_field else (
+		1 if is_variable else (2 if is_literal else (
+		3 if is_node_property else (4 if is_operation else 0)
+	))))
 	kind.item_selected.connect(_on_operand_kind_selected.bind(row_index, side))
 	line.add_child(kind)
 	var value: Control = null
 	var type_control: Control = null
-	if is_variable:
+	if is_event_field:
+		var event_field: FlowEventPayloadValueSource = source as FlowEventPayloadValueSource
+		var event_name := LineEdit.new()
+		event_name.name = "Operand%sEventName%d" % [side, row_index]
+		event_name.placeholder_text = "Event name"
+		event_name.text = String(event_field.event_name)
+		event_name.focus_mode = Control.FOCUS_ALL
+		event_name.text_changed.connect(_on_event_field_text.bind(row_index, side, &"event_name"))
+		box.add_child(event_name)
+		var field_name := LineEdit.new()
+		field_name.name = "Operand%sEventField%d" % [side, row_index]
+		field_name.placeholder_text = "Payload field"
+		field_name.text = event_field.field_name
+		field_name.focus_mode = Control.FOCUS_ALL
+		field_name.text_changed.connect(_on_event_field_text.bind(row_index, side, &"field_name"))
+		box.add_child(field_name)
+		var exact_type := OptionButton.new()
+		exact_type.name = "Operand%sEventType%d" % [side, row_index]
+		exact_type.focus_mode = Control.FOCUS_ALL
+		exact_type.add_item("Select type...")
+		exact_type.set_item_metadata(0, int(Variant.Type.TYPE_NIL))
+		for t: Variant.Type in [
+			Variant.Type.TYPE_BOOL, Variant.Type.TYPE_INT,
+			Variant.Type.TYPE_FLOAT, Variant.Type.TYPE_STRING
+		]:
+			var item: int = exact_type.item_count
+			exact_type.add_item(_type_name(t))
+			exact_type.set_item_metadata(item, int(t))
+			if event_field.value_type == t:
+				exact_type.select(item)
+		if exact_type.selected < 0:
+			exact_type.select(0)
+		exact_type.item_selected.connect(
+			_on_event_field_type.bind(row_index, side, exact_type)
+		)
+		box.add_child(exact_type)
+	elif is_variable:
 		var variable_source: FlowVariableRefValueSource = source as FlowVariableRefValueSource
 		var choose: Button = Button.new()
 		choose.name = "Operand%sChooseVariable%d" % [side, row_index]
@@ -524,6 +567,8 @@ func _on_operand_kind_selected(_selected: int, row_index: int, side: String) -> 
 		next = FlowNodePropertyRefValueSource.new()
 	elif selected_kind == FlowValueSource.SOURCE_KIND_OPERATION:
 		next = FlowOperationValueSource.new(&"", [null, null])
+	elif selected_kind == FlowEventPayloadValueSource.SOURCE_KIND:
+		next = FlowEventPayloadValueSource.new()
 	else:
 		next = null
 	if side == "A":
@@ -535,6 +580,42 @@ func _on_operand_kind_selected(_selected: int, row_index: int, side: String) -> 
 		call_deferred(&"_open_node_property_picker_for_current", row_index, side)
 	elif selected_kind == FlowValueSource.SOURCE_KIND_OPERATION:
 		call_deferred(&"_open_nested_operation_editor_for_current", row_index, side)
+
+
+## Event field inputs are authored metadata, never ambient runtime samples.
+func _on_event_field_text(
+		text: String, row_index: int, side: String, field: StringName
+) -> void:
+	if _draft == null or row_index < 0 or row_index >= _draft.comparisons.size():
+		return
+	var comparison: FlowConditionComparison = _draft.comparisons[row_index]
+	var source: FlowEventPayloadValueSource = (
+		comparison.left_source if side == "A" else comparison.right_source
+	) as FlowEventPayloadValueSource
+	if source == null:
+		return
+	if field == &"event_name":
+		source.event_name = StringName(text)
+	elif field == &"field_name":
+		source.field_name = text
+	_update_preview()
+
+
+func _on_event_field_type(
+		index: int, row_index: int, side: String, menu: OptionButton
+) -> void:
+	if _draft == null or index <= 0 or not is_instance_valid(menu) \
+			or index >= menu.item_count or row_index < 0 \
+			or row_index >= _draft.comparisons.size():
+		return
+	var comparison: FlowConditionComparison = _draft.comparisons[row_index]
+	var source: FlowEventPayloadValueSource = (
+		comparison.left_source if side == "A" else comparison.right_source
+	) as FlowEventPayloadValueSource
+	if source == null:
+		return
+	source.value_type = int(menu.get_item_metadata(index))
+	_rebuild_rows()
 
 
 func _on_operand_type_selected(selected: int, row_index: int, side: String) -> void:
