@@ -393,3 +393,10 @@ Todo es Flujo; todo fluye. 🌊
 - Lesson: reuse `FlowBlock.duplicate_with_new_id()` for deep resource-copy and own-ID remap; preserve external SDK script and exported values; insert immediately after original (including with null slots). Duplicate name based on original + " Copy" with local uniqueness, no catalog factory. Validate detached state and graph before exactly one UndoRedo action; redo uses same copied resource.
 - Coverage: invalid phase/owner/ID; Enter, Update, Exit, SDK external, properties, preserved null and siblings, UndoRedo, Ready untouched. Deep nested mutable documents not separately exercised; full UI remains 7F-1C2D. **Next 7F-1C2C** strict Delete with Cancel/confirmation to follow in UI stage. Human 15 Fedora + 10 Android PENDING, main unchanged.
 - [7F-1C2B result](fsm_phase7_7f1c2b_result.md).
+
+## 2026-11-02 — Potok 7F-1C2C phase block Delete
+
+- Baseline `f051c8f8ec20e651451ae0ec4f8941f987dca408`, [CI 41509176626](https://github.com/mercurysama/Flujo/actions/runs/41509176626) SUCCESS. RED focal `32e6e6ced2f3b0043ba39a93955cf804cfc86bb5` added in workflow `abc98c60321d011bba665a982cb7ea9d77eeeab4`: [RED Actions 41512635281](https://github.com/mercurysama/Flujo/actions/runs/41512635281) failed at absent method. Implementation `b5b5643607fd621280414f1af5455c5db934e0cd`. [GREEN Actions 41512783269](https://github.com/mercurysama/Flujo/actions/runs/41512783269), **69/69 SUCCESS**, zero failures.
+- Lesson: Delete resolves exact controller/machine/state/phase/block ownership, removes one array element without replacing it with null or compacting preexisting null holes, validates a detached FSM candidate then commits one UndoRedo action. Undo restores the same block resource and stable ID; stale second Delete is rejected without history. SDK script, values, Ready and sibling phases remain safe.
+- API command only; UI confirmation, Cancel, focus/scroll recovery and Move/Duplicate/Delete buttons are due **7F-1C2D**, followed by 7F-1C2E persistence/integration. Manual tests 15 Fedora + 10 Android **PENDING**; main/runtime/schema untouched.
+- [7F-1C2C result](fsm_phase7_7f1c2c_result.md).
