@@ -7,7 +7,7 @@
 - Baseline `43d8c3413a17e4ad24d929e75d12f4adaf56669d` y [CI 41496047937](https://github.com/mercurysama/Flujo/actions/runs/41496047937) SUCCESS.
 - Contrato [`fsm_phase7_7f1c2_contract.md`](fsm_phase7_7f1c2_contract.md), commit `39a726b15319c7d5c561725394144f8e66908053`.
 - Prueba focal `tests/editor/flow_fsm_phase_block_move_commands_test.gd`, commit `0e8af907608458b183f387e0bf136fe78366cb99`. Agregada al workflow en `ba10f1be42ccd385220c177feb8c037a8be1c123`; [Actions 41497932628](https://github.com/mercurysama/Flujo/actions/runs/41497932628) registró fallo esperado de la prueba por ausencia del método Move, sin implementar el comando.
-- Implementación `40495da7547955643434f9569710ed4159ad22ae`; [Actions 41498107835](https://github.com/mercurysama/Flujo/actions/runs/41498107835) incluye la focal Move y regresión Godot 4.7.2. Consultar conclusión final del run antes de declarar suite completa GREEN.
+- Implementación `40495da7547955643434f9569710ed4159ad22ae`; **GREEN confirmado**: [Actions 41498107835](https://github.com/mercurysama/Flujo/actions/runs/41498107835), completed **SUCCESS, 67/67 pasos**, cero fallos. Incluye focal Move y regresión Godot 4.7.2.
 
 ## Comportamiento implementado
 
