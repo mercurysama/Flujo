@@ -1824,11 +1824,11 @@
         "No schema migration or automatic backup recovery occurs."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_snapshot_invalid_file_restore_test.tscn"
       ],
-      "notes": "9C1-A mandatory CI focal registered; baseline not_run until Godot 4.7.2 full suite SUCCESS. Previous 9B3-C1/C2/C3 are design/authorization boundary, no runtime change."
+      "notes": "9C1-A commit f2fb13c7f9ff0d68a74f7ea33b398e6e16cf8613. GitHub Actions 41678522740 completed SUCCESS: 105/105 steps, mandatory invalid-file-restore focal SUCCESS, zero failures. Missing, malformed, wrong JSON root, oversized, version and graph mismatch are rejected without mutation of persistent alias/data or queued transition. No production changes."
     }
   ]
 }

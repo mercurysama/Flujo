@@ -1,3 +1,8 @@
+## Potok 9C1-B — disk restore invalid-file full CI PASS, next 9C2-A (2026-11-03)
+
+- [9C1-B closeout](fsm_phase9_9c1b_invalid_file_restore_closeout.md): [Actions 41678522740](https://github.com/mercurysama/Flujo/actions/runs/41678522740) **completed SUCCESS**, **105/105 steps**, mandatory 9C1-A focal PASS; behavior `FLUJO-BHV-POTOK-SNAPSHOT-INVALID-FILE-015` **not_run → passing**. No production changes.
+- **Next 9C2-A:** independent teardown / new controller / explicit `restore_from_file` characterization; no autoload claim. Main untouched; 25 manual checks deferred.
+
 ## Potok 9B3-C3 + 9C1-A — authorization boundary and invalid disk restore test (2026-11-03)
 
 - [9B3-C3](fsm_phase9_9b3c3_authorization_boundary.md) leaves F5–F7 and F9 as open contractual choices, **does not interpret permission for grouped microblocks as authorization to change save semantics**.
