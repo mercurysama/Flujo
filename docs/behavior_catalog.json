@@ -1672,11 +1672,11 @@
         "Authored FlowGraph remains immutable."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_dual_controller_event_budget_test.tscn"
       ],
-      "notes": "8D2-B3A3 test-only characterization; CI mandatory and status NOT RUN until confirmed."
+      "notes": "8D2-B3A3 mandatory focal and full regression completed SUCCESS in Godot 4.7.2 Actions 41588927428 on 4c733296a491fbe02455095fb81229b3a560d896; no production edits. Local tests and manual acceptance not run."
     }
   ]
 }

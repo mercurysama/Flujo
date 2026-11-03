@@ -1,3 +1,8 @@
+## 2026-11-02 — Potok 8D2-B3A3 event FIFO budget and callback determinism
+
+- Focal and mandatory gate at `4c73329`; [Actions 41588927428](https://github.com/mercurysama/Flujo/actions/runs/41588927428) full **SUCCESS**. Identical 34 FIFO A events, one B event, 32 per-machine budget, single deferred callback and guarded nested tick across two controllers produce equivalent ordered traces.
+- Catalog `FLUJO-BHV-POTOK-DETERMINISM-EVENT-BUDGET-007` moved `not_run` → `passing` after remote CI. No production changes; B3A4 next. Local Godot/formal Skills NOT RUN; manual review 0/25.
+
 ## 2026-11-02 — Potok 8D2-B3A2 ordered two-wave replay
 
 - `fcc5d1d` introduced focal `flow_fsm_two_wave_order_replay_test.tscn`, mandatory CI and behavior `FLUJO-BHV-POTOK-DETERMINISM-ORDER-006`. [Actions 41584784409](https://github.com/mercurysama/Flujo/actions/runs/41584784409) **SUCCESS** full Godot 4.7.2 suite. Reverse admission B→A over two waves commits A→B each time in both independent runtimes. No production changes.
