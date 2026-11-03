@@ -1691,11 +1691,11 @@
         "No mutation of authored graph."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_dual_controller_dynamic_reset_test.tscn"
       ],
-      "notes": "B3A4 introduced as characterization test with mandatory CI; not run until verification."
+      "notes": "8D2-B3A4 initial Actions 41589653144 FAIL due to test expecting all Exit callbacks before all Enter callbacks; actual contractual reset processes Exit→Enter per authored machine. Test-only correction fb6c1340b4fd91b590216e3528f47e8bcdede503 preserves coverage; Actions 41589766004 completed SUCCESS full Godot 4.7.2 suite. No production changes."
     }
   ]
 }

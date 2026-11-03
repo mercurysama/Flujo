@@ -1,3 +1,9 @@
+## 2026-11-03 — Potok 8D2-B3A4 deterministic dynamic reset replay
+
+- `ce2f8b5` added mandatory focal, catalog `FLUJO-BHV-POTOK-DETERMINISM-RESET-008`, two controllers with equal explicit alias IDs. [Actions 41589653144](https://github.com/mercurysama/Flujo/actions/runs/41589653144) FAIL due to test-only reset trace assumption (all Exits then all Enters).
+- Existing reset performs Exit→Enter **per machine**, not two global phases. Corrected fixture-only expected trace in `fb6c134` with full assertions intact; [Actions 41589766004](https://github.com/mercurysama/Flujo/actions/runs/41589766004) **SUCCESS** full Godot 4.7.2 suite. Catalog `not_run` → `passing` after CI. No production changes.
+- Next B3A5 determinant replay audit; local Godot and formal Skills NOT RUN; 25 manual tests pending. See [B3A4 result](fsm_phase8_8d2b3a4_result.md).
+
 ## 2026-11-02 — Potok 8D2-B3A3 event FIFO budget and callback determinism
 
 - Focal and mandatory gate at `4c73329`; [Actions 41588927428](https://github.com/mercurysama/Flujo/actions/runs/41588927428) full **SUCCESS**. Identical 34 FIFO A events, one B event, 32 per-machine budget, single deferred callback and guarded nested tick across two controllers produce equivalent ordered traces.
