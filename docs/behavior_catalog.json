@@ -1505,6 +1505,25 @@
         "tests/runtime/flow_fsm_sdk_data_copy_validation_test.tscn"
       ],
       "notes": "8D1-C4B: GitHub Actions 41568809804 completed SUCCESS 87/87 on 6dda6c74637170905877cb59ee7c50bc23bb4f07; SDK data copies, validation, and full regressions passed; production unchanged."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SDK-INACTIVE-REMOVE-007",
+      "area": "Potok SDK inactive alias removal and selective pending queue cleanup",
+      "precondition": "One controller starts two MANUAL state machines; their real StateUpdate SDK callbacks queue sibling authored target, then two direct requests to a new alias plus one independent alias.",
+      "public_action": "Main SDK callback removes its inactive alias after queuing two direct requests; attempts stale lookup/removal and advances the machine clock.",
+      "expected_result": "Exactly the two queued requests targeting removed alias are purged. Sibling machine request and same-machine surviving alias request remain deferred and commit in deterministic next-tick order, with no graph mutation or reentrancy.",
+      "invariants": [
+        "Only matching machine+alias direct requests are removed; sibling and surviving alias requests remain.",
+        "Inactive removal works from an actual StateUpdate SDK callback even while runtime is ticking.",
+        "Retained callback facade expires and cannot reintroduce purged pending requests.",
+        "Graph remains declarative; active alias fallback is covered in separate 8D1-C4C2."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_sdk_selective_removal_test.tscn"
+      ],
+      "notes": "8D1-C4C1 required focal added; not a PASS before remote Godot 4.7.2 CI. Active alias fallback deferred to C4C2."
     }
   ]
 }
