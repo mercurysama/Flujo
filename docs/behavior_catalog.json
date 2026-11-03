@@ -1601,6 +1601,25 @@
         "tests/runtime/flow_fsm_snapshot_transient_active_test.tscn"
       ],
       "notes": "8D2-B2A: GitHub Actions 41579446980 completed SUCCESS 93/93 at 78a9a7d265ddad369f2473de661b01bb906d3fe5; mandatory snapshot focal passed and all baseline regressions GREEN. Snapshot codec and production unchanged."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SNAPSHOT-ATOMIC-004",
+      "area": "Potok FSM snapshot invalid preflight atomicity with live request queue",
+      "precondition": "Two PVControllers share a valid schema 3 FlowGraph containing two MANUAL machines. A holds an active PERSISTENT alias and a SESSION alias, a second PERSISTENT record, three queued direct/event packets, while B retains an independent SESSION alias and pending packet.",
+      "public_action": "Try 23 malformed/incompatible snapshots covering document structure, graph/schema/version, machine records/count/duplicates, active IDs, dynamic record identities/templates/duplicates, unsafe values/depth and per-machine quota; then restore an intact valid snapshot.",
+      "expected_result": "Every invalid snapshot is rejected before Exit/Enter, leaving active machine IDs, original registry, nested data, pending queue, portable snapshot and peer controller unchanged. A valid snapshot afterward performs ordered Exit/Enter, replaces registry, clears pending queue and deeply detaches restored data.",
+      "invariants": [
+        "Invalid snapshot preflight is non-destructive, including pending direct/event requests and absence of lifecycle callbacks.",
+        "Invalid machine/alias IDs, unsupported graph/schema/format, duplicate entries and malformed/budget-exceeding/unsafe data never partially publish.",
+        "Successful restoration still clears queued stale requests and replaces transient registry entries without modifying authored graph.",
+        "The source controller and a second independent PVController never share mutable registry or pending queue state."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_snapshot_preflight_atomicity_test.tscn"
+      ],
+      "notes": "8D2-B2B test-only characterization. Await remote Godot 4.7.2 CI before marking PASS. FlowFSMSnapshotCodec and production unchanged; Phase 9 not closed."
     }
   ]
 }
