@@ -82,13 +82,18 @@ func _run() -> void:
 		"External direct request can transition out of probed state")
 	runtime.tick(0.1, FlowStateMachineDefinition.TickMode.MANUAL)
 	observations = controller.get_meta("potok_8d1_observations", [])
-	_check(observations.size() == 4
-		and observations[3].get("phase") == "StateExit"
-		and observations[3].get("available", false)
-		and FlowId.is_valid(String(observations[3].get("id", ""))),
-		"StateExit receives capability via the shared executor")
-	_check(runtime.get_dynamic_state_ids(machine_id).size() == 3,
-		"Three FSM callbacks register distinct instance-local aliases")
+	_check(observations.size() == 5, "Transition tick runs StateUpdate before StateExit")
+	if observations.size() == 5:
+		_check(observations[3].get("phase") == "StateUpdate"
+			and observations[3].get("available", false)
+			and FlowId.is_valid(String(observations[3].get("id", ""))),
+			"Second tick executes its scoped StateUpdate callback")
+		_check(observations[4].get("phase") == "StateExit"
+			and observations[4].get("available", false)
+			and FlowId.is_valid(String(observations[4].get("id", ""))),
+			"StateExit receives capability via the shared executor")
+	_check(runtime.get_dynamic_state_ids(machine_id).size() == 4,
+		"Four FSM callbacks register distinct instance-local aliases")
 	_check(runtime.get_dynamic_state_ids(second_id).is_empty(),
 		"Facade cannot create aliases in a sibling machine")
 	_check(main_machine.states.size() == 3 and second_machine.states.size() == 1
