@@ -1,3 +1,8 @@
+## Potok 9D2-A — phase 9 coverage/risk audit; next 9E1-A conditional acceptance (2026-11-03)
+
+- [9D2-A audit](fsm_phase9_9d2a_coverage_risk_audit.md): all 8 new snapshot behaviors 012–019 catalogued **passing**, each with a mandatory focal in `.github/workflows/flujo-fsm.yml`; [Actions 41711670098](https://github.com/mercurysama/Flujo/actions/runs/41711670098) completed **SUCCESS 109/109**. [9D1-B closeout](fsm_phase9_9d1b_compatibility_closeout.md) records compatibility passing. These automatic results cover S1/S2 backup on success, safe paths, F3 preflight, invalid files, explicit new controller restore, callbacks/reentrancy and v1 strict rejection.
+- **Not closed:** F5–F7 copy/rename/recovery exact fault branches, corrupt previous file policy F9, rebooted game process proof, and 25 deferred human checks (15 Fedora, 10 Android); no silent `.bak` auto-recovery. Runtime/codec/format/graph unchanged; no main merge. **Next 9E1-A:** conditional technical assessment, not release; approval for filesystem failure semantics still required.
+
 ## Potok 9D1-B — strict v1 compatibility CI PASS; next 9D2-A (2026-11-03)
 
 - [9D1-B closeout](fsm_phase9_9d1b_compatibility_closeout.md): [Actions 41711670098](https://github.com/mercurysama/Flujo/actions/runs/41711670098) completed **SUCCESS 109/109**, mandatory 9D1-A focal PASS. Catalog `FLUJO-BHV-POTOK-SNAPSHOT-COMPATIBILITY-019` updated **not_run → passing** after complete evidence.
