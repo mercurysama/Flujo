@@ -1,5 +1,10 @@
 # Current Iteration
 
+## Potok — 8D2-B1A lifetime y reset PASS; siguiente 8D2-B1B (2026-11-02)
+
+- [CI 41576973539](https://github.com/mercurysama/Flujo/actions/runs/41576973539) **SUCCESS 91/91**, commit focal `7d9f702c1eef19af52d7ba90a600bf153eeb204e`. Alias `EPHEMERAL` activo eliminado por reset con Exit→Enter; `SESSION` y `PERSISTENT` retienen IDs/datos y pueden activarse; solo se vacía la cola del controlador reset, y el otro permanece independiente.
+- [Informe B1A](fsm_phase8_8d2b1a_result.md), [plan 8D2](fsm_phase8_8d2_microblocks.md); `FLUJO-BHV-POTOK-LIFETIME-RESET-001` `passing` solo después de CI. Sin cambios productivos. Siguiente **8D2-B1B**, stop/restart integral. Las 25 pruebas humanas de Fase 7 continúan diferidas.
+
 ## Potok — 8D2-A auditoría de lifetimes y snapshots; próximo 8D2-B1A (2026-11-02)
 
 - Baseline [Actions 41575182608](https://github.com/mercurysama/Flujo/actions/runs/41575182608) **SUCCESS 90/90** Godot 4.7.2, incluidos FSM 003 dynamic states, FSM 004 snapshot, 8B1/8B2/8C1/8C2. Auditoría documental [8D2-A](fsm_phase8_8d2a_audit.md): políticas EPHEMERAL/SESSION/PERSISTENT, reset, stop/restart, codec de snapshots y almacenamiento `user://` **ya implementados**; no se reescribe producción ni Fase 9.

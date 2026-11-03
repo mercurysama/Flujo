@@ -1558,11 +1558,11 @@
         "A second PVController sharing the FlowGraph retains its dynamic aliases and independently pending request."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_lifetime_reset_matrix_test.tscn"
       ],
-      "notes": "Potok 8D2-B1A characterization of pre-existing runtime; awaits Godot 4.7.2 remote Actions. Not a Phase 9 snapshot-format change or a new production implementation."
+      "notes": "Potok 8D2-B1A: Actions 41576973539 completed SUCCESS 91/91 on 7d9f702c1eef19af52d7ba90a600bf153eeb204e; focal passed on existing runtime; Phase 9 codec untouched."
     }
   ]
 }

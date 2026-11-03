@@ -1,5 +1,11 @@
 # Flujo Project Memory / Handoff
 
+## Potok — 8D2-B1A reset de lifetimes probado (2026-11-02)
+
+- [Informe B1A](fsm_phase8_8d2b1a_result.md); [Actions 41576973539](https://github.com/mercurysama/Flujo/actions/runs/41576973539) **SUCCESS 91/91** para `7d9f702c1eef19af52d7ba90a600bf153eeb204e`: EPHEMERAL activo se elimina con Exit→Enter; SESSION/PERSISTENT conservan IDs y datos; reset limpia solo cola del dueño y no afecta otro controlador.
+- **Siguiente 8D2-B1B:** stop/restart, los tres lifetimes, solicitudes obsoletas, SDK caducado, independencia. [Plan](fsm_phase8_8d2_microblocks.md); codec de snapshot Fase 9 intacto.
+- 15 pruebas Fedora + 10 Android de Fase 7 **PENDING**; no hay aprobación visual ni cierre de fase 8.
+
 ## Potok — 8D2-A inventario y microbloques (2026-11-02)
 
 - [Auditoría 8D2-A](fsm_phase8_8d2a_audit.md) y [microbloques](fsm_phase8_8d2_microblocks.md): **no faltan** `EPHEMERAL`/`SESSION`/`PERSISTENT`, reset, teardown, codec de snapshot ni save/restore `user://`; la siguiente tarea es ampliar cobertura, no reconstruirlas.

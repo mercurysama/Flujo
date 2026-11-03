@@ -1,5 +1,13 @@
 # Flujo FSM — Iteration journal / Skill learning
 
+## 2026-11-02 — Potok 8D2-B1A active EPHEMERAL reset characterization
+
+- Baseline `a81af3ebb42efa101c5336381a831c5244f7ff07` [CI 41576142513](https://github.com/mercurysama/Flujo/actions/runs/41576142513) SUCCESS 90/90. Focal `7d9f702c1eef19af52d7ba90a600bf153eeb204e`, [CI 41576973539](https://github.com/mercurysama/Flujo/actions/runs/41576973539) **SUCCESS 91/91**; mandatory test passed under Godot 4.7.2 with no product changes.
+- Two PVControllers share one schema 3 graph, not registries. On A, active EPHEMERAL alias exits on reset and disappears; SESSION/PERSISTENT alias IDs and detached nested metadata survive in order, and both remain executable. A's two queued packets are cleared; B's queued command/alias remain and advance independently. Exit/Enter exact trace and authored graph invariants verified.
+- `FLUJO-BHV-POTOK-LIFETIME-RESET-001` added to catalog, marked passing only after remote CI; `flow_fsm_lifetime_reset_matrix_test.tscn` has required pipeline step. Existing FSM-004 snapshots untouched and not implied to close phase 9.
+- Report [B1A](fsm_phase8_8d2b1a_result.md); next **8D2-B1B** teardown/restart all lifetimes and stale capability; no premature 8D2-C/8E or manual acceptance. Local Godot NOT RUN; formal repo Skills not invoked; 15 Fedora + 10 Android PENDING.
+- Lesson: reset and teardown are distinct lifecycle boundaries. Test isolation using another controller's **pending packet**, not merely comparing immutable graph or initial state.
+
 ## 2026-11-02 — Potok 8D2-A audit: lifetime/reset/snapshot evidence before coding
 
 - Baseline `ad73a4816849556810dd62047d468decdd562a9f`, [CI 41575182608](https://github.com/mercurysama/Flujo/actions/runs/41575182608) SUCCESS **90/90** with actual FSM 003 dynamic and FSM 004 snapshot focal markers; no new runtime verification was run locally.
