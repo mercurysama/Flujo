@@ -1,5 +1,11 @@
 # Current Iteration
 
+## Potok — 8D1-C1A PASS, siguiente 8D1-C1B (2026-11-02)
+
+- [CI 41562328203](https://github.com/mercurysama/Flujo/actions/runs/41562328203), HEAD `f315ddb1d459f1685da2a339647008a501a47aef`: **SUCCESS 82/82**. Sin cambios productivos.
+- Contrato SDK de referencia retenida tras StateEnter caracterizado; [resultado](fsm_phase8_8d1c1a_result.md) y [plan 8D1-C](fsm_phase8_8d1c_microblocks.md).
+- 25 pruebas humanas de fase 7 siguen pendientes (15 Fedora, 10 Android). Próximo 8D1-C1B: Update/Exit, parada/reinicio y grafo.
+
 ## Potok — Phase 8 active; Phase 7 physical acceptance explicitly deferred (2026-11-02)
 
 - Maintainer authorized moving to **Phase 8** without performing the 25 physical acceptance tests now. **Phase 7 implementation and automatic coverage finished, but final visual acceptance remains deferred/PENDING**, not a signed-off release. F01–F15 Fedora and A01–A10 Android must be revisited before a stable merge/release; see [manual matrix](fsm_phase7_7f2_manual_acceptance_matrix.md).

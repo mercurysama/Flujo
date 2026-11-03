@@ -1405,11 +1405,11 @@
         "No claim of GDScript sandboxing, visual/manual approval, or protection from hostile direct access."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_sdk_expired_operations_test.tscn"
       ],
-      "notes": "Potok 8D1-C1A: test and required CI step added; remote result pending at time of catalog entry."
+      "notes": "Potok 8D1-C1A: GitHub Actions 41562328203 SUCCESS 82/82 at f315ddb1d459f1685da2a339647008a501a47aef; test and full regressions passed without production changes."
     }
   ]
 }

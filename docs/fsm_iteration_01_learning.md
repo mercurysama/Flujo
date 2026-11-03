@@ -1,5 +1,15 @@
 # Flujo FSM — Iteration journal / Skill learning
 
+## 2026-11-02 — Potok 8D1-C1A: SDK facade expiration
+
+- Verified baseline: `85a9ace1` / [CI 41558938893](https://github.com/mercurysama/Flujo/actions/runs/41558938893) **SUCCESS 81/81**.
+- Added one SDK-style fixture, scene and test that retains `FlowFSMOperations`: alias registration works in StateEnter, but all six API operations reject after callback return; runtime and `FlowGraph` remain unchanged.
+- No production GDScript changes. Full [CI 41562174607](https://github.com/mercurysama/Flujo/actions/runs/41562174607) and later [CI 41562328203](https://github.com/mercurysama/Flujo/actions/runs/41562328203) completed **SUCCESS 82/82**.
+- Keep history: [CI 41562016330](https://github.com/mercurysama/Flujo/actions/runs/41562016330) failed only whitespace of the plan, fixed in `585cbdd2`.
+- Versioned `flujo-baseline` and `flujo-prove` read but not formally invoked. Local Godot **NOT RUN**; remote CI **PASS**. Physical review 15 Fedora + 10 Android **PENDING**.
+- Recovery: [C1A result](fsm_phase8_8d1c1a_result.md), [C1–C5 plan](fsm_phase8_8d1c_microblocks.md). Next 8D1-C1B; do not redo completed code or claim full 8D1-C closure.
+- Skill lesson: distinguish successful in-callback use from rejection of an escaped reference, and check the real runtime/graph for side effects, not only facade return values.
+
 **Iteration:** FSM-01 / remote branch `feature/fsm-runtime-flow-flusso`  
 **Start:** 2026-11-01  
 **Status:** IN PROGRESS. No FSM runtime/UI test pass is claimed.  
