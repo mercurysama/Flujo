@@ -1939,11 +1939,11 @@
         "Observed operations never rewrite authored resources; one controller teardown leaves the other live."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_observability_existing_signals_test.tscn"
       ],
-      "notes": "Potok 10A-3 test-first characterization on existing runtime; mandatory GitHub Actions focal added in this commit. NOT RUN until same-commit CI outcome is checked; local Godot and formal Skills are unavailable via GitHub connector. Does not implement proposed observability API, buffer or editor UI."
+      "notes": "Potok 10A-3: GitHub Actions 41734104878 completed SUCCESS on 15da55c216e62afbd8aeb2c2ded40e1107983a39; mandatory existing-signals focal PASS and complete headless job PASS. Local Godot and formal Skills NOT RUN via GitHub connector; no human approval. Proposed observability API, buffer and editor UI are NOT implemented."
     }
   ]
 }
