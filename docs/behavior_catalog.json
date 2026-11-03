@@ -1410,6 +1410,25 @@
         "tests/runtime/flow_fsm_sdk_expired_operations_test.tscn"
       ],
       "notes": "Potok 8D1-C1A: GitHub Actions 41562328203 SUCCESS 82/82 at f315ddb1d459f1685da2a339647008a501a47aef; test and full regressions passed without production changes."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SDK-CAPABILITY-LIFECYCLE-002",
+      "area": "Potok SDK FSM context invalidation across reset, stop, restart and graph replacement",
+      "precondition": "A schema 3 manual-clock PVController runs Enter, Update, Exit and retains each callback-scoped operations facade.",
+      "public_action": "Tick and reset, swap the current graph, disable the controller and restart it while probing retained facade access.",
+      "expected_result": "Each callback-only facade expires after return; graph mismatch and shutdown reject operations; restarted runtime does not inherit old aliases or facades.",
+      "invariants": [
+        "Same-controller SESSION aliases survive reset but not stop/restart.",
+        "No retained SDK facade can mutate after callback return.",
+        "Graph switch rejects operations without modifying authored resources.",
+        "Shutdown Exit cannot register states on a disabled controller."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_sdk_lifecycle_guards_test.tscn"
+      ],
+      "notes": "8D1-C1B: required focused CI introduced; remote execution pending."
     }
   ]
 }
