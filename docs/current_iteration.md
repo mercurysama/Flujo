@@ -1,3 +1,8 @@
+## Potok 8D2-C2 — technical closeout, handoff to 8E (2026-11-03)
+
+- [C2 technical closeout](fsm_phase8_8d2c2_closeout.md) reconciles [C1 matrix](fsm_phase8_8d2c1_traceability_audit.md), 11 `passing` behavior-catalog entries, 11 mandatory Godot 4.7.2 focal scenes and historic full CI **SUCCESS**, with [Actions 41593493271](https://github.com/mercurysama/Flujo/actions/runs/41593493271) SUCCESS on C1 and [41593197556](https://github.com/mercurysama/Flujo/actions/runs/41593197556) SUCCESS on B3B4. C2 new docs CI awaits independent validation.
+- **8D2 technical scope complete; phase 8 not yet closed. Next 8E-1**, audit `FLU-FSM-003` closure criteria, existing 8A–8D evidence, then 8E gates. Do not close phase 9; 25 manual acceptance checks pending (15 Fedora, 10 Android), no local Godot/formal skill invocation, no production changes.
+
 ## Potok 8D2-C1 — technical traceability inventory complete (2026-11-03)
 
 - [C1 evidence audit](fsm_phase8_8d2c1_traceability_audit.md) maps all 11 behavior IDs, `tests/runtime/*.tscn` gates, contracts `FLU-FSM-003` and compatibility frontier `FLU-FSM-004`, implementation and historical successful Actions runs. B3B4 checkpoint Actions [41593197556](https://github.com/mercurysama/Flujo/actions/runs/41593197556) was still running when C1 began.

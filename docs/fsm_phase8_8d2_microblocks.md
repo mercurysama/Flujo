@@ -21,7 +21,7 @@
 | **8D2-B2B** | 23 variantes inválidas de snapshot rechazadas atómicamente sin tocar máquina activa, alias, datos, cola ni callbacks; restauración válida posterior y aislamiento de otro controlador. | [PASS 94/94](fsm_phase8_8d2b2b_result.md), focal obligatorio y regresiones FSM-004, con codec y runtime intactos. | **PASS CI** |
 | **8D2-B3A** | Dos controladores y varias máquinas reciben la misma secuencia definida de entradas, resets y ticks; comparar trazas ordenadas y resultados con IDs explícitos estables. | [Auditoría B3A5](fsm_phase8_8d2b3a5_audit.md); cuatro focos obligatorios, CI verde; IDs explícitos. | **PASS CI + AUDIT** |
 | **8D2-B3B** | Aislar casos de callbacks `StateExit`/`StateEnter` durante reset/restore y solicitudes encoladas; comprobar guardas dentro de tick y que no haya doble Enter/Exit inesperado. | [Auditoría B3B4](fsm_phase8_8d2b3b4_audit.md); B3B1–B3B3 CI SUCCESS; callbacks acotados. | **PASS CI + AUDIT** |
-| **8D2-C** | Auditoría final requisito → código → catálogo → escena → commit → Actions, reconstrucción de qué lifetimes sobreviven a cada frontera; declarar cierre técnico **solo** si todos los gates pasan. | Conservar alcance de Fase 9, 25 visuales pendientes y límites de SDK; preparar entrada 8E. | **PENDING** |
+| **8D2-C** | Auditoría final requisito → código → catálogo → escena → commit → Actions, reconstrucción de qué lifetimes sobreviven a cada frontera; declarar cierre técnico **solo** si todos los gates pasan. | Conservar alcance de Fase 9, 25 visuales pendientes y límites de SDK; preparar entrada 8E. | **PASS TÉCNICO C2** |
 
 ## Punto de recuperación
 
@@ -49,3 +49,8 @@
 
 - [Traceability matrix](fsm_phase8_8d2c1_traceability_audit.md): 11 registered `passing` behaviors map to source/runtime or codec, required focal scenes, GitHub Actions and lifecycle/serialization boundaries. Documentation-only checkpoint; no new product code or tests.
 - **Next: 8D2-C2** verify fresh full regression and reconcile outstanding manual and phase 9 boundaries. Only then determine technical 8D2 closeout and handoff to 8E.
+
+## 2026-11-03 — cierre técnico 8D2-C2
+
+- [C2 conciliación y dictamen](fsm_phase8_8d2c2_closeout.md): las once entradas de 8D2 están `passing`, sus gates exigidos y focos y CI previos **SUCCESS**; [C1 Actions 41593493271](https://github.com/mercurysama/Flujo/actions/runs/41593493271) verificado. Cierre técnico 8D2 sin editar producción.
+- 25 pruebas manuales aún aplazadas. La aceptación UI/fase 8 y el cierre de la fase 9 **no** se deducen de este dictamen. Próxima unidad: 8E-1 auditoría del criterio FLU-FSM-003 y de la cobertura 8A–8D.
