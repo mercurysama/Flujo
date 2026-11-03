@@ -1829,6 +1829,25 @@
         "tests/runtime/flow_fsm_snapshot_invalid_file_restore_test.tscn"
       ],
       "notes": "9C1-A commit f2fb13c7f9ff0d68a74f7ea33b398e6e16cf8613. GitHub Actions 41678522740 completed SUCCESS: 105/105 steps, mandatory invalid-file-restore focal SUCCESS, zero failures. Missing, malformed, wrong JSON root, oversized, version and graph mismatch are rejected without mutation of persistent alias/data or queued transition. No production changes."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SNAPSHOT-RECONSTRUCT-016",
+      "area": "Potok FSM-004 explicit persisted restore across instance reconstruction",
+      "precondition": "Source PVController with one MANUAL machine registers SESSION and PERSISTENT aliases, activates PERSISTENT with JSON-safe data and writes a user:// snapshot; source controller is fully queue_freed.",
+      "public_action": "Construct a new PVController over the same authored FlowGraph, inspect its initial state and absence of old aliases, then explicitly call restore_from_file and compare recovered portable snapshot.",
+      "expected_result": "Fresh controller is independent and does not auto-load old dynamic aliases; explicit disk restore recovers active PERSISTENT alias, ID, data and versioned snapshot; SESSION is absent.",
+      "invariants": [
+        "Instance teardown destroys dynamic aliases rather than silently auto-loading.",
+        "PERSISTENT portable recovery requires explicit restore and preserves stable identifiers.",
+        "SESSION data cannot cross controller-instance boundary through snapshots.",
+        "Restoration never mutates authored FlowGraph or the disk file."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_snapshot_instance_reconstruction_test.tscn"
+      ],
+      "notes": "9C2-A focal and mandatory Godot 4.7.2 CI gate registered; full CI must pass before status passing. No runtime changes; human acceptance pending."
     }
   ]
 }

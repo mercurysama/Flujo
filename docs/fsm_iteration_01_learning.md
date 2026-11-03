@@ -1,3 +1,8 @@
+## Potok 9C2-A — controller teardown + explicit disk recovery focal (2026-11-03)
+
+- [9C2-A](fsm_phase9_9c2a_instance_reconstruction_result.md): new mandatory `flow_fsm_snapshot_instance_reconstruction_test.tscn` and behavior `FLUJO-BHV-POTOK-SNAPSHOT-RECONSTRUCT-016` **not_run** pending CI. Fresh controller after real queue_free of source does not carry SESSION/PERSISTENT alias automatically; explicit `restore_from_file` must restore only PERSISTENT identity and data. No production changes.
+- [9C1-B closeout](fsm_phase9_9c1b_invalid_file_restore_closeout.md) recorded **PASS** from [41678522740](https://github.com/mercurysama/Flujo/actions/runs/41678522740). Next **9C2-B** verify CI and close; then 9C3-A callbacks. 25 manual checks deferred.
+
 ## Potok 9C1-B — disk restore invalid-file full CI PASS, next 9C2-A (2026-11-03)
 
 - [9C1-B closeout](fsm_phase9_9c1b_invalid_file_restore_closeout.md): [Actions 41678522740](https://github.com/mercurysama/Flujo/actions/runs/41678522740) **completed SUCCESS**, **105/105 steps**, mandatory 9C1-A focal PASS; behavior `FLUJO-BHV-POTOK-SNAPSHOT-INVALID-FILE-015` **not_run → passing**. No production changes.
