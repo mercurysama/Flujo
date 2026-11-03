@@ -89,12 +89,12 @@ func _run() -> void:
 	_check(runtimes[1].reset(), "Reset controller 1")
 	var expected: Array[String] = [
 		"Exit:" + aid + ":" + ephemeral_id,
-		"Exit:" + bid + ":" + persistent_id,
 		"Enter:" + aid + ":" + a0.get_internal_id(),
+		"Exit:" + bid + ":" + persistent_id,
 		"Enter:" + bid + ":" + b0.get_internal_id()
 	]
 	_check(traces[0] == expected and traces[1] == expected,
-			"Reset produces identical ordered Exit then Enter and no stale commit")
+			"Reset applies per-machine Exit then Enter in authored order with no stale commit")
 	for i: int in 2:
 		var rt: FlowFSMRuntime = runtimes[i]
 		_check(not rt.has_state(aid, ephemeral_id)
