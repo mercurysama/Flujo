@@ -1620,6 +1620,25 @@
         "tests/runtime/flow_fsm_snapshot_preflight_atomicity_test.tscn"
       ],
       "notes": "8D2-B2B: first run 41581962872 FAIL because test attempted invalid writes to Godot typed Array[Dictionary], causing cascade. Corrected test fixture 32f6ab6a95ccb31c51dac882be578180afbe9dd4 passed 41582200667 SUCCESS 94/94; 23 invalid cases and valid restore verified, without production changes."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-DETERMINISM-005",
+      "area": "Potok deterministic direct replay across independent two-machine runtimes",
+      "precondition": "Two separate PVControllers share one valid schema 3 authored graph with two MANUAL FSMs and stable authored state IDs; both runtimes start independently.",
+      "public_action": "Queue the same two direct requests on each controller, advance controller A then B with identical manual tick, compare ordered transition_committed traces and active states.",
+      "expected_result": "Each runtime processes exactly two direct requests in authored machine order with identical trigger IDs; advancing A does not drain B, both finish at matching targets, and shared authored graph is unchanged.",
+      "invariants": [
+        "Separate PVControllers never share mutable runtime or pending queues.",
+        "Identical authored definitions and direct inputs yield identical ordered transition commit traces.",
+        "A single controller tick does not consume the other controller's pending requests.",
+        "Authoring FlowGraph is immutable during runtime replay."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_deterministic_dual_controller_test.tscn"
+      ],
+      "notes": "8D2-B3A1 test first authored against existing production; CI not run at registration, mark passing only after verified mandatory gate."
     }
   ]
 }
