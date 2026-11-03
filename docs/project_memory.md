@@ -1,5 +1,12 @@
 # Flujo Project Memory / Handoff
 
+## Potok — 8D2-B2B rechazo atómico snapshots PASS (2026-11-02)
+
+- [Informe B2B](fsm_phase8_8d2b2b_result.md) y [CI 41582200667](https://github.com/mercurysama/Flujo/actions/runs/41582200667) **SUCCESS 94/94**, test fix `32f6ab6a95ccb31c51dac882be578180afbe9dd4`: 23 snapshots inválidos rechazados, estado/registro/cola/callbacks sin cambios; uno válido después se restaura correctamente.
+- Histórico [CI 41581962872](https://github.com/mercurysama/Flujo/actions/runs/41581962872) **FAIL** por construir una fila inválida en un TypedArray Godot; corregido creando arreglo no tipado, sin falla de runtime ni cambios productivos.
+- **Siguiente 8D2-B3A**: determinismo de colas, ticks, eventos y reset con dos controladores y varias máquinas; después B3B y C. [Plan 8D2](fsm_phase8_8d2_microblocks.md). Sin cierre de Fase 9 ni Fase 8.
+- Pruebas humanas fase 7: **0/25 PENDING** (15 Fedora + 10 Android); no inferirlas del CI.
+
 ## Potok — 8D2-B2A snapshot de alias activos PASS (2026-11-02)
 
 - [Informe B2A](fsm_phase8_8d2b2a_result.md); [Actions 41579446980](https://github.com/mercurysama/Flujo/actions/runs/41579446980) **SUCCESS 93/93** en `78a9a7d265ddad369f2473de661b01bb906d3fe5`: máquinas EPHEMERAL/SESSION activas exportan inicial authored, PERSISTENT conserva ID, seis registros persistentes mantienen orden; restauración aislada y payload desacoplado.

@@ -1,5 +1,12 @@
 # Flujo FSM — Iteration journal / Skill learning
 
+## 2026-11-02 — Potok 8D2-B2B rejected snapshot atomicity
+
+- Baseline `8583cbdc0e8bf01e98364d19671bd162b65f488d`, [CI 41579978091](https://github.com/mercurysama/Flujo/actions/runs/41579978091) SUCCESS 93/93. Initial `cb32badb` [CI 41581962872](https://github.com/mercurysama/Flujo/actions/runs/41581962872) FAIL: a malformed-record fixture tried to write string into typed Array[Dictionary], causing errors and cascading false failures; not proof of a runtime bug.
+- Test-only fix `32f6ab6a95ccb31c51dac882be578180afbe9dd4` uses an **untyped copy** of arrays to build invalid document records. [CI 41582200667](https://github.com/mercurysama/Flujo/actions/runs/41582200667) **SUCCESS 94/94** including new focal; 23 negative cases rejected with no Exit/Enter, active state, registry, nested data, pending queue, or sibling mutation. Valid restore afterward clears pending and commits ordered callbacks, with deep-copy isolation.
+- `FLUJO-BHV-POTOK-SNAPSHOT-ATOMIC-004` marked `passing` only after remote evidence. No production/codec/schema changes; separate FLU-FSM-004 Phase 9 not closed. [Result B2B](fsm_phase8_8d2b2b_result.md).
+- Lesson: codec exports typed Array[Dictionary]; to test malformed JSON-shape records, first construct an **untyped Array** copy. Prevent test fixture setup errors from masquerading as failed validator invariants. Next 8D2-B3A deterministic replay, B3B callback guards, C audit; 0/25 manual acceptance.
+
 ## 2026-11-02 — Potok 8D2-B2A transient-active snapshots and ordering
 
 - Baseline `50fe20def6c91a3b59ef11d54ff3e701583392cb` / [CI 41578626503](https://github.com/mercurysama/Flujo/actions/runs/41578626503) SUCCESS 92/92. Test commit `78a9a7d265ddad369f2473de661b01bb906d3fe5`, [CI 41579446980](https://github.com/mercurysama/Flujo/actions/runs/41579446980) **SUCCESS 93/93**, mandatory B2A focal passed.

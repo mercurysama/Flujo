@@ -1615,11 +1615,11 @@
         "The source controller and a second independent PVController never share mutable registry or pending queue state."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_snapshot_preflight_atomicity_test.tscn"
       ],
-      "notes": "8D2-B2B test-only characterization. Await remote Godot 4.7.2 CI before marking PASS. FlowFSMSnapshotCodec and production unchanged; Phase 9 not closed."
+      "notes": "8D2-B2B: first run 41581962872 FAIL because test attempted invalid writes to Godot typed Array[Dictionary], causing cascade. Corrected test fixture 32f6ab6a95ccb31c51dac882be578180afbe9dd4 passed 41582200667 SUCCESS 94/94; 23 invalid cases and valid restore verified, without production changes."
     }
   ]
 }

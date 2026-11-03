@@ -1,5 +1,10 @@
 # Current Iteration
 
+## Potok — 8D2-B2B atomicidad snapshots PASS; siguiente 8D2-B3A (2026-11-02)
+
+- [Actions 41582200667](https://github.com/mercurysama/Flujo/actions/runs/41582200667) **SUCCESS 94/94**, commit focal `32f6ab6a95ccb31c51dac882be578180afbe9dd4`. Los **23 snapshots inválidos** rechazan sin alterar registros, estados activos, cola o callbacks; restauración posterior válida sí limpia cola y ejecuta lifecycle correcto. El [primer CI 41581962872](https://github.com/mercurysama/Flujo/actions/runs/41581962872) falló por TypedArray del fixture, corregido sin cambiar aserciones.
+- [Informe B2B](fsm_phase8_8d2b2b_result.md), [plan 8D2](fsm_phase8_8d2_microblocks.md); `FLUJO-BHV-POTOK-SNAPSHOT-ATOMIC-004` `passing`, cero producción editada. **Siguiente: 8D2-B3A** determinismo multi-instancia y múltiples máquinas. Fase 9 independiente; 25 manuales Fase 7 diferidas.
+
 ## Potok — 8D2-B2A snapshot transitorio activo PASS; siguiente 8D2-B2B (2026-11-02)
 
 - [Actions 41579446980](https://github.com/mercurysama/Flujo/actions/runs/41579446980) **SUCCESS 93/93** para focal `78a9a7d265ddad369f2473de661b01bb906d3fe5`. Tres máquinas activas EPHEMERAL/SESSION/PERSISTENT: las dos transitorias exportan recuperación al inicial authored, persistente conserva ID, y seis registros persistentes mantienen orden y datos; restore en segundo controlador sin afectar al primero.
