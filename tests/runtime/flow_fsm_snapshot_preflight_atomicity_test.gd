@@ -214,11 +214,21 @@ func _make_invalid(source: Dictionary, case_name: String,
 		"unsaved_session_active":
 			machines[0]["active_state_id"] = transient_id
 		"bad_machine_record":
-			machines[0] = "invalid-row"
+			# The codec exports Array[Dictionary]; make an untyped copy so a
+			# malformed row is representable without a Godot TypedArray error.
+			var loose_machines: Array = []
+			for row: Variant in machines:
+				loose_machines.append(row)
+			loose_machines[0] = "invalid-row"
+			snapshot["machines"] = loose_machines
 		"unknown_dynamic_machine":
 			dynamic[0]["machine_id"] = "missing-machine"
 		"bad_dynamic_record":
-			dynamic[0] = "invalid-row"
+			var loose_dynamic: Array = []
+			for row: Variant in dynamic:
+				loose_dynamic.append(row)
+			loose_dynamic[0] = "invalid-row"
+			snapshot["dynamic_states"] = loose_dynamic
 		"bad_alias_id":
 			dynamic[0]["runtime_id"] = "not-a-valid-flow-id"
 		"authored_id_collision":
