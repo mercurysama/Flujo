@@ -1843,11 +1843,11 @@
         "Restoration never mutates authored FlowGraph or the disk file."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_snapshot_instance_reconstruction_test.tscn"
       ],
-      "notes": "9C2-A focal and mandatory Godot 4.7.2 CI gate registered; full CI must pass before status passing. No runtime changes; human acceptance pending."
+      "notes": "9C2-A source 4b5954deceacc7017480aa7ce062b8fc3425e68b. GitHub Actions 41679826206 and whitespace-corrected checkpoint 41679988667 completed SUCCESS, 106/106 headless steps without failed steps. Mandatory 9C2-A focal proves new PVController does not auto-restore SESSION/PERSISTENT; explicit restore_from_file recovers PERSISTENT identity and payload, SESSION stays absent. 25 manual checks deferred."
     }
   ]
 }
