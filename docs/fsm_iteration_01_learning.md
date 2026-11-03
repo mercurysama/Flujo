@@ -1,3 +1,8 @@
+## 2026-11-03 — Potok 8D2-B3B3 / B3B4 reentrancy audit closeout
+
+- Mandatory `flow_fsm_reset_restore_reentrant_guard_test.tscn` introduced in `7dd735d`, [Actions 41592345621](https://github.com/mercurysama/Flujo/actions/runs/41592345621) **SUCCESS** full Godot 4.7.2 suite. No runtime edits. Catalog `FLUJO-BHV-POTOK-RESET-RESTORE-REENTRANCY-011` now `passing` based on verified CI.
+- [B3B4 audit](fsm_phase8_8d2b3b4_audit.md) records B3B1–B3B3 exact scenes, commits, CI and reset per-machine Exit→Enter vs restore global Exit→Enter distinction. No new test or product code in audit; next 8D2-C1 traceability. 25 human checks pending, local Godot NOT RUN, repository skills not formally invoked.
+
 ## 2026-11-03 — Potok 8D2-B3B2 snapshot restore callbacks
 
 - Focal `flow_fsm_restore_callback_queue_test.tscn`, behavior `FLUJO-BHV-POTOK-RESTORE-CALLBACK-QUEUE-010`, source `4bc3f73`; [Actions 41591954025](https://github.com/mercurysama/Flujo/actions/runs/41591954025) **SUCCESS** full Godot 4.7.2 suite. Restore emits global Exit(A), Exit(B), Enter(A), Enter(B) and clears only owner stale queue, sibling independent. Catalog marked passing after CI, production unchanged.

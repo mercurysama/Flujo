@@ -1,3 +1,10 @@
+## Potok — 8D2-B3B1–B4 callback guards PASS CI; next 8D2-C1 (2026-11-03)
+
+- **B3B1:** [Actions 41590902774](https://github.com/mercurysama/Flujo/actions/runs/41590902774) SUCCESS, per-machine bounded reset callback order and owner-only queue clearing.
+- **B3B2:** [Actions 41591954025](https://github.com/mercurysama/Flujo/actions/runs/41591954025) SUCCESS, global snapshot restore callbacks, queue clearing and sibling isolation.
+- **B3B3:** [Actions 41592345621](https://github.com/mercurysama/Flujo/actions/runs/41592345621) SUCCESS, rejects reset/restore inside tick and nested execution. Behavior catalog ID `FLUJO-BHV-POTOK-RESET-RESTORE-REENTRANCY-011` marked `passing` after CI.
+- **B3B4:** [evidence audit](fsm_phase8_8d2b3b4_audit.md) consolidated without production changes. Next **8D2-C1**; **8D2 overall and 8E not closed**. 25 Fedora/Android manual checks pending; no local Godot or formal repo skill invocation.
+
 ## Potok — 8D2-B3A1–A5 determinism audit PASS; next 8D2-B3B (2026-11-03)
 
 - [Audit B3A5](fsm_phase8_8d2b3a5_audit.md) consolidates four independent real-PVController characterization focals: [B3A1 CI 41584361713](https://github.com/mercurysama/Flujo/actions/runs/41584361713) PASS; [B3A2 CI 41584784409](https://github.com/mercurysama/Flujo/actions/runs/41584784409) PASS; [B3A3 CI 41588927428](https://github.com/mercurysama/Flujo/actions/runs/41588927428) PASS; [B3A4 CI 41589766004](https://github.com/mercurysama/Flujo/actions/runs/41589766004) PASS after correcting a test-only callback ordering expectation, historical [FAIL 41589653144](https://github.com/mercurysama/Flujo/actions/runs/41589653144) preserved. All four catalog behaviors marked `passing` with required CI gates.

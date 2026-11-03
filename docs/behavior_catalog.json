@@ -1748,11 +1748,11 @@
         "Sibling controller and authored graph remain isolated and unmodified."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_reset_restore_reentrant_guard_test.tscn"
       ],
-      "notes": "8D2-B3B3 focal registered, mandatory CI not yet verified."
+      "notes": "8D2-B3B3 test 7dd735de16f36e5ceb81690fc106e5b44222d64d and mandatory focal plus complete Godot 4.7.2 suite in Actions 41592345621 completed SUCCESS. Follow-up documentation 514e111e1c7e907003aef14d7a173c8a68ae7520 also Actions 41592430879 SUCCESS. No production code changes. 25 manual checks deferred."
     }
   ]
 }

@@ -19,8 +19,8 @@
 | **8D2-B1B** | Tras stop y reinicio del mismo `PVController`, los tres lifetimes desaparecen, cola vieja no reaparece, runtime anterior y SDK retenidos no pueden operar; segundo controlador no se detiene. | [PASS 92/92](fsm_phase8_8d2b1b_result.md), focal de ciclo de vida y regresiones FSM-003/004/SDK. | **PASS CI** |
 | **8D2-B2A** | Exportar snapshot con alias EPHEMERAL o SESSION **activo**; inicial authored como recuperación; PERSISTENT activo retiene ID. Tres máquinas y seis persistentes ordenados; restaurar a otra instancia. | [PASS 93/93](fsm_phase8_8d2b2a_result.md), focal B2A + FSM-004, codec v1 preservado. | **PASS CI** |
 | **8D2-B2B** | 23 variantes inválidas de snapshot rechazadas atómicamente sin tocar máquina activa, alias, datos, cola ni callbacks; restauración válida posterior y aislamiento de otro controlador. | [PASS 94/94](fsm_phase8_8d2b2b_result.md), focal obligatorio y regresiones FSM-004, con codec y runtime intactos. | **PASS CI** |
-| **8D2-B3A** | Dos controladores y varias máquinas reciben la misma secuencia definida de entradas, resets y ticks; comparar trazas ordenadas y resultados con IDs explícitos estables. | `flow_fsm_negative_routing_test.tscn`, 6A/6B/6G, 8C2; no equiparar GUID aleatorios. | **PENDING** |
-| **8D2-B3B** | Aislar casos de callbacks `StateExit`/`StateEnter` durante reset/restore y solicitudes encoladas; comprobar guardas dentro de tick y que no haya doble Enter/Exit inesperado. | Pruebas pequeñas y acotadas; detener ante dos fallos de un recurso; nunca forzar recursión potencialmente sin límite. | **PENDING** |
+| **8D2-B3A** | Dos controladores y varias máquinas reciben la misma secuencia definida de entradas, resets y ticks; comparar trazas ordenadas y resultados con IDs explícitos estables. | [Auditoría B3A5](fsm_phase8_8d2b3a5_audit.md); cuatro focos obligatorios, CI verde; IDs explícitos. | **PASS CI + AUDIT** |
+| **8D2-B3B** | Aislar casos de callbacks `StateExit`/`StateEnter` durante reset/restore y solicitudes encoladas; comprobar guardas dentro de tick y que no haya doble Enter/Exit inesperado. | [Auditoría B3B4](fsm_phase8_8d2b3b4_audit.md); B3B1–B3B3 CI SUCCESS; callbacks acotados. | **PASS CI + AUDIT** |
 | **8D2-C** | Auditoría final requisito → código → catálogo → escena → commit → Actions, reconstrucción de qué lifetimes sobreviven a cada frontera; declarar cierre técnico **solo** si todos los gates pasan. | Conservar alcance de Fase 9, 25 visuales pendientes y límites de SDK; preparar entrada 8E. | **PENDING** |
 
 ## Punto de recuperación
@@ -37,3 +37,10 @@
 - **8D2-B3A1–B3A4:** focal and full Godot 4.7.2 CI **PASS**; trace and initial B3A4 fixture failure documented in [B3A5 audit](fsm_phase8_8d2b3a5_audit.md).
 - **8D2-B3A5:** documentary audit **PASS**, no code changes or fresh test added. B3A complete technically; do not infer 8D2/8E closure or human acceptance.
 - **Next:** 8D2-B3B1 characterize bounded reset callbacks, B3B2 restore callbacks, B3B3 tick/reentrancy and isolation, B3B4 regression/checkpoint. See audit for test baselines.
+
+## 2026-11-03 — B3B callback audit checkpoint
+
+- **B3B1 PASS CI:** [41590902774](https://github.com/mercurysama/Flujo/actions/runs/41590902774); `reset()` rejects in-tick and performs per-machine Exit→Enter outside tick.
+- **B3B2 PASS CI:** [41591954025](https://github.com/mercurysama/Flujo/actions/runs/41591954025); `restore_snapshot()` uses global Exit then Enter and clears owner stale pending work.
+- **B3B3 PASS CI:** [41592345621](https://github.com/mercurysama/Flujo/actions/runs/41592345621); callback reset/restore and nested tick guards, with controller isolation.
+- **B3B4:** [technical audit](fsm_phase8_8d2b3b4_audit.md), documentary consolidation; new docs CI separate. **Next 8D2-C1** requirement-to-implementation/test/catalog/CI traceability, then 8D2-C2 and 8E. Manual tests 0/25 and production unchanged.
