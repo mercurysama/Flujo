@@ -1900,11 +1900,11 @@
         "Later compatible restore succeeds and preserves original alias identity."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_snapshot_compatibility_matrix_test.tscn"
       ],
-      "notes": "9D1-A new mandatory Godot 4.7.2 focal, pending full CI; 9C3-D pass 41706512868. This is strict rejection characterization, not migration."
+      "notes": "9D1-A source a41076b37ac7db8de754eda0b7c5e62ceab73ff9, Godot 4.7.2 GitHub Actions 41711670098 completed SUCCESS with 109/109 job steps and zero failures, mandatory 9D1-A compatibility focal success. Exact v1 portable restore preserved; old/future format, schema/graph/machine/state/template and invalid collection rejected without runtime publication. 25 manual checks deferred, F5–F7 open."
     }
   ]
 }

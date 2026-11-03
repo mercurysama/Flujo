@@ -1,3 +1,8 @@
+## Potok 9D1-B — strict v1 compatibility CI PASS; next 9D2-A (2026-11-03)
+
+- [9D1-B closeout](fsm_phase9_9d1b_compatibility_closeout.md): [Actions 41711670098](https://github.com/mercurysama/Flujo/actions/runs/41711670098) completed **SUCCESS 109/109**, mandatory 9D1-A focal PASS. Catalog `FLUJO-BHV-POTOK-SNAPSHOT-COMPATIBILITY-019` updated **not_run → passing** after complete evidence.
+- **Next 9D2-A** audit all phase 9 automatic coverage, exact F5–F7 fault gaps and unapproved recovery policy. Phase9 and manual 25 NOT closed; no production change.
+
 ## Potok 9D1-A — snapshot strict compatibility matrix focal registered (2026-11-03)
 
 - [9D1-A](fsm_phase9_9d1a_compatibility_matrix_result.md) adds a mandatory `flow_fsm_snapshot_compatibility_matrix_test.tscn` for old/future format, mismatched schema/graph/machine, invalid active/template ID and machine collection. All reject without modifying persistent alias/data or pending request; exact v1 file must restore. Behavior `FLUJO-BHV-POTOK-SNAPSHOT-COMPATIBILITY-019` **not_run** until complete CI. No migration or runtime edits.
