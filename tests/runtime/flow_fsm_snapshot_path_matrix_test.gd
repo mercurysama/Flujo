@@ -92,7 +92,8 @@ func _run() -> void:
 	_check(runtime.get_active_state_id(mid) == alias_id
 			and runtime.get_dynamic_state_data(mid, alias_id).get("generation") == 2,
 			"Valid restore recovers original active persistent alias and detached data")
-	_check(runtime.export_snapshot() == expected, "Successful restore reproduces snapshot")
+	var restored_json: Variant = JSON.parse_string(JSON.stringify(runtime.export_snapshot()))
+	_check(restored_json == json_expected, "Successful restore reproduces portable JSON snapshot")
 	_cleanup()
 	controller.visual_program_enabled = false
 	controller.queue_free()

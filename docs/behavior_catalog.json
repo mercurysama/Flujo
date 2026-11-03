@@ -1790,7 +1790,7 @@
       "test_paths": [
         "tests/runtime/flow_fsm_snapshot_path_matrix_test.tscn"
       ],
-      "notes": "9B2-A test scene and mandatory full Godot 4.7.2 CI gate registered; no passing claim before successful complete run."
+      "notes": "9B2-A original c3ace6534f3b0b9b247700e56caec5be653250b5 produced expected gate RED on Actions 41658231067: only last assertion compared in-memory typed Dictionary to JSON-restored Dictionary. Test-only correction normalizes both through JSON stringify/parse; full CI still pending. Keep not_run until complete SUCCESS."
     }
   ]
 }

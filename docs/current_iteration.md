@@ -1,3 +1,7 @@
+## Potok 9B2-B — focal JSON-normalization fix after historical RED (2026-11-03)
+
+- [Actions 41658231067](https://github.com/mercurysama/Flujo/actions/runs/41658231067) **FAIL** only on final direct Dictionary equality after successful JSON restore; preceding checks passed. Test-only normalization compares portable JSON snapshots on both sides, preserving all path / queue / alias assertions. Behavior `FLUJO-BHV-POTOK-SNAPSHOT-PATH-POLICY-013` stays **not_run** pending a new full SUCCESS. No runtime or codec changes.
+
 ## Potok 9B2-A — safe user:// snapshot path matrix registered (2026-11-03)
 
 - [9B2-A path matrix](fsm_phase9_9b2a_path_matrix_result.md) creates mandatory `tests/runtime/flow_fsm_snapshot_path_matrix_test.tscn` and behavior `FLUJO-BHV-POTOK-SNAPSHOT-PATH-POLICY-013` **not_run** pending new CI. It checks valid root/nested `user://` paths, rejects relative/res/absolute/traversal/backslash/invalid-extension on save and restore, retains queued direct request on rejected restore, and successfully restores portable persistent alias from allowed nested file. No production changes.

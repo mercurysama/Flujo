@@ -18,3 +18,9 @@ Los caminos prohibidos se pasan a las APIs para comprobar su rechazo, **no** se 
 **Siguiente microbloque:** 9B2-B, comprobar log y resultado integral; actualizar catálogo `not_run → passing` únicamente tras éxito total, o diagnosticar RED sin modificar contrato en silencio. Después 9B3, riesgos de backup ante fallo de reemplazo.
 
 *Todo es Flujo; todo fluye.* 🌊
+
+## 9B2-B — primer CI RED; corrección focal sin modificar producción
+
+- [Actions 41658231067](https://github.com/mercurysama/Flujo/actions/runs/41658231067) **completed FAILURE**: solo falla el paso `Potok-9B2A user snapshot write and restore path matrix focal`. El log muestra una única aserción fallida: `Successful restore reproduces snapshot`; las aserciones precedentes sobre rutas, cola, alias y datos pasaron.
+- **Diagnóstico de fixture:** `expected` procede de un Dictionary en memoria con tipos numéricos Godot; tras JSON, enteros pueden decodificarse como floats. La igualdad directa de Dictionary exige la representación original. El resultado contractual de un snapshot **portable** se compara ahora tras `JSON.parse_string(JSON.stringify(runtime.export_snapshot()))` frente a `json_expected` ya normalizado. Se conservan las comprobaciones explícitas de alias, datos, estado, rechazo de rutas y cola; no se relajan.
+- **Estado:** `baseline_status=not_run` hasta nuevo CI integral SUCCESS. Runtime, codec, escenas, workflow y formato permanecen intactos. Este fallo histórico debe conservarse en la auditoría de 9B2-B.
