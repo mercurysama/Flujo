@@ -1530,19 +1530,20 @@
       "area": "Potok SDK active dynamic alias removal with synchronous safe fallback",
       "precondition": "One schema 3 PVController has two machines; an SDK StateEnter registered a pair of dynamic SESSION aliases and activated the first on a manual tick.",
       "public_action": "Attempt removal from real StateUpdate during a tick, then use a controlled shared executor callback with the same real machine/runtime capability outside tick to reject invalid fallbacks and remove active alias with dynamic and then authored fallback.",
-      "expected_result": "Active removal is rejected inside tick with no effects. Outside tick, a machine-bound SDK callback rejects invalid fallbacks, commits exactly one Exit→Enter→Commit lifecycle for each valid removal, purges only matching queued direct requests, and retains unrelated events.",
+      "expected_result": "The real SDK StateUpdate rejects active alias removal during tick. Two independent test scenes exercise dynamic and authored fallbacks outside tick via a controlled shared executor, preserving Exit→Enter→Commit, selective pending cleanup, and guarded authored StateEnter reentry without duplicate aliases.",
       "invariants": [
         "Real StateUpdate SDK cannot remove its own active alias during tick.",
         "The outside-tick test injection uses the existing FlowReadyExecutor and real FlowFSMRuntime; it is not a new production runtime or general public callback trigger.",
-        "On successful active removal the original Exit and new Enter precede exactly one dynamic-removal commit; no nested callback reentry occurs in the fixture.",
+        "Dynamic fallback does not reenter the initial state; authored fallback legitimately reenters its initial StateEnter once but must not register aliases twice. Both produce exactly one dynamic-removal commit.",
         "Authored graph and other-machine requests remain unchanged; expired SDK facades reject further operations."
       ],
       "coverage": "automatic",
       "baseline_status": "not_run",
       "test_paths": [
-        "tests/runtime/flow_fsm_sdk_active_removal_test.tscn"
+        "tests/runtime/flow_fsm_sdk_active_removal_test.tscn",
+        "tests/runtime/flow_fsm_sdk_authored_fallback_test.tscn"
       ],
-      "notes": "8D1-C4C2 SDK callback contract focal pending CI. Positive outside-tick case uses the shared executor test seam (not an automatic FSM lifecycle phase), a limitation to report honestly."
+      "notes": "8D1-C4C2 split into independent dynamic and authored fallback scenes after two failed Actions runs (41572128593 parser; 41572368984 incorrect StateEnter reentry expectation). New characterization awaits CI, remains not_run. SDK outside-tick path uses the existing shared executor test seam; not a public automatic callback."
     }
   ]
 }

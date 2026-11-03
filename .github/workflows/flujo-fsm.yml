@@ -75,9 +75,12 @@ jobs:
       - name: Potok-8D1C4C1 SDK selective pending alias removal focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_sdk_selective_removal_test.tscn
-      - name: Potok-8D1C4C2 SDK active removal fallback contract focal
+      - name: Potok-8D1C4C2A SDK dynamic fallback focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_sdk_active_removal_test.tscn
+      - name: Potok-8D1C4C2B SDK authored fallback and StateEnter reentry focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_sdk_authored_fallback_test.tscn
       - name: Potok-8C2 selective pending requests and multi-machine focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_dynamic_pending_multimachine_test.tscn

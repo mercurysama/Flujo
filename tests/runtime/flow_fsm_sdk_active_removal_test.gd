@@ -1,7 +1,7 @@
 extends Node
 
-## Potok 8D1-C4C2: actual StateUpdate must reject active alias deletion;
-## the shared executor can provide a machine-bound SDK callback outside tick.
+## Potok 8D1-C4C2A: an active dynamic alias may be removed to a dynamic fallback;
+## real StateUpdate rejects deletion during tick, the controlled SDK callback succeeds outside.
 ## No production runtime or public SDK API is added for this test seam.
 var _failures: Array[String] = []
 var _trace: Array[String] = []
@@ -142,31 +142,17 @@ func _run() -> void:
 		"Commit:" + active_alias + ">" + backup + ":dynamic-removal"
 	], "Synchronous fallback preserves source Exit, target Enter, then one commit")
 
-	controller.set_meta("potok_8d1c4c2_target", backup)
-	controller.set_meta("potok_8d1c4c2_target_fallback", idle.get_internal_id())
-	_trace.clear()
-	_invoke_sdk_outside_tick(controller, graph, runtime, wrapper, mid)
-	records = controller.get_meta("potok_8d1c4c2_records", [])
-	_check(records.size() == 4
-		and _matches_success(records[3], backup, idle.get_internal_id()),
-		"Second SDK callback can remove active fallback alias to an authored state")
-	_check(runtime.get_active_state_id(mid) == idle.get_internal_id()
-		and runtime.get_dynamic_state_ids(mid).is_empty(),
-		"Both aliases are removed; authored fallback is active")
-	_check(_trace == [
-		"StateExit:fallback-exit",
-		"Exit:" + backup,
-		"Enter:" + idle.get_internal_id(),
-		"Commit:" + backup + ">" + idle.get_internal_id() + ":dynamic-removal"
-	], "Second fallback preserves Exit→Enter→Commit without recursive SDK creation")
-	_check(controller.get_meta("potok_8d1c4c2_records", []).size() == 4,
-		"Lifecycle callbacks never reenter the SDK creation/removal probes")
+	_check(controller.get_meta("potok_8d1c4c2_records", []).size() == 3,
+		"Alias-to-alias fallback never reenters the authored initial StateEnter")
+	_check(runtime.get_dynamic_state_ids(mid) == [backup],
+		"Only the known dynamic fallback alias survives")
 	_check(runtime.pending_request_count() == 1,
-		"Unrelated event is retained across both active SDK removals")
+		"Unrelated sibling event is retained after dynamic fallback")
 	runtime.tick(0.1, FlowStateMachineDefinition.TickMode.MANUAL)
 	_check(runtime.pending_request_count() == 0
-		and runtime.get_active_state_id(mid) == idle.get_internal_id(),
-		"Retained sibling event drains on the next clock without altering main FSM")
+		and runtime.get_active_state_id(mid) == backup
+		and controller.get_meta("potok_8d1c4c2_records", []).size() == 3,
+		"Sibling event drains without reentering SDK probes or moving the fallback")
 
 	for row: Dictionary in records:
 		var operations: FlowFSMOperations = row.get("facade") as FlowFSMOperations
@@ -184,10 +170,10 @@ func _run() -> void:
 	controller.queue_free()
 	await get_tree().process_frame
 	if _failures.is_empty():
-		print("[Flujo] Potok 8D1-C4C2 SDK active fallback contract passed")
+		print("[Flujo] Potok 8D1-C4C2A SDK dynamic fallback contract passed")
 	else:
 		for failure: String in _failures:
-			push_error("[Flujo] Potok 8D1-C4C2: " + failure)
+			push_error("[Flujo] Potok 8D1-C4C2A: " + failure)
 	get_tree().quit(0 if _failures.is_empty() else 1)
 
 
@@ -249,5 +235,5 @@ func _on_commit(_machine_id: String, from_id: String, to_id: String,
 func _check(ok: bool, description: String) -> bool:
 	if not ok:
 		_failures.append(description)
-		push_error("[Flujo] Potok 8D1-C4C2: " + description)
+		push_error("[Flujo] Potok 8D1-C4C2A: " + description)
 	return ok
