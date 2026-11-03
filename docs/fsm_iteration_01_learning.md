@@ -1,3 +1,8 @@
+## Potok — 8E-1 FLU-FSM-003 closure criteria audited; next 8E-2 (2026-11-03)
+
+- [8E-1 closure criteria audit](fsm_phase8_8e1_closure_criteria_audit.md): maps phase 8 original eight tasks to existing 8A–8D technical evidence, with 8B1 [41547536522](https://github.com/mercurysama/Flujo/actions/runs/41547536522), 8B2 [41548395878](https://github.com/mercurysama/Flujo/actions/runs/41548395878), 8C1 [41549228081](https://github.com/mercurysama/Flujo/actions/runs/41549228081), 8C2 [41550131409](https://github.com/mercurysama/Flujo/actions/runs/41550131409), 8D1-C [41574412835](https://github.com/mercurysama/Flujo/actions/runs/41574412835) and 8D2-C2 [41594048021](https://github.com/mercurysama/Flujo/actions/runs/41594048021) confirmed SUCCESS. Current contract retains constant 128-state quota; original plan's 'configurable' wording is a recorded difference, not authorization to alter runtime.
+- 8E-1 is documentary only, no production/test changes. **Next 8E-2** check `AGENTS.md`, constitution, workflow, catalog and mandatory test gates then fresh full CI. **Phase 8 not yet formally closed**; Fedora 15 + Android 10 acceptance checks still pending, phase 9 separate. Godot local and formal repository Skills not run.
+
 ## Potok 8D2-C2 — technical closeout, handoff to 8E (2026-11-03)
 
 - [C2 technical closeout](fsm_phase8_8d2c2_closeout.md) reconciles [C1 matrix](fsm_phase8_8d2c1_traceability_audit.md), 11 `passing` behavior-catalog entries, 11 mandatory Godot 4.7.2 focal scenes and historic full CI **SUCCESS**, with [Actions 41593493271](https://github.com/mercurysama/Flujo/actions/runs/41593493271) SUCCESS on C1 and [41593197556](https://github.com/mercurysama/Flujo/actions/runs/41593197556) SUCCESS on B3B4. C2 new docs CI awaits independent validation.
