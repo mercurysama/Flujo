@@ -1,3 +1,9 @@
+## Potok 8E-4 — FSM-004 inventory and phase 9 handoff (2026-11-03)
+
+- [8E-4 phase 9 handoff](fsm_phase8_8e4_phase9_handoff.md) inventories existing `FlowFSMSnapshotCodec`, `FlowFSMRuntime.export_snapshot/restore_snapshot/save_to_file/restore_from_file`, `FLU-FSM-004`, `tests/runtime/flow_fsm_snapshot_test.tscn` and 8D2 snapshot compatibility focals. Phase 9 is **NOT complete**; no production or snapshot format edits.
+- **Next 9A1:** audit snapshot file safety, backup contents, failure recovery, paths, invalid JSON, graph incompatibility and per-controller isolation; phase 9 is subdivided into 9A1–9E1 recoverable microblocks. A conditional snapshot CI gate exists and needs review. Historical 8E-2 CI [41595220445](https://github.com/mercurysama/Flujo/actions/runs/41595220445) SUCCESS; the 8E-3 runs [41612296707](https://github.com/mercurysama/Flujo/actions/runs/41612296707) and [41612358115](https://github.com/mercurysama/Flujo/actions/runs/41612358115) were still running at start of 8E-4; do not assume PASS before checking.
+- Phase 8 is **technically validated by CI with human acceptance deferred**. Fedora 15 + Android 10 = **0/25 manual checks done**. No merge or stable release; no local Godot/formally invoked repository Skills.
+
 ## Potok 8E-3 — fase 8 technical acceptance conditional, next 8E-4 (2026-11-03)
 
 - [8E-3 conditional technical acceptance](fsm_phase8_8e3_conditional_technical_acceptance.md): **phase 8 automated technical validation complete** on `feature/fsm-runtime-flow-flusso`; **human acceptance NOT complete**. [8E-2 audit Actions 41595172497](https://github.com/mercurysama/Flujo/actions/runs/41595172497) and [checkpoint 41595220445](https://github.com/mercurysama/Flujo/actions/runs/41595220445) both **SUCCESS**. Full Potok automatic subset of 22 entries `passing`, but other catalog statuses retain their own non-PASS values. No production changes, no merge/release.
