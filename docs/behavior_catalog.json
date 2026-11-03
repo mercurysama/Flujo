@@ -1791,6 +1791,25 @@
         "tests/runtime/flow_fsm_snapshot_path_matrix_test.tscn"
       ],
       "notes": "9B2-A original CI Actions 41658231067 FAILURE due to test-only in-memory-versus-JSON Dictionary equality; correction in 85e5b7f03c401c0186b4745e9d2abc8c0bc48eb9 normalizes portable JSON on both sides without removing assertions. Entire GitHub Actions 41658845225 completed SUCCESS, 103/103 steps, zero failed including mandatory 9B2A focal. No product change; manual acceptance pending."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SNAPSHOT-SAVE-PREFLIGHT-014",
+      "area": "Potok FSM-004 early save preflight failure preserves valid snapshot",
+      "precondition": "An active persistent FSM has a saved S1 under dedicated user://flujo_fsm_tests/ and a regular sentinel file occupies a would-be directory component of a second path; a direct state change is queued.",
+      "public_action": "Try save_to_file beneath the file sentinel, then inspect the sentinel, valid S1, runtime and queued direct transition.",
+      "expected_result": "save_to_file returns false on impossible directory creation; valid S1 bytes and sentinel remain intact, no output or temporary files appear, the active persistent FSM remains unchanged, and queued direct transition survives.",
+      "invariants": [
+        "Failed directory creation cannot publish a new snapshot.",
+        "No modification of a separate valid S1 file or its backup.",
+        "No mutation of live persistent data or loss of a previously queued transition.",
+        "Fixture creates/deletes only dedicated user:// test files it owns."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_snapshot_save_preflight_failure_test.tscn"
+      ],
+      "notes": "9B3-B2 F3 file-sentinel failure test and mandatory Godot 4.7.2 CI gate registered; do not mark passing before complete run SUCCESS. Does not characterize F5–F7 rename/copy failures."
     }
   ]
 }

@@ -1,3 +1,8 @@
+## Potok 9B3-B2 — safe early-save F3 failure focal added (2026-11-03)
+
+- [9B3-B2 focal](fsm_phase9_9b3b2_save_preflight_failure_result.md) creates `flow_fsm_snapshot_save_preflight_failure_test.tscn` and mandatory GitHub Actions step for early `save_to_file` failure: sentinel file occupies a path component, preserving separate valid S1 bytes, pending transition, persistent alias and avoiding leaked temp. Behavior `FLUJO-BHV-POTOK-SNAPSHOT-SAVE-PREFLIGHT-014` **not_run** until integral CI passes. F5–F7 rename/backup replacement remain unproven.
+- **Next 9B3-B3** verify focal and full CI, repair only evidence-backed RED or mark behavior passing after SUCCESS; later **9B3-C1** recovery/fault-test design. No runtime/codec changes, main untouched, 25 manual checks deferred.
+
 ## Potok 9B3-B1 — backup failure policy proposal and safe F3 test plan (2026-11-03)
 
 - [9B3-B1 policy proposal](fsm_phase9_9b3b1_backup_failure_policy.md): F5/F7 should prefer preserving previously verified backup and target; F9 corrupt prior target still needs human contract choice; F10 automatic recovery from .bak is NOT authorized and is NOT currently implemented. No claim of universal atomicity, no productive code changes.

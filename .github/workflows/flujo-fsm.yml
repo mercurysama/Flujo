@@ -43,6 +43,9 @@ jobs:
         run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_ready_runtime_test.tscn
       - name: Navigation baseline
         run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_navigation_runtime_test.tscn
+      - name: Potok-9B3B2 early save I/O preflight failure focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_snapshot_save_preflight_failure_test.tscn
       - name: Potok-9B2A user snapshot write and restore path matrix focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_snapshot_path_matrix_test.tscn
