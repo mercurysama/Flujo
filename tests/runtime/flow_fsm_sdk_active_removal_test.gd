@@ -201,7 +201,8 @@ func _invoke_sdk_outside_tick(controller: PVController, graph: FlowGraph,
 
 
 func _matches_success(row: Dictionary, target: String, fallback: String) -> bool:
-	return row.get("role") == "remove" and row.get("phase") == "StateExit"
+	return (
+		row.get("role") == "remove" and row.get("phase") == "StateExit"
 		and row.get("authorized") == true
 		and row.get("target") == target and row.get("fallback") == fallback
 		and row.get("invalid_fallbacks_rejected") == true
@@ -210,6 +211,7 @@ func _matches_success(row: Dictionary, target: String, fallback: String) -> bool
 		and row.get("fallback_present") == true
 		and row.get("second_remove_rejected") == true
 		and row.get("target_data_empty") == true
+	)
 
 
 func _probe(script: Script, role: String, template_id: String) -> FlowBlock:
