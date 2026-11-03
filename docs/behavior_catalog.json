@@ -1429,6 +1429,25 @@
         "tests/runtime/flow_fsm_sdk_lifecycle_guards_test.tscn"
       ],
       "notes": "8D1-C1B: GitHub Actions 41563021661 completed SUCCESS 83/83 at 1df32fdbb0ccba29eede437bc3f1ae6b33374a33; no production changes."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SDK-MULTI-OWNER-003",
+      "area": "Potok FSM SDK operations bound to controller and machine",
+      "precondition": "Two PVController nodes share one validated schema 3 FlowGraph containing two MANUAL state machines with the same explicit dynamic alias ID scoped per machine.",
+      "public_action": "Execute SDK StateEnter callbacks on both controllers and both machines, attempt foreign-machine operations, retain facades and change/remove aliases independently.",
+      "expected_result": "Each of four local registries accepts its own same-named dynamic alias with independent callback data; sibling-machine operations reject; retained facades expire; changes and stopping one controller never alter other controllers or machines.",
+      "invariants": [
+        "No facade SDK argument can choose an alternate machine or controller.",
+        "An alias with identical ID across machines/controllers has isolated data, active state and lifetime.",
+        "Rejection of cross-machine registration/change/remove/read/write leaves queues and authored FlowGraph intact.",
+        "SDK callback uses the existing shared executor and context; no new registry or sandbox claim."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_sdk_machine_isolation_test.tscn"
+      ],
+      "notes": "8D1-C2 focal and required CI step committed; mark passing only after actual Godot 4.7.2 GitHub Actions execution."
     }
   ]
 }

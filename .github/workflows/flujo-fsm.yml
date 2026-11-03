@@ -60,6 +60,9 @@ jobs:
       - name: Potok-8D1C1B SDK lifecycle reset graph and stop guards
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_sdk_lifecycle_guards_test.tscn
+      - name: Potok-8D1C2 two controllers and two machines SDK isolation
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_sdk_machine_isolation_test.tscn
       - name: Potok-8C2 selective pending requests and multi-machine focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_dynamic_pending_multimachine_test.tscn
