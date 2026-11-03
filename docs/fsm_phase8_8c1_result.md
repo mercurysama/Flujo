@@ -7,7 +7,7 @@
 - `f1a669b601680408671a8492b32fdd3bd10eab9c`: nuevo test `tests/runtime/flow_fsm_dynamic_active_removal_test.gd`.
 - `9a6ccf64b4e8f21375b784a4d5f31dd4bd40bd37`: escena ejecutable `tests/runtime/flow_fsm_dynamic_active_removal_test.tscn`.
 - `f1922e8de2e6a6ad513c49bde200b22b3c6f2539`: paso `Potok-8C1 active dynamic alias fallback lifecycle focal` en `.github/workflows/flujo-fsm.yml`.
-- [GitHub Actions 41549228081](https://github.com/mercurysama/Flujo/actions/runs/41549228081): focal 8C1 completado SUCCESS; verificar el estado final de la regresión completa antes de confirmar toda la suite.
+- **GREEN global confirmado:** [GitHub Actions 41549228081](https://github.com/mercurysama/Flujo/actions/runs/41549228081), **completed SUCCESS, 79/79 pasos**, cero fallos, para el commit `f1922e8de2e6a6ad513c49bde200b22b3c6f2539`. Incluye focal 8C1, 8B2, 8B1 y las regresiones históricas.
 
 ## Pruebas realizadas
 
