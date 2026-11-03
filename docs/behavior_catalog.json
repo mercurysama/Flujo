@@ -1538,12 +1538,12 @@
         "Authored graph and other-machine requests remain unchanged; expired SDK facades reject further operations."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_sdk_active_removal_test.tscn",
         "tests/runtime/flow_fsm_sdk_authored_fallback_test.tscn"
       ],
-      "notes": "8D1-C4C2 split into independent dynamic and authored fallback scenes after two failed Actions runs (41572128593 parser; 41572368984 incorrect StateEnter reentry expectation). New characterization awaits CI, remains not_run. SDK outside-tick path uses the existing shared executor test seam; not a public automatic callback."
+      "notes": "8D1-C4C2: split after failed runs 41572128593 (parser) and 41572368984 (incorrect StateEnter reentry expectation). Both independent focal scenes and full gate passed Actions 41573978889 SUCCESS 90/90 on 6650d5c7571887f13e61d18f4c4753c5e59e80eb. Positive outside-tick path uses controlled shared-executor seam, not a public automatic lifecycle trigger; no production changes."
     }
   ]
 }

@@ -1,5 +1,14 @@
 # Flujo FSM — Iteration journal / Skill learning
 
+## 2026-11-02 — Potok 8D1-C4C2 split active SDK fallback and guarded StateEnter reentry
+
+- Baseline `b6f61f9f` / [CI 41571201948](https://github.com/mercurysama/Flujo/actions/runs/41571201948) SUCCESS 88/88. Initial combined test `d7ffa6b0` [CI 41572128593](https://github.com/mercurysama/Flujo/actions/runs/41572128593) FAIL (GDScript parse); syntax fix `b53ee9f5` [CI 41572368984](https://github.com/mercurysama/Flujo/actions/runs/41572368984) FAIL due to incorrect record count when authored fallback legitimately reenters idle StateEnter; stopped after two resource failures.
+- Newly authorized split `6650d5c7571887f13e61d18f4c4753c5e59e80eb`: C4C2A dynamic-to-dynamic fallback uses existing scene; C4C2B authored fallback runs independently with separate .gd/.tscn. It explicitly requires the extra StateEnter record but no additional alias registration, queue admission, or changed IDs. [CI 41573978889](https://github.com/mercurysama/Flujo/actions/runs/41573978889) **SUCCESS 90/90**, both focal gates passed.
+- SDK real StateUpdate rejects active removal inside tick; controlled shared executor outside tick accepts valid fallback and emits Exit→Enter→Commit without destructive recursion. Other-machine event retained. Positive executor seam is not a normal public lifecycle trigger. Catalog `FLUJO-BHV-POTOK-SDK-ACTIVE-REMOVE-008` moves `not_run`→`passing` only after CI.
+- No production changes, persistent-schema changes or `main` edits; local Godot NOT RUN; remote Godot 4.7.2 PASS. Formal skills invocation unavailable; human visual 15 Fedora + 10 Android pending.
+- Reusable skill lesson: on return to authored state, callback *must* execute; prevent duplicate *registration*, not callback reentry. Split scenarios with different lifecycle expectations so failed assertions describe a real invariant, not a false assumption.
+- [C4C2 result](fsm_phase8_8d1c4c2_result.md), [recoverable C plan](fsm_phase8_8d1c_microblocks.md). Next **8D1-C5** audit SDK evidence, then 8D2 only after review.
+
 ## 2026-11-02 — Potok 8D1-C4C1 SDK inactive removal, selective queue purge
 
 - Baseline `bb9b73a0` / [CI 41569317117](https://github.com/mercurysama/Flujo/actions/runs/41569317117), SUCCESS 87/87. Test commit `948c3b9d8a9f4d5df08d31a20e0ad7dba57ba631`; [CI 41570578617](https://github.com/mercurysama/Flujo/actions/runs/41570578617) **SUCCESS 88/88**.

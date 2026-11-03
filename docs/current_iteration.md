@@ -1,5 +1,10 @@
 # Current Iteration
 
+## Potok — 8D1-C4C2 PASS; siguiente 8D1-C5 (2026-11-02)
+
+- [Actions 41573978889](https://github.com/mercurysama/Flujo/actions/runs/41573978889) **SUCCESS 90/90**, commit `6650d5c7571887f13e61d18f4c4753c5e59e80eb`. C4C2 ahora contiene dos pruebas independientes: A para fallback dinámico y B para fallback authored, con reingreso legítimo `StateEnter` **sin duplicar alias**. Conservan Exit→Enter→Commit, cola selectiva y rechazo dentro del tick. No hubo cambios productivos.
+- [Informe C4C2](fsm_phase8_8d1c4c2_result.md); siguiente **8D1-C5** auditoría de evidencia, no fase 8D2 automáticamente. Las pruebas humanas de fase 7 siguen pendientes (15 Fedora + 10 Android).
+
 ## Potok — 8D1-C4C1 PASS; próximo 8D1-C4C2 (2026-11-02)
 
 - [Actions 41570578617](https://github.com/mercurysama/Flujo/actions/runs/41570578617) **SUCCESS 88/88** para `948c3b9d8a9f4d5df08d31a20e0ad7dba57ba631`. Callback real SDK `StateUpdate` elimina alias inactivo y limpia **solo dos** solicitudes a ese ID; conserva la transición de otra máquina y el segundo alias, que se confirman en el tick posterior. Cero cambios productivos.
