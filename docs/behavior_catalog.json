@@ -1886,6 +1886,25 @@
         "tests/runtime/flow_fsm_snapshot_disk_restore_reentrant_test.tscn"
       ],
       "notes": "9C3-C source 1a882fe540d66af5acf92ca2d1de2e64a22b5888, GitHub Actions 41706512868 completed SUCCESS, 108/108 headless job steps, zero failed including mandatory file restore in-tick guard focal. No runtime changes. 25 manual checks deferred."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SNAPSHOT-COMPATIBILITY-019",
+      "area": "Potok FSM-004 strict version graph schema and machine compatibility",
+      "precondition": "Running controller with known schema 3 graph, active persistent alias and pending transition; isolated user:// fixture path is absent.",
+      "public_action": "Load from disk eight modified snapshots with old/future format, wrong schema, foreign graph or machine, unknown active/template ID, or malformed machine collection, then restore exact compatible v1 file.",
+      "expected_result": "Each incompatible file rejects without mutating active persistent alias/data or clearing pending transition; exact v1 snapshot subsequently restores. No silent migration occurs.",
+      "invariants": [
+        "Only exact supported format_version and graph/schema are accepted.",
+        "No implicit machine-ID or display-name based remapping.",
+        "Preflight rejects incompatible records without state publication or queue clearing.",
+        "Later compatible restore succeeds and preserves original alias identity."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_snapshot_compatibility_matrix_test.tscn"
+      ],
+      "notes": "9D1-A new mandatory Godot 4.7.2 focal, pending full CI; 9C3-D pass 41706512868. This is strict rejection characterization, not migration."
     }
   ]
 }

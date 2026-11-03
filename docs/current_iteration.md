@@ -1,3 +1,8 @@
+## Potok 9D1-A — snapshot strict compatibility matrix focal registered (2026-11-03)
+
+- [9D1-A](fsm_phase9_9d1a_compatibility_matrix_result.md) adds a mandatory `flow_fsm_snapshot_compatibility_matrix_test.tscn` for old/future format, mismatched schema/graph/machine, invalid active/template ID and machine collection. All reject without modifying persistent alias/data or pending request; exact v1 file must restore. Behavior `FLUJO-BHV-POTOK-SNAPSHOT-COMPATIBILITY-019` **not_run** until complete CI. No migration or runtime edits.
+- [9C3-D](fsm_phase9_9c3d_disk_reentrant_closeout.md) CI [41706512868](https://github.com/mercurysama/Flujo/actions/runs/41706512868) **SUCCESS 108/108**, reentrancy catalog marked passing. Next **9D1-B** check new CI, then 9D2. F5–F7 unresolved; 25 manual tests deferred.
+
 ## Potok 9C3-D — reentrant disk restore CI PASS; next 9D1-A (2026-11-03)
 
 - [9C3-D closeout](fsm_phase9_9c3d_disk_reentrant_closeout.md) confirms [Actions 41706512868](https://github.com/mercurysama/Flujo/actions/runs/41706512868) **SUCCESS 108/108**, mandatory disk restore in-tick focal PASS. Catalog `FLUJO-BHV-POTOK-SNAPSHOT-DISK-REENTRANCY-018` advanced `not_run → passing`. No runtime code changes.
