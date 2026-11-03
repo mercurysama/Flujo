@@ -1,3 +1,8 @@
+## Potok 9B3-B3 — F3 full CI PASS, next 9B3-C1 (2026-11-03)
+
+- [9B3-B3 closeout](fsm_phase9_9b3b3_save_preflight_closeout.md): [Actions 41670135010](https://github.com/mercurysama/Flujo/actions/runs/41670135010) **completed SUCCESS**, all **104** headless steps, mandatory F3 focal PASS on `9fc4d44`. Catalog `FLUJO-BHV-POTOK-SNAPSHOT-SAVE-PREFLIGHT-014` updated **not_run → passing** only after full evidence. Separate valid S1, sentinel, active PERSISTENT alias and pending request preserved.
+- **Next 9B3-C1** audit how to test backup/rename failure branches F5–F7 safely; no live fault hooks or product changes without contract authority. Phase 9 not closed, no main merge; 25 manual Fedora/Android checks deferred.
+
 ## Potok 9B3-B2 — safe early-save F3 failure focal added (2026-11-03)
 
 - [9B3-B2 focal](fsm_phase9_9b3b2_save_preflight_failure_result.md) creates `flow_fsm_snapshot_save_preflight_failure_test.tscn` and mandatory GitHub Actions step for early `save_to_file` failure: sentinel file occupies a path component, preserving separate valid S1 bytes, pending transition, persistent alias and avoiding leaked temp. Behavior `FLUJO-BHV-POTOK-SNAPSHOT-SAVE-PREFLIGHT-014` **not_run** until integral CI passes. F5–F7 rename/backup replacement remain unproven.

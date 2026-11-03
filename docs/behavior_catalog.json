@@ -1805,11 +1805,11 @@
         "Fixture creates/deletes only dedicated user:// test files it owns."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_snapshot_save_preflight_failure_test.tscn"
       ],
-      "notes": "9B3-B2 F3 file-sentinel failure test and mandatory Godot 4.7.2 CI gate registered; do not mark passing before complete run SUCCESS. Does not characterize F5–F7 rename/copy failures."
+      "notes": "9B3-B2 commit 9fc4d44a9c4de18100d2b4095ded461ad0355bcf. Full Godot 4.7.2 CI GitHub Actions 41670135010 completed SUCCESS, headless job 104/104 steps completed without failures including mandatory early save I/O preflight focal. F3 file-as-parent-directory case preserves sentinel, existing S1 snapshot, live runtime and pending transition. F5–F7 replacement failures not exercised; 25 manual tests deferred."
     }
   ]
 }
