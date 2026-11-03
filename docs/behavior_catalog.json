@@ -1772,6 +1772,25 @@
         "tests/runtime/flow_fsm_snapshot_backup_contents_test.tscn"
       ],
       "notes": "9B1-A source commit c0385b67ba7ae62080a34961c2a084f55db167cf, mandatory Godot 4.7.2 focal and full regression in GitHub Actions 41654276567 completed SUCCESS (102/102 steps, zero failed). Main file S2 and backup .bak S1 verified by exact parsed JSON comparison; no production change. Human review deferred."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SNAPSHOT-PATH-POLICY-013",
+      "area": "Potok FSM-004 safe save and restore path policy",
+      "precondition": "A running PVController holds an active persistent alias and two saved valid snapshots under isolated user:// test paths; a direct transition is pending.",
+      "public_action": "Try save_to_file and restore_from_file on invalid relative, res://, absolute, traversal, backslash and extension paths; then tick and restore from a valid nested user:// JSON file.",
+      "expected_result": "Invalid paths return false without changing live FSM, its queued direct transition, or valid files; valid user:// nested paths write and restore a portable persistent snapshot.",
+      "invariants": [
+        "Rejected paths never write outside user:// or change existing valid files.",
+        "Rejecting a restore does not clear a queued transition or change active state.",
+        "Valid nested user:// file remains portable and restores only persistent instance data.",
+        "Test cleanup is limited to dedicated user://flujo_fsm_tests/ files."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_snapshot_path_matrix_test.tscn"
+      ],
+      "notes": "9B2-A test scene and mandatory full Godot 4.7.2 CI gate registered; no passing claim before successful complete run."
     }
   ]
 }

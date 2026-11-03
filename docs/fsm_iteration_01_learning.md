@@ -1,3 +1,8 @@
+## Potok 9B2-A — safe user:// snapshot path matrix registered (2026-11-03)
+
+- [9B2-A path matrix](fsm_phase9_9b2a_path_matrix_result.md) creates mandatory `tests/runtime/flow_fsm_snapshot_path_matrix_test.tscn` and behavior `FLUJO-BHV-POTOK-SNAPSHOT-PATH-POLICY-013` **not_run** pending new CI. It checks valid root/nested `user://` paths, rejects relative/res/absolute/traversal/backslash/invalid-extension on save and restore, retains queued direct request on rejected restore, and successfully restores portable persistent alias from allowed nested file. No production changes.
+- [9B1-B checkpoint 41655383920](https://github.com/mercurysama/Flujo/actions/runs/41655383920) **completed SUCCESS**. Next **9B2-B** verify new full Actions before marking `passing`, then **9B3** backup replacement failure characterization; 25 visual checks deferred, main untouched.
+
 ## Potok 9B1-B — backup S1/S2 full CI PASS; next 9B2-A (2026-11-03)
 
 - [9B1-B closure](fsm_phase9_9b1b_backup_contents_closeout.md): [GitHub Actions 41654276567](https://github.com/mercurysama/Flujo/actions/runs/41654276567) **completed SUCCESS**, 102/102 Godot 4.7.2 steps, including mandatory `Potok-9B1A distinct snapshot backup contents focal`. Source `c0385b6` checks main JSON=S2 and `.bak`=previous S1 with persistent alias identity and differing data. Catalog `FLUJO-BHV-POTOK-SNAPSHOT-BACKUP-CONTENT-012` advanced `not_run → passing` only after full CI.
