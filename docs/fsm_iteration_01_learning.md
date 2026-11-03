@@ -1,3 +1,8 @@
+## Potok 9B3-B1 — backup failure policy proposal and safe F3 test plan (2026-11-03)
+
+- [9B3-B1 policy proposal](fsm_phase9_9b3b1_backup_failure_policy.md): F5/F7 should prefer preserving previously verified backup and target; F9 corrupt prior target still needs human contract choice; F10 automatic recovery from .bak is NOT authorized and is NOT currently implemented. No claim of universal atomicity, no productive code changes.
+- **Next 9B3-B2:** safe early save preflight F3 test: create a file sentinel under isolated `user://flujo_fsm_tests/` and attempt save beneath it as if it were a directory; verify false, unchanged valid snapshot/runtime/queue and no leaked files. Register `not_run` and mandatory focal; close only after full CI in later microblock. 25 visual tests still deferred; main untouched. 9B3-A runs [41668929079](https://github.com/mercurysama/Flujo/actions/runs/41668929079), [41669024313](https://github.com/mercurysama/Flujo/actions/runs/41669024313) were in progress at initial 9B3-B1 check; confirm final status separately.
+
 ## Potok 9B3-A — backup failure path audit complete; next 9B3-B1 (2026-11-03)
 
 - [9B3-A failure-path audit](fsm_phase9_9b3a_failure_path_audit.md) inspected `FlowFSMRuntime.save_to_file` sequencing of `.tmp`, `.bak`, `copy_absolute`, `rename_absolute` and fallback. Historical [9B2-B checkpoint 41659742397](https://github.com/mercurysama/Flujo/actions/runs/41659742397) **SUCCESS**. Prior backup can be deleted before a replacement backup copy succeeds; rename fallback can delete target before retry; these are **risks inferred from source, not confirmed failures**. 9B1 assures successful S2 main + S1 bak, not interrupted operations.
