@@ -1577,11 +1577,11 @@
         "Second PVController sharing immutable FlowGraph retains its active state, aliases and pending request, unaffected by A's stop/restart."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_lifetime_stop_restart_test.tscn"
       ],
-      "notes": "8D2-B1B test-only characterization awaiting remote Godot 4.7.2 CI. No claims of Phase 9 snapshot completion or human acceptance."
+      "notes": "8D2-B1B: Actions 41578192657 completed SUCCESS 92/92 for 2dad13c6815ae4269cbd42ebd07eb79f8fac2854, mandatory teardown/restart focal PASS; production and Phase 9 snapshot codec untouched; human acceptance pending."
     }
   ]
 }

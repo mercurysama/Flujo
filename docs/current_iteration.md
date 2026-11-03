@@ -1,5 +1,10 @@
 # Current Iteration
 
+## Potok — 8D2-B1B stop/restart PASS; siguiente 8D2-B2A (2026-11-02)
+
+- [CI 41578192657](https://github.com/mercurysama/Flujo/actions/runs/41578192657) **SUCCESS 92/92**; focal `2dad13c6815ae4269cbd42ebd07eb79f8fac2854`. `stop()` libera EPHEMERAL, SESSION y PERSISTENT y elimina la cola; al reactivar el mismo `PVController` aparece nuevo runtime sin alias viejos. SDK retenidos no pueden operar. El segundo controlador preserva su alias y solicitud pendiente.
+- [Informe B1B](fsm_phase8_8d2b1b_result.md), [plan](fsm_phase8_8d2_microblocks.md); catálogo `FLUJO-BHV-POTOK-LIFETIME-STOP-002` en PASS tras CI. **Siguiente 8D2-B2A**: exportación con alias transitorios activos y fallback authored. Sin cambios de producción ni fase 9. Las 25 pruebas humanas siguen diferidas.
+
 ## Potok — 8D2-B1A lifetime y reset PASS; siguiente 8D2-B1B (2026-11-02)
 
 - [CI 41576973539](https://github.com/mercurysama/Flujo/actions/runs/41576973539) **SUCCESS 91/91**, commit focal `7d9f702c1eef19af52d7ba90a600bf153eeb204e`. Alias `EPHEMERAL` activo eliminado por reset con Exit→Enter; `SESSION` y `PERSISTENT` retienen IDs/datos y pueden activarse; solo se vacía la cola del controlador reset, y el otro permanece independiente.

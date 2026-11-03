@@ -1,5 +1,13 @@
 # Flujo FSM — Iteration journal / Skill learning
 
+## 2026-11-02 — Potok 8D2-B1B controller teardown, restart and stale SDK
+
+- Baseline [41577454239](https://github.com/mercurysama/Flujo/actions/runs/41577454239) 91/91 SUCCESS at `f8a4120beb89ee27c276a9645ad045b69fc1e162`. Test commit `2dad13c6815ae4269cbd42ebd07eb79f8fac2854` passed [CI 41578192657](https://github.com/mercurysama/Flujo/actions/runs/41578192657) **92/92 SUCCESS** (mandatory B1B focal + all existing regressions).
+- Two real PVControllers share only authored graph. A registers all three lifetimes, activates PERSISTENT and queues two direct + one event requests; B retains independent SESSION alias and pending request. Shutdown A emits Exit and Stopped once, clears registry/queue and disables old runtime. Restart same controller creates new instance with no alias or old requests and exactly one Enter.
+- Retained callback-local facades from initial StateEnter and shutdown StateExit cannot mutate either dead or fresh runtime. Stale IDs reject; new alias can register independently. B remains unchanged until own tick. No production or snapshot code changed.
+- `FLUJO-BHV-POTOK-LIFETIME-STOP-002` catalog `not_run` → `passing` after remote CI; fixture, .gd/.tscn and required gate preserved. [B1B result](fsm_phase8_8d2b1b_result.md).
+- Lesson: **stop/restart is not reset**: SESSION and PERSISTENT survive `reset()`, but no dynamic ID survives runtime teardown without explicit snapshot restore; never claim automatic persistence. Next **8D2-B2A** snapshot of active transient aliases; FLU-FSM-004 unchanged. Godot local NOT RUN, repository Skills not formally invoked, 25 visual checks pending.
+
 ## 2026-11-02 — Potok 8D2-B1A active EPHEMERAL reset characterization
 
 - Baseline `a81af3ebb42efa101c5336381a831c5244f7ff07` [CI 41576142513](https://github.com/mercurysama/Flujo/actions/runs/41576142513) SUCCESS 90/90. Focal `7d9f702c1eef19af52d7ba90a600bf153eeb204e`, [CI 41576973539](https://github.com/mercurysama/Flujo/actions/runs/41576973539) **SUCCESS 91/91**; mandatory test passed under Godot 4.7.2 with no product changes.
