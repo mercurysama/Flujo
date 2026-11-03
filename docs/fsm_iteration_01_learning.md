@@ -1,3 +1,10 @@
+## 2026-11-02 — Potok 8D2-B3A1 deterministic dual-controller replay
+
+- Defined minimal two-MANUAL-machine contract in `3528ac9`; characterization focal and required CI gate in `845f68f`.
+- [Actions 41584361713](https://github.com/mercurysama/Flujo/actions/runs/41584361713) **SUCCESS** on Godot 4.7.2, including new focal and existing regressions. Two independent PVControllers sharing authored definitions produce identical ordered A→B direct-commit traces, separate queues, matching targets, no graph mutation.
+- `FLUJO-BHV-POTOK-DETERMINISM-005` changed `not_run` → `passing` after evidence. No production changes or schema changes. New B3A2 two-wave ordering focal has its own `not_run` registration; no completion claimed until its CI passes.
+- Local Godot and formal skills **NOT RUN**; 25 human checks pending. See [B3A1 result](fsm_phase8_8d2b3a1_result.md).
+
 # Flujo FSM — Iteration journal / Skill learning
 
 ## 2026-11-02 — Potok 8D2-B2B rejected snapshot atomicity

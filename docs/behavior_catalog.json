@@ -1634,11 +1634,11 @@
         "Authoring FlowGraph is immutable during runtime replay."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_deterministic_dual_controller_test.tscn"
       ],
-      "notes": "8D2-B3A1 test first authored against existing production; CI not run at registration, mark passing only after verified mandatory gate."
+      "notes": "8D2-B3A1 focal and complete Godot 4.7.2 CI on 845f68fd583ccb1eef60b3a7ba6f1d282cf73aa5: Actions 41584361713 completed SUCCESS, including mandatory deterministic replay and all prior regression gates. No production change. 25 manual checks remain pending."
     },
     {
       "id": "FLUJO-BHV-POTOK-DETERMINISM-ORDER-006",
