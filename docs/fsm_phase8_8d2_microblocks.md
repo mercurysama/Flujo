@@ -31,3 +31,9 @@
 4. En 8D2-C decidir si procede 8E. Las 25 pruebas Fedora/Android siguen PENDING y la fase 8 no se da por cerrada durante esta planificación.
 
 *Todo es Flujo; todo fluye.* 🌊
+
+## 2026-11-03 — B3A audit closeout and handoff
+
+- **8D2-B3A1–B3A4:** focal and full Godot 4.7.2 CI **PASS**; trace and initial B3A4 fixture failure documented in [B3A5 audit](fsm_phase8_8d2b3a5_audit.md).
+- **8D2-B3A5:** documentary audit **PASS**, no code changes or fresh test added. B3A complete technically; do not infer 8D2/8E closure or human acceptance.
+- **Next:** 8D2-B3B1 characterize bounded reset callbacks, B3B2 restore callbacks, B3B3 tick/reentrancy and isolation, B3B4 regression/checkpoint. See audit for test baselines.

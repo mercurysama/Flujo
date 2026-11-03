@@ -1,3 +1,8 @@
+## Potok — 8D2-B3A1–A5 determinism audit PASS; next 8D2-B3B (2026-11-03)
+
+- [Audit B3A5](fsm_phase8_8d2b3a5_audit.md) consolidates four independent real-PVController characterization focals: [B3A1 CI 41584361713](https://github.com/mercurysama/Flujo/actions/runs/41584361713) PASS; [B3A2 CI 41584784409](https://github.com/mercurysama/Flujo/actions/runs/41584784409) PASS; [B3A3 CI 41588927428](https://github.com/mercurysama/Flujo/actions/runs/41588927428) PASS; [B3A4 CI 41589766004](https://github.com/mercurysama/Flujo/actions/runs/41589766004) PASS after correcting a test-only callback ordering expectation, historical [FAIL 41589653144](https://github.com/mercurysama/Flujo/actions/runs/41589653144) preserved. All four catalog behaviors marked `passing` with required CI gates.
+- **Next:** B3B1 bounded `reset()` callbacks/queue guards, B3B2 `restore_snapshot()` lifecycle, B3B3 reentrancy/isolation, B3B4 close; then B3C and 8E. **8D2, phase 8 and phase 9 NOT closed.** No production changes in B3A; 25 Fedora/Android manual tests pending. Repository Skills read but not formally invoked.
+
 # Current Iteration
 
 ## Potok — 8D2-B2B atomicidad snapshots PASS; siguiente 8D2-B3A (2026-11-02)

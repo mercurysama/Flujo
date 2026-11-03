@@ -1,3 +1,8 @@
+## 2026-11-03 — Potok 8D2-B3A5 determinism evidence audit
+
+- [B3A5 audit](fsm_phase8_8d2b3a5_audit.md) maps B3A1–A4 to contracts, test scenes, catalog IDs, focal gates, commits, and Actions (all technical PASS). Historical B3A4 RED was a fixture-only reset callback order mistake; runtime untouched. No new test or product code in B3A5; the audit is documentary and not equivalent to a fresh Godot execution.
+- B3A is technically complete by recorded CI; B3B reset/restore callback guards next, split into bounded B3B1–B3B4. Other 8D2/8E phases and human 25/25 acceptance remain incomplete.
+
 ## 2026-11-03 — Potok 8D2-B3A4 deterministic dynamic reset replay
 
 - `ce2f8b5` added mandatory focal, catalog `FLUJO-BHV-POTOK-DETERMINISM-RESET-008`, two controllers with equal explicit alias IDs. [Actions 41589653144](https://github.com/mercurysama/Flujo/actions/runs/41589653144) FAIL due to test-only reset trace assumption (all Exits then all Enters).
