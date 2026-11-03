@@ -1448,6 +1448,25 @@
         "tests/runtime/flow_fsm_sdk_machine_isolation_test.tscn"
       ],
       "notes": "8D1-C2: Actions 41565743817 completed SUCCESS 84/84 at 4c867d45d6bc5878eb42cd57bdf6c08279a40049, including required isolation focal; no production changes."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SDK-CAPABILITY-EXCLUSION-004",
+      "area": "Potok FSM SDK capability absent from Ready Timer Constructor and nested Method callbacks",
+      "precondition": "One schema 3 PVController contains Ready, Timer, Constructor, a callable Method and StateEnter/Update/Exit SDK probes; a real FSM runtime becomes active.",
+      "public_action": "Execute startup callbacks, trigger a real Timer, replay Ready and Constructor with an active FSM, run StateUpdate with a nested Method, call the generic executor with a synthetic StateEnter label but no runtime, and stop the FSM.",
+      "expected_result": "Ready, Timer, Constructor and Method always have null FSM operations despite an active runtime or an inherited StateUpdate entry label; only genuine StateEnter/Update/Exit callbacks receive an ephemeral scoped facade.",
+      "invariants": [
+        "Merely setting entry_point to StateEnter without passing the owning FSM runtime must not create a capability.",
+        "A Method called inside StateUpdate must not inherit the parent machine's capability.",
+        "Ready/Timer/Constructor never register dynamic state aliases through the SDK facade.",
+        "Historical Ready/Timer/Constructor/Method behavior and authored FlowGraph remain unchanged."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_sdk_non_fsm_capability_test.tscn"
+      ],
+      "notes": "8D1-C3 required focal added; no passing claim until GitHub Actions Godot 4.7.2 completes."
     }
   ]
 }
