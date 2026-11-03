@@ -1,3 +1,8 @@
+## Potok 8D2-C1 — technical traceability inventory complete (2026-11-03)
+
+- [C1 evidence audit](fsm_phase8_8d2c1_traceability_audit.md) maps all 11 behavior IDs, `tests/runtime/*.tscn` gates, contracts `FLU-FSM-003` and compatibility frontier `FLU-FSM-004`, implementation and historical successful Actions runs. B3B4 checkpoint Actions [41593197556](https://github.com/mercurysama/Flujo/actions/runs/41593197556) was still running when C1 began.
+- C1 is a **documentary audit only**; no new test or production change. **Next 8D2-C2** reconcile final CI results, explicitly classify remaining non-goals and determine technical 8D2 closeout/8E entry; phase 8 and phase 9 remain open. 25 human tests pending; no local Godot or formal repo Skills invocation.
+
 ## 2026-11-03 — Potok 8D2-B3B3 / B3B4 reentrancy audit closeout
 
 - Mandatory `flow_fsm_reset_restore_reentrant_guard_test.tscn` introduced in `7dd735d`, [Actions 41592345621](https://github.com/mercurysama/Flujo/actions/runs/41592345621) **SUCCESS** full Godot 4.7.2 suite. No runtime edits. Catalog `FLUJO-BHV-POTOK-RESET-RESTORE-REENTRANCY-011` now `passing` based on verified CI.

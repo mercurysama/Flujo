@@ -44,3 +44,8 @@
 - **B3B2 PASS CI:** [41591954025](https://github.com/mercurysama/Flujo/actions/runs/41591954025); `restore_snapshot()` uses global Exit then Enter and clears owner stale pending work.
 - **B3B3 PASS CI:** [41592345621](https://github.com/mercurysama/Flujo/actions/runs/41592345621); callback reset/restore and nested tick guards, with controller isolation.
 - **B3B4:** [technical audit](fsm_phase8_8d2b3b4_audit.md), documentary consolidation; new docs CI separate. **Next 8D2-C1** requirement-to-implementation/test/catalog/CI traceability, then 8D2-C2 and 8E. Manual tests 0/25 and production unchanged.
+
+## 2026-11-03 — 8D2-C1 audit
+
+- [Traceability matrix](fsm_phase8_8d2c1_traceability_audit.md): 11 registered `passing` behaviors map to source/runtime or codec, required focal scenes, GitHub Actions and lifecycle/serialization boundaries. Documentation-only checkpoint; no new product code or tests.
+- **Next: 8D2-C2** verify fresh full regression and reconcile outstanding manual and phase 9 boundaries. Only then determine technical 8D2 closeout and handoff to 8E.
