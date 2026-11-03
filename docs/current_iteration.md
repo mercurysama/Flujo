@@ -1,3 +1,9 @@
+## Potok 9B3-C1 + 9B3-C2 — two consecutive microblocks (2026-11-03)
+
+- **9B3-C1** [design audit](fsm_phase9_9b3c1_fault_test_design_audit.md), commit `e6713f5f6639847da3d0ad5b004e9aaa7f6a733d`: investigated direct path blockers, OS permission tricks, real file operations and possible test-only backend seam. No method reliably forces F5–F7 in current runtime across all platforms; a controlled seam requires a separate approved implementation. No claim of reproduced defect.
+- **9B3-C2** [fault matrix & authorization gate](fsm_phase9_9b3c2_failure_matrix_and_gate.md), commit `bf1c26f8487081ac6095558c4fa61a588ef493e5`: exact negative cases F5/F6/F7/F7R, F9/F10 decisions, expected outcome, guarded future test-first tasks. **No tests for F5–F7 have run**, no production, catalog or workflow change; no auto-recovery contract change.
+- Previous [9B3-B3 checkpoint 41674464784](https://github.com/mercurysama/Flujo/actions/runs/41674464784) **completed SUCCESS**, protecting F3. **Next 9B3-C3** authorization/design decision or independent **9C1-A** file-read reject characterization. Never infer user approval for changed save/backup semantics; 25 manual tests remain deferred, main untouched.
+
 ## Potok 9B3-B3 — F3 full CI PASS, next 9B3-C1 (2026-11-03)
 
 - [9B3-B3 closeout](fsm_phase9_9b3b3_save_preflight_closeout.md): [Actions 41670135010](https://github.com/mercurysama/Flujo/actions/runs/41670135010) **completed SUCCESS**, all **104** headless steps, mandatory F3 focal PASS on `9fc4d44`. Catalog `FLUJO-BHV-POTOK-SNAPSHOT-SAVE-PREFLIGHT-014` updated **not_run → passing** only after full evidence. Separate valid S1, sentinel, active PERSISTENT alias and pending request preserved.
