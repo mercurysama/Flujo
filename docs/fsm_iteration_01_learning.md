@@ -1,3 +1,9 @@
+## Potok 9E1-A/B/C — conditional verdict, two-process acceptance plan, recoverable checkpoint (2026-11-03)
+
+- [9E1-A conditional verdict](fsm_phase9_9e1a_conditional_verdict.md) **technical conditional only**; [9E1-B restart protocol](fsm_phase9_9e1b_restart_acceptance_protocol.md) defines **two separate Godot processes** and stable authored IDs as missing verification. [9E1-C handoff](fsm_phase9_9e1c_conditional_handoff.md) records next microsteps. Historical [41712607299](https://github.com/mercurysama/Flujo/actions/runs/41712607299) **SUCCESS** for 9D2 checkpoint; 9E1 commit CIs have separate statuses.
+- Snapshot behaviors 012–019: **8/8 passing** with mandatory CI, last implementation suite **109/109 SUCCESS**. Phase 9 **not unconditionally closed**: two-process game restart **NO RUN**, F5–F7 faults **NO RUN**, F9 approval open, human tests **0/25** deferred. No production/codec/schema change or main merge.
+- **Next 9R1-A** build stable graph fixture and split-process snapshot test in isolated user:// with `not_run` and mandatory gate, then **9R1-B** verify full CI. **9R2** fault behavior only after explicit maintainer policy authorization. No automatic move to phase 10.
+
 ## Potok 9D2-A — phase 9 coverage/risk audit; next 9E1-A conditional acceptance (2026-11-03)
 
 - [9D2-A audit](fsm_phase9_9d2a_coverage_risk_audit.md): all 8 new snapshot behaviors 012–019 catalogued **passing**, each with a mandatory focal in `.github/workflows/flujo-fsm.yml`; [Actions 41711670098](https://github.com/mercurysama/Flujo/actions/runs/41711670098) completed **SUCCESS 109/109**. [9D1-B closeout](fsm_phase9_9d1b_compatibility_closeout.md) records compatibility passing. These automatic results cover S1/S2 backup on success, safe paths, F3 preflight, invalid files, explicit new controller restore, callbacks/reentrancy and v1 strict rejection.
