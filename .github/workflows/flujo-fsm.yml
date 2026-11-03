@@ -43,14 +43,9 @@ jobs:
         run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_ready_runtime_test.tscn
       - name: Navigation baseline
         run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_navigation_runtime_test.tscn
-      - name: FSM snapshot focal (when present)
+      - name: FSM-004 mandatory snapshot file round-trip focal
         shell: bash
-        run: |
-          if test -f tests/runtime/flow_fsm_snapshot_test.tscn; then
-            timeout --signal=TERM --kill-after=5s 40s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_snapshot_test.tscn
-          else
-            echo 'FSM snapshot test missing; not a PASS'
-          fi
+        run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_snapshot_test.tscn
       - name: Potok-8D1B1 SDK machine-scoped capability contract (expected RED until 8D1B2)
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_sdk_context_capability_contract_test.tscn

@@ -1,3 +1,9 @@
+## Potok 9A2 — FSM-004 policy frozen; base snapshot CI gate mandatory (2026-11-03)
+
+- [9A2 contract and acceptance criteria](fsm_phase9_9a2_contract_and_gate.md) keeps format v1, SESSION teardown and explicit PERSISTENT restore semantics unchanged. Defines 9B1 test for distinct saved S1/S2 with `.bak=S1` and destination `S2`; replacement failure recovery is still unproven, not declared broken.
+- Workflow `FSM snapshot focal (when present)` replaced with unconditional `FSM-004 mandatory snapshot file round-trip focal`, running the existing scene directly. A missing scene now fails CI. [9A1 Actions 41613093728](https://github.com/mercurysama/Flujo/actions/runs/41613093728) and [41613177819](https://github.com/mercurysama/Flujo/actions/runs/41613177819) **SUCCESS**. 9A2 new CI must independently pass. Next **9B1-A** scoped test and catalog/gate, then **9B1-B** full-CI closeout.
+- No runtime/codec/schema changes or merge. 25 manual tests deferred, local Godot and formal project Skills not run.
+
 ## Potok 9A1 — FSM-004 persistence baseline audited; next 9A2 (2026-11-03)
 
 - [9A1 baseline audit](fsm_phase9_9a1_baseline_audit.md) traces `FLU-FSM-004` to `FlowFSMSnapshotCodec`, `FlowFSMRuntime`, the existing `flow_fsm_snapshot_test.tscn` and 8D2 compatibility coverage. The test proves `.bak` **exists**, not that it contains the prior saved snapshot; code's rename/remove fallback requires bounded characterization, not an unproven bug declaration.
