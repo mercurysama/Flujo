@@ -1639,6 +1639,25 @@
         "tests/runtime/flow_fsm_deterministic_dual_controller_test.tscn"
       ],
       "notes": "8D2-B3A1 test first authored against existing production; CI not run at registration, mark passing only after verified mandatory gate."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-DETERMINISM-ORDER-006",
+      "area": "Potok deterministic machine traversal order with reverse cross-machine queue insertion",
+      "precondition": "Two independent controllers share a schema 3 graph with two MANUAL machines of three authored states each; both begin in identical initial states.",
+      "public_action": "For two consecutive waves, enqueue machine B then machine A target changes on both controllers and manually tick the instances in alternating order, capturing commits.",
+      "expected_result": "Despite reverse B/A admission order, every wave commits A then B in graph order, yielding identical four-commit traces, independent queues, matching final states and unchanged graph.",
+      "invariants": [
+        "Machine definition order determines ordered commit observations across machines.",
+        "Per-machine requests and controller queues do not leak into other runtimes.",
+        "Both instances yield same four exact direct-trigger commit signatures after two waves.",
+        "No authored FlowGraph mutation occurs."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_two_wave_order_replay_test.tscn"
+      ],
+      "notes": "8D2-B3A2 focal introduced on existing runtime with mandatory CI gate; not_run until remote PASS."
     }
   ]
 }

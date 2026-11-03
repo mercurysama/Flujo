@@ -84,6 +84,9 @@ jobs:
       - name: Potok-8D2B2A transient snapshot active fallback and ordering focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_snapshot_transient_active_test.tscn
+      - name: Potok-8D2B3A2 ordered two-wave replay focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_two_wave_order_replay_test.tscn
       - name: Potok-8D2B3A1 deterministic dual-controller replay focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_deterministic_dual_controller_test.tscn
