@@ -82,7 +82,8 @@ func execute(controller: Node, graph: FlowGraph, output: FlowRuntimeOutput, entr
 func _execute_blocks(controller: Node, graph: FlowGraph, container: FlowBlockContainer, path: String,
 		output: FlowRuntimeOutput, entry_point: StringName, entry_id: String,
 		resolution_context: FlowValueResolutionContext,
-		invalid_paths: Array[String], allow_calls: bool, method_id: String = "", call_id: String = "") -> FlowNavigationDecision:
+		invalid_paths: Array[String], allow_calls: bool, method_id: String = "", call_id: String = "",
+		fsm_runtime: FlowFSMRuntime = null) -> FlowNavigationDecision:
 	var block_indices: Dictionary[String, int] = {}
 	for index: int in container.blocks.size():
 		var candidate: FlowBlock = container.blocks[index]
@@ -146,9 +147,12 @@ func _execute_blocks(controller: Node, graph: FlowGraph, container: FlowBlockCon
 			container,
 			block.get_internal_id(),
 			entry_point,
-			resolution_context
+			resolution_context,
+			fsm_runtime,
+			entry_id
 		)
 		var decision: FlowNavigationDecision = block.get_navigation_decision(context)
+		context.invalidate_fsm_operations()
 		if decision == null or not decision.is_well_formed():
 			push_warning("[Flujo] invalid_navigation_decision at %s: Block returned malformed runtime navigation." % block_path)
 			return FlowNavigationDecision.stop_execution()
