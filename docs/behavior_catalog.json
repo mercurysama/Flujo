@@ -1919,12 +1919,12 @@
         "Temporary user directory is owned and cleaned by the CI runner."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_snapshot_two_process_write.tscn",
         "tests/runtime/flow_fsm_snapshot_two_process_restore.tscn"
       ],
-      "notes": "9R1-A mandatory two-process focal added, pending entire GitHub Actions success. Does not test physical reboot, power loss, F5–F7 or manual Fedora/Android acceptance."
+      "notes": "9R1-A automated PASS: GitHub Actions 41722469207 on commit eaa95cb9239fd37bb3a69d07298e5684dc7688c1 (Godot 4.7.2) ran two independent OS processes with a shared isolated XDG_DATA_HOME. Process A write passed; Process B explicit restore passed; complete workflow SUCCESS. No physical reboot, power loss, F5-F7 fault injection, or manual Fedora/Android acceptance."
     }
   ]
 }
