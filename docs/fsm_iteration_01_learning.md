@@ -1,3 +1,8 @@
+## Potok 8E-3 — fase 8 technical acceptance conditional, next 8E-4 (2026-11-03)
+
+- [8E-3 conditional technical acceptance](fsm_phase8_8e3_conditional_technical_acceptance.md): **phase 8 automated technical validation complete** on `feature/fsm-runtime-flow-flusso`; **human acceptance NOT complete**. [8E-2 audit Actions 41595172497](https://github.com/mercurysama/Flujo/actions/runs/41595172497) and [checkpoint 41595220445](https://github.com/mercurysama/Flujo/actions/runs/41595220445) both **SUCCESS**. Full Potok automatic subset of 22 entries `passing`, but other catalog statuses retain their own non-PASS values. No production changes, no merge/release.
+- 15 Fedora + 10 Android manual checks **0/25 deferred**. **Next 8E-4:** create recoverable FSM-004 phase-9 roadmap and baseline inventory for versioned snapshots, safe `user://` file saves/backups, restore validation and cross-controller isolation. **Do not preemptively close phase 9.** Local Godot and formal repository Skills NOT RUN.
+
 ## Potok 8E-2 — governance and mandatory CI gate audit complete (2026-11-03)
 
 - [8E-2 governance audit](fsm_phase8_8e2_governance_gate_audit.md) reviews `AGENTS.md`, constitution, workflow, `FLU-FSM-003`, full 92-entry catalog and mandatory Godot 4.7.2 CI YAML. The 22 automatic `FLUJO-BHV-POTOK-*` entries are all `passing`, their cited test files exist in Git tree and every path occurs in mandatory CI; global catalog statuses include deferred unrelated cases and must not be misrepresented as all passing.
