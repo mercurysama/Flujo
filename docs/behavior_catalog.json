@@ -1486,6 +1486,25 @@
         "tests/runtime/flow_fsm_sdk_register_change_test.tscn"
       ],
       "notes": "8D1-C4A: GitHub Actions 41567631405 completed SUCCESS 86/86 on 89d9bfb7382f44eaa2b52862a3e8562253db4ca9, including required SDK queued dynamic activation focal; production unchanged."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SDK-DATA-DETACH-006",
+      "area": "Potok FSM SDK dynamic state data deep-copy isolation and validation",
+      "precondition": "Two PVController instances share one valid schema 3 FlowGraph; their real SDK StateEnter callbacks each register a SESSION alias with nested JSON-safe data.",
+      "public_action": "Mutate the original data dictionary, mutate SDK readback, write replacement nested data then mutate both input and readback; attempt invalid registrations and writes using excessive entries, numeric dictionary keys, infinity, oversized JSON, excessive depth, Callable, Vector2 and a live Node.",
+      "expected_result": "Runtime stores independent deep copies at registration and replacement; SDK reads are detached; eight invalid payload kinds reject registration and update without changing aliases, stored values, active state, queue or authored FlowGraph.",
+      "invariants": [
+        "SDK FlowFSMOperations is available only within the actual FSM callback and becomes invalid afterward.",
+        "Mutable nested Dictionary/Array values do not leak between callers, SDK readback and controller runtime storage.",
+        "Rejected registration and replacement never partially mutate registry state.",
+        "Two controllers with shared FlowGraph retain independent runtime data; no schema/runtime production change."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_sdk_data_copy_validation_test.tscn"
+      ],
+      "notes": "8D1-C4B test and mandatory CI step added; do not mark PASS before actual Godot 4.7.2 Actions completion."
     }
   ]
 }
