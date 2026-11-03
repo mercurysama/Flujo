@@ -1563,6 +1563,25 @@
         "tests/runtime/flow_fsm_lifetime_reset_matrix_test.tscn"
       ],
       "notes": "Potok 8D2-B1A: Actions 41576973539 completed SUCCESS 91/91 on 7d9f702c1eef19af52d7ba90a600bf153eeb204e; focal passed on existing runtime; Phase 9 codec untouched."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-LIFETIME-STOP-002",
+      "area": "Potok per-controller lifetime stop restart and SDK facade expiry",
+      "precondition": "Two running PVController instances share an authored graph, while A registers EPHEMERAL/SESSION/PERSISTENT aliases and activates the persistent alias, and B keeps its own SESSION alias and queued authored transition. An actual SDK StateEnter callback on A retains its scoped facade.",
+      "public_action": "Queue old-runtime direct and event requests, disable visual programming on A, inspect shutdown StateExit, then reenable the same controller and attempt stale runtime and SDK operations before ticking B.",
+      "expected_result": "Disabling A executes one Exit/Stopped sequence and drops all dynamic aliases regardless of lifetime, clears pending packets, and expires its SDK callbacks. Reenabling creates a fresh runtime, enters authored initial state once, restores no aliases or pending packets automatically, and rejects old IDs and facades. B remains live, retains its alias and queue until independently ticked.",
+      "invariants": [
+        "Stop and restart are NOT reset; even PERSISTENT does not survive teardown without explicit snapshot restore.",
+        "Old queued direct and event requests never enter the restarted runtime; old FlowFSMRuntime is stopped.",
+        "Retained StateEnter/StateExit SDK facades cannot read or mutate the new instance after shutdown.",
+        "Second PVController sharing immutable FlowGraph retains its active state, aliases and pending request, unaffected by A's stop/restart."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_lifetime_stop_restart_test.tscn"
+      ],
+      "notes": "8D2-B1B test-only characterization awaiting remote Godot 4.7.2 CI. No claims of Phase 9 snapshot completion or human acceptance."
     }
   ]
 }

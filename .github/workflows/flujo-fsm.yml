@@ -78,6 +78,9 @@ jobs:
       - name: Potok-8D2B1A lifetime policy reset and controller isolation focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_lifetime_reset_matrix_test.tscn
+      - name: Potok-8D2B1B lifecycle teardown and SDK expiry focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_lifetime_stop_restart_test.tscn
       - name: Potok-8D1C4C2A SDK dynamic fallback focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_sdk_active_removal_test.tscn
