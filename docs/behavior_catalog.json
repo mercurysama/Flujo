@@ -1544,6 +1544,25 @@
         "tests/runtime/flow_fsm_sdk_authored_fallback_test.tscn"
       ],
       "notes": "8D1-C4C2: split after failed runs 41572128593 (parser) and 41572368984 (incorrect StateEnter reentry expectation). Both independent focal scenes and full gate passed Actions 41573978889 SUCCESS 90/90 on 6650d5c7571887f13e61d18f4c4753c5e59e80eb. Positive outside-tick path uses controlled shared-executor seam, not a public automatic lifecycle trigger; no production changes."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-LIFETIME-RESET-001",
+      "area": "Potok runtime-only lifetime reset semantics with active ephemeral alias",
+      "precondition": "Two PVControllers share a valid schema 3 FlowGraph, but own independent running manual FSMs. Controller A registers EPHEMERAL/SESSION/PERSISTENT dynamic aliases with nested JSON-safe metadata, activates the EPHEMERAL alias and queues mixed direct/event requests. Controller B registers a SESSION alias and holds a direct request.",
+      "public_action": "Call reset on controller A outside the manual tick, verify Exit/Enter events and retained policy data, then request both surviving aliases and advance controller B separately.",
+      "expected_result": "Reset executes active ephemeral Exit followed once by authored initial Enter, removes EPHEMERAL and only A's pending requests; preserves SESSION/PERSISTENT IDs and detached nested values in order. The second controller and its queue remain unchanged until explicitly ticked. Authored FlowGraph stays unmodified.",
+      "invariants": [
+        "An active EPHEMERAL alias is removed on reset, not silently retained or exported into authored definitions.",
+        "SESSION and PERSISTENT survive reset with their original runtime IDs, lifetimes and nested JSON-safe data.",
+        "Reset clears the owning controller queue and performs one Exit→Enter lifecycle, without committing stale requests.",
+        "A second PVController sharing the FlowGraph retains its dynamic aliases and independently pending request."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_lifetime_reset_matrix_test.tscn"
+      ],
+      "notes": "Potok 8D2-B1A characterization of pre-existing runtime; awaits Godot 4.7.2 remote Actions. Not a Phase 9 snapshot-format change or a new production implementation."
     }
   ]
 }
