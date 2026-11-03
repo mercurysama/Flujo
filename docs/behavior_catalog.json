@@ -1658,6 +1658,25 @@
         "tests/runtime/flow_fsm_two_wave_order_replay_test.tscn"
       ],
       "notes": "8D2-B3A2 focal and full Godot 4.7.2 Actions 41584784409 completed SUCCESS for fcc5d1d7240cb30a3fa0dcbbcc406db9c236b412. Reverse queue B/A, two waves, exact A/B commits, independent controllers and immutable graph verified. No production change."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-DETERMINISM-EVENT-BUDGET-007",
+      "area": "Potok deterministic dual-controller event FIFO, bounded per-machine work and non-reentrancy",
+      "precondition": "Two independent PVControllers share two MANUAL machine definitions; machine A receives 34 unmatched events, machine B one transition event per controller.",
+      "public_action": "Deliver identical events, tick controllers separately, inject one callback event plus guarded recursive tick and compare event, budget and commit traces over two ticks.",
+      "expected_result": "Both runtimes process the same first 32 A packets, independently commit B event, defer two A packets and callback until next tick, then drain in identical order without recursive commits or graph mutation.",
+      "invariants": [
+        "The 32-request per-machine budget prevents one machine from starving another.",
+        "Callback-generated events and recursive tick never consume current-tick additional packets.",
+        "Controller queues and ordered event/commit/budget signals are independent but equivalent for identical inputs.",
+        "Authored FlowGraph remains immutable."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_dual_controller_event_budget_test.tscn"
+      ],
+      "notes": "8D2-B3A3 test-only characterization; CI mandatory and status NOT RUN until confirmed."
     }
   ]
 }
