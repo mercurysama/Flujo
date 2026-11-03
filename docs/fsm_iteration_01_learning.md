@@ -1,5 +1,13 @@
 # Flujo FSM — Iteration journal / Skill learning
 
+## 2026-11-02 — Potok 8D1-C1B: SDK lifecycle, reset and graph guard
+
+- Added standalone GDScript test and `.tscn` scene, mandatory CI step, and `FLUJO-BHV-POTOK-SDK-CAPABILITY-LIFECYCLE-002`; no production files touched. Commit `1df32fdbb0ccba29eede437bc3f1ae6b33374a33`.
+- Real SDK callbacks retain and expire facades in Enter, Update and Exit during reset. SESSION aliases survive reset, not stop/restart; shutdown Exit cannot register while controller disabled. A separately direct-constructed facade tests the graph-identity guard but is not a sandbox proof.
+- [CI 41563021661](https://github.com/mercurysama/Flujo/actions/runs/41563021661) **SUCCESS 83/83**; focal SDK lifecycle **PASS**, full regressions **PASS**. Baseline [41562801506](https://github.com/mercurysama/Flujo/actions/runs/41562801506) SUCCESS 82/82.
+- Godot local **NOT RUN**; versioned baseline/prove Skills instructions read, not formally invoked. Visual acceptance 15 Fedora + 10 Android **PENDING**.
+- [Result and recovery](fsm_phase8_8d1c1b_result.md); next **8D1-C2** tests two controller SDK facade isolation. Lesson: distinguish true executor-supplied callback scope from a direct-constructor guard probe.
+
 ## 2026-11-02 — Potok 8D1-C1A: SDK facade expiration
 
 - Verified baseline: `85a9ace1` / [CI 41558938893](https://github.com/mercurysama/Flujo/actions/runs/41558938893) **SUCCESS 81/81**.

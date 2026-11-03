@@ -1424,11 +1424,11 @@
         "Shutdown Exit cannot register states on a disabled controller."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_sdk_lifecycle_guards_test.tscn"
       ],
-      "notes": "8D1-C1B: required focused CI introduced; remote execution pending."
+      "notes": "8D1-C1B: GitHub Actions 41563021661 completed SUCCESS 83/83 at 1df32fdbb0ccba29eede437bc3f1ae6b33374a33; no production changes."
     }
   ]
 }

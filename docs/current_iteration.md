@@ -1,5 +1,11 @@
 # Current Iteration
 
+## Potok — 8D1-C1B PASS; próximo 8D1-C2 (2026-11-02)
+
+- [CI 41563021661](https://github.com/mercurysama/Flujo/actions/runs/41563021661), commit `1df32fdbb0ccba29eede437bc3f1ae6b33374a33`: **SUCCESS 83/83**. Focal SDK de reset/stop/reinicio/grafo y regresiones aprobadas; sin cambios de producción.
+- [Reporte C1B](fsm_phase8_8d1c1b_result.md), [reporte C1A](fsm_phase8_8d1c1a_result.md) y [microbloques C1–C5](fsm_phase8_8d1c_microblocks.md).
+- Próximo **8D1-C2**: aislamiento de dos `PVController` con grafo compartido y máquinas múltiples. 25 pruebas manuales fase 7 siguen pendientes (15 Fedora, 10 Android).
+
 ## Potok — 8D1-C1A PASS, siguiente 8D1-C1B (2026-11-02)
 
 - [CI 41562328203](https://github.com/mercurysama/Flujo/actions/runs/41562328203), HEAD `f315ddb1d459f1685da2a339647008a501a47aef`: **SUCCESS 82/82**. Sin cambios productivos.
