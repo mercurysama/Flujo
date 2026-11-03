@@ -1786,11 +1786,11 @@
         "Test cleanup is limited to dedicated user://flujo_fsm_tests/ files."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_snapshot_path_matrix_test.tscn"
       ],
-      "notes": "9B2-A original c3ace6534f3b0b9b247700e56caec5be653250b5 produced expected gate RED on Actions 41658231067: only last assertion compared in-memory typed Dictionary to JSON-restored Dictionary. Test-only correction normalizes both through JSON stringify/parse; full CI still pending. Keep not_run until complete SUCCESS."
+      "notes": "9B2-A original CI Actions 41658231067 FAILURE due to test-only in-memory-versus-JSON Dictionary equality; correction in 85e5b7f03c401c0186b4745e9d2abc8c0bc48eb9 normalizes portable JSON on both sides without removing assertions. Entire GitHub Actions 41658845225 completed SUCCESS, 103/103 steps, zero failed including mandatory 9B2A focal. No product change; manual acceptance pending."
     }
   ]
 }

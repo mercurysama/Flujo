@@ -1,3 +1,8 @@
+## Potok 9B2-B — full CI PASS; next 9B3-A safe replacement audit (2026-11-03)
+
+- [9B2-B closeout](fsm_phase9_9b2b_path_matrix_closeout.md): [Actions 41658845225](https://github.com/mercurysama/Flujo/actions/runs/41658845225) completed **SUCCESS 103/103 steps**, mandatory 9B2A focal PASS. Historical [41658231067](https://github.com/mercurysama/Flujo/actions/runs/41658231067) RED was one test-only Dictionary-versus-JSON representation assertion, normalized by `85e5b7f`; full coverage preserved. Behavior `FLUJO-BHV-POTOK-SNAPSHOT-PATH-POLICY-013` becomes **passing** only after full CI.
+- **Next 9B3-A** safely audit filesystem replacement/backup failure cases before test or code modifications; do not claim atomicity over crashes. No production changes; 25 visual acceptance checks deferred; main untouched.
+
 ## Potok 9B2-B — focal JSON-normalization fix after historical RED (2026-11-03)
 
 - [Actions 41658231067](https://github.com/mercurysama/Flujo/actions/runs/41658231067) **FAIL** only on final direct Dictionary equality after successful JSON restore; preceding checks passed. Test-only normalization compares portable JSON snapshots on both sides, preserving all path / queue / alias assertions. Behavior `FLUJO-BHV-POTOK-SNAPSHOT-PATH-POLICY-013` stays **not_run** pending a new full SUCCESS. No runtime or codec changes.
