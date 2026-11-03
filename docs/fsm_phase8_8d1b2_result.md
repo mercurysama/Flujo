@@ -13,7 +13,7 @@
 
 La prueba inicialmente esperaba tres registros (Enter, Update, Exit). En la ejecución manual de un `change_state` pendiente, **el tick siguiente ejecuta Update antes de Exit**, por contrato del runtime. [CI 41558346002](https://github.com/mercurysama/Flujo/actions/runs/41558346002) confirmó que Enter y Update ya disponían de fachada, pero fallaron las aserciones de índice/cantidad del test. El commit `5dbc64e18907b7833f19b63338029c8b54fd6686` corrige solo esta expectativa: Ready sin capacidad, Enter con capacidad, Update en tick 1, Update en tick 2, Exit con capacidad y **cuatro alias independientes** en la máquina A; la máquina B conserva registro vacío. Se mantienen exigencias de IDs válidos, ejecución real y ausencia de mutación del `FlowGraph`.
 
-[CI 41558491721](https://github.com/mercurysama/Flujo/actions/runs/41558491721) ejecutó el focal de contrato y lo marcó **SUCCESS**. La conclusión de la regresión completa se registra por separado cuando el job termina.
+**GREEN global confirmado:** [CI 41558491721](https://github.com/mercurysama/Flujo/actions/runs/41558491721) finalizó **SUCCESS 81/81 pasos**, sin fallos, para el commit `5dbc64e18907b7833f19b63338029c8b54fd6686`. Incluye el contrato 8D1-B1 convertido a GREEN y todas las regresiones anteriores.
 
 ## Seguridad y límites
 
