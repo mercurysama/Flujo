@@ -1696,6 +1696,25 @@
         "tests/runtime/flow_fsm_dual_controller_dynamic_reset_test.tscn"
       ],
       "notes": "8D2-B3A4 initial Actions 41589653144 FAIL due to test expecting all Exit callbacks before all Enter callbacks; actual contractual reset processes Exit→Enter per authored machine. Test-only correction fb6c1340b4fd91b590216e3528f47e8bcdede503 preserves coverage; Actions 41589766004 completed SUCCESS full Godot 4.7.2 suite. No production changes."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-RESET-CALLBACK-GUARD-009",
+      "area": "Potok bounded reset callbacks and cross-controller queue isolation",
+      "precondition": "Two independent PVControllers share two authored MANUAL state machines. Controller A requests two state changes, then queues mixed stale requests; B holds an independent queued transition.",
+      "public_action": "Attempt reset from StateUpdate inside tick, then reset A outside tick and compare callback order and queues before ticking peer B.",
+      "expected_result": "Reset inside tick is rejected; both authored commits proceed once. Outside-tick reset emits one Exit/Enter pair per machine in authored order without commits and clears only A's stale queue; B remains unchanged until independently ticked.",
+      "invariants": [
+        "In-tick reset is rejected and cannot recurse through StateUpdate.",
+        "Outside-tick reset is bounded to exactly one Exit→Enter pair per machine.",
+        "Clearing pending packets during reset applies only to the owning controller.",
+        "Authored graph is unchanged."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_reset_callback_guard_test.tscn"
+      ],
+      "notes": "8D2-B3B1 test-only characterization registered, mandatory CI pending."
     }
   ]
 }
