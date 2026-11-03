@@ -1,3 +1,8 @@
+## Potok 9C3-A — file restore callbacks and owner/peer queues focal (2026-11-03)
+
+- [9C3-A](fsm_phase9_9c3a_disk_restore_callbacks_result.md) adds mandatory `flow_fsm_snapshot_disk_restore_callbacks_test.tscn`, behavior `FLUJO-BHV-POTOK-SNAPSHOT-DISK-CALLBACKS-017` **not_run** awaiting full CI. Covers disk-backed restore global Exit(A),Exit(B),Enter(A),Enter(B), zero Commit signals and clear only owner pending requests; sibling remains unchanged until tick. No reentrancy tested here, no production changes.
+- [9C2-B closeout](fsm_phase9_9c2b_instance_reconstruction_closeout.md) based on [Actions 41679988667](https://github.com/mercurysama/Flujo/actions/runs/41679988667) **SUCCESS**. Next **9C3-B** validate full CI; later restore_from_file in-tick reentrancy. 25 manual checks deferred, main untouched.
+
 ## Potok 9C2-B — rebuilt instance explicit disk restore CI PASS; next 9C3-A (2026-11-03)
 
 - [9C2-B closure](fsm_phase9_9c2b_instance_reconstruction_closeout.md): [Actions 41679988667](https://github.com/mercurysama/Flujo/actions/runs/41679988667) **SUCCESS 106/106**, 9C2-A focal SUCCESS. Behavior `FLUJO-BHV-POTOK-SNAPSHOT-RECONSTRUCT-016` changed `not_run → passing` after evidence. New controller lacks prior aliases until explicit file restore, which recovers only PERSISTENT.

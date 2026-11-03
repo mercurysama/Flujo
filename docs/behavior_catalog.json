@@ -1848,6 +1848,25 @@
         "tests/runtime/flow_fsm_snapshot_instance_reconstruction_test.tscn"
       ],
       "notes": "9C2-A source 4b5954deceacc7017480aa7ce062b8fc3425e68b. GitHub Actions 41679826206 and whitespace-corrected checkpoint 41679988667 completed SUCCESS, 106/106 headless steps without failed steps. Mandatory 9C2-A focal proves new PVController does not auto-restore SESSION/PERSISTENT; explicit restore_from_file recovers PERSISTENT identity and payload, SESSION stays absent. 25 manual checks deferred."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SNAPSHOT-DISK-CALLBACKS-017",
+      "area": "Potok FSM-004 file restore global lifecycle callbacks and owner queue isolation",
+      "precondition": "Two controllers share authored two-MANUAL-machine FlowGraph. Owner saves both target active states, moves back to initial, queues direct/event packets, and sibling separately queues a direct change.",
+      "public_action": "Restore owner snapshot with restore_from_file and inspect global Exit/Enter phases, absence of transition_committed, owner queue clearing, sibling queue/callback state, then tick sibling.",
+      "expected_result": "File restore emits Exit(A),Exit(B),Enter(A),Enter(B) without transition commits; owner restores disk targets and clears only its queue, while sibling queue stays pending until its independent tick.",
+      "invariants": [
+        "Successful disk restore uses all Exit callbacks before Enter callbacks.",
+        "Stale owner requests do not publish transitions after restore.",
+        "Sibling controller queue and callback trace remain isolated.",
+        "Portable snapshot and authored graph IDs are unchanged."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_snapshot_disk_restore_callbacks_test.tscn"
+      ],
+      "notes": "9C3-A mandatory disk-based lifecycle and queue focal registered. Previous in-memory callback test 8D2-B3B2 passing. No new reentrancy claim until separately characterized; full Godot 4.7.2 CI pending."
     }
   ]
 }
