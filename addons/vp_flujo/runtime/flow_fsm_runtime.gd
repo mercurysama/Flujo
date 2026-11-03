@@ -579,7 +579,10 @@ func _execute_phase(
 		machine.get_internal_id(),
 		_controller.get_value_resolution_context(),
 		[],
-		true
+		true,
+		"",
+		"",
+		self
 	)
 
 
