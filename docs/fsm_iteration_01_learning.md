@@ -1,5 +1,14 @@
 # Flujo FSM — Iteration journal / Skill learning
 
+## 2026-11-02 — Potok 8D1-C4C1 SDK inactive removal, selective queue purge
+
+- Baseline `bb9b73a0` / [CI 41569317117](https://github.com/mercurysama/Flujo/actions/runs/41569317117), SUCCESS 87/87. Test commit `948c3b9d8a9f4d5df08d31a20e0ad7dba57ba631`; [CI 41570578617](https://github.com/mercurysama/Flujo/actions/runs/41570578617) **SUCCESS 88/88**.
+- Actual StateUpdate SDK block in one machine registered two aliases, enqueued two direct requests to a removable alias and one to its survivor, then removed the inactive target; sibling machine had already queued its own direct request. Only targeted requests were purged. Next manual tick committed the two survivors in machine order; model untouched, retained SDK facades expired.
+- Added fixture, focused .gd/.tscn, required CI and `FLUJO-BHV-POTOK-SDK-INACTIVE-REMOVE-007` (catalog `passing` after confirmed run); no production code changes.
+- Godot local NOT RUN; remote Godot 4.7.2 PASS; project skills consulted but not formally invoked. Human 15 Fedora + 10 Android scenarios remain PENDING.
+- [C4C1 result](fsm_phase8_8d1c4c1_result.md), [plan](fsm_phase8_8d1c_microblocks.md); next **8D1-C4C2**: active alias fallback SDK outside tick and Exit→Enter sequence. C4C not complete until this passes.
+- Skill learning: enqueue an unrelated sibling command **before** removing a pending alias in the same actual SDK lifecycle tick; the negative property (not purging unrelated requests) is otherwise not proved.
+
 ## 2026-11-02 — Potok 8D1-C4B SDK data deep-copy and validation
 
 - Baseline `1b952a4d` / [CI 41568112472](https://github.com/mercurysama/Flujo/actions/runs/41568112472) SUCCESS 86/86; test commit `6dda6c74637170905877cb59ee7c50bc23bb4f07`, [CI 41568809804](https://github.com/mercurysama/Flujo/actions/runs/41568809804) **SUCCESS 87/87**.

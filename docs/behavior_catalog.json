@@ -1519,11 +1519,11 @@
         "Graph remains declarative; active alias fallback is covered in separate 8D1-C4C2."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_sdk_selective_removal_test.tscn"
       ],
-      "notes": "8D1-C4C1 required focal added; not a PASS before remote Godot 4.7.2 CI. Active alias fallback deferred to C4C2."
+      "notes": "8D1-C4C1: Actions 41570578617 completed SUCCESS 88/88 for 948c3b9d8a9f4d5df08d31a20e0ad7dba57ba631, required SDK selective queue purge focal PASS; active alias fallback remains C4C2."
     }
   ]
 }

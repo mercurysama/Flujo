@@ -1,5 +1,10 @@
 # Current Iteration
 
+## Potok — 8D1-C4C1 PASS; próximo 8D1-C4C2 (2026-11-02)
+
+- [Actions 41570578617](https://github.com/mercurysama/Flujo/actions/runs/41570578617) **SUCCESS 88/88** para `948c3b9d8a9f4d5df08d31a20e0ad7dba57ba631`. Callback real SDK `StateUpdate` elimina alias inactivo y limpia **solo dos** solicitudes a ese ID; conserva la transición de otra máquina y el segundo alias, que se confirman en el tick posterior. Cero cambios productivos.
+- [Informe C4C1](fsm_phase8_8d1c4c1_result.md) y [plan C](fsm_phase8_8d1c_microblocks.md). Próximo **8D1-C4C2**: eliminación de alias activo con fallback y Exit→Enter. Las 25 pruebas humanas permanecen diferidas.
+
 ## Potok — 8D1-C4B PASS; siguiente 8D1-C4C (2026-11-02)
 
 - [CI 41568809804](https://github.com/mercurysama/Flujo/actions/runs/41568809804) **SUCCESS 87/87** para `6dda6c74637170905877cb59ee7c50bc23bb4f07`. Copias profundas verificadas desde callbacks SDK reales, ocho categorías inválidas rechazadas, dos controladores independientes, `FlowGraph` intacto; sin cambios productivos.
