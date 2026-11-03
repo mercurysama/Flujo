@@ -1,3 +1,8 @@
+## Potok 9B1-B — backup S1/S2 full CI PASS; next 9B2-A (2026-11-03)
+
+- [9B1-B closure](fsm_phase9_9b1b_backup_contents_closeout.md): [GitHub Actions 41654276567](https://github.com/mercurysama/Flujo/actions/runs/41654276567) **completed SUCCESS**, 102/102 Godot 4.7.2 steps, including mandatory `Potok-9B1A distinct snapshot backup contents focal`. Source `c0385b6` checks main JSON=S2 and `.bak`=previous S1 with persistent alias identity and differing data. Catalog `FLUJO-BHV-POTOK-SNAPSHOT-BACKUP-CONTENT-012` advanced `not_run → passing` only after full CI.
+- **Next 9B2-A:** bounded, safe `user://` write/read path matrix (valid paths versus invalid/traversal) without changing production; register new behavior/focal/gate and close only after CI. No runtime/codec/schema changes, main untouched. 25 manual checks deferred; local Godot/formal repo Skills NOT RUN.
+
 ## Potok 9B1-A — distinct S1/S2 snapshot backup focal registered (2026-11-03)
 
 - [9B1-A characterization](fsm_phase9_9b1a_backup_contents_result.md) adds a real-PVController test `flow_fsm_snapshot_backup_contents_test.tscn`, mandatory Godot 4.7.2 CI step and behavior `FLUJO-BHV-POTOK-SNAPSHOT-BACKUP-CONTENT-012` at **not_run** until full CI. Asserts new main JSON=S2 and backup .bak=S1 after two semantically distinct saves.

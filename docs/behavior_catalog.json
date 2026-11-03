@@ -1767,11 +1767,11 @@
         "Only isolated user://flujo_fsm_tests/ artifacts are created and deleted."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_snapshot_backup_contents_test.tscn"
       ],
-      "notes": "9B1-A focal and mandatory gate registered. Full Godot 4.7.2 CI pending; do not mark passing until entire run succeeds."
+      "notes": "9B1-A source commit c0385b67ba7ae62080a34961c2a084f55db167cf, mandatory Godot 4.7.2 focal and full regression in GitHub Actions 41654276567 completed SUCCESS (102/102 steps, zero failed). Main file S2 and backup .bak S1 verified by exact parsed JSON comparison; no production change. Human review deferred."
     }
   ]
 }
