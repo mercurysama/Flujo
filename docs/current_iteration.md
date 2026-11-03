@@ -1,3 +1,8 @@
+## Potok 9A1 — FSM-004 persistence baseline audited; next 9A2 (2026-11-03)
+
+- [9A1 baseline audit](fsm_phase9_9a1_baseline_audit.md) traces `FLU-FSM-004` to `FlowFSMSnapshotCodec`, `FlowFSMRuntime`, the existing `flow_fsm_snapshot_test.tscn` and 8D2 compatibility coverage. The test proves `.bak` **exists**, not that it contains the prior saved snapshot; code's rename/remove fallback requires bounded characterization, not an unproven bug declaration.
+- Base snapshot CI step is currently conditional `FSM snapshot focal (when present)`; assess an unconditional gate during 9A2. **Next 9A2** freeze v1 format / SESSION policy, specify 9B1 saved S1 vs S2 backup acceptance, and decide gate hardening; then 9B1–9E1 microblocks. No production changes or release. 25 Fedora/Android manual checks pending, local Godot/formal repo Skills NOT RUN.
+
 ## Potok 8E-4 — FSM-004 inventory and phase 9 handoff (2026-11-03)
 
 - [8E-4 phase 9 handoff](fsm_phase8_8e4_phase9_handoff.md) inventories existing `FlowFSMSnapshotCodec`, `FlowFSMRuntime.export_snapshot/restore_snapshot/save_to_file/restore_from_file`, `FLU-FSM-004`, `tests/runtime/flow_fsm_snapshot_test.tscn` and 8D2 snapshot compatibility focals. Phase 9 is **NOT complete**; no production or snapshot format edits.
