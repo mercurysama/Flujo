@@ -1,5 +1,10 @@
 # Current Iteration
 
+## Potok — 8D1-C4A PASS; siguiente 8D1-C4B (2026-11-02)
+
+- [CI 41567631405](https://github.com/mercurysama/Flujo/actions/runs/41567631405) **SUCCESS 86/86** en `89d9bfb7382f44eaa2b52862a3e8562253db4ca9`. Un FlowBlock SDK crea un alias dinámico SESSION con datos, solicita su activación y la transición espera al tick manual; se conserva la secuencia Update→Exit→Enter y el Update dinámico ocurre en el tick siguiente. Código productivo sin cambios.
+- [Informe C4A](fsm_phase8_8d1c4a_result.md) y [plan 8D1-C](fsm_phase8_8d1c_microblocks.md); próximo **8D1-C4B** (copias profundas y validación de datos del SDK). Se mantienen 25 pruebas manuales pendientes (15 Fedora, 10 Android).
+
 ## Potok — 8D1-C3 PASS; próximo 8D1-C4A (2026-11-02)
 
 - [CI 41566863222](https://github.com/mercurysama/Flujo/actions/runs/41566863222) **SUCCESS 85/85** en `1989bf6fc52b52903770c8c53ec4207f304cd2af`. Las rutas reales Ready, Timer, Constructor y Method carecen de capacidad FSM aun con runtime activo o cuando Method hereda `StateUpdate`; las fases FSM sí reciben acceso acotado. Cero cambios productivos.

@@ -1481,11 +1481,11 @@
         "No changes to historical Ready/Timer/Constructor, schema, or public SDK API."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_sdk_register_change_test.tscn"
       ],
-      "notes": "8D1-C4A: test/CI added, remote execution pending; not a PASS before actual GitHub Actions."
+      "notes": "8D1-C4A: GitHub Actions 41567631405 completed SUCCESS 86/86 on 89d9bfb7382f44eaa2b52862a3e8562253db4ca9, including required SDK queued dynamic activation focal; production unchanged."
     }
   ]
 }

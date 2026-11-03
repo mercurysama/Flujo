@@ -1,5 +1,14 @@
 # Flujo FSM — Iteration journal / Skill learning
 
+## 2026-11-02 — Potok 8D1-C4A SDK queued dynamic state activation
+
+- Baseline `0c6b3749`, [CI 41567300158](https://github.com/mercurysama/Flujo/actions/runs/41567300158) SUCCESS 85/85. Test commit `89d9bfb7382f44eaa2b52862a3e8562253db4ca9` passed full [Actions 41567631405](https://github.com/mercurysama/Flujo/actions/runs/41567631405) **SUCCESS 86/86**.
+- External-style SDK StateEnter callback registers a templated SESSION alias and queues `change_state`; the alias is visible and data readable inside the callback. Initial state and request count remain unchanged until next manual tick. That tick orders original Update→Exit→template Enter→direct commit; dynamic Update waits until next tick. Retained facade expires and authored graph remains immutable.
+- Added focused fixture, .gd/.tscn scene, required CI step and `FLUJO-BHV-POTOK-SDK-REGISTER-CHANGE-005`, now catalog `passing` after confirmed CI. No production code edits, schema/UI changes or `main` merge.
+- Godot local NOT RUN, remote Godot Actions PASS; versioned baseline/prove skill instructions were consulted but not formally invoked. Manual 15 Fedora + 10 Android remains PENDING.
+- [C4A report](fsm_phase8_8d1c4a_result.md), [C plan](fsm_phase8_8d1c_microblocks.md); next **8D1-C4B** deep-copy data, invalid payload rejection.
+- Reusable skill lesson: assert the post-callback pending queue before ticking, then the precise lifecycle trace and delayed template Update; one green registration assertion alone does not prove non-reentrancy.
+
 ## 2026-11-02 — Potok 8D1-C3 non-FSM SDK capability boundary
 
 - Baseline `b65b7a48`: [CI 41566270777](https://github.com/mercurysama/Flujo/actions/runs/41566270777) SUCCESS 84/84. Test commit `1989bf6fc52b52903770c8c53ec4207f304cd2af`; [CI 41566863222](https://github.com/mercurysama/Flujo/actions/runs/41566863222) **SUCCESS 85/85**.
