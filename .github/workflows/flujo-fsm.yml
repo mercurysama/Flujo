@@ -314,6 +314,9 @@ jobs:
       - name: Potok-6A cross-machine request focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 30s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_cross_machine_request_test.tscn
+      - name: Potok-10A3 existing FSM signal characterization focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 35s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_observability_existing_signals_test.tscn
       - name: Potok-5G admission diagnostic focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 30s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_admission_diagnostics_test.tscn

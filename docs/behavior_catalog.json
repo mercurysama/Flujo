@@ -1925,6 +1925,25 @@
         "tests/runtime/flow_fsm_snapshot_two_process_restore.tscn"
       ],
       "notes": "9R1-A automated PASS: GitHub Actions 41722469207 on commit eaa95cb9239fd37bb3a69d07298e5684dc7688c1 (Godot 4.7.2) ran two independent OS processes with a shared isolated XDG_DATA_HOME. Process A write passed; Process B explicit restore passed; complete workflow SUCCESS. No physical reboot, power loss, F5-F7 fault injection, or manual Fedora/Android acceptance."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-OBSERVABILITY-EXISTING-001",
+      "area": "Potok existing runtime signal characterization for future DEBUG-FSM",
+      "precondition": "Two PVControllers share a validated authored schema 3 graph with a MANUAL event transition. Each controller owns its own running FSM runtime.",
+      "public_action": "Subscribe to existing public runtime signals, submit invalid and unmatched events, enqueue events independently on A/B, tick A and B separately, perform a direct request and stop only A.",
+      "expected_result": "Stable rejection code without queue mutation; unmatched event is consumed with detached payload; Update, event consumption, Exit, Enter and commit are observed in order; direct metadata follows the legacy commit; no FlowGraph authoring mutation and no cross-controller queue/state leak.",
+      "invariants": [
+        "Public signals preserve ordering without adding or changing any runtime API.",
+        "A consuming or committing cannot drain B's queue or update its state.",
+        "Event payload copies and stable machine/state/edge IDs remain independently observable.",
+        "Observed operations never rewrite authored resources; one controller teardown leaves the other live."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_observability_existing_signals_test.tscn"
+      ],
+      "notes": "Potok 10A-3 test-first characterization on existing runtime; mandatory GitHub Actions focal added in this commit. NOT RUN until same-commit CI outcome is checked; local Godot and formal Skills are unavailable via GitHub connector. Does not implement proposed observability API, buffer or editor UI."
     }
   ]
 }
