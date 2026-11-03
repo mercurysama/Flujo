@@ -1,5 +1,14 @@
 # Flujo FSM — Iteration journal / Skill learning
 
+## 2026-11-02 — Potok 8D1-C3 non-FSM SDK capability boundary
+
+- Baseline `b65b7a48`: [CI 41566270777](https://github.com/mercurysama/Flujo/actions/runs/41566270777) SUCCESS 84/84. Test commit `1989bf6fc52b52903770c8c53ec4207f304cd2af`; [CI 41566863222](https://github.com/mercurysama/Flujo/actions/runs/41566863222) **SUCCESS 85/85**.
+- Verified real Constructor/Ready startup, Timer timeout and Method calls; replayed Ready/Constructor after FSM startup. Methods called from StateUpdate keep the phase name but do not inherit the FSM runtime. Synthetic StateEnter without runtime also remains unauthorized. Genuine Enter/Update/Exit callbacks obtain ephemeral facades; FlowGraph unchanged.
+- Added fixture, focal .gd/.tscn, required CI step and catalog `FLUJO-BHV-POTOK-SDK-CAPABILITY-EXCLUSION-004`, now passing after verified CI; no production changes.
+- Versioned baseline/prove instructions consulted but **not formally invoked**. Local Godot NOT RUN, remote Godot Actions PASS; manual Fedora/Android approval pending 15+10.
+- Handoff [C3 result](fsm_phase8_8d1c3_result.md), [C plan](fsm_phase8_8d1c_microblocks.md). Next 8D1-C4A (SDK registration and queued change).
+- Skill lesson: test capability boundaries with real executable routes, **including a method called by StateUpdate**, because an inherited phase string alone must never confer runtime authority.
+
 ## 2026-11-02 — Potok 8D1-C2 controller/machine SDK isolation
 
 - Baseline: `6b091334` / [CI 41563497465](https://github.com/mercurysama/Flujo/actions/runs/41563497465) SUCCESS 83/83. Test commit `4c867d45d6bc5878eb42cd57bdf6c08279a40049`; [CI 41565743817](https://github.com/mercurysama/Flujo/actions/runs/41565743817) **SUCCESS 84/84**.

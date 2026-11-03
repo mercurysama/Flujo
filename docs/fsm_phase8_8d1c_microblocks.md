@@ -3,9 +3,9 @@
 **Fecha del plan:** 2026-11-02 (America/Mexico_City)
 **Rama exclusiva:** `feature/fsm-runtime-flow-flusso`
 **Punto de partida verificado:** `85a9ace1aab97dfc6f9248910b7fa05462e2a4d7`; [Actions 41558938893](https://github.com/mercurysama/Flujo/actions/runs/41558938893), SUCCESS 81/81.
-**Estado actual:** 8D1-C1A, C1B y C2 aprobados con CI (82/82, 83/83 y 84/84 respectivamente); C3 en adelante pendientes. Este plan no implica aprobación de fases posteriores.
+**Estado actual:** 8D1-C1A, C1B, C2 y C3 aprobados con CI (82/82, 83/83, 84/84 y 85/85); C4A en adelante pendientes. Este plan no implica aprobación de fases posteriores.
 
-**Último checkpoint:** [8D1-C2](fsm_phase8_8d1c2_result.md), commit de prueba `4c867d45d6bc5878eb42cd57bdf6c08279a40049`, [Actions 41565743817](https://github.com/mercurysama/Flujo/actions/runs/41565743817) SUCCESS 84/84. Próximo **8D1-C3**.
+**Último checkpoint:** [8D1-C3](fsm_phase8_8d1c3_result.md), commit focal `1989bf6fc52b52903770c8c53ec4207f304cd2af`, [Actions 41566863222](https://github.com/mercurysama/Flujo/actions/runs/41566863222) SUCCESS 85/85. Próximo **8D1-C4A**.
 
 ## Contrato y límites
 
@@ -35,6 +35,6 @@ Cada microbloque se comitea por separado, con pruebas RED solo cuando existe una
 - Proteger `demo/main.tscn`, `main`, recursos persistentes, las 25 pruebas humanas pendientes (15 Fedora, 10 Android) y todos los cambios de otras ramas.
 - Tras **8D1-C5**, auditar 8D2 (políticas EPHEMERAL/SESSION/PERSISTENT, stop/restart, snapshots, determinismo) y 8E; seguir fases 9–11 con brechas reales, no reconstrucción.
 
-**Punto de recuperación:** leer el HEAD real y el último Actions, encontrar el último microbloque de esta tabla con evidencia, y retomar el siguiente. Próximo trabajo: **8D1-C3**; C1A, C1B y C2 tienen sus informes de PASS.
+**Punto de recuperación:** leer el HEAD real y el último Actions, encontrar el último microbloque de esta tabla con evidencia, y retomar el siguiente. Próximo trabajo: **8D1-C4A**; C1A, C1B, C2 y C3 tienen informes de PASS.
 
 *Todo es Flujo; todo fluye.* 🌊

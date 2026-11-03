@@ -1462,11 +1462,11 @@
         "Historical Ready/Timer/Constructor/Method behavior and authored FlowGraph remain unchanged."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_sdk_non_fsm_capability_test.tscn"
       ],
-      "notes": "8D1-C3 required focal added; no passing claim until GitHub Actions Godot 4.7.2 completes."
+      "notes": "8D1-C3: Actions 41566863222 completed SUCCESS 85/85 at 1989bf6fc52b52903770c8c53ec4207f304cd2af; required non-FSM capability exclusion focal passed. Production unchanged."
     }
   ]
 }
