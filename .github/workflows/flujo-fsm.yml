@@ -84,6 +84,9 @@ jobs:
       - name: Potok-8D2B2A transient snapshot active fallback and ordering focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_snapshot_transient_active_test.tscn
+      - name: Potok-8D2B3B2 restore snapshot callbacks and stale queue focal
+        shell: bash
+        run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_restore_callback_queue_test.tscn
       - name: Potok-8D2B3B1 bounded reset callback and queue guard focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_reset_callback_guard_test.tscn
