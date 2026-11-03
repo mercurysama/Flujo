@@ -1734,6 +1734,25 @@
         "tests/runtime/flow_fsm_restore_callback_queue_test.tscn"
       ],
       "notes": "B3B2 test-only characterization registered with mandatory CI gate; NOT RUN until CI passes."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-RESET-RESTORE-REENTRANCY-011",
+      "area": "Potok bounded reset and restore in-tick guard with independent controller isolation",
+      "precondition": "Two PVControllers share valid two-machine MANUAL schema 3 graph; owner exports valid initial snapshot, then both queue independent direct requests.",
+      "public_action": "From owner's StateUpdate and transition_committed callbacks, attempt reset(), restore_snapshot() and nested tick; queue a callback event, later restore outside tick and advance sibling alone.",
+      "expected_result": "Every in-tick reset/restore attempt returns false, nested ticks add no transitions; an update-generated event is deferred and cleared by successful outside-tick restore, which emits global Exit then Enter while peer remains untouched.",
+      "invariants": [
+        "No reset or snapshot restore executes within current tick or nested tick callbacks.",
+        "One and only one direct transition commits per machine on outer tick.",
+        "Successful outside-tick restore clears only owner queued callback packets.",
+        "Sibling controller and authored graph remain isolated and unmodified."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_reset_restore_reentrant_guard_test.tscn"
+      ],
+      "notes": "8D2-B3B3 focal registered, mandatory CI not yet verified."
     }
   ]
 }
