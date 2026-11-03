@@ -1467,6 +1467,25 @@
         "tests/runtime/flow_fsm_sdk_non_fsm_capability_test.tscn"
       ],
       "notes": "8D1-C3: Actions 41566863222 completed SUCCESS 85/85 at 1989bf6fc52b52903770c8c53ec4207f304cd2af; required non-FSM capability exclusion focal passed. Production unchanged."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SDK-REGISTER-CHANGE-005",
+      "area": "Potok SDK StateEnter registration and deferred activation",
+      "precondition": "A validated schema 3 FSM enters a state with an external-style SDK FlowBlock, a same-machine template and manual clock.",
+      "public_action": "Inside StateEnter register a dynamic alias with structured data, call SDK change_state, then advance manual ticks and inspect lifecycle order and authored resources.",
+      "expected_result": "The alias is registered and read while the callback is active; its change is queued without reentry, commits on the next matching tick with original Update→Exit→template Enter and one direct transition; template Update occurs on a subsequent tick.",
+      "invariants": [
+        "StateEnter callback completion and subsequent blocks precede any requested transition.",
+        "SDK capability expires on callback return; stale calls do not enqueue changes.",
+        "Dynamic template and data stay in the controller runtime, not FlowGraph.",
+        "No changes to historical Ready/Timer/Constructor, schema, or public SDK API."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_sdk_register_change_test.tscn"
+      ],
+      "notes": "8D1-C4A: test/CI added, remote execution pending; not a PASS before actual GitHub Actions."
     }
   ]
 }
