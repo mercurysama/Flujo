@@ -1,3 +1,9 @@
+## Potok 9B3-C3 + 9C1-A — authorization boundary and invalid disk restore test (2026-11-03)
+
+- [9B3-C3](fsm_phase9_9b3c3_authorization_boundary.md) leaves F5–F7 and F9 as open contractual choices, **does not interpret permission for grouped microblocks as authorization to change save semantics**.
+- [9C1-A](fsm_phase9_9c1a_invalid_file_restore_result.md) adds mandatory invalid-file restore focal, behavior `FLUJO-BHV-POTOK-SNAPSHOT-INVALID-FILE-015` **not_run** pending full CI. Tests absent, malformed, wrong JSON root, >MAX_JSON_LENGTH, version and graph mismatch while retaining active alias, payload and pending queue. No production code changes.
+- **Next 9C1-B** close only after full CI success. Then 9C2-A teardown/new-controller explicit file roundtrip. 25 manual checks deferred, no main merge.
+
 ## Potok 9B3-C1 + 9B3-C2 — two consecutive microblocks (2026-11-03)
 
 - **9B3-C1** [design audit](fsm_phase9_9b3c1_fault_test_design_audit.md), commit `e6713f5f6639847da3d0ad5b004e9aaa7f6a733d`: investigated direct path blockers, OS permission tricks, real file operations and possible test-only backend seam. No method reliably forces F5–F7 in current runtime across all platforms; a controlled seam requires a separate approved implementation. No claim of reproduced defect.

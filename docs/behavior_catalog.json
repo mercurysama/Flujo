@@ -1810,6 +1810,25 @@
         "tests/runtime/flow_fsm_snapshot_save_preflight_failure_test.tscn"
       ],
       "notes": "9B3-B2 commit 9fc4d44a9c4de18100d2b4095ded461ad0355bcf. Full Godot 4.7.2 CI GitHub Actions 41670135010 completed SUCCESS, headless job 104/104 steps completed without failures including mandatory early save I/O preflight focal. F3 file-as-parent-directory case preserves sentinel, existing S1 snapshot, live runtime and pending transition. F5–F7 replacement failures not exercised; 25 manual tests deferred."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SNAPSHOT-INVALID-FILE-015",
+      "area": "Potok FSM-004 invalid and incompatible disk snapshot restore atomicity",
+      "precondition": "Running one-machine PVController holds a live active persistent alias with detached data and a pending direct transition. Isolated user:// test paths are unused.",
+      "public_action": "Attempt restore_from_file on absent file, malformed JSON, non-dictionary JSON root, oversized contents, unsupported format_version and foreign graph_id, checking runtime after each refusal.",
+      "expected_result": "All invalid files reject without mutation of active state, persistent alias/data, or pending transition; the pending direct transition commits on the next tick.",
+      "invariants": [
+        "Untrusted disk contents never publish partially validated dynamic state.",
+        "Invalid restore never clears unrelated queued requests.",
+        "File fixtures are written only under dedicated user://flujo_fsm_tests/.",
+        "No schema migration or automatic backup recovery occurs."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_snapshot_invalid_file_restore_test.tscn"
+      ],
+      "notes": "9C1-A mandatory CI focal registered; baseline not_run until Godot 4.7.2 full suite SUCCESS. Previous 9B3-C1/C2/C3 are design/authorization boundary, no runtime change."
     }
   ]
 }
