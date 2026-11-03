@@ -1582,6 +1582,25 @@
         "tests/runtime/flow_fsm_lifetime_stop_restart_test.tscn"
       ],
       "notes": "8D2-B1B: Actions 41578192657 completed SUCCESS 92/92 for 2dad13c6815ae4269cbd42ebd07eb79f8fac2854, mandatory teardown/restart focal PASS; production and Phase 9 snapshot codec untouched; human acceptance pending."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SNAPSHOT-TRANSIENT-003",
+      "area": "Potok snapshot boundary for transient active runtime states and deterministic machine ordering",
+      "precondition": "Two PVControllers share an authored graph of three MANUAL state machines. The source has nine interleaved runtime aliases (six persistent and three transient), with EPHEMERAL, SESSION and PERSISTENT active on separate machines.",
+      "public_action": "Export two snapshots without changing source runtime, inspect ordered machine and persistent alias lists, modify a detached copy, then restore the valid snapshot into the second controller.",
+      "expected_result": "The EPHEMERAL and SESSION active machine IDs serialize as their authored initial states; PERSISTENT active retains its runtime ID. Only six PERSISTENT entries appear ordered by machine definition and per-machine registration. Export does not change runtime. A second controller restores these entries with detached metadata and exact portable round-trip ordering.",
+      "invariants": [
+        "Snapshot never exposes nonpersistent alias IDs even when one is currently active; recovery IDs are authored and valid.",
+        "Machines preserve authored graph ordering, while saved persistent aliases preserve per-machine registration order.",
+        "Portable snapshot data are deeply detached from source runtime and between controller instances.",
+        "Existing FLU-FSM-004 codec and authored graph remain unchanged; this characterization does not complete Phase 9."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_snapshot_transient_active_test.tscn"
+      ],
+      "notes": "8D2-B2A focal and full Godot 4.7.2 CI not yet run. Existing snapshot codec is reused without any production changes."
     }
   ]
 }
