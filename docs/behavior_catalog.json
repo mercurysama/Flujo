@@ -1677,6 +1677,25 @@
         "tests/runtime/flow_fsm_dual_controller_event_budget_test.tscn"
       ],
       "notes": "8D2-B3A3 mandatory focal and full regression completed SUCCESS in Godot 4.7.2 Actions 41588927428 on 4c733296a491fbe02455095fb81229b3a560d896; no production edits. Local tests and manual acceptance not run."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-DETERMINISM-RESET-008",
+      "area": "Potok two-controller explicit-alias deterministic reset replay",
+      "precondition": "Two PVControllers share two MANUAL machines; each registers equal explicit EPHEMERAL and PERSISTENT IDs with detached data, activates both aliases and queues identical mixed direct/event requests.",
+      "public_action": "Reset controllers separately, compare ordered Exit/Enter callback traces, active state recovery, queue clearing, lifetime/ID retention and post-reset activation of persistent alias.",
+      "expected_result": "Each reset emits identical ordered Exit of active aliases followed by authored initial Enter; only reset owner's queue clears; EPHEMERAL disappears, PERSISTENT retains ID/data and can be activated later; no stale commits.",
+      "invariants": [
+        "Reset isolation between controllers with same immutable graph and explicit alias IDs.",
+        "No random ID equality assumption; runtime IDs provided explicitly to both registries.",
+        "Lifetime policies EPHEMERAL/PERSISTENT and deterministic callback order preserved.",
+        "No mutation of authored graph."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_dual_controller_dynamic_reset_test.tscn"
+      ],
+      "notes": "B3A4 introduced as characterization test with mandatory CI; not run until verification."
     }
   ]
 }
