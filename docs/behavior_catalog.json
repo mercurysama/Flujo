@@ -1653,11 +1653,11 @@
         "No authored FlowGraph mutation occurs."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_two_wave_order_replay_test.tscn"
       ],
-      "notes": "8D2-B3A2 focal introduced on existing runtime with mandatory CI gate; not_run until remote PASS."
+      "notes": "8D2-B3A2 focal and full Godot 4.7.2 Actions 41584784409 completed SUCCESS for fcc5d1d7240cb30a3fa0dcbbcc406db9c236b412. Reverse queue B/A, two waves, exact A/B commits, independent controllers and immutable graph verified. No production change."
     }
   ]
 }

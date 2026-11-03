@@ -1,3 +1,8 @@
+## 2026-11-02 — Potok 8D2-B3A2 ordered two-wave replay
+
+- `fcc5d1d` introduced focal `flow_fsm_two_wave_order_replay_test.tscn`, mandatory CI and behavior `FLUJO-BHV-POTOK-DETERMINISM-ORDER-006`. [Actions 41584784409](https://github.com/mercurysama/Flujo/actions/runs/41584784409) **SUCCESS** full Godot 4.7.2 suite. Reverse admission B→A over two waves commits A→B each time in both independent runtimes. No production changes.
+- Catalog moved `not_run` to `passing` only after CI; B3A3 events/budget is next. Manual tests 0/25 pending; repository Skills documentation read, not formally invoked.
+
 ## 2026-11-02 — Potok 8D2-B3A1 deterministic dual-controller replay
 
 - Defined minimal two-MANUAL-machine contract in `3528ac9`; characterization focal and required CI gate in `845f68f`.
