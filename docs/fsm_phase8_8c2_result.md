@@ -7,7 +7,7 @@
 - `35b573c935f8983ba9b4c1d8076a2bccc7d3a0fb` — `tests/runtime/flow_fsm_dynamic_pending_multimachine_test.gd`.
 - `03df48438487328bfbe84295c73efabcd6587408` — `tests/runtime/flow_fsm_dynamic_pending_multimachine_test.tscn`.
 - `2604a3a252dfff256dd4735b9bbeb26408e942fd` — paso `Potok-8C2 selective pending requests and multi-machine focal` en workflow de GitHub Actions.
-- [CI 41550131409](https://github.com/mercurysama/Flujo/actions/runs/41550131409): focal 8C2 SUCCESS; la conclusión de toda la suite debe verificarse por separado.
+- **GREEN global confirmado:** [CI 41550131409](https://github.com/mercurysama/Flujo/actions/runs/41550131409), **completed SUCCESS 80/80 pasos**, cero fallos, sobre `2604a3a252dfff256dd4735b9bbeb26408e942fd`; incluye focal 8C2 y regresiones anteriores.
 
 ## Escenario y resultados
 
