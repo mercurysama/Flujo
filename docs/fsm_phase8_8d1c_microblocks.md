@@ -1,8 +1,8 @@
 # Potok — 8D1-C: contrato y microbloques recuperables
 
-**Fecha del plan:** 2026-11-02 (America/Mexico_City)  
-**Rama exclusiva:** `feature/fsm-runtime-flow-flusso`  
-**Punto de partida verificado:** `85a9ace1aab97dfc6f9248910b7fa05462e2a4d7`; [Actions 41558938893](https://github.com/mercurysama/Flujo/actions/runs/41558938893), SUCCESS 81/81.  
+**Fecha del plan:** 2026-11-02 (America/Mexico_City)
+**Rama exclusiva:** `feature/fsm-runtime-flow-flusso`
+**Punto de partida verificado:** `85a9ace1aab97dfc6f9248910b7fa05462e2a4d7`; [Actions 41558938893](https://github.com/mercurysama/Flujo/actions/runs/41558938893), SUCCESS 81/81.
 **Estado:** PLANIFICADO; esta página no constituye un PASS de los microbloques.
 
 ## Contrato y límites
