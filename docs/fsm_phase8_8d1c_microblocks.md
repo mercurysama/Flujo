@@ -3,9 +3,9 @@
 **Fecha del plan:** 2026-11-02 (America/Mexico_City)
 **Rama exclusiva:** `feature/fsm-runtime-flow-flusso`
 **Punto de partida verificado:** `85a9ace1aab97dfc6f9248910b7fa05462e2a4d7`; [Actions 41558938893](https://github.com/mercurysama/Flujo/actions/runs/41558938893), SUCCESS 81/81.
-**Estado actual:** 8D1-C1A, C1B, C2, C3 y C4A aprobados con CI (82/82, 83/83, 84/84, 85/85 y 86/86); C4B en adelante pendientes. No implica aprobación de las fases posteriores.
+**Estado actual:** 8D1-C1A, C1B, C2, C3, C4A y C4B aprobados con CI (82/82, 83/83, 84/84, 85/85, 86/86 y 87/87); C4C y C5 pendientes. No implica aprobación de fases posteriores.
 
-**Último checkpoint:** [8D1-C4A](fsm_phase8_8d1c4a_result.md), commit focal `89d9bfb7382f44eaa2b52862a3e8562253db4ca9`, [Actions 41567631405](https://github.com/mercurysama/Flujo/actions/runs/41567631405) SUCCESS 86/86. Próximo **8D1-C4B**.
+**Último checkpoint:** [8D1-C4B](fsm_phase8_8d1c4b_result.md), commit focal `6dda6c74637170905877cb59ee7c50bc23bb4f07`, [Actions 41568809804](https://github.com/mercurysama/Flujo/actions/runs/41568809804) SUCCESS 87/87. Próximo **8D1-C4C**.
 
 ## Contrato y límites
 
@@ -35,6 +35,6 @@ Cada microbloque se comitea por separado, con pruebas RED solo cuando existe una
 - Proteger `demo/main.tscn`, `main`, recursos persistentes, las 25 pruebas humanas pendientes (15 Fedora, 10 Android) y todos los cambios de otras ramas.
 - Tras **8D1-C5**, auditar 8D2 (políticas EPHEMERAL/SESSION/PERSISTENT, stop/restart, snapshots, determinismo) y 8E; seguir fases 9–11 con brechas reales, no reconstrucción.
 
-**Punto de recuperación:** leer el HEAD real y el último Actions, encontrar el último microbloque de esta tabla con evidencia, y retomar el siguiente. Próximo trabajo: **8D1-C4B**; C1A, C1B, C2, C3 y C4A tienen informes de PASS.
+**Punto de recuperación:** leer el HEAD real y el último Actions, encontrar el último microbloque de esta tabla con evidencia, y retomar el siguiente. Próximo trabajo: **8D1-C4C**; C1A, C1B, C2, C3, C4A y C4B tienen informes de PASS.
 
 *Todo es Flujo; todo fluye.* 🌊

@@ -1,5 +1,14 @@
 # Flujo FSM — Iteration journal / Skill learning
 
+## 2026-11-02 — Potok 8D1-C4B SDK data deep-copy and validation
+
+- Baseline `1b952a4d` / [CI 41568112472](https://github.com/mercurysama/Flujo/actions/runs/41568112472) SUCCESS 86/86; test commit `6dda6c74637170905877cb59ee7c50bc23bb4f07`, [CI 41568809804](https://github.com/mercurysama/Flujo/actions/runs/41568809804) **SUCCESS 87/87**.
+- Two PVControllers sharing a schema 3 FlowGraph execute external-style `FlowBlock` SDK callbacks. Registration deep clones nested data; repeated SDK reads are detached; replacement data is deep cloned. Eight invalid input categories reject both registration and writing without changing stored data, queues or graph.
+- Added fixture, focal scene, mandatory CI step and catalog `FLUJO-BHV-POTOK-SDK-DATA-DETACH-006` (now **passing** only after CI); zero production changes or schema changes.
+- Local Godot NOT RUN; remote Actions Godot 4.7.2 PASS. Versioned baseline/prove Skills instructions consulted, not formally invoked. 15 Fedora + 10 Android manual checks remain PENDING.
+- [C4B report](fsm_phase8_8d1c4b_result.md), [plan](fsm_phase8_8d1c_microblocks.md); next **8D1-C4C**, active alias removal from SDK with fallback lifecycle and selective request cleanup.
+- Reusable lesson: prove all three copy boundaries—registration input, setter input and readback—and check non-mutation after each rejected invalid payload through actual SDK callbacks.
+
 ## 2026-11-02 — Potok 8D1-C4A SDK queued dynamic state activation
 
 - Baseline `0c6b3749`, [CI 41567300158](https://github.com/mercurysama/Flujo/actions/runs/41567300158) SUCCESS 85/85. Test commit `89d9bfb7382f44eaa2b52862a3e8562253db4ca9` passed full [Actions 41567631405](https://github.com/mercurysama/Flujo/actions/runs/41567631405) **SUCCESS 86/86**.

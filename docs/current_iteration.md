@@ -1,5 +1,10 @@
 # Current Iteration
 
+## Potok — 8D1-C4B PASS; siguiente 8D1-C4C (2026-11-02)
+
+- [CI 41568809804](https://github.com/mercurysama/Flujo/actions/runs/41568809804) **SUCCESS 87/87** para `6dda6c74637170905877cb59ee7c50bc23bb4f07`. Copias profundas verificadas desde callbacks SDK reales, ocho categorías inválidas rechazadas, dos controladores independientes, `FlowGraph` intacto; sin cambios productivos.
+- [Informe C4B](fsm_phase8_8d1c4b_result.md) y [plan C](fsm_phase8_8d1c_microblocks.md). Próximo **8D1-C4C**: retirada de alias desde el SDK con fallback y cola selectiva. Revisión humana de fase 7: 15 Fedora + 10 Android pendientes.
+
 ## Potok — 8D1-C4A PASS; siguiente 8D1-C4B (2026-11-02)
 
 - [CI 41567631405](https://github.com/mercurysama/Flujo/actions/runs/41567631405) **SUCCESS 86/86** en `89d9bfb7382f44eaa2b52862a3e8562253db4ca9`. Un FlowBlock SDK crea un alias dinámico SESSION con datos, solicita su activación y la transición espera al tick manual; se conserva la secuencia Update→Exit→Enter y el Update dinámico ocurre en el tick siguiente. Código productivo sin cambios.

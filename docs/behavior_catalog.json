@@ -1500,11 +1500,11 @@
         "Two controllers with shared FlowGraph retain independent runtime data; no schema/runtime production change."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_sdk_data_copy_validation_test.tscn"
       ],
-      "notes": "8D1-C4B test and mandatory CI step added; do not mark PASS before actual Godot 4.7.2 Actions completion."
+      "notes": "8D1-C4B: GitHub Actions 41568809804 completed SUCCESS 87/87 on 6dda6c74637170905877cb59ee7c50bc23bb4f07; SDK data copies, validation, and full regressions passed; production unchanged."
     }
   ]
 }
