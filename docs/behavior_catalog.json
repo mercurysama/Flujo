@@ -1596,11 +1596,11 @@
         "Existing FLU-FSM-004 codec and authored graph remain unchanged; this characterization does not complete Phase 9."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_snapshot_transient_active_test.tscn"
       ],
-      "notes": "8D2-B2A focal and full Godot 4.7.2 CI not yet run. Existing snapshot codec is reused without any production changes."
+      "notes": "8D2-B2A: GitHub Actions 41579446980 completed SUCCESS 93/93 at 78a9a7d265ddad369f2473de661b01bb906d3fe5; mandatory snapshot focal passed and all baseline regressions GREEN. Snapshot codec and production unchanged."
     }
   ]
 }

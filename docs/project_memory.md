@@ -1,5 +1,11 @@
 # Flujo Project Memory / Handoff
 
+## Potok — 8D2-B2A snapshot de alias activos PASS (2026-11-02)
+
+- [Informe B2A](fsm_phase8_8d2b2a_result.md); [Actions 41579446980](https://github.com/mercurysama/Flujo/actions/runs/41579446980) **SUCCESS 93/93** en `78a9a7d265ddad369f2473de661b01bb906d3fe5`: máquinas EPHEMERAL/SESSION activas exportan inicial authored, PERSISTENT conserva ID, seis registros persistentes mantienen orden; restauración aislada y payload desacoplado.
+- **Siguiente 8D2-B2B:** rechazo atómico de snapshots inválidos preservando estado, registry y cola, sin cambiar `FlowFSMSnapshotCodec` ni cerrar Fase 9; [plan](fsm_phase8_8d2_microblocks.md). Ya PASS B1A, B1B, B2A; B2B/B3/C siguen pendientes.
+- 25 pruebas humanas de Fase 7 (15 Fedora, 10 Android) siguen **PENDING**; ninguna aceptación visual inferida.
+
 ## Potok — 8D2-B1B stop/restart probado (2026-11-02)
 
 - [Informe B1B](fsm_phase8_8d2b1b_result.md), [CI 41578192657](https://github.com/mercurysama/Flujo/actions/runs/41578192657) **SUCCESS 92/92** con commit `2dad13c6815ae4269cbd42ebd07eb79f8fac2854`: stop elimina las tres políticas y cola, el runtime reiniciado queda limpio y SDK antiguo expira; un segundo controlador mantiene su estado independiente.

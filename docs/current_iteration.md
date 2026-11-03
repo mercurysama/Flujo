@@ -1,5 +1,10 @@
 # Current Iteration
 
+## Potok — 8D2-B2A snapshot transitorio activo PASS; siguiente 8D2-B2B (2026-11-02)
+
+- [Actions 41579446980](https://github.com/mercurysama/Flujo/actions/runs/41579446980) **SUCCESS 93/93** para focal `78a9a7d265ddad369f2473de661b01bb906d3fe5`. Tres máquinas activas EPHEMERAL/SESSION/PERSISTENT: las dos transitorias exportan recuperación al inicial authored, persistente conserva ID, y seis registros persistentes mantienen orden y datos; restore en segundo controlador sin afectar al primero.
+- [Informe B2A](fsm_phase8_8d2b2a_result.md), [plan](fsm_phase8_8d2_microblocks.md); catálogo `FLUJO-BHV-POTOK-SNAPSHOT-TRANSIENT-003` `passing`. **Siguiente 8D2-B2B:** rechazo atómico de snapshots inválidos. Codec Fase 9 y producción sin modificaciones; 25 pruebas humanas de Fase 7 diferidas.
+
 ## Potok — 8D2-B1B stop/restart PASS; siguiente 8D2-B2A (2026-11-02)
 
 - [CI 41578192657](https://github.com/mercurysama/Flujo/actions/runs/41578192657) **SUCCESS 92/92**; focal `2dad13c6815ae4269cbd42ebd07eb79f8fac2854`. `stop()` libera EPHEMERAL, SESSION y PERSISTENT y elimina la cola; al reactivar el mismo `PVController` aparece nuevo runtime sin alias viejos. SDK retenidos no pueden operar. El segundo controlador preserva su alias y solicitud pendiente.

@@ -1,5 +1,12 @@
 # Flujo FSM — Iteration journal / Skill learning
 
+## 2026-11-02 — Potok 8D2-B2A transient-active snapshots and ordering
+
+- Baseline `50fe20def6c91a3b59ef11d54ff3e701583392cb` / [CI 41578626503](https://github.com/mercurysama/Flujo/actions/runs/41578626503) SUCCESS 92/92. Test commit `78a9a7d265ddad369f2473de661b01bb906d3fe5`, [CI 41579446980](https://github.com/mercurysama/Flujo/actions/runs/41579446980) **SUCCESS 93/93**, mandatory B2A focal passed.
+- Three real MANUAL machines: EPHEMERAL and SESSION active recovery IDs export as authored initial state, PERSISTENT active stays alias; nine runtime aliases interleaved, six PERSISTENT exported exactly in machine/registration order. Version 1 portable payload, detached nested metadata, identical repeated exports, restored into second controller, complete ordered reexport and instance data isolation confirmed.
+- `FLUJO-BHV-POTOK-SNAPSHOT-TRANSIENT-003` catalog `not_run` → `passing` after CI. No runtime/codec/schema change, no claims of completing existing Phase 9 FSM-004. [Report B2A](fsm_phase8_8d2b2a_result.md).
+- Next **8D2-B2B**, characterize preflight rejection atomicity (graph/schema mismatch, duplicate entries, unresolved references, quota, unsafe payload) while live queue and aliases exist; don't weaken existing FSM snapshot test. Godot local NOT RUN, skills not formally invoked, 0/25 human checks deferred.
+
 ## 2026-11-02 — Potok 8D2-B1B controller teardown, restart and stale SDK
 
 - Baseline [41577454239](https://github.com/mercurysama/Flujo/actions/runs/41577454239) 91/91 SUCCESS at `f8a4120beb89ee27c276a9645ad045b69fc1e162`. Test commit `2dad13c6815ae4269cbd42ebd07eb79f8fac2854` passed [CI 41578192657](https://github.com/mercurysama/Flujo/actions/runs/41578192657) **92/92 SUCCESS** (mandatory B1B focal + all existing regressions).
