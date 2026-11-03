@@ -1391,6 +1391,25 @@
         "docs/fsm_phase7_7f2_manual_acceptance_matrix.md"
       ],
       "notes": "7F-1D4 acceptance matrix created 2026-11-02; 15 Fedora + 10 Android all PENDING."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SDK-CAPABILITY-EXPIRY-001",
+      "area": "Potok callback-scoped SDK FSM operations lifecycle",
+      "precondition": "An external-style FlowBlock is called in StateEnter on a running schema 3 PVController and retains its FlowFSMOperations facade.",
+      "public_action": "Use the facade to register an alias during the callback, then attempt state reads, registration, changes, removal and data writes after the callback returns.",
+      "expected_result": "The in-callback registration succeeds; all use of the retained facade after callback return is rejected without modifying runtime alias IDs, stored data, pending transitions, active state or authored FlowGraph.",
+      "invariants": [
+        "FSM dynamic state belongs only to the owning controller and machine.",
+        "No stale reference can call mutators or read dynamic-state data.",
+        "StateEnter still executes through the shared SDK block executor, not a parallel runtime.",
+        "No claim of GDScript sandboxing, visual/manual approval, or protection from hostile direct access."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_sdk_expired_operations_test.tscn"
+      ],
+      "notes": "Potok 8D1-C1A: test and required CI step added; remote result pending at time of catalog entry."
     }
   ]
 }
