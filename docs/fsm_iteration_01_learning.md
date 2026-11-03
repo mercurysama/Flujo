@@ -1,3 +1,8 @@
+## Potok 9B3-A — backup failure path audit complete; next 9B3-B1 (2026-11-03)
+
+- [9B3-A failure-path audit](fsm_phase9_9b3a_failure_path_audit.md) inspected `FlowFSMRuntime.save_to_file` sequencing of `.tmp`, `.bak`, `copy_absolute`, `rename_absolute` and fallback. Historical [9B2-B checkpoint 41659742397](https://github.com/mercurysama/Flujo/actions/runs/41659742397) **SUCCESS**. Prior backup can be deleted before a replacement backup copy succeeds; rename fallback can delete target before retry; these are **risks inferred from source, not confirmed failures**. 9B1 assures successful S2 main + S1 bak, not interrupted operations.
+- **Next 9B3-B1:** document expected backup preservation/recovery policy for failure branches F5/F7/F9/F10, then 9B3-B2 safe preflight I/O failure focal using only dedicated `user://flujo_fsm_tests/`. No production, codec, workflow or behavior catalog changes in 9B3-A. Godot local/Skills formally not run, no main merge; 25 manual checks deferred.
+
 ## Potok 9B2-B — full CI PASS; next 9B3-A safe replacement audit (2026-11-03)
 
 - [9B2-B closeout](fsm_phase9_9b2b_path_matrix_closeout.md): [Actions 41658845225](https://github.com/mercurysama/Flujo/actions/runs/41658845225) completed **SUCCESS 103/103 steps**, mandatory 9B2A focal PASS. Historical [41658231067](https://github.com/mercurysama/Flujo/actions/runs/41658231067) RED was one test-only Dictionary-versus-JSON representation assertion, normalized by `85e5b7f`; full coverage preserved. Behavior `FLUJO-BHV-POTOK-SNAPSHOT-PATH-POLICY-013` becomes **passing** only after full CI.
