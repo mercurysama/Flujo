@@ -43,6 +43,17 @@ jobs:
         run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_ready_runtime_test.tscn
       - name: Navigation baseline
         run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_navigation_runtime_test.tscn
+      - name: Potok-9R1A two separate Godot processes preserve user snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          snapshot_home="$(mktemp -d "${RUNNER_TEMP}/potok-9r1-XXXXXXXX")"
+          trap 'rm -rf -- "$snapshot_home"' EXIT
+          export XDG_DATA_HOME="$snapshot_home"
+          echo '[Flujo] 9R1 process A: write snapshot'
+          timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_snapshot_two_process_write.tscn
+          echo '[Flujo] 9R1 process B: explicit snapshot restore'
+          timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_snapshot_two_process_restore.tscn
       - name: Potok-9D1A snapshot version graph and schema matrix focal
         shell: bash
         run: timeout --signal=TERM --kill-after=5s 70s ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . tests/runtime/flow_fsm_snapshot_compatibility_matrix_test.tscn

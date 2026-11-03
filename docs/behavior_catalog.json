@@ -1905,6 +1905,26 @@
         "tests/runtime/flow_fsm_snapshot_compatibility_matrix_test.tscn"
       ],
       "notes": "9D1-A source a41076b37ac7db8de754eda0b7c5e62ceab73ff9, Godot 4.7.2 GitHub Actions 41711670098 completed SUCCESS with 109/109 job steps and zero failures, mandatory 9D1-A compatibility focal success. Exact v1 portable restore preserved; old/future format, schema/graph/machine/state/template and invalid collection rejected without runtime publication. 25 manual checks deferred, F5–F7 open."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SNAPSHOT-TWO-PROCESS-020",
+      "area": "Potok FSM-004 persistent save and explicit restore across two Godot OS processes",
+      "precondition": "Two independent Godot 4.7.2 executions share an isolated XDG_DATA_HOME and reconstruct identical authored FlowGraph IDs from a test-only fixture.",
+      "public_action": "Process A saves snapshot of PERSISTENT alias while SESSION and EPHEMERAL aliases exist; process A exits. Process B launches anew, verifies no implicit alias, calls restore_from_file on the same user:// file.",
+      "expected_result": "Second process recovers exact active persistent alias identity and JSON-safe data, with no transient data or automatic loading; user:// file survives process boundary.",
+      "invariants": [
+        "Authored graph IDs remain stable across two launched processes.",
+        "No production ID generation or schema behavior is modified.",
+        "Only PERSISTENT data crosses processes, via explicit file restore.",
+        "Temporary user directory is owned and cleaned by the CI runner."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_snapshot_two_process_write.tscn",
+        "tests/runtime/flow_fsm_snapshot_two_process_restore.tscn"
+      ],
+      "notes": "9R1-A mandatory two-process focal added, pending entire GitHub Actions success. Does not test physical reboot, power loss, F5–F7 or manual Fedora/Android acceptance."
     }
   ]
 }

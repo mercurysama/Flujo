@@ -1,3 +1,8 @@
+## Potok 9R1-A — split process snapshot persistence focal registered (2026-11-03)
+
+- [9R1-A](fsm_phase9_9r1a_two_process_restart_result.md): separate Godot writer/reader scenes with test-only stable graph IDs and shared isolated `XDG_DATA_HOME`, verifying PERSISTENT explicit restore and SESSION/EPHEMERAL omission across a real process boundary. Behavior `FLUJO-BHV-POTOK-SNAPSHOT-TWO-PROCESS-020` **not_run** until full CI. [9E1-C Actions 41718438282](https://github.com/mercurysama/Flujo/actions/runs/41718438282) **SUCCESS**.
+- Next **9R1-B** verify both separate processes and full CI, close only on success; unresolved F5–F7 and 25 manual checks remain. No runtime/schema/codec/main changes.
+
 ## Potok 9E1-A/B/C — conditional verdict, two-process acceptance plan, recoverable checkpoint (2026-11-03)
 
 - [9E1-A conditional verdict](fsm_phase9_9e1a_conditional_verdict.md) **technical conditional only**; [9E1-B restart protocol](fsm_phase9_9e1b_restart_acceptance_protocol.md) defines **two separate Godot processes** and stable authored IDs as missing verification. [9E1-C handoff](fsm_phase9_9e1c_conditional_handoff.md) records next microsteps. Historical [41712607299](https://github.com/mercurysama/Flujo/actions/runs/41712607299) **SUCCESS** for 9D2 checkpoint; 9E1 commit CIs have separate statuses.
