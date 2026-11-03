@@ -1,5 +1,13 @@
 # Flujo FSM — Iteration journal / Skill learning
 
+## 2026-11-02 — Potok 8D2-A audit: lifetime/reset/snapshot evidence before coding
+
+- Baseline `ad73a4816849556810dd62047d468decdd562a9f`, [CI 41575182608](https://github.com/mercurysama/Flujo/actions/runs/41575182608) SUCCESS **90/90** with actual FSM 003 dynamic and FSM 004 snapshot focal markers; no new runtime verification was run locally.
+- Reviewed `FlowFSMRuntime`, `FlowFSMDynamicStateRecord`, `FlowFSMSnapshotCodec`, `PVController`, [FLU-FSM-003](fsm_dynamic_contract_v1.md), [FLU-FSM-004](fsm_snapshot_contract_v1.md), earlier 8A audit, current dynamic/snapshot/SDK tests, and the original roadmap. These APIs exist already; never treat Phase 9 snapshot infrastructure as unimplemented Phase 8 work.
+- Relevant gaps are **characterization only**, not known defects: active ephemeral reset lifecycle, full lifetime matrix on restart, transient active snapshot fallback, rejection atomicity against queue, deterministic multi-machine replay and callbacks around reset/restore.
+- Created [8D2-A audit](fsm_phase8_8d2a_audit.md) and [small-step 8D2 plan](fsm_phase8_8d2_microblocks.md). Next **8D2-B1A** independent focal on current production, catalog NOT RUN until actual remote Actions.
+- Existing SDK is not a sandbox; local Godot NOT RUN, formal repo skills not invoked; human acceptance 0/25. No production/schema modifications or phase 9 redesign.
+
 ## 2026-11-02 — Potok 8D1-C5 SDK technical evidence audit
 
 - Nine mandatory SDK focal steps C1A, C1B, C2, C3, C4A, C4B, C4C1 and C4C2A/B confirmed SUCCESS in [Actions 41574412835](https://github.com/mercurysama/Flujo/actions/runs/41574412835), full **90/90** under Godot 4.7.2; catalog nine focal steps across eight behavior IDs all `passing` and test paths exist.

@@ -1,5 +1,10 @@
 # Current Iteration
 
+## Potok — 8D2-A auditoría de lifetimes y snapshots; próximo 8D2-B1A (2026-11-02)
+
+- Baseline [Actions 41575182608](https://github.com/mercurysama/Flujo/actions/runs/41575182608) **SUCCESS 90/90** Godot 4.7.2, incluidos FSM 003 dynamic states, FSM 004 snapshot, 8B1/8B2/8C1/8C2. Auditoría documental [8D2-A](fsm_phase8_8d2a_audit.md): políticas EPHEMERAL/SESSION/PERSISTENT, reset, stop/restart, codec de snapshots y almacenamiento `user://` **ya implementados**; no se reescribe producción ni Fase 9.
+- [Microbloques 8D2](fsm_phase8_8d2_microblocks.md): siguiente **8D2-B1A**, matriz de lifetime y reset con alias temporal activo, segundo controlador y secuencia Exit→Enter. Los experimentos nuevos están **NOT RUN**, no PASS. 8D1-C cerrado técnicamente y 25 pruebas humanas de Fase 7 diferidas.
+
 ## Potok — 8D1-C5 auditoría técnica cerrada; siguiente 8D2-A (2026-11-02)
 
 - [CI 41574412835](https://github.com/mercurysama/Flujo/actions/runs/41574412835) **SUCCESS 90/90** y las 9 focales de 8D1-C verificadas por conclusión y marcador Godot 4.7.2. Comparación desde `85a9ace1` a `ae8b4710`: 24 commits, 38 rutas afectadas; cero archivos de producción modificados.

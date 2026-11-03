@@ -1,5 +1,11 @@
 # Flujo Project Memory / Handoff
 
+## Potok — 8D2-A inventario y microbloques (2026-11-02)
+
+- [Auditoría 8D2-A](fsm_phase8_8d2a_audit.md) y [microbloques](fsm_phase8_8d2_microblocks.md): **no faltan** `EPHEMERAL`/`SESSION`/`PERSISTENT`, reset, teardown, codec de snapshot ni save/restore `user://`; la siguiente tarea es ampliar cobertura, no reconstruirlas.
+- **Próximo 8D2-B1A**: test real de lifetimes durante reset con alias temporal activo y segundo controlador. Luego B1B (teardown), B2A/B (compatibilidad snapshot de Fase 9), B3A/B (determinismo/reentrancia), C (auditoría). Nuevos focales NOT RUN hasta Actions.
+- Baseline [41575182608](https://github.com/mercurysama/Flujo/actions/runs/41575182608) SUCCESS 90/90. Las pruebas 15 Fedora/10 Android siguen diferidas; no hay aceptación de fase 8 completa.
+
 ## Potok — checkpoint específico de rama (2026-11-02)
 
 - **Rama exclusiva Potok:** `feature/fsm-runtime-flow-flusso`, distinta de la rama UI Fluo documentada a continuación.
