@@ -1,3 +1,8 @@
+## Potok 9C3-C — disk restore in-tick reentrancy focal added (2026-11-03)
+
+- [9C3-C](fsm_phase9_9c3c_disk_restore_reentrant_result.md) adds mandatory `flow_fsm_snapshot_disk_restore_reentrant_test.tscn`, behavior `FLUJO-BHV-POTOK-SNAPSHOT-DISK-REENTRANCY-018` **not_run** awaiting CI, testing file restore attempts from StateUpdate/commit, nested-tick rejection, deferred owner event, sibling isolation and outside-tick successful restore. 9C3-B [Actions 41681389535](https://github.com/mercurysama/Flujo/actions/runs/41681389535) **SUCCESS 107/107**; behavior 017 updated passing.
+- **Next 9C3-D:** verify full CI and close or investigate RED. Then 9D1. No runtime changes; 25 manual checks deferred.
+
 ## Potok 9C3-B — disk callback focal PASS; next 9C3-C (2026-11-03)
 
 - [9C3-B closure](fsm_phase9_9c3b_disk_restore_callbacks_closeout.md), [Actions 41681389535](https://github.com/mercurysama/Flujo/actions/runs/41681389535) **SUCCESS 107/107**, behavior `FLUJO-BHV-POTOK-SNAPSHOT-DISK-CALLBACKS-017` now **passing**. Next 9C3-C focus on file restore in-tick reentrancy without runtime changes. F5–F7 unverified; manual 25 deferred.

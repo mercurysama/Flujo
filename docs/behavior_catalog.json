@@ -1867,6 +1867,25 @@
         "tests/runtime/flow_fsm_snapshot_disk_restore_callbacks_test.tscn"
       ],
       "notes": "9C3-A test commit f69d6d9106dbdf3ba99158a1d14de4ca149aa1fe, Actions 41681389535 completed SUCCESS, 107/107 job steps, zero failed, mandatory disk restore callback and peer queue focal SUCCESS. Owner global Exit(A),Exit(B),Enter(A),Enter(B), no commit; sibling independent. No production changes."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SNAPSHOT-DISK-REENTRANCY-018",
+      "area": "Potok FSM-004 disk restore in-tick guard and callback queue isolation",
+      "precondition": "Two controllers share a two-machine MANUAL graph; owner saves its initial state to disk while both instances can queue separate direct transitions.",
+      "public_action": "During owner's StateUpdate and transition_committed callbacks call restore_from_file, attempt nested tick, then restore successfully outside tick and independently tick peer.",
+      "expected_result": "Both in-tick restores reject; normal pending transitions and callback order are preserved with no recursion, pending owner callback event remains until an outside-tick successful file restore clears it, and sibling remains isolated.",
+      "invariants": [
+        "Disk-backed restore cannot reenter a running FSM tick.",
+        "Rejected restores do not clear owner deferred requests or sibling queue.",
+        "Successful outside-tick restore emits all Exit callbacks before any Enter.",
+        "No cross-controller callback leakage or on-disk mutation."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_snapshot_disk_restore_reentrant_test.tscn"
+      ],
+      "notes": "9C3-C mandatory focal registered pending complete Godot 4.7.2 CI. Builds on passing 8D2-B3B3 in-memory reentrancy and 9C3-A disk callbacks. No product code change."
     }
   ]
 }
