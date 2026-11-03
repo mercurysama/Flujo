@@ -1,3 +1,8 @@
+## 2026-11-03 — Potok 8D2-B3B1 guarded reset callbacks
+
+- `74f755e` registered required test `flow_fsm_reset_callback_guard_test.tscn` and behavior `FLUJO-BHV-POTOK-RESET-CALLBACK-GUARD-009`. [Actions 41590902774](https://github.com/mercurysama/Flujo/actions/runs/41590902774) **SUCCESS** full Godot 4.7.2 suite. In-tick reset returns false; outside-tick reset performs bounded per-machine Exit→Enter and clears only owner pending queue. No production changes.
+- Catalog marked passing after CI, next B3B2 snapshot restore callbacks. Skills read not formally invoked; local Godot NOT RUN and 25 manual checks deferred.
+
 ## 2026-11-03 — Potok 8D2-B3A5 determinism evidence audit
 
 - [B3A5 audit](fsm_phase8_8d2b3a5_audit.md) maps B3A1–A4 to contracts, test scenes, catalog IDs, focal gates, commits, and Actions (all technical PASS). Historical B3A4 RED was a fixture-only reset callback order mistake; runtime untouched. No new test or product code in B3A5; the audit is documentary and not equivalent to a fresh Godot execution.

@@ -1710,11 +1710,11 @@
         "Authored graph is unchanged."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_reset_callback_guard_test.tscn"
       ],
-      "notes": "8D2-B3B1 test-only characterization registered, mandatory CI pending."
+      "notes": "8D2-B3B1 mandatory focal plus complete Godot 4.7.2 Actions 41590902774 SUCCESS on 74f755e11f1932b7fcb1cc4fad2c1d2a625fdfba; no production changes. Human checks remain pending."
     }
   ]
 }
