@@ -1753,6 +1753,25 @@
         "tests/runtime/flow_fsm_reset_restore_reentrant_guard_test.tscn"
       ],
       "notes": "8D2-B3B3 test 7dd735de16f36e5ceb81690fc106e5b44222d64d and mandatory focal plus complete Godot 4.7.2 suite in Actions 41592345621 completed SUCCESS. Follow-up documentation 514e111e1c7e907003aef14d7a173c8a68ae7520 also Actions 41592430879 SUCCESS. No production code changes. 25 manual checks deferred."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-SNAPSHOT-BACKUP-CONTENT-012",
+      "area": "Potok FSM-004 repeated file save preserves exact prior snapshot in backup",
+      "precondition": "A running PVController has an active PERSISTENT dynamic alias. There is no previous file at a dedicated user:// test path.",
+      "public_action": "Save snapshot S1, replace alias JSON-safe data, save distinct S2 at the same path, then parse the destination and its .bak.",
+      "expected_result": "Both files contain valid portable JSON; destination equals S2 exactly and .bak equals prior S1 exactly; active alias/graph identity preserved, no .tmp remains and live runtime is unchanged.",
+      "invariants": [
+        "Second save does not overwrite prior S1 backup with S2.",
+        "No unvalidated file content or transient alias is serialized.",
+        "No mutation of live runtime from file writing.",
+        "Only isolated user://flujo_fsm_tests/ artifacts are created and deleted."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_snapshot_backup_contents_test.tscn"
+      ],
+      "notes": "9B1-A focal and mandatory gate registered. Full Godot 4.7.2 CI pending; do not mark passing until entire run succeeds."
     }
   ]
 }

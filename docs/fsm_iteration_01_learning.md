@@ -1,3 +1,8 @@
+## Potok 9B1-A — distinct S1/S2 snapshot backup focal registered (2026-11-03)
+
+- [9B1-A characterization](fsm_phase9_9b1a_backup_contents_result.md) adds a real-PVController test `flow_fsm_snapshot_backup_contents_test.tscn`, mandatory Godot 4.7.2 CI step and behavior `FLUJO-BHV-POTOK-SNAPSHOT-BACKUP-CONTENT-012` at **not_run** until full CI. Asserts new main JSON=S2 and backup .bak=S1 after two semantically distinct saves.
+- [9A2 CI 41624218942](https://github.com/mercurysama/Flujo/actions/runs/41624218942) **SUCCESS** for unconditional historic snapshot test. **Next 9B1-B** verify complete new CI before passing; then 9B2 path matrix. No production/schema/codec changes; 25 manual checks deferred.
+
 ## Potok 9A2 — FSM-004 policy frozen; base snapshot CI gate mandatory (2026-11-03)
 
 - [9A2 contract and acceptance criteria](fsm_phase9_9a2_contract_and_gate.md) keeps format v1, SESSION teardown and explicit PERSISTENT restore semantics unchanged. Defines 9B1 test for distinct saved S1/S2 with `.bak=S1` and destination `S2`; replacement failure recovery is still unproven, not declared broken.
