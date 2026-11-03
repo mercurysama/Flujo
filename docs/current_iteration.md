@@ -1,5 +1,10 @@
 # Current Iteration
 
+## Potok — 8D1-C2 PASS; próximo 8D1-C3 (2026-11-02)
+
+- [CI 41565743817](https://github.com/mercurysama/Flujo/actions/runs/41565743817) **SUCCESS 84/84** en `4c867d45d6bc5878eb42cd57bdf6c08279a40049`. Cuatro registros independientes con ID idéntico, dos controladores y dos máquinas, SDK acotado y `FlowGraph` intacto; cero cambios de producción.
+- [Reporte 8D1-C2](fsm_phase8_8d1c2_result.md) y [plan de microbloques](fsm_phase8_8d1c_microblocks.md). Próximo **8D1-C3**: Ready/Timer/Constructor y rutas no FSM sin capacidad. Fase 7 conserva 25 pruebas humanas pendientes (15 Fedora + 10 Android).
+
 ## Potok — 8D1-C1B PASS; próximo 8D1-C2 (2026-11-02)
 
 - [CI 41563021661](https://github.com/mercurysama/Flujo/actions/runs/41563021661), commit `1df32fdbb0ccba29eede437bc3f1ae6b33374a33`: **SUCCESS 83/83**. Focal SDK de reset/stop/reinicio/grafo y regresiones aprobadas; sin cambios de producción.

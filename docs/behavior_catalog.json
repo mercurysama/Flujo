@@ -1443,11 +1443,11 @@
         "SDK callback uses the existing shared executor and context; no new registry or sandbox claim."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_sdk_machine_isolation_test.tscn"
       ],
-      "notes": "8D1-C2 focal and required CI step committed; mark passing only after actual Godot 4.7.2 GitHub Actions execution."
+      "notes": "8D1-C2: Actions 41565743817 completed SUCCESS 84/84 at 4c867d45d6bc5878eb42cd57bdf6c08279a40049, including required isolation focal; no production changes."
     }
   ]
 }

@@ -1,5 +1,13 @@
 # Flujo FSM — Iteration journal / Skill learning
 
+## 2026-11-02 — Potok 8D1-C2 controller/machine SDK isolation
+
+- Baseline: `6b091334` / [CI 41563497465](https://github.com/mercurysama/Flujo/actions/runs/41563497465) SUCCESS 83/83. Test commit `4c867d45d6bc5878eb42cd57bdf6c08279a40049`; [CI 41565743817](https://github.com/mercurysama/Flujo/actions/runs/41565743817) **SUCCESS 84/84**.
+- One SDK-style probe, runtime scene and required CI step characterize 2 PVControllers × 2 machines sharing one FlowGraph and the same dynamic ID. Foreign machine operations reject; callback writes, active transitions, alias removal and controller stop remain isolated. Retained facades expire.
+- No changes to production runtime, editor, schema or `main`. Catalog `FLUJO-BHV-POTOK-SDK-MULTI-OWNER-003` advanced to `passing` only after CI. Godot local NOT RUN; versioned baseline/prove skills read, not formally invoked.
+- Physical acceptance: 15 Fedora + 10 Android PENDING. Detailed evidence and handoff: [8D1-C2 result](fsm_phase8_8d1c2_result.md), [microblocks](fsm_phase8_8d1c_microblocks.md). Next 8D1-C3 (Ready/Timer/Constructor capability exclusion).
+- Reusable Skill lesson: use a shared valid runtime alias across machine/controller scopes to catch registry leakage; verify rejected cross-machine operations inside the actual SDK callback and assert no unintended queue/model mutations.
+
 ## 2026-11-02 — Potok 8D1-C1B: SDK lifecycle, reset and graph guard
 
 - Added standalone GDScript test and `.tscn` scene, mandatory CI step, and `FLUJO-BHV-POTOK-SDK-CAPABILITY-LIFECYCLE-002`; no production files touched. Commit `1df32fdbb0ccba29eede437bc3f1ae6b33374a33`.
