@@ -1,3 +1,8 @@
+## Potok 9C3-D — reentrant disk restore CI PASS; next 9D1-A (2026-11-03)
+
+- [9C3-D closeout](fsm_phase9_9c3d_disk_reentrant_closeout.md) confirms [Actions 41706512868](https://github.com/mercurysama/Flujo/actions/runs/41706512868) **SUCCESS 108/108**, mandatory disk restore in-tick focal PASS. Catalog `FLUJO-BHV-POTOK-SNAPSHOT-DISK-REENTRANCY-018` advanced `not_run → passing`. No runtime code changes.
+- **Next 9D1-A** contract v1 compatibility rejection matrix for format/schema/graph IDs and machine identity; no silent migration. F5-F7 remain unverified, 25 manual checks deferred.
+
 ## Potok 9C3-C — disk restore in-tick reentrancy focal added (2026-11-03)
 
 - [9C3-C](fsm_phase9_9c3c_disk_restore_reentrant_result.md) adds mandatory `flow_fsm_snapshot_disk_restore_reentrant_test.tscn`, behavior `FLUJO-BHV-POTOK-SNAPSHOT-DISK-REENTRANCY-018` **not_run** awaiting CI, testing file restore attempts from StateUpdate/commit, nested-tick rejection, deferred owner event, sibling isolation and outside-tick successful restore. 9C3-B [Actions 41681389535](https://github.com/mercurysama/Flujo/actions/runs/41681389535) **SUCCESS 107/107**; behavior 017 updated passing.

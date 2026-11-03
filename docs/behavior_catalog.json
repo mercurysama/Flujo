@@ -1881,11 +1881,11 @@
         "No cross-controller callback leakage or on-disk mutation."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_snapshot_disk_restore_reentrant_test.tscn"
       ],
-      "notes": "9C3-C mandatory focal registered pending complete Godot 4.7.2 CI. Builds on passing 8D2-B3B3 in-memory reentrancy and 9C3-A disk callbacks. No product code change."
+      "notes": "9C3-C source 1a882fe540d66af5acf92ca2d1de2e64a22b5888, GitHub Actions 41706512868 completed SUCCESS, 108/108 headless job steps, zero failed including mandatory file restore in-tick guard focal. No runtime changes. 25 manual checks deferred."
     }
   ]
 }
