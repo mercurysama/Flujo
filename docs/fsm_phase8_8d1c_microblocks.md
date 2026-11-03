@@ -3,9 +3,9 @@
 **Fecha del plan:** 2026-11-02 (America/Mexico_City)
 **Rama exclusiva:** `feature/fsm-runtime-flow-flusso`
 **Punto de partida verificado:** `85a9ace1aab97dfc6f9248910b7fa05462e2a4d7`; [Actions 41558938893](https://github.com/mercurysama/Flujo/actions/runs/41558938893), SUCCESS 81/81.
-**Estado actual:** 8D1-C1A, C1B, C2, C3, C4A, C4B, C4C1 y C4C2 aprobados con CI (82/82, 83/83, 84/84, 85/85, 86/86, 87/87, 88/88 y 90/90). C4C queda técnicamente probado; **C5 auditoría pendiente**.
+**Estado actual:** C1A, C1B, C2, C3, C4A, C4B, C4C1 y C4C2 **PASS**; **C5 AUDITADO y 8D1-C técnicamente CERRADO** por [CI 41574412835](https://github.com/mercurysama/Flujo/actions/runs/41574412835), SUCCESS 90/90. Aceptación humana y pruebas visuales pendientes.
 
-**Último checkpoint:** [8D1-C4C2](fsm_phase8_8d1c4c2_result.md), commit focal `6650d5c7571887f13e61d18f4c4753c5e59e80eb`, [Actions 41573978889](https://github.com/mercurysama/Flujo/actions/runs/41573978889) SUCCESS 90/90. Próximo **8D1-C5**.
+**Último checkpoint:** [auditoría 8D1-C5](fsm_phase8_8d1c5_audit.md), validación funcional `ae8b4710e9e1da22b12f708a5e0cdbbf6252bffd`, [Actions 41574412835](https://github.com/mercurysama/Flujo/actions/runs/41574412835) SUCCESS 90/90. Próximo **8D2-A** (auditar y planear).
 
 ## Contrato y límites
 
@@ -23,7 +23,7 @@ Continuación de [8D1-B2](fsm_phase8_8d1b2_result.md) y [auditoría SDK 8D1-A](f
 | **8D1-C4B** | Desde un callback SDK autorizado se consulta/actualiza una copia independiente de datos; rechazo de payload inválido. | Focal de copias profundas y datos. |
 | **8D1-C4C1** | Desde un callback real StateUpdate del SDK retirar alias inactivo y purgar únicamente las solicitudes dirigidas a él. | [PASS 88/88](fsm_phase8_8d1c4c1_result.md), prueba focal SDK y cola selectiva. |
 | **8D1-C4C2** | Dos escenarios independientes: eliminación activa con fallback dinámico; eliminación activa con fallback authored y reingreso legítimo en StateEnter sin nuevos alias; rechazo de eliminación durante tick. | [PASS 90/90](fsm_phase8_8d1c4c2_result.md), dos focales SDK y regresión global; conector externo controlado fuera de tick. |
-| **8D1-C5** | Auditoría de evidencias C1–C4; trazabilidad contrato→test→commit→Actions; 8D1-C queda técnicamente cerrado solamente si todas las focales pasan. | Documento checkpoint, aprendizaje y CI global. |
+| **8D1-C5** | Auditoría C1–C4 con contrato→behavior→test→commit→Actions y comparación de 24 commits. | [C5 auditado](fsm_phase8_8d1c5_audit.md), 9 focales y CI 90/90 PASS; cierre técnico con reservas sobre test seam, sandbox y aceptación humana. |
 
 Cada microbloque se comitea por separado, con pruebas RED solo cuando existe una brecha demostrada y GREEN posterior; las pruebas históricas no se debilitan. Un test nuevo que caracteriza comportamiento ya presente puede ser GREEN en la primera ejecución. CI Godot 4.7.2 es la fuente remota de ejecución; un archivo de prueba sin ejecución cuenta **NOT RUN**. Se distinguen **PASS**, **FAIL**, **SKIPPED** y **NOT RUN**; no se presume aprobación visual por CI.
 
@@ -36,6 +36,6 @@ Cada microbloque se comitea por separado, con pruebas RED solo cuando existe una
 - Proteger `demo/main.tscn`, `main`, recursos persistentes, las 25 pruebas humanas pendientes (15 Fedora, 10 Android) y todos los cambios de otras ramas.
 - Tras **8D1-C5**, auditar 8D2 (políticas EPHEMERAL/SESSION/PERSISTENT, stop/restart, snapshots, determinismo) y 8E; seguir fases 9–11 con brechas reales, no reconstrucción.
 
-**Punto de recuperación:** leer el HEAD real y el último Actions, encontrar el último microbloque de esta tabla con evidencia, y retomar el siguiente. Próximo trabajo: **8D1-C5**, auditoría de cierre; C1A, C1B, C2, C3, C4A, C4B, C4C1 y C4C2 tienen informes de PASS.
+**Punto de recuperación:** **8D1-C completada técnicamente**, sin aceptación visual/humana. Leer [C5](fsm_phase8_8d1c5_audit.md), verificar HEAD/Actions y continuar **8D2-A, auditoría y plan**, comenzando por código ya implementado y contratos de lifetime, stop/restart, snapshots y determinismo. No declarar fase 8 completa.
 
 *Todo es Flujo; todo fluye.* 🌊

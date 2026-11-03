@@ -1,5 +1,11 @@
 # Current Iteration
 
+## Potok — 8D1-C5 auditoría técnica cerrada; siguiente 8D2-A (2026-11-02)
+
+- [CI 41574412835](https://github.com/mercurysama/Flujo/actions/runs/41574412835) **SUCCESS 90/90** y las 9 focales de 8D1-C verificadas por conclusión y marcador Godot 4.7.2. Comparación desde `85a9ace1` a `ae8b4710`: 24 commits, 38 rutas afectadas; cero archivos de producción modificados.
+- [Auditoría C5](fsm_phase8_8d1c5_audit.md): 8D1-C queda **cerrada técnicamente en CI**, con límites explícitos: C4C2 fuera de tick mediante ejecutor de prueba, SDK no es sandbox, Skills no ejecutadas formalmente, 25 pruebas humanas (15 Fedora/10 Android) diferidas. No implica aceptación del mantenedor ni cierre de fase 8.
+- Próximo microbloque **8D2-A**: auditar implementaciones existentes y planificar lifetime, stop/restart, snapshots y determinismo antes de escribir código. Rama exclusiva `feature/fsm-runtime-flow-flusso`.
+
 ## Potok — 8D1-C4C2 PASS; siguiente 8D1-C5 (2026-11-02)
 
 - [Actions 41573978889](https://github.com/mercurysama/Flujo/actions/runs/41573978889) **SUCCESS 90/90**, commit `6650d5c7571887f13e61d18f4c4753c5e59e80eb`. C4C2 ahora contiene dos pruebas independientes: A para fallback dinámico y B para fallback authored, con reingreso legítimo `StateEnter` **sin duplicar alias**. Conservan Exit→Enter→Commit, cola selectiva y rechazo dentro del tick. No hubo cambios productivos.

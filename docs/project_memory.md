@@ -1,5 +1,12 @@
 # Flujo Project Memory / Handoff
 
+## Potok — checkpoint específico de rama (2026-11-02)
+
+- **Rama exclusiva Potok:** `feature/fsm-runtime-flow-flusso`, distinta de la rama UI Fluo documentada a continuación.
+- **8D1-C cerrado técnicamente en CI:** [auditoría](fsm_phase8_8d1c5_audit.md), último [Actions 41574412835](https://github.com/mercurysama/Flujo/actions/runs/41574412835) **SUCCESS 90/90**, nueve pruebas SDK focales PASS. Base `85a9ace1` → `ae8b4710`: 24 commits, 38 rutas, sin modificaciones productivas.
+- **Límites:** SDK no es sandbox; caso activo fuera de tick demostrado solo con ejecutor de prueba; Skills consultadas no invocadas formalmente. **Pruebas humanas de fase 7 0/25 diferidas** (15 Fedora/10 Android). No es aceptación del mantenedor ni cierre de fase 8.
+- **Siguiente 8D2-A:** auditar código actual y documentar microbloques para lifetime, stop/restart, snapshots y determinismo; no reconstruir APIs existentes. Proteger `main` y `demo/main.tscn`.
+
 Updated: 2026-10-29
 
 This is the durable repository handoff for future chats and maintainers.

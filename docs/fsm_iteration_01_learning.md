@@ -1,5 +1,13 @@
 # Flujo FSM — Iteration journal / Skill learning
 
+## 2026-11-02 — Potok 8D1-C5 SDK technical evidence audit
+
+- Nine mandatory SDK focal steps C1A, C1B, C2, C3, C4A, C4B, C4C1 and C4C2A/B confirmed SUCCESS in [Actions 41574412835](https://github.com/mercurysama/Flujo/actions/runs/41574412835), full **90/90** under Godot 4.7.2; catalog nine focal steps across eight behavior IDs all `passing` and test paths exist.
+- GitHub compare baseline `85a9ace1aab97dfc6f9248910b7fa05462e2a4d7` → `ae8b4710e9e1da22b12f708a5e0cdbbf6252bffd`: **24 commits, 38 paths**, tests, docs and CI only; production code untouched. Two historic C4C2 failures documented, not erased.
+- Finding: positive active removal outside tick was demonstrated through controlled shared executor using real runtime but not from an autonomous public callback trigger. SDK is capability scoping, not a sandbox; limitations remain explicit.
+- Local Godot NOT RUN, formal repo Skills not invoked, manual phase 7 0/25 deferred; technical CI closure does not mean human acceptance, merge, or completion of phase 8.
+- [8D1-C5 audit](fsm_phase8_8d1c5_audit.md); next **8D2-A** audit lifetimes, stop/restart, snapshots, determinism before adding new code. Reusable lesson: review whole CI job evidence and GitHub compare, not just old statuses; separate API contract, executable seam and actual public workflow.
+
 ## 2026-11-02 — Potok 8D1-C4C2 split active SDK fallback and guarded StateEnter reentry
 
 - Baseline `b6f61f9f` / [CI 41571201948](https://github.com/mercurysama/Flujo/actions/runs/41571201948) SUCCESS 88/88. Initial combined test `d7ffa6b0` [CI 41572128593](https://github.com/mercurysama/Flujo/actions/runs/41572128593) FAIL (GDScript parse); syntax fix `b53ee9f5` [CI 41572368984](https://github.com/mercurysama/Flujo/actions/runs/41572368984) FAIL due to incorrect record count when authored fallback legitimately reenters idle StateEnter; stopped after two resource failures.
