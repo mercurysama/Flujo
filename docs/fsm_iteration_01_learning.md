@@ -1,3 +1,8 @@
+## 2026-11-03 — Potok 8D2-B3B2 snapshot restore callbacks
+
+- Focal `flow_fsm_restore_callback_queue_test.tscn`, behavior `FLUJO-BHV-POTOK-RESTORE-CALLBACK-QUEUE-010`, source `4bc3f73`; [Actions 41591954025](https://github.com/mercurysama/Flujo/actions/runs/41591954025) **SUCCESS** full Godot 4.7.2 suite. Restore emits global Exit(A), Exit(B), Enter(A), Enter(B) and clears only owner stale queue, sibling independent. Catalog marked passing after CI, production unchanged.
+- B3B3 reentrancy characterization registered at `7dd735d` but separately NOT RUN until verified. Local Godot and formal Skills NOT RUN; 25 manual checks remain deferred.
+
 ## 2026-11-03 — Potok 8D2-B3B1 guarded reset callbacks
 
 - `74f755e` registered required test `flow_fsm_reset_callback_guard_test.tscn` and behavior `FLUJO-BHV-POTOK-RESET-CALLBACK-GUARD-009`. [Actions 41590902774](https://github.com/mercurysama/Flujo/actions/runs/41590902774) **SUCCESS** full Godot 4.7.2 suite. In-tick reset returns false; outside-tick reset performs bounded per-machine Exit→Enter and clears only owner pending queue. No production changes.
