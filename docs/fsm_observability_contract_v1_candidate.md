@@ -32,7 +32,7 @@
 
 Registro copiable e inerte con `version: 1`, `sequence`, `tick`, `controller_epoch` (efímero, no authored), `machine_id`, `state_id`, `from_state_id`, `to_state_id`, `trigger_id`, `request_kind`, `event_name`, `stage`, `outcome`, `diagnostic_code`, `phase`. Los identificadores authored siguen siendo autoridad; `session_id` de Godot identifica conexión de debugger, **no** máquina. Considerar `controller_epoch` un token temporal generado al iniciar una captura que no se persiste.
 
-**Reglas candidatas de emit:** 
+**Reglas candidatas de emit:**
 - `admission/admitted`: `emit_event()` o `request_transition()` acepta en cola; no prometer matching futuro.
 - `admission/rejected`: falla preexistente, reusar `request_rejected` sin modificar su orden/código.
 - `consumption/delivered`: el paquete cruza la barrera de reloj y se procesa en el tick actual. `event_consumed` conserva su semántica pública legacy.
