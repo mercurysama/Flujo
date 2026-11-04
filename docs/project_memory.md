@@ -1,5 +1,12 @@
 # Flujo Project Memory / Handoff
 
+## Potok 10B — Primer preflight y test RED preparado (2026-11-03)
+
+- [Checkpoint 10B tanda 1](fsm_phase10_10b_tanda1_handoff.md) con tres commits: 10B-0A `3ae1ec0d31e4a276f611427535b7a26375ae0d25`, 10B-0B `94a78eb8d13b3f3eb1f8da3359454a9cd3b3ac93`, 10B-1A `c3ceb157eeec5cbd5f0aa9c557d993c1a2fa321a`. CI por confirmar.
+- G1..G6 tuvieron asentimiento contextual directo `🙆🏻` a una pregunta sí/no sobre parámetros; G7/G8 no incluidos. Antes de integración, gate de Skills formales y, si se exige, ratificación literal.
+- Fixture `tests/runtime/flow_fsm_debug_trace_red_test.tscn` **NOT RUN**, fuera de CI obligatorio, catálogo `FLUJO-BHV-POTOK-DEBUG-TRACE-CORE-005` `not_run`. No debugger runtime implementado.
+- `$flujo-baseline` formal **BLOCKED** en esta sesión GitHub-only y `$flujo-prove` NOT RUN. Fase 9 condicional, fase 10 abierta, `main` sin cambios, Fedora/Android 0/25.
+
 ## Potok — 10A-14 Godot Debugger API probe PASS (2026-11-03)
 
 - Focal `tests/editor/flow_fsm_debugger_classdb_probe.gd`, commit `979a07b423299b49fe1610cb76a944df83fcdc1f`, [CI 41766064041](https://github.com/mercurysama/Flujo/actions/runs/41766064041) **SUCCESS**: ClassDB Godot 4.7.2 tiene `EditorDebuggerPlugin`, `EditorDebuggerSession` y `EngineDebugger` con send/receive declarados.

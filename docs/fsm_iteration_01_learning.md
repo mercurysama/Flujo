@@ -1,3 +1,11 @@
+## Potok 10B — Tanda inicial 10B-0A/0B/1A (2026-11-03)
+
+- [10B-0A autorización contextual](fsm_phase10_10b0a_authorization_scope.md), commit `3ae1ec0d31e4a276f611427535b7a26375ae0d25`: respuesta afirmativa `🙆🏻` a pregunta directa G1–G6, alcance **core portable**, no G7/G8; no sustituye verificación formal o ratificación literal si se requiere.
+- [10B-0B diagnóstico baseline](fsm_phase10_10b0b_baseline_gate_assessment.md), commit `94a78eb8d13b3f3eb1f8da3359454a9cd3b3ac93`: `$flujo-baseline = BLOCKED` como Skill formal en entorno GitHub-only; CI histórico PASS no es invocación local. `$flujo-prove = NOT RUN`.
+- [10B-1A fixture RED aislada](fsm_phase10_10b1a_red_fixture_prepared.md), commit `c3ceb157eeec5cbd5f0aa9c557d993c1a2fa321a`: `tests/runtime/flow_fsm_debug_trace_red_test.tscn`, **NOT RUN**, excluida del CI obligatorio. Catálogo `FLUJO-BHV-POTOK-DEBUG-TRACE-CORE-005` **not_run**, sin API ni runtime modificados.
+- [Checkpoint](fsm_phase10_10b_tanda1_handoff.md): CI por confirmar para [#41767573774](https://github.com/mercurysama/Flujo/actions/runs/41767573774), [#41767660670](https://github.com/mercurysama/Flujo/actions/runs/41767660670) y [#41767813828](https://github.com/mercurysama/Flujo/actions/runs/41767813828); **no marcar PASS sin resultado final**.
+- **No producción, main, editor, snapshot ni API nuevos.** Fase 9 permanece condicional, fase 10 abierta, humanos 0/25; siguiente gate: ejecutar Skills formales y RED real en Fedora antes de GREEN.
+
 ## Potok 10A-14 — Capacidad del API de depuración verificada en CI (2026-11-03)
 
 - `tests/editor/flow_fsm_debugger_classdb_probe.gd` (commit `979a07b423299b49fe1610cb76a944df83fcdc1f`) tuvo focal y regresión integrales **SUCCESS** en [#41766064041](https://github.com/mercurysama/Flujo/actions/runs/41766064041), confirmando clases y métodos nativos del debugger Godot 4.7.2. El log de ClassDB señaló `EngineDebugger exists=true/send=true/receive=true`.
