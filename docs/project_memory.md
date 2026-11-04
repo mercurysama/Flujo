@@ -1,5 +1,14 @@
 # Flujo Project Memory / Handoff
 
+## Potok — 10A-12, handoff DEBUG-FSM (2026-11-03)
+
+- [Checkpoint de doce microbloques 10A](fsm_phase10_10a12_consolidated_handoff.md): documentación/characterización y propuesta de trazabilidad completas; tres focales de señales existentes con CI histórico PASS, **sin APIs de depurador ni bitácora implementadas**.
+- [Contrato candidato v1](fsm_observability_contract_v1_candidate.md) **NO APROBADO**: G1..G6 (buffer, activación, fuente, resultados, privacidad, conexión tardía) requieren aprobación específica; G7/G8 independientes. No iniciar 10B por emoji.
+- [Auditoría CI 10A-10](fsm_phase10_10a10_ci_and_contract_audit.md) y [blueprint 10A-11](fsm_phase10_10a11_red_green_test_blueprint.md): nuevos workflows por confirmar. Falla original 10A-9 [#41745931151](https://github.com/mercurysama/Flujo/actions/runs/41745931151) por trailing whitespace, corregida y [#41746020240](https://github.com/mercurysama/Flujo/actions/runs/41746020240) SUCCESS.
+- Rama `feature/fsm-runtime-flow-flusso`, `main` sin cambios, fase 10 abierta, fase 9 condicionada. Skills formales/Fedora **NOT RUN** y pruebas humanas 0/25; próximo paso verificar CI y obtener decisiones G1..G6.
+
+
+
 ## Potok — 8D2-B2B rechazo atómico snapshots PASS (2026-11-02)
 
 - [Informe B2B](fsm_phase8_8d2b2b_result.md) y [CI 41582200667](https://github.com/mercurysama/Flujo/actions/runs/41582200667) **SUCCESS 94/94**, test fix `32f6ab6a95ccb31c51dac882be578180afbe9dd4`: 23 snapshots inválidos rechazados, estado/registro/cola/callbacks sin cambios; uno válido después se restaura correctamente.

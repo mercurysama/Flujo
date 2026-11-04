@@ -1,3 +1,12 @@
+## Potok — 10A-12, preparación documental recuperable (2026-11-03)
+
+- [Checkpoint y handoff 10A](fsm_phase10_10a12_consolidated_handoff.md): microbloques 10A-1..12 auditados y caracterizaciones 10A-3/4/5 `passing` con CI; **no** bitácora/debugger implementado.
+- [Auditoría CI 10A-10](fsm_phase10_10a10_ci_and_contract_audit.md), commit `5a2f6589befba5d47b5763b791e6aecb12ccbcb1` y [blueprint 10A-11](fsm_phase10_10a11_red_green_test_blueprint.md), commit `0ad9abab43b8a562dd46f3dfb5b5bc6100ce2550`. Runs [#41764754927](https://github.com/mercurysama/Flujo/actions/runs/41764754927) y [#41764887581](https://github.com/mercurysama/Flujo/actions/runs/41764887581) seguían en progreso durante la preparación; verificar resultado por SHA.
+- CI 10A-7 [#41745659957](https://github.com/mercurysama/Flujo/actions/runs/41745659957), 10A-8 [#41745779604](https://github.com/mercurysama/Flujo/actions/runs/41745779604), fix 10A-9 [#41746020240](https://github.com/mercurysama/Flujo/actions/runs/41746020240), checkpoint de tanda 3 [#41746152560](https://github.com/mercurysama/Flujo/actions/runs/41746152560) SUCCESS. Intento original 10A-9 [#41745931151](https://github.com/mercurysama/Flujo/actions/runs/41745931151) FAILED por whitespace (corregido).
+- [Contrato DEBUG-FSM candidato v1](fsm_observability_contract_v1_candidate.md): **G1..G6 no aprobados**, 10B-core **bloqueada**; G7 y G8 requieren contratos/decisiones separadas. `🙆🏻` de continuidad no aprueba valores nuevos.
+- Sin cambios productivos, de editor ni `main`; Godot Fedora y Skills formales **NOT RUN**, revisión humana 0/25; fase 9 condicional, fase 10 global ABIERTA.
+
+
 ## Potok 10A — Tanda 3 (10A-7/8/9), diseño de depuración documentado (2026-11-03)
 
 - [10A-7 auditoría de evidencia](fsm_phase10_10a7_evidence_audit.md), commit `432f59e1700a1fa433ff0bf4170100fc007adc91`: tres comportamientos observacionales existentes con PASSES CI históricos, **sin nueva capacidad de trace**.
