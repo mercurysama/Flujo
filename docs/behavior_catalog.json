@@ -2001,6 +2001,25 @@
         "tests/editor/flow_fsm_debugger_classdb_probe.gd"
       ],
       "notes": "10A-14 Godot 4.7.2 headless editor ClassDB API probe: GitHub Actions 41766064041 completed SUCCESS, focal success on commit 979a07b423299b49fe1610cb76a944df83fcdc1f. Log reports EngineDebugger class exists=true, send_message=true, register_message_capture=true. Method availability only; no live session, transport handshake, editor UI, production debugger or G7 approval. Local Skills/Godot Fedora and manual acceptance NOT RUN."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-DEBUG-TRACE-CORE-005",
+      "area": "Potok candidate DEBUG-FSM opt-in core trace, bounded ring and current-state read-only snapshot",
+      "precondition": "An authored schema 3 graph with an auto-start MANUAL FSM and a running PVController; debug capture is disabled by default.",
+      "public_action": "Query initially empty records, opt in to capture, enqueue and consume multiple unmatched packets, read latest records and current snapshot.",
+      "expected_result": "When implemented, the controller-local ring contains the newest 128 inert records with strictly increasing sequences; each record is <=1024 UTF-8 JSON bytes, no payload private data, and no changes to authored graph or active state.",
+      "invariants": [
+        "No global shared trace or editor-only dependency in runtime.",
+        "Capture disabled by default, including exports; no unsafe payload in records.",
+        "No changes to legacy signal order, FIFO queue budget, Ready/Timer or snapshot persistence.",
+        "No false PASS: the isolated candidate RED fixture is not run by mandatory workflow and has no observed outcome."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_debug_trace_red_test.tscn"
+      ],
+      "notes": "10B-1A prepared RED candidate only. No local Godot 4.7.2 executor, no formal Skills; expected API-missing failure has NOT BEEN RUN. Not included in mandatory GitHub Actions workflow. Future 10B-1B subject to formal baseline/prove."
     }
   ]
 }

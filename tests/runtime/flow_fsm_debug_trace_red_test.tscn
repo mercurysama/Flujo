@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/runtime/flow_fsm_debug_trace_red_test.gd" id="1"]
+
+[node name="Potok10B1ARedTest" type="Node"]
+script = ExtResource("1")
