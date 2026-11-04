@@ -1,3 +1,11 @@
+## Potok 10A — Tanda 3 (10A-7/8/9), diseño de depuración documentado (2026-11-03)
+
+- [10A-7 auditoría de evidencia](fsm_phase10_10a7_evidence_audit.md), commit `432f59e1700a1fa433ff0bf4170100fc007adc91`: tres comportamientos observacionales existentes con PASSES CI históricos, **sin nueva capacidad de trace**.
+- [10A-8 mapa Godot Debugger / Fluo](fsm_phase10_10a8_editor_debugger_integration_map.md), commit `34a427bdf7cba0bf30439cc58ca8ffa66b38d600`: vía posible con `EditorDebuggerPlugin`, `EditorDebuggerSession`, `EngineDebugger`, con separación editor/runtime y validación Godot 4.7.2 pendiente.
+- [10A-9 contrato candidato v1](fsm_observability_contract_v1_candidate.md), commit `c3229cf0fa43808541acebf8357238195cfd614e` y fix `f795ab7098680a0feb3a137c6c6054873638d86c`: #41745931151 FAILED por whitespace en línea 35, fix iniciado en CI [#41746020240](https://github.com/mercurysama/Flujo/actions/runs/41746020240). **10B-G1..G6 PENDIENTES DE APROBACIÓN**.
+- [Cierre recuperable](fsm_phase10_10a_tanda3_closeout.md). Último CI del checkpoint 10A-4/5/6: [#41745215720](https://github.com/mercurysama/Flujo/actions/runs/41745215720) SUCCESS. 10A-7/8 y el fix de 10A-9: verificar su estado final antes de declarar PASS.
+- **Sin cambios productivos, UI, esquema, runtime ni main.** Skills formales y Godot local NOT RUN; pruebas humanas 0/25. Fase 9 sigue condicionada; fase 10 permanece abierta.
+
 ## Potok 10A — Tanda 2 (10A-4/5/6), CI verificado (2026-11-03)
 
 - **10A-4** [condiciones y no-op](fsm_phase10_10a4_conditions_characterization.md), commit `eb7ba4b87d952d639e83b19a3c7c7abec4935249`: la nueva focal caracteriza señales del ganador y el silencio de condiciones false/autotransición. [Actions 41744246830](https://github.com/mercurysama/Flujo/actions/runs/41744246830) **completed SUCCESS**. `FLUJO-BHV-POTOK-OBSERVABILITY-CONDITIONS-002` actualizado `not_run → passing`.
