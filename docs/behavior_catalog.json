@@ -1982,6 +1982,25 @@
         "tests/runtime/flow_fsm_observability_lifecycle_test.tscn"
       ],
       "notes": "Potok characterization accepted by mandatory focal and complete GitHub Actions 41744492793 SUCCESS on 0c2204c71fa85704aa63cc0113851ae19f208e5c; runtime/editor/schema unchanged. Local Godot, formal Skills and human acceptance NOT RUN. This is not approval of proposed DEBUG-FSM runtime contract."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-EDITOR-DEBUGGER-API-PROBE-004",
+      "area": "Godot editor debugger class API introspection, read-only characterization",
+      "precondition": "The plugin's pinned Godot 4.7.2 stable editor binary is available under headless CI.",
+      "public_action": "Run an editor-only ClassDB method and class existence probe without attaching or creating a debugger session.",
+      "expected_result": "EditorPlugin debugger registration, EditorDebuggerPlugin session access, EditorDebuggerSession tab and status methods are present; EngineDebugger transport capability is reported but not treated as a live-session success.",
+      "invariants": [
+        "Probe cannot instantiate a debugger session or send messages.",
+        "No mutation of FlowFSMRuntime, PVController, FlowGraph or editor UI.",
+        "No inference that G7 or 10B transport implementation has been authorized.",
+        "Test status stays not_run until same-commit Godot headless job completes successfully."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/editor/flow_fsm_debugger_classdb_probe.gd"
+      ],
+      "notes": "10A-14 read-only engine API probe added to mandatory editor headless CI. No live session/transport assertion; NOT RUN until same-commit workflow evidence."
     }
   ]
 }
