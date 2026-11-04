@@ -1,3 +1,10 @@
+## Potok 10A — Preflight 10A-13/14/15 (2026-11-03)
+
+- **10A-13:** [cierre de CI 10A-12](fsm_phase10_10a13_ci_checkpoint_certification.md), commit `e96079d214b760801fc520b7ac9a5c3dd2d0a24c`. [Actions 41765259748](https://github.com/mercurysama/Flujo/actions/runs/41765259748) **completed/success**; 10A-10/11 también SUCCESS.
+- **10A-14:** [introspección API de Godot 4.7.2](fsm_phase10_10a14_debugger_api_probe.md) y `tests/editor/flow_fsm_debugger_classdb_probe.gd`, commit `979a07b423299b49fe1610cb76a944df83fcdc1f`. Nuevo gate CI, catálogo `FLUJO-BHV-POTOK-EDITOR-DEBUGGER-API-PROBE-004` en `not_run` **hasta verificar GitHub Actions**. No prueba sesiones reales/EngineDebugger transporte.
+- **10A-15:** [acta propuesta de aprobación G1..G6](fsm_phase10_10a15_approval_decision_sheet.md) y handoff; **NO APROBADA**. Ningún cambio runtime/UI/snapshot; G7 (editor) y G8 (pausa/step) excluidos.
+- **Estado de autorización:** 10B-core sigue bloqueado hasta decisión explícita del responsable sobre G1..G6 y ejecución formal de Skills para cambios productivos. Godot local y revisión humana 0/25 pendientes. Fase 9 condicional; fase 10 abierta.
+
 ## Potok — 10A-12, preparación documental recuperable (2026-11-03)
 
 - [Checkpoint y handoff 10A](fsm_phase10_10a12_consolidated_handoff.md): microbloques 10A-1..12 auditados y caracterizaciones 10A-3/4/5 `passing` con CI; **no** bitácora/debugger implementado.

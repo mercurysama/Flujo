@@ -1,5 +1,13 @@
 # Flujo Project Memory / Handoff
 
+## Potok — 10A-13/14/15, preflight y decisión propuesta (2026-11-03)
+
+- [CI 10A-12](fsm_phase10_10a13_ci_checkpoint_certification.md) verificado por SHA; 10A-10, 10A-11, 10A-12 integrales SUCCESS.
+- [Prueba de introspección API Godot](fsm_phase10_10a14_debugger_api_probe.md) `tests/editor/flow_fsm_debugger_classdb_probe.gd`, commit `979a07b423299b49fe1610cb76a944df83fcdc1f`; resultado **not_run** hasta CI nuevo, no implica transporte operativo.
+- [Acta de decisiones G1..G6](fsm_phase10_10a15_approval_decision_sheet.md) **NO APROBADA**: anillo 128 y 1024 bytes candidatos, OFF default, polling read-only, semántica precisa, sanitización y snapshot actual tardío. G7/G8 separadas. El emoji de continuidad no aprueba la arquitectura.
+- Fase 10 ABIERTA; fase 9 CONDICIONAL; no modificaciones productivas ni `main`, Skills Fedora formales NOT RUN, humanos 0/25.
+
+
 ## Potok — 10A-12, handoff DEBUG-FSM (2026-11-03)
 
 - [Checkpoint de doce microbloques 10A](fsm_phase10_10a12_consolidated_handoff.md): documentación/characterización y propuesta de trazabilidad completas; tres focales de señales existentes con CI histórico PASS, **sin APIs de depurador ni bitácora implementadas**.
