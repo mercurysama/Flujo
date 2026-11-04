@@ -1963,6 +1963,25 @@
         "tests/runtime/flow_fsm_observability_conditions_test.tscn"
       ],
       "notes": "Potok 10A-4 characterization registered; mandatory CI step included. NOT RUN until same-commit workflow confirms results; runtime and existing tests unchanged."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-OBSERVABILITY-LIFECYCLE-003",
+      "area": "Potok existing lifecycle signals across controllers and matching clocks",
+      "precondition": "Two controllers share a valid graph with one MANUAL and one PHYSICS FSM; public signal subscriptions attach after controller startup.",
+      "public_action": "Tick both modes on A, reset and stop only A while B holds an unmatched physics event, then tick B and disable each controller.",
+      "expected_result": "Matching-clock Update, ordered Exit/Enter reset, ordered Exit/Stopped shutdown, idempotent stop, B queue and machine identities isolated, authored graph unchanged.",
+      "invariants": [
+        "No reentrant or duplicated stop signals.",
+        "One controller shutdown leaves the other controller and pending packet untouched.",
+        "Signals and state IDs respect authored machine order during reset/stop.",
+        "No authored FlowGraph mutation and no new runtime API."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_observability_lifecycle_test.tscn"
+      ],
+      "notes": "Potok 10A-5 existing-signal characterization added to mandatory CI; NOT RUN until same-commit Actions evidence, no runtime changes."
     }
   ]
 }
