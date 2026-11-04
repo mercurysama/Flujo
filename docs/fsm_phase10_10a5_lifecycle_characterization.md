@@ -15,3 +15,7 @@ La nueva fixture `tests/runtime/flow_fsm_observability_lifecycle_test.tscn` obse
 **Revisión:** CI del mismo commit pendiente, Godot local/Skills formales **NOT RUN**, pruebas humanas diferidas; sin modificaciones a `main`.
 
 *Todo es Flujo; todo fluye.* 🌊
+
+## Verificación de cierre posterior
+
+**PASS de la focal y regresión integral:** [GitHub Actions 41744492793](https://github.com/mercurysama/Flujo/actions/runs/41744492793) finalizó `completed/success` para `0c2204c71fa85704aa63cc0113851ae19f208e5c`. El catálogo se cierra como `passing` únicamente por esta evidencia. Local Fedora/Skills formales y aprobación humana: **NOT RUN**; fase 10 sigue abierta.

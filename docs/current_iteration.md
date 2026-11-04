@@ -1,3 +1,11 @@
+## Potok 10A — Tanda 2 (10A-4/5/6), CI verificado (2026-11-03)
+
+- **10A-4** [condiciones y no-op](fsm_phase10_10a4_conditions_characterization.md), commit `eb7ba4b87d952d639e83b19a3c7c7abec4935249`: la nueva focal caracteriza señales del ganador y el silencio de condiciones false/autotransición. [Actions 41744246830](https://github.com/mercurysama/Flujo/actions/runs/41744246830) **completed SUCCESS**. `FLUJO-BHV-POTOK-OBSERVABILITY-CONDITIONS-002` actualizado `not_run → passing`.
+- **10A-5** [ciclo de vida](fsm_phase10_10a5_lifecycle_characterization.md), commit `0c2204c71fa85704aa63cc0113851ae19f208e5c`: dos controladores, modos MANUAL/PHYSICS, reset, stop y limpieza. [Actions 41744492793](https://github.com/mercurysama/Flujo/actions/runs/41744492793) **completed SUCCESS**. `FLUJO-BHV-POTOK-OBSERVABILITY-LIFECYCLE-003` actualizado `not_run → passing`.
+- **10A-6** [presupuesto de trazas](fsm_phase10_10a6_trace_budget_proposal.md), commit `1041dcec6567c28b489936631694c1ec9666f888`: alternativas, retención propuesta, riesgos y matriz de pruebas, **sin autorización de API ni implementación del buffer**. [Actions 41744622179](https://github.com/mercurysama/Flujo/actions/runs/41744622179) **completed SUCCESS**.
+- Los tres workflows pasaron la regresión integral obligatoria. **Sin archivos productivos, esquemas, snapshots o editor cambiados; main sin tocar.** `$flujo-baseline` y `$flujo-prove` se leyeron, **no invocados formalmente**. Godot/Fedora local **NOT RUN**; revisión humana 0/25.
+- **Siguiente tanda propuesta:** 10A-7 auditoría formal de evidencia y regresiones de estas caracterizaciones, 10A-8 inventario de integración del depurador de Godot/Fluo sin UI nueva, 10A-9 contrato definitivo propuesto y matriz de decisiones para autorización. **10B sigue bloqueada por decisiones arquitectónicas explícitas.** Fase 9 condicionada (F5–F7/F7R, F9, F10 sin autocarga).
+
 ## Potok 10A — tanda 1, observabilidad sin cambio productivo (2026-11-03)
 
 - **10A-1**: [auditoría de señales y brechas](fsm_phase10_10a1_diagnostics_audit.md), commit `a3d56ae874da2ee1a9b94d9922191b40bfcda238`. Reutilizar señales actuales antes de agregar historial.

@@ -1958,11 +1958,11 @@
         "FlowGraph remains unchanged, pending queue drains without extra requests."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_observability_conditions_test.tscn"
       ],
-      "notes": "Potok 10A-4 characterization registered; mandatory CI step included. NOT RUN until same-commit workflow confirms results; runtime and existing tests unchanged."
+      "notes": "Potok characterization accepted by mandatory focal and complete GitHub Actions 41744246830 SUCCESS on eb7ba4b87d952d639e83b19a3c7c7abec4935249; runtime/editor/schema unchanged. Local Godot, formal Skills and human acceptance NOT RUN. This is not approval of proposed DEBUG-FSM runtime contract."
     },
     {
       "id": "FLUJO-BHV-POTOK-OBSERVABILITY-LIFECYCLE-003",
@@ -1977,11 +1977,11 @@
         "No authored FlowGraph mutation and no new runtime API."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/runtime/flow_fsm_observability_lifecycle_test.tscn"
       ],
-      "notes": "Potok 10A-5 existing-signal characterization added to mandatory CI; NOT RUN until same-commit Actions evidence, no runtime changes."
+      "notes": "Potok characterization accepted by mandatory focal and complete GitHub Actions 41744492793 SUCCESS on 0c2204c71fa85704aa63cc0113851ae19f208e5c; runtime/editor/schema unchanged. Local Godot, formal Skills and human acceptance NOT RUN. This is not approval of proposed DEBUG-FSM runtime contract."
     }
   ]
 }
