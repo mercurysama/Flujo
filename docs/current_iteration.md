@@ -1,3 +1,9 @@
+## Potok 10A-14 — Capacidad del API de depuración verificada en CI (2026-11-03)
+
+- `tests/editor/flow_fsm_debugger_classdb_probe.gd` (commit `979a07b423299b49fe1610cb76a944df83fcdc1f`) tuvo focal y regresión integrales **SUCCESS** en [#41766064041](https://github.com/mercurysama/Flujo/actions/runs/41766064041), confirmando clases y métodos nativos del debugger Godot 4.7.2. El log de ClassDB señaló `EngineDebugger exists=true/send=true/receive=true`.
+- Comportamiento `FLUJO-BHV-POTOK-EDITOR-DEBUGGER-API-PROBE-004` actualizado `not_run → passing` **después** del CI. Este PASS **no** representa una sesión conectada, un canal operativo ni una UI; G7 no aprobado y 10B-core pendiente G1..G6.
+- [Acta de decisión 10A-15](fsm_phase10_10a15_approval_decision_sheet.md), sin aprobación implícita; no se tocaron archivos productivos, `main`, snapshot ni políticas de fase 9. Skills formales Fedora y pruebas humanas NOT RUN.
+
 ## Potok 10A — Preflight 10A-13/14/15 (2026-11-03)
 
 - **10A-13:** [cierre de CI 10A-12](fsm_phase10_10a13_ci_checkpoint_certification.md), commit `e96079d214b760801fc520b7ac9a5c3dd2d0a24c`. [Actions 41765259748](https://github.com/mercurysama/Flujo/actions/runs/41765259748) **completed/success**; 10A-10/11 también SUCCESS.

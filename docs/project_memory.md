@@ -1,5 +1,11 @@
 # Flujo Project Memory / Handoff
 
+## Potok — 10A-14 Godot Debugger API probe PASS (2026-11-03)
+
+- Focal `tests/editor/flow_fsm_debugger_classdb_probe.gd`, commit `979a07b423299b49fe1610cb76a944df83fcdc1f`, [CI 41766064041](https://github.com/mercurysama/Flujo/actions/runs/41766064041) **SUCCESS**: ClassDB Godot 4.7.2 tiene `EditorDebuggerPlugin`, `EditorDebuggerSession` y `EngineDebugger` con send/receive declarados.
+- Entrada del catálogo `FLUJO-BHV-POTOK-EDITOR-DEBUGGER-API-PROBE-004` **passing** por evidencia. **Sin sesión real, protocolo ni UI de debugger**. G1..G6 y G7/G8 siguen no aprobados; fase 10 ABIERTA, fase 9 CONDICIONAL, main intacta.
+
+
 ## Potok — 10A-13/14/15, preflight y decisión propuesta (2026-11-03)
 
 - [CI 10A-12](fsm_phase10_10a13_ci_checkpoint_certification.md) verificado por SHA; 10A-10, 10A-11, 10A-12 integrales SUCCESS.

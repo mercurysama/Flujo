@@ -1996,11 +1996,11 @@
         "Test status stays not_run until same-commit Godot headless job completes successfully."
       ],
       "coverage": "automatic",
-      "baseline_status": "not_run",
+      "baseline_status": "passing",
       "test_paths": [
         "tests/editor/flow_fsm_debugger_classdb_probe.gd"
       ],
-      "notes": "10A-14 read-only engine API probe added to mandatory editor headless CI. No live session/transport assertion; NOT RUN until same-commit workflow evidence."
+      "notes": "10A-14 Godot 4.7.2 headless editor ClassDB API probe: GitHub Actions 41766064041 completed SUCCESS, focal success on commit 979a07b423299b49fe1610cb76a944df83fcdc1f. Log reports EngineDebugger class exists=true, send_message=true, register_message_capture=true. Method availability only; no live session, transport handshake, editor UI, production debugger or G7 approval. Local Skills/Godot Fedora and manual acceptance NOT RUN."
     }
   ]
 }

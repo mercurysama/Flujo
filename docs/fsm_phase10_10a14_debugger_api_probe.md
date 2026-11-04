@@ -25,3 +25,11 @@ timeout --signal=TERM --kill-after=5s 35s ./Godot_v4.7.2-stable_linux.x86_64 --h
 **Gobernanza:** esta es una caracterización *test-only* de una capacidad existente del motor. No se ejecutaron formalmente `$flujo-baseline` ni `$flujo-prove` en Fedora; no hay revisión humana ni cambios productivos. Incluso con CI PASS, G1..G8 siguen sin aprobación.
 
 *Todo es Flujo; todo fluye.* 🌊
+
+## Evidencia posterior de 10A-14
+
+- **Commit focal:** `979a07b423299b49fe1610cb76a944df83fcdc1f`.
+- **Workflow integral y paso focal:** [GitHub Actions 41766064041](https://github.com/mercurysama/Flujo/actions/runs/41766064041), `completed/success`, paso «Potok-10A14 native Godot debugger API ClassDB probe» `success`.
+- **Salida de introspección recuperada del log del job:** `EngineDebugger` `exists=true`, `send=true`, `receive=true`, y marcador de la fixture `editor debugger API probe result: passed`.
+- **Interpretación exacta:** el binario Godot 4.7.2 ofrece las clases/métodos inspeccionados, **NO** se comprobó conexión entre editor y juego ni envío de un paquete real. `G7` y la fase 10B permanecen sin aprobar. Catalogado `FLUJO-BHV-POTOK-EDITOR-DEBUGGER-API-PROBE-004` como `passing` sólo después de este PASS completo.
+
