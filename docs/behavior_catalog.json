@@ -1944,6 +1944,25 @@
         "tests/runtime/flow_fsm_observability_existing_signals_test.tscn"
       ],
       "notes": "Potok 10A-3: GitHub Actions 41734104878 completed SUCCESS on 15da55c216e62afbd8aeb2c2ded40e1107983a39; mandatory existing-signals focal PASS and complete headless job PASS. Local Godot and formal Skills NOT RUN via GitHub connector; no human approval. Proposed observability API, buffer and editor UI are NOT implemented."
+    },
+    {
+      "id": "FLUJO-BHV-POTOK-OBSERVABILITY-CONDITIONS-002",
+      "area": "Potok observable conditional winner and self/no-op behavior under existing public signals",
+      "precondition": "A validated graph contains two MANUAL FSMs; A has false/high priority, true/self and true/destination condition edges, while B has false and true/self edges only.",
+      "public_action": "Observe only existing runtime public signals on two matching ticks and enqueue a direct request targeting an already active state; inspect identities, queue and unchanged authored definitions.",
+      "expected_result": "Only the true valid destination edge emits Exit, Enter and Commit with its stable edge ID. False/self-only machine emits Update without Commit. Accepted direct self request is consumed as a no-op with no commit; no admission rejection is emitted.",
+      "invariants": [
+        "Observability does not evaluate conditions an additional time.",
+        "One committed target per machine/tick and unchanged authored priorities and edge IDs.",
+        "Self-target or false candidates produce no unapproved public diagnostic or phase callbacks.",
+        "FlowGraph remains unchanged, pending queue drains without extra requests."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "not_run",
+      "test_paths": [
+        "tests/runtime/flow_fsm_observability_conditions_test.tscn"
+      ],
+      "notes": "Potok 10A-4 characterization registered; mandatory CI step included. NOT RUN until same-commit workflow confirms results; runtime and existing tests unchanged."
     }
   ]
 }
