@@ -1,7 +1,7 @@
 @tool
 extends SceneTree
 
-## Execute: godot --headless --editor --path . --script res://tests/editor/pixnido_export_writer_smoke.gd
+## Execute: godot --headless --path . --script res://tests/editor/pixnido_export_writer_smoke.gd
 
 const WRITER := preload("res://addons/pixnido_panel_lab/sprite_export_writer.gd")
 const TEST_DIR: String = "res://.godot/pixnido_writer_test/"
