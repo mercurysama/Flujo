@@ -140,3 +140,8 @@ Trace: PNL-08A/08C → addons/pixnido_panel_lab/plugin.gd; PNL-08B → addons/pi
 - [ ] Run `git diff --check` and record visual review on Fedora and Android.
 
 **Trace:** PNL-11 → `pixnido_export_bridge.js` (JS protocol), `pixnido_servo_host.gd` (native integration and UI), `sprite_export_writer.gd` (confined safe writing), `panel_dock.gd` + `plugin.gd` (directory persistence). **Validation:** repository static review only; execution time and real platform outcomes not measured. No edits to `addons/vp_flujo/` or production PixNido.
+
+### EXP-05 focal test added
+
+- `tests/editor/pixnido_export_writer_smoke.gd`: creates a 2×2 PNG in memory, exercises path traversal denial, MIME/signature rejection, unique filenames, byte-for-byte save verification, and cleanup under `res://.godot/pixnido_writer_test/`. Run with `godot --headless --editor --path . --script res://tests/editor/pixnido_export_writer_smoke.gd` in Godot 4.7.2. **Not executed in this environment.**
+- The JavaScript bridge source was parsed/executed in a standalone JS harness with a stub Godot event sink: one 20,000-character Base64 payload produced 3 chunks (8192 + 8192 + 3616 characters) and one end message; a concurrent duplicate start was rejected. This **does not** prove the native Servo event transport, disk writer or editor UI works.
