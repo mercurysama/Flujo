@@ -23,6 +23,8 @@ jobs:
           node-version: "22"
       - name: JavaScript bridge protocol
         run: node tests/editor/pixnido_export_bridge.test.cjs
+      - name: Native color and palette adapter
+        run: node tests/editor/nidolab_native_dialogs.test.cjs
       - name: Changed-file whitespace check
         run: git diff --check HEAD~1 HEAD
 
@@ -92,6 +94,16 @@ jobs:
             echo "::error::NidoLab reference tabs emitted a Godot error"
             exit 1
           fi
+      - name: Future-ready NidoLab editor tabs
+        shell: bash
+        run: |
+          set -o pipefail
+          timeout 35s godot --headless --path . --script res://tests/editor/nidolab_editor_tabs_smoke.gd 2>&1 | tee nidolab-editor-tabs.log
+          grep -F "[NidoLab] Editor tabs smoke test passed" nidolab-editor-tabs.log
+          if grep -E '(SCRIPT ERROR:|ERROR:)' nidolab-editor-tabs.log; then
+            echo "::error::NidoLab editor-tabs test emitted a Godot error"
+            exit 1
+          fi
       - name: Regression model smoke
         shell: bash
         run: |
@@ -112,5 +124,6 @@ jobs:
             pixnido-writer.log
             nidolab-focus.log
             nidolab-tabs.log
+            nidolab-editor-tabs.log
             flujo-smoke.log
           if-no-files-found: ignore
