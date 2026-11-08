@@ -6,6 +6,7 @@ extends EditorDock
 signal close_requested
 signal references_changed
 signal pixnido_source_changed
+signal pixnido_export_directory_changed
 
 const REFERENCE_BOARD_SCRIPT := preload("res://addons/pixnido_panel_lab/reference_board.gd")
 const PIXNIDO_HOST_SCRIPT := preload("res://addons/pixnido_panel_lab/pixnido_servo_host.gd")
@@ -119,6 +120,21 @@ func _on_pixnido_source_changed(value: String) -> void:
 	pixnido_source_changed.emit()
 
 
+func get_pixnido_export_directory() -> String:
+	if not is_instance_valid(_pixnido_host):
+		return "res://assets/sprites/"
+	return String(_pixnido_host.call(&"get_export_directory"))
+
+
+func set_pixnido_export_directory(directory: String) -> void:
+	if is_instance_valid(_pixnido_host):
+		_pixnido_host.call(&"set_export_directory", directory)
+
+
+func _on_pixnido_export_directory_changed() -> void:
+	pixnido_export_directory_changed.emit()
+
+
 func get_references_state() -> Dictionary:
 	if not is_instance_valid(_board):
 		return {"version": 1, "next_id": 1, "items": []}
@@ -183,6 +199,7 @@ func _build_content(is_pixnido: bool) -> void:
 	if is_pixnido:
 		_pixnido_host = PIXNIDO_HOST_SCRIPT.new()
 		_pixnido_host.connect(&"source_changed", _on_pixnido_source_changed)
+		_pixnido_host.connect(&"export_directory_changed", _on_pixnido_export_directory_changed)
 		content.add_child(_pixnido_host)
 	else:
 		_board = REFERENCE_BOARD_SCRIPT.new()
