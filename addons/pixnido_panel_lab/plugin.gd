@@ -20,6 +20,9 @@ var _references_open: bool = false
 var _swapped: bool = false
 var _registered_swapped: bool = false
 var _reference_state: Dictionary = {"version": 1, "next_id": 1, "items": []}
+var _notes_state: Dictionary = {"version": 1, "next_id": 1, "items": []}
+var _tasks_state: Dictionary = {"version": 1, "next_id": 1, "items": []}
+var _references_tab: int = 0
 var _pixnido_source: String = "https://pixnido.pages.dev/"
 var _pixnido_export_directory: String = "res://assets/sprites/"
 
@@ -30,7 +33,14 @@ func _get_window_layout(configuration: ConfigFile) -> void:
 	configuration.set_value(LAYOUT_SECTION, "swapped", _swapped)
 	if is_instance_valid(_references_dock):
 		_reference_state = _references_dock.call(&"get_references_state")
+		var extras: Dictionary = _references_dock.call(&"get_references_extras")
+		_notes_state = extras.get("notes", _notes_state)
+		_tasks_state = extras.get("tasks", _tasks_state)
+		_references_tab = int(extras.get("tab", _references_tab))
 	configuration.set_value(LAYOUT_SECTION, "reference_images", _reference_state)
+	configuration.set_value(LAYOUT_SECTION, "reference_notes", _notes_state)
+	configuration.set_value(LAYOUT_SECTION, "reference_tasks", _tasks_state)
+	configuration.set_value(LAYOUT_SECTION, "references_tab", _references_tab)
 	if is_instance_valid(_pixnido_dock):
 		_pixnido_source = String(_pixnido_dock.call(&"get_pixnido_source"))
 	configuration.set_value(LAYOUT_SECTION, "pixnido_source", _pixnido_source)
@@ -51,8 +61,16 @@ func _set_window_layout(configuration: ConfigFile) -> void:
 	var saved_images: Variant = configuration.get_value(LAYOUT_SECTION, "reference_images", {})
 	if saved_images is Dictionary:
 		_reference_state = saved_images
+	var saved_notes: Variant = configuration.get_value(LAYOUT_SECTION, "reference_notes", _notes_state)
+	if saved_notes is Dictionary:
+		_notes_state = saved_notes
+	var saved_tasks: Variant = configuration.get_value(LAYOUT_SECTION, "reference_tasks", _tasks_state)
+	if saved_tasks is Dictionary:
+		_tasks_state = saved_tasks
+	_references_tab = clampi(int(configuration.get_value(LAYOUT_SECTION, "references_tab", _references_tab)), 0, 2)
 	if is_instance_valid(_references_dock):
 		_references_dock.call(&"set_references_state", _reference_state)
+		_references_dock.call(&"set_references_extras", {"notes": _notes_state, "tasks": _tasks_state, "tab": _references_tab})
 	if is_instance_valid(_pixnido_dock) and is_instance_valid(_references_dock):
 		_apply_registered_sides()
 		_apply_visibility.call_deferred()
@@ -98,6 +116,7 @@ func _enter_tree() -> void:
 	_references_dock.connect(&"close_requested", _close_references)
 	_references_dock.connect(&"references_changed", _on_references_changed)
 	_references_dock.call(&"set_references_state", _reference_state)
+	_references_dock.call(&"set_references_extras", {"notes": _notes_state, "tasks": _tasks_state, "tab": _references_tab})
 	_references_dock.call(&"set_slide_side", true)
 	add_dock(_references_dock)
 
@@ -144,7 +163,7 @@ func _build_toolbar() -> void:
 	_toolbar = HBoxContainer.new()
 	_toolbar.name = "PixNidoPanelToolbar"
 
-	_pixnido_button = _make_button(&"Sprite2D", "▦", "Show / hide PixNido (Ctrl+Alt+P)")
+	_pixnido_button = _make_button(&"Sprite2D", "▦", "Open PixNido with References in NidoLab (Ctrl+Alt+P)")
 	_pixnido_button.toggle_mode = true
 	_pixnido_button.button_pressed = _pixnido_open
 	_pixnido_button.pressed.connect(_toggle_pixnido)
@@ -154,7 +173,7 @@ func _build_toolbar() -> void:
 	swap_button.pressed.connect(_swap_sides)
 	_toolbar.add_child(swap_button)
 
-	_references_button = _make_button(&"Texture2D", "▧", "Show / hide references (Ctrl+Alt+R)")
+	_references_button = _make_button(&"Texture2D", "▧", "Open References independently (Ctrl+Alt+R)")
 	_references_button.toggle_mode = true
 	_references_button.button_pressed = _references_open
 	_references_button.pressed.connect(_toggle_references)
@@ -185,21 +204,27 @@ func _make_button(icon_id: StringName, fallback: String, hint: String) -> Button
 
 
 func _toggle_pixnido() -> void:
-	_pixnido_open = not _pixnido_open
 	if is_instance_valid(_focus_workspace):
+		_pixnido_open = not _pixnido_open
 		_focus_workspace.call(&"set_pane_visibility", &"pixnido", _pixnido_open)
 	else:
-		_set_dock_visible(_pixnido_dock, _pixnido_open)
+		# Calling PixNido launches both fixed-width panes in focus mode.
+		_pixnido_open = true
+		_references_open = true
+		_enter_focus_workspace()
 	_sync_button_states()
 	queue_save_layout()
 
 
 func _toggle_references() -> void:
-	_references_open = not _references_open
 	if is_instance_valid(_focus_workspace):
+		_references_open = not _references_open
 		_focus_workspace.call(&"set_pane_visibility", &"references", _references_open)
 	else:
-		_set_dock_visible(_references_dock, _references_open)
+		# References can be summoned without PixNido or native Servo.
+		_pixnido_open = false
+		_references_open = true
+		_enter_focus_workspace()
 	_sync_button_states()
 	queue_save_layout()
 
@@ -239,7 +264,10 @@ func _toggle_focus_workspace() -> void:
 	if is_instance_valid(_focus_workspace):
 		_leave_focus_workspace()
 	else:
+		_pixnido_open = true
+		_references_open = true
 		_enter_focus_workspace()
+		queue_save_layout()
 
 
 func _enter_focus_workspace() -> void:
@@ -299,7 +327,7 @@ func _on_focus_pane_visibility_changed(panel: StringName, opening: bool) -> void
 
 func _on_focus_add_reference() -> void:
 	if is_instance_valid(_references_dock):
-		_references_dock.call(&"open_reference_picker")
+		_references_dock.call(&"add_to_current_reference_tab")
 
 
 func _apply_registered_sides() -> void:

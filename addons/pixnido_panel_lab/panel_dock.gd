@@ -8,7 +8,7 @@ signal references_changed
 signal pixnido_source_changed
 signal pixnido_export_directory_changed
 
-const REFERENCE_BOARD_SCRIPT := preload("res://addons/pixnido_panel_lab/reference_board.gd")
+const REFERENCE_HUB_SCRIPT := preload("res://addons/pixnido_panel_lab/reference_hub.gd")
 const PIXNIDO_HOST_SCRIPT := preload("res://addons/pixnido_panel_lab/pixnido_servo_host.gd")
 
 const ANIMATION_SECONDS: float = 0.16
@@ -113,6 +113,11 @@ func open_reference_picker() -> void:
 	_open_reference_dialog()
 
 
+func add_to_current_reference_tab() -> void:
+	if is_instance_valid(_board):
+		_board.call(&"add_for_current_tab")
+
+
 func get_pixnido_source() -> String:
 	if not is_instance_valid(_pixnido_host):
 		return "https://pixnido.pages.dev/"
@@ -146,13 +151,39 @@ func _on_pixnido_export_directory_changed() -> void:
 func get_references_state() -> Dictionary:
 	if not is_instance_valid(_board):
 		return {"version": 1, "next_id": 1, "items": []}
-	var state: Dictionary = _board.call(&"get_layout_state")
+	var state: Dictionary = _board.call(&"get_images_state")
 	return state
 
 
 func set_references_state(state: Dictionary) -> void:
 	if is_instance_valid(_board):
-		_board.call(&"set_layout_state", state)
+		_board.call(&"set_images_state", state)
+
+
+func get_references_extras() -> Dictionary:
+	if not is_instance_valid(_board):
+		return {
+			"notes": {"version": 1, "next_id": 1, "items": []},
+			"tasks": {"version": 1, "next_id": 1, "items": []},
+			"tab": 0
+		}
+	return {
+		"notes": _board.call(&"get_notes_state"),
+		"tasks": _board.call(&"get_tasks_state"),
+		"tab": int(_board.call(&"current_section"))
+	}
+
+
+func set_references_extras(state: Dictionary) -> void:
+	if not is_instance_valid(_board):
+		return
+	var notes: Variant = state.get("notes", {})
+	if notes is Dictionary:
+		_board.call(&"set_notes_state", notes)
+	var tasks: Variant = state.get("tasks", {})
+	if tasks is Dictionary:
+		_board.call(&"set_tasks_state", tasks)
+	_board.call(&"set_active_section", int(state.get("tab", 0)))
 
 
 func _open_reference_dialog() -> void:
@@ -162,7 +193,7 @@ func _open_reference_dialog() -> void:
 
 func _on_files_selected(paths: PackedStringArray) -> void:
 	if is_instance_valid(_board):
-		_board.call(&"add_paths", paths)
+		_board.call(&"add_image_paths", paths)
 
 
 func _on_references_changed() -> void:
@@ -196,9 +227,9 @@ func _build_content(is_pixnido: bool) -> void:
 	header.add_child(heading)
 
 	if not is_pixnido:
-		_add_button = _make_button("Add reference image")
+		_add_button = _make_button("Add item to the selected References tab")
 		_add_button.name = "AddReference"
-		_add_button.pressed.connect(_open_reference_dialog)
+		_add_button.pressed.connect(add_to_current_reference_tab)
 		header.add_child(_add_button)
 
 	_close_button = _make_button("Close panel")
@@ -212,9 +243,10 @@ func _build_content(is_pixnido: bool) -> void:
 		_pixnido_host.connect(&"export_directory_changed", _on_pixnido_export_directory_changed)
 		content.add_child(_pixnido_host)
 	else:
-		_board = REFERENCE_BOARD_SCRIPT.new()
+		_board = REFERENCE_HUB_SCRIPT.new()
 		content.add_child(_board)
 		_board.connect(&"changed", _on_references_changed)
+		_board.connect(&"image_picker_requested", _open_reference_dialog)
 
 		_file_dialog = EditorFileDialog.new()
 		_file_dialog.name = "ReferenceFilePicker"
