@@ -16,6 +16,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -42,13 +44,42 @@ jobs:
           mv "$RUNNER_TEMP/godot-bin/Godot_v4.7.2-stable_linux.x86_64" "$RUNNER_TEMP/godot-bin/godot"
       - name: Check Godot version
         run: godot --version | grep "4.7.2"
-      - name: Import project and parse plugins
-        run: godot --headless --editor --path . --quit-after 5 2>&1 | tee godot-import.log
+      - name: Baseline without experimental PixNido dock
+        shell: bash
+        run: |
+          set -o pipefail
+          cp project.godot "$RUNNER_TEMP/project-original.godot"
+          trap 'cp "$RUNNER_TEMP/project-original.godot" project.godot' EXIT
+          sed -i 's/, "res:\/\/addons\/pixnido_panel_lab\/plugin.cfg"//' project.godot
+          godot --headless --editor --path . --quit-after 5 2>&1 | tee godot-baseline.log
+      - name: Import project with PixNido lab and parse plugins
+        shell: bash
+        run: |
+          set -o pipefail
+          godot --headless --editor --path . --quit-after 5 2>&1 | tee godot-import.log
+      - name: Compare editor startup errors against baseline
+        shell: bash
+        run: |
+          grep 'ERROR:' godot-baseline.log | sort -u > baseline-errors.txt || true
+          grep 'ERROR:' godot-import.log | sort -u > pixnido-errors.txt || true
+          comm -23 pixnido-errors.txt baseline-errors.txt > new-editor-errors.txt
+          if [[ -s new-editor-errors.txt ]]; then
+            cat new-editor-errors.txt
+            echo "::error::New editor errors introduced by experimental panel"
+            exit 1
+          fi
+          if [[ -s pixnido-errors.txt ]]; then
+            echo "::warning::Editor logged errors also present without experimental PixNido dock"
+          fi
       - name: Test sprite writer
-        run: godot --headless --editor --path . --script res://tests/editor/pixnido_export_writer_smoke.gd 2>&1 | tee pixnido-writer.log
+        shell: bash
+        run: |
+          set -o pipefail
+          godot --headless --editor --path . --script res://tests/editor/pixnido_export_writer_smoke.gd 2>&1 | tee pixnido-writer.log
       - name: Regression model smoke
         shell: bash
         run: |
+          set -o pipefail
           godot --headless --path . tests/model/flow_model_smoke_test.tscn 2>&1 | tee flujo-smoke.log
           grep -F "[Flujo] Model smoke test passed" flujo-smoke.log
       - name: Upload validation logs
@@ -57,7 +88,11 @@ jobs:
         with:
           name: pixnido-lab-validation-logs
           path: |
+            godot-baseline.log
             godot-import.log
+            baseline-errors.txt
+            pixnido-errors.txt
+            new-editor-errors.txt
             pixnido-writer.log
             flujo-smoke.log
           if-no-files-found: ignore
