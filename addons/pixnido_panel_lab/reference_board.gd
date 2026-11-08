@@ -27,6 +27,7 @@ func _init() -> void:
 	name = "ReferenceCanvas"
 	clip_contents = true
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	focus_mode = Control.FOCUS_ALL
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 	custom_minimum_size = Vector2(180.0, 140.0)
@@ -181,6 +182,7 @@ func _select_item(item: Control) -> void:
 		_selected.call(&"set_selected", false)
 	_selected = item
 	item.call(&"set_selected", true)
+	grab_focus()
 	_items.erase(item)
 	_items.append(item)
 	move_child(item, get_child_count() - 1)
@@ -230,6 +232,45 @@ func _input(event: InputEvent) -> void:
 			_drag_mode = &""
 			_changed()
 			get_viewport().set_input_as_handled()
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if not has_focus() or not is_instance_valid(_selected):
+		return
+	if not event is InputEventKey:
+		return
+	var key: InputEventKey = event as InputEventKey
+	if not key.pressed or key.echo or key.ctrl_pressed or key.alt_pressed or key.meta_pressed:
+		return
+	if key.keycode == KEY_ESCAPE:
+		_selected.call(&"set_selected", false)
+		_selected = null
+		get_viewport().set_input_as_handled()
+		return
+	if key.keycode == KEY_DELETE and not key.shift_pressed:
+		_remove_item(_selected)
+		get_viewport().set_input_as_handled()
+		return
+	var direction: Vector2 = Vector2.ZERO
+	match key.keycode:
+		KEY_LEFT:
+			direction = Vector2.LEFT
+		KEY_RIGHT:
+			direction = Vector2.RIGHT
+		KEY_UP:
+			direction = Vector2.UP
+		KEY_DOWN:
+			direction = Vector2.DOWN
+		_:
+			return
+	var step: float = 10.0 if key.shift_pressed else 1.0
+	if key.shift_pressed:
+		_selected.size += direction * step
+	else:
+		_selected.position += direction * step
+	_clamp_item(_selected)
+	_changed()
+	get_viewport().set_input_as_handled()
 
 
 func _clamp_item(item: Control) -> void:

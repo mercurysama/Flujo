@@ -1,7 +1,7 @@
 @tool
 extends EditorDock
 
-## Independent docks: reference image board is editor-only; HTML5 PixNido is pending.
+## NidoLab: independent editor docks for PixNido and reference images.
 
 signal close_requested
 signal references_changed
@@ -183,6 +183,8 @@ func _build_content(is_pixnido: bool) -> void:
 	var heading := Label.new()
 	heading.text = "PixNido" if is_pixnido else "References"
 	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.clip_text = true
+	heading.tooltip_text = "NidoLab / PixNido" if is_pixnido else "NidoLab / References"
 	header.add_child(heading)
 
 	if not is_pixnido:

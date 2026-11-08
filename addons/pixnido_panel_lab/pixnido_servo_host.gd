@@ -10,6 +10,7 @@ signal export_directory_changed
 const DEFAULT_SOURCE: String = "https://pixnido.pages.dev/"
 const SERVO_SCRIPT_PATH: String = "res://addons/pixnido_panel_lab/servo_editor_texture_rect.gd"
 const SERVO_CURSORS_PATH: String = "res://addons/godot_servo/cursors.gd"
+const SERVO_INSTALL_URL: String = "https://github.com/shiena/godot-servo/releases/latest"
 const EXPORT_BRIDGE_PATH: String = "res://addons/pixnido_panel_lab/pixnido_export_bridge.js"
 const WRITER := preload("res://addons/pixnido_panel_lab/sprite_export_writer.gd")
 const CHUNK_SIZE: int = 8192
@@ -22,6 +23,9 @@ var _open_button: Button
 var _save_button: Button
 var _folder_button: Button
 var _folder_dialog: EditorFileDialog
+var _servo_status_label: Label
+var _servo_install_button: Button
+var _destination_label: Label
 var _export_directory: String = "res://assets/sprites/"
 var _transfer_token: String = ""
 var _last_progress_at: int = 0
@@ -50,6 +54,7 @@ func _ready() -> void:
 	_apply_icon(_open_button, &"Play", "▶")
 	_apply_icon(_save_button, &"Save", "↓")
 	_apply_icon(_folder_button, &"Folder", "▱")
+	_refresh_servo_status()
 
 
 func _process(_delta: float) -> void:
@@ -75,6 +80,9 @@ func set_export_directory(directory: String) -> void:
 		_export_directory = directory
 		if is_instance_valid(_folder_button):
 			_folder_button.tooltip_text = "Output folder: " + directory
+		if is_instance_valid(_destination_label):
+			_destination_label.text = "Save to: " + directory.trim_suffix("/").get_file()
+			_destination_label.tooltip_text = directory
 
 
 func _build_ui() -> void:
@@ -101,6 +109,19 @@ func _build_ui() -> void:
 	_open_button.pressed.connect(_open_source)
 	address_row.add_child(_open_button)
 
+	# A second row keeps the URL usable when the dock is narrow.
+	var export_row := HBoxContainer.new()
+	export_row.name = "SpriteExportActions"
+	add_child(export_row)
+
+	_destination_label = Label.new()
+	_destination_label.name = "SpriteDestination"
+	_destination_label.text = "Save to: sprites"
+	_destination_label.tooltip_text = _export_directory
+	_destination_label.clip_text = true
+	_destination_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	export_row.add_child(_destination_label)
+
 	_save_button = Button.new()
 	_save_button.name = "SaveSpriteInGodot"
 	_save_button.flat = true
@@ -108,7 +129,7 @@ func _build_ui() -> void:
 	_save_button.tooltip_text = "Save PixNido export preview inside the Godot project"
 	_save_button.custom_minimum_size = Vector2(30, 30)
 	_save_button.pressed.connect(_request_export)
-	address_row.add_child(_save_button)
+	export_row.add_child(_save_button)
 
 	_folder_button = Button.new()
 	_folder_button.name = "SpriteOutputFolder"
@@ -117,7 +138,7 @@ func _build_ui() -> void:
 	_folder_button.tooltip_text = "Output folder: res://assets/sprites/"
 	_folder_button.custom_minimum_size = Vector2(30, 30)
 	_folder_button.pressed.connect(_choose_directory)
-	address_row.add_child(_folder_button)
+	export_row.add_child(_folder_button)
 
 	_folder_dialog = EditorFileDialog.new()
 	_folder_dialog.name = "SpriteFolderPicker"
@@ -126,9 +147,28 @@ func _build_ui() -> void:
 	_folder_dialog.dir_selected.connect(_on_directory_selected)
 	add_child(_folder_dialog)
 
+	var servo_row := HBoxContainer.new()
+	servo_row.name = "ServoDependency"
+	add_child(servo_row)
+
+	_servo_status_label = Label.new()
+	_servo_status_label.name = "ServoStatus"
+	_servo_status_label.text = "Servo: checking…"
+	_servo_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_servo_status_label.clip_text = true
+	servo_row.add_child(_servo_status_label)
+
+	_servo_install_button = Button.new()
+	_servo_install_button.name = "GetServo"
+	_servo_install_button.text = "Get Servo"
+	_servo_install_button.tooltip_text = "Open official godot-servo releases; installation is optional"
+	_servo_install_button.focus_mode = Control.FOCUS_ALL
+	_servo_install_button.pressed.connect(_on_get_servo_pressed)
+	servo_row.add_child(_servo_install_button)
+
 	_status = Label.new()
 	_status.name = "BrowserStatus"
-	_status.text = "Open PixNido, export a PNG/WebP preview, then click Save. Default: res://assets/sprites/"
+	_status.text = "Open PixNido, export PNG/WebP, then click the Save icon."
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(_status)
 
@@ -147,6 +187,24 @@ func _apply_icon(button: Button, icon_id: StringName, fallback: String) -> void:
 		button.icon = editor_theme.get_icon(icon_id, &"EditorIcons")
 	else:
 		button.text = fallback
+
+
+func _refresh_servo_status() -> void:
+	if not is_instance_valid(_servo_status_label):
+		return
+	var native_present: bool = ClassDB.class_exists(&"ServoWebView")
+	var helper_present: bool = ResourceLoader.exists(SERVO_CURSORS_PATH)
+	var available: bool = native_present and helper_present
+	_servo_status_label.text = "Servo: detected" if available else "Servo: optional / not installed"
+	_servo_status_label.tooltip_text = "Native browser available (runtime not yet verified)" if available else "Install godot-servo manually to use PixNido inside Godot"
+	_servo_install_button.visible = not available
+
+
+func _on_get_servo_pressed() -> void:
+	# This opens documentation only after the user clicks. No automatic install.
+	var error: Error = OS.shell_open(SERVO_INSTALL_URL)
+	if error != OK:
+		_set_status("Could not open Servo release page (%d)." % error, true)
 
 
 func _source_edited(value: String) -> void:
@@ -172,6 +230,7 @@ func _on_directory_selected(directory: String) -> void:
 
 
 func _open_source() -> void:
+	_refresh_servo_status()
 	var source: String = get_source()
 	var target_url: String = _validated_url(source)
 	if target_url.is_empty():
@@ -180,7 +239,7 @@ func _open_source() -> void:
 		_set_status("godot-servo is not installed. Install its GDExtension first; no network request was made.", true)
 		return
 	if not ResourceLoader.exists(SERVO_SCRIPT_PATH) or not ResourceLoader.exists(SERVO_CURSORS_PATH):
-		_set_status("The godot-servo TextureRect adapter is missing. Copy the complete addons/godot_servo/ folder.", true)
+		_set_status("Native Servo installation incomplete. Check addons/godot_servo/ helpers and binaries.", true)
 		return
 
 	# Loading the adapter only after native registration prevents parse failures
