@@ -82,6 +82,12 @@ jobs:
           set -o pipefail
           godot --headless --path . --script res://tests/editor/nidolab_focus_smoke.gd 2>&1 | tee nidolab-focus.log
           grep -F "[NidoLab] Focus workspace smoke test passed" nidolab-focus.log
+      - name: NidoLab three-tab references and persistence
+        shell: bash
+        run: |
+          set -o pipefail
+          godot --headless --path . --script res://tests/editor/nidolab_reference_tabs_smoke.gd 2>&1 | tee nidolab-tabs.log
+          grep -F "[NidoLab] References tabs smoke test passed" nidolab-tabs.log
       - name: Regression model smoke
         shell: bash
         run: |
@@ -101,5 +107,6 @@ jobs:
             new-editor-errors.txt
             pixnido-writer.log
             nidolab-focus.log
+            nidolab-tabs.log
             flujo-smoke.log
           if-no-files-found: ignore

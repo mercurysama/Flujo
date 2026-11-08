@@ -54,6 +54,15 @@ func _run_focal() -> void:
 	if split.get_child(0).name != "ReferencesColumn":
 		failures.append("Swapping panel sides failed")
 
+	focus.call(&"set_pane_visibility", &"references", false)
+	await process_frame
+	var after_hide: Vector2 = focus.call(&"get_pane_widths")
+	if absf(after_hide.x - widths.x) > 1.0 or absf(after_hide.y - widths.y) > 1.0:
+		failures.append("Hiding References unexpectedly resized PixNido")
+	if references.visible:
+		failures.append("References was not hidden")
+	focus.call(&"set_pane_visibility", &"references", true)
+
 	focus.call(&"set_pane_visibility", &"pixnido", false)
 	if pix.visible:
 		failures.append("PixNido body was not hidden")
