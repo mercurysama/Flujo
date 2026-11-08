@@ -150,12 +150,13 @@ func _build_ui() -> void:
 	_folder_button.pressed.connect(_choose_directory)
 	export_row.add_child(_folder_button)
 
-	_folder_dialog = EditorFileDialog.new()
-	_folder_dialog.name = "SpriteFolderPicker"
-	_folder_dialog.file_mode = EditorFileDialog.FILE_MODE_OPEN_DIR
-	_folder_dialog.access = EditorFileDialog.ACCESS_RESOURCES
-	_folder_dialog.dir_selected.connect(_on_directory_selected)
-	add_child(_folder_dialog)
+	if Engine.is_editor_hint():
+		_folder_dialog = EditorFileDialog.new()
+		_folder_dialog.name = "SpriteFolderPicker"
+		_folder_dialog.file_mode = EditorFileDialog.FILE_MODE_OPEN_DIR
+		_folder_dialog.access = EditorFileDialog.ACCESS_RESOURCES
+		_folder_dialog.dir_selected.connect(_on_directory_selected)
+		add_child(_folder_dialog)
 
 	# Separate compact row: native pickers work around Servo's unsupported
 	# HTML file/color dialogs without changing the published PixNido app.
@@ -184,13 +185,14 @@ func _build_ui() -> void:
 	_native_palette_button.pressed.connect(_choose_palette_json)
 	native_row.add_child(_native_palette_button)
 
-	_native_palette_dialog = EditorFileDialog.new()
-	_native_palette_dialog.name = "NativePaletteJsonDialog"
-	_native_palette_dialog.file_mode = EditorFileDialog.FILE_MODE_OPEN_FILE
-	_native_palette_dialog.access = EditorFileDialog.ACCESS_FILESYSTEM
-	_native_palette_dialog.add_filter("*.json", "PixNido palette JSON")
-	_native_palette_dialog.file_selected.connect(_on_palette_json_selected)
-	add_child(_native_palette_dialog)
+	if Engine.is_editor_hint():
+		_native_palette_dialog = EditorFileDialog.new()
+		_native_palette_dialog.name = "NativePaletteJsonDialog"
+		_native_palette_dialog.file_mode = EditorFileDialog.FILE_MODE_OPEN_FILE
+		_native_palette_dialog.access = EditorFileDialog.ACCESS_FILESYSTEM
+		_native_palette_dialog.add_filter("*.json", "PixNido palette JSON")
+		_native_palette_dialog.file_selected.connect(_on_palette_json_selected)
+		add_child(_native_palette_dialog)
 
 	var servo_row := HBoxContainer.new()
 	servo_row.name = "ServoDependency"
@@ -271,6 +273,9 @@ func _refresh_native_actions() -> void:
 func _choose_palette_json() -> void:
 	if not _native_dialog_ready or not _native_source_allowed():
 		_set_status("Load the trusted PixNido page before importing a palette.", true)
+		return
+	if not is_instance_valid(_native_palette_dialog):
+		_set_status("This palette picker is available only in the Godot editor.", true)
 		return
 	_native_palette_dialog.popup_centered_ratio(0.7)
 
@@ -372,6 +377,9 @@ func _on_source_submitted(_value: String) -> void:
 
 
 func _choose_directory() -> void:
+	if not is_instance_valid(_folder_dialog):
+		_set_status("Choose an export folder from the Godot editor.", true)
+		return
 	_folder_dialog.current_dir = "res://"
 	_folder_dialog.popup_centered_ratio(0.7)
 
