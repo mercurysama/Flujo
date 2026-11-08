@@ -44,7 +44,7 @@ func _set_window_layout(configuration: ConfigFile) -> void:
 	_pixnido_export_directory = String(configuration.get_value(LAYOUT_SECTION, "pixnido_export_directory", "res://assets/sprites/"))
 	if is_instance_valid(_pixnido_dock):
 		_pixnido_dock.call(&"set_pixnido_source", _pixnido_source)
-	_pixnido_dock.call(&"set_pixnido_export_directory", _pixnido_export_directory)
+		_pixnido_dock.call(&"set_pixnido_export_directory", _pixnido_export_directory)
 	var saved_images: Variant = configuration.get_value(LAYOUT_SECTION, "reference_images", {})
 	if saved_images is Dictionary:
 		_reference_state = saved_images
