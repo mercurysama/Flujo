@@ -1,7 +1,7 @@
 # NidoLab — PixNido / References (EXP-01 through EXP-07)
 
 **Branch:** `experiment/pixnido-servo-dock`
-**Status:** EXP-01–07 experimental code; Linux Godot 4.7.2 headless CI passed; Fedora desktop visual inspection and native Servo integration remain pending. Android integration is deliberately paused.
+**Status:** EXP-01–08 experimental code; focus workspace ratio/reparent smoke and Linux Godot 4.7.2 headless CI passed; Fedora visual overlay and native Servo tests remain pending. Android integration is paused.
 **Isolation:** independent editor plugin at `addons/pixnido_panel_lab/`; no changes to `addons/vp_flujo/`, its runtime, F4 shortcut, or persistent model.
 
 ## Approved interaction contract
@@ -249,3 +249,13 @@ godot --headless --path . tests/model/flow_model_smoke_test.tscn
 **Decision:** Prefer a standalone opaque NidoLab overlay over private `SplitContainer` manipulation or a separate OS-level popup Window. The editor's public `EditorInterface.get_base_control()` gives a stable place for adding a user-owned Control; this is experimental and still requires visual stacking/focus verification. The overlay itself does not need native Servo.
 
 **Acceptance:** [ ] toolbar and Ctrl+Alt+N enter, [ ] NidoLab covers Godot without a visible gap, [ ] PixNido/References display side by side at 1:2 widths, [ ] hide/show/swap work, [ ] returning to Godot retains browser session and reference positions, [ ] exit and plugin disable cannot orphan controls, [ ] no extra editor errors or Flujo regressions, [ ] Fedora visual approval. CI success alone is insufficient.
+
+### EXP-08 implementation and verification — 2026-11-08
+
+- `addons/pixnido_panel_lab/focus_workspace.gd`: a dedicated opaque `PanelContainer` covering the editor's `EditorInterface.get_base_control()`. It contains two independently hideable columns with stretch ratios 1:2. Controls named PixNido and References are moved from their addon-owned dock containers into these columns; swapping reorders only the owned columns; neither `EditorDock` nor Godot editor internals are reparented.
+- `addons/pixnido_panel_lab/plugin.gd`: new focus action in the editor toolbar and Ctrl+Alt+N shortcut. Escape from focus uses the explicit `Back to Godot` button or the shortcut; no automatic focus launch at startup. Restores original addon children before removing the overlay on exit/plugin disable. Existing dock visibility/swap preferences still apply outside focus mode.
+- `addons/pixnido_panel_lab/panel_dock.gd`: exposes only its own content widget and reference image picker for the temporary overlay.
+- `tests/editor/nidolab_focus_smoke.gd`: headless test uses dummy addon bodies to verify reparenting, exact 1:2 width ratio to tolerance, swap order, hide/show and reparent restoration after closing.
+- [GitHub Actions run 42529479346](https://github.com/mercurysama/Flujo/actions/runs/42529479346) **SUCCESS**: JavaScript bridge and diff checks, Godot 4.7.2 editor import relative to the no-NidoLab baseline, writer smoke, NidoLab focus smoke (`[NidoLab] Focus workspace smoke test passed`) and Flujo model smoke. Expected editor shutdown warning `Scan thread aborted...` observed; no new editor `ERROR:` lines relative to baseline.
+- **Manual Fedora review remains open:** confirm this child overlay actually covers all editor UI (no gaps) and appears above the editor menus/docks at multiple window sizes, the native Servo browser is interactive, modal file pickers appear in front, and `Back to Godot` restores keyboard/mouse focus and the active PixNido/References session. Headless layout checks alone cannot prove these UI points.
+- **Compatibility:** native dock widths are still controlled by Godot; the 1:2 width is implemented for the opaque focus overlay, not for normal side docks. Android remains on pause. No native Servo binaries are bundled.
