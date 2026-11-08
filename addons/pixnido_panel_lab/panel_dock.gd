@@ -1,9 +1,12 @@
 @tool
 extends EditorDock
 
-## Experimental UI shell. HTML5 rendering and reference images are not connected yet.
+## Independent docks: reference image board is editor-only; HTML5 PixNido is pending.
 
 signal close_requested
+signal references_changed
+
+const REFERENCE_BOARD_SCRIPT := preload("res://addons/pixnido_panel_lab/reference_board.gd")
 
 const ANIMATION_SECONDS: float = 0.16
 const SLIDE_PIXELS: float = 20.0
@@ -15,6 +18,8 @@ var _content: VBoxContainer
 var _motion: Tween
 var _should_be_open: bool = false
 var _slide_from_right: bool = false
+var _board: Control
+var _file_dialog: EditorFileDialog
 
 
 func configure(new_panel_id: StringName, slot: int) -> void:
@@ -96,6 +101,32 @@ func _slide_offset() -> float:
 	return SLIDE_PIXELS if _slide_from_right else -SLIDE_PIXELS
 
 
+func get_references_state() -> Dictionary:
+	if not is_instance_valid(_board):
+		return {"version": 1, "next_id": 1, "items": []}
+	var state: Dictionary = _board.call(&"get_layout_state")
+	return state
+
+
+func set_references_state(state: Dictionary) -> void:
+	if is_instance_valid(_board):
+		_board.call(&"set_layout_state", state)
+
+
+func _open_reference_dialog() -> void:
+	if is_instance_valid(_file_dialog):
+		_file_dialog.popup_centered_ratio(0.7)
+
+
+func _on_files_selected(paths: PackedStringArray) -> void:
+	if is_instance_valid(_board):
+		_board.call(&"add_paths", paths)
+
+
+func _on_references_changed() -> void:
+	references_changed.emit()
+
+
 func _build_content(is_pixnido: bool) -> void:
 	var mask := Control.new()
 	mask.name = "ContentMask"
@@ -121,9 +152,9 @@ func _build_content(is_pixnido: bool) -> void:
 	header.add_child(heading)
 
 	if not is_pixnido:
-		_add_button = _make_button("Add reference (Phase 03)")
+		_add_button = _make_button("Add reference image")
 		_add_button.name = "AddReference"
-		_add_button.disabled = true
+		_add_button.pressed.connect(_open_reference_dialog)
 		header.add_child(_add_button)
 
 	_close_button = _make_button("Close panel")
@@ -131,18 +162,30 @@ func _build_content(is_pixnido: bool) -> void:
 	_close_button.pressed.connect(_on_close_pressed)
 	header.add_child(_close_button)
 
-	var center := CenterContainer.new()
-	center.name = "Placeholder"
-	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_child(center)
+	if is_pixnido:
+		var center := CenterContainer.new()
+		center.name = "Placeholder"
+		center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		content.add_child(center)
 
-	var message := Label.new()
-	message.name = "Status"
-	message.text = "HTML5 editor pending" if is_pixnido else "No reference images yet"
-	message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	center.add_child(message)
+		var message := Label.new()
+		message.name = "Status"
+		message.text = "HTML5 editor pending"
+		message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		center.add_child(message)
+	else:
+		_board = REFERENCE_BOARD_SCRIPT.new()
+		content.add_child(_board)
+		_board.connect(&"changed", _on_references_changed)
+
+		_file_dialog = EditorFileDialog.new()
+		_file_dialog.name = "ReferenceFilePicker"
+		_file_dialog.file_mode = EditorFileDialog.FILE_MODE_OPEN_FILES
+		_file_dialog.access = EditorFileDialog.ACCESS_FILESYSTEM
+		_file_dialog.add_filter("*.png, *.jpg, *.jpeg, *.webp, *.bmp", "Image files")
+		_file_dialog.files_selected.connect(_on_files_selected)
+		add_child(_file_dialog)
 
 
 func _make_button(hint: String) -> Button:

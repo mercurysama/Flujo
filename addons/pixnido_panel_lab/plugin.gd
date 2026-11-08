@@ -16,18 +16,27 @@ var _pixnido_open: bool = true
 var _references_open: bool = false
 var _swapped: bool = false
 var _registered_swapped: bool = false
+var _reference_state: Dictionary = {"version": 1, "next_id": 1, "items": []}
 
 
 func _get_window_layout(configuration: ConfigFile) -> void:
 	configuration.set_value(LAYOUT_SECTION, "pixnido_open", _pixnido_open)
 	configuration.set_value(LAYOUT_SECTION, "references_open", _references_open)
 	configuration.set_value(LAYOUT_SECTION, "swapped", _swapped)
+	if is_instance_valid(_references_dock):
+		_reference_state = _references_dock.call(&"get_references_state")
+	configuration.set_value(LAYOUT_SECTION, "reference_images", _reference_state)
 
 
 func _set_window_layout(configuration: ConfigFile) -> void:
 	_pixnido_open = bool(configuration.get_value(LAYOUT_SECTION, "pixnido_open", true))
 	_references_open = bool(configuration.get_value(LAYOUT_SECTION, "references_open", false))
 	_swapped = bool(configuration.get_value(LAYOUT_SECTION, "swapped", false))
+	var saved_images: Variant = configuration.get_value(LAYOUT_SECTION, "reference_images", {})
+	if saved_images is Dictionary:
+		_reference_state = saved_images
+	if is_instance_valid(_references_dock):
+		_references_dock.call(&"set_references_state", _reference_state)
 	if is_instance_valid(_pixnido_dock) and is_instance_valid(_references_dock):
 		_apply_registered_sides()
 		_apply_visibility.call_deferred()
@@ -65,6 +74,8 @@ func _enter_tree() -> void:
 	_references_dock = PANEL_DOCK_SCRIPT.new()
 	_references_dock.call(&"configure", &"references", EditorDock.DOCK_SLOT_RIGHT_UR)
 	_references_dock.connect(&"close_requested", _close_references)
+	_references_dock.connect(&"references_changed", _on_references_changed)
+	_references_dock.call(&"set_references_state", _reference_state)
 	_references_dock.call(&"set_slide_side", true)
 	add_dock(_references_dock)
 
@@ -91,6 +102,10 @@ func _exit_tree() -> void:
 		remove_dock(_pixnido_dock)
 		_pixnido_dock.queue_free()
 	_pixnido_dock = null
+
+
+func _on_references_changed() -> void:
+	queue_save_layout()
 
 
 func _build_toolbar() -> void:
