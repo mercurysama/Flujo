@@ -1,7 +1,7 @@
-# PixNido Panel Lab — EXP-01
+# PixNido Panel Lab — EXP-01 / EXP-02
 
 **Branch:** `experiment/pixnido-servo-dock`
-**Status:** structural prototype, pending Godot 4.7.2 execution and visual approval.
+**Status:** EXP-01 / EXP-02 code prepared; Godot 4.7.2 execution and visual approval pending.
 **Isolation:** independent editor plugin at `addons/pixnido_panel_lab/`; no changes to `addons/vp_flujo/`, its runtime, F4 shortcut, or persistent model.
 
 ## Approved interaction contract
@@ -13,7 +13,7 @@
 - PNL-05: Swapping reverses initial left/right slots without destroying either panel instance.
 - PNL-06: References may be used even when PixNido is closed.
 - PNL-07: Target widths are PixNido 1/3 and References 2/3 of the available horizontal space, **including when one is hidden**; unused space remains available to Godot.
-- PNL-08 (future): keyboard shortcuts, smooth slide-in/out, and session layout persistence.
+- PNL-08 (EXP-02 code prepared): keyboard shortcuts, animated inner-panel content, and per-project editor layout persistence.
 - PNL-09 (future): freely movable/resizable reference images, per-project storage and controls on selection.
 - PNL-10 (future): HTML5 PixNido via a compatible WebView/Servo extension; avoid modifying PixNido's source app.
 - PNL-11 (future): sprite export to project paths, default `res://assets/sprites/`, via a vetted JS-to-GDScript bridge.
@@ -34,7 +34,7 @@ This step implements PNL-01 through PNL-06 as an **editor dock shell**. The `+` 
 - [ ] Verify `+` is visible and disabled; no file dialog or fake reference is created.
 - [ ] Check compact editor layout, tooltips and keyboard focus.
 - [ ] Disable the test plugin; its docks and toolbar are fully removed.
-- [ ] Check editor restart and reopen; persistent session state is *not yet implemented*.
+- [ ] Check editor restart and reopen; EXP-02 should restore visibility and swapped sides.
 - [ ] Capture editor load, existing model smoke test, and any warnings separately.
 
 ## Evidence and trace
@@ -43,3 +43,22 @@ PNL-01..06 → `addons/pixnido_panel_lab/plugin.gd`, `panel_dock.gd` → manual 
 
 **Tests:** Cannot claim execution without a Godot 4.7.2 runtime. CI/manual verification required.
 **Metrics:** test duration: not measured; defects: unknown; review time: not measured.
+
+## EXP-02 — keyboard, transition, session persistence
+
+- **PNL-08A:** Ctrl+Alt+P toggles PixNido; Ctrl+Alt+R toggles References; Ctrl+Alt+I swaps sides. The plugin uses Node._shortcut_input; conflicts and input focus must be tested. Flujo F4 remains unchanged.
+- **PNL-08B:** Smooth 0.16-second Tween of content alpha and horizontal offset (20 pixels) inside each dock. Rapid repeated toggles kill prior transitions. The native Godot dock/tab/splitter does not physically slide; animating editor internals is deferred.
+- **PNL-08C:** EditorPlugin._get_window_layout / _set_window_layout save pixnido_open, references_open, and swapped to Godot's per-project editor_layout.cfg. Every user toggle, X, or swap calls queue_save_layout; no separate configuration or runtime files are created.
+- **Compatibility:** Session state is project/editor-local. Swapping docks re-registers their default slots, which may reset user-dragged placements. The precise 1:2 width ratio (PNL-07) is unimplemented.
+
+### EXP-02 verification (still pending Godot 4.7.2)
+
+- [ ] Open, close and swap with toolbar icons, X buttons and all three shortcuts.
+- [ ] Toggle rapidly while fading/sliding, with one or both docks open.
+- [ ] Restart Godot and verify panel visibility and swapped sides are restored.
+- [ ] Confirm References can remain open by itself.
+- [ ] Check shortcut collisions, focus handling and layout behavior on Fedora / Android.
+- [ ] Run headless editor import and existing model smoke test; run git diff --check.
+- [ ] Review editor startup logs, visual UI, plugin disable/re-enable, and unchanged Flujo F4.
+
+Trace: PNL-08A/08C → addons/pixnido_panel_lab/plugin.gd; PNL-08B → addons/pixnido_panel_lab/panel_dock.gd. Rationale: native editor layout persistence is preferable to machine-specific configuration paths; internal-content Tweens are less invasive than altering editor splitters. Test metrics remain not measured; runtime verification is not claimed.

@@ -5,9 +5,16 @@ extends EditorDock
 
 signal close_requested
 
+const ANIMATION_SECONDS: float = 0.16
+const SLIDE_PIXELS: float = 20.0
+
 var panel_id: StringName = &""
 var _close_button: Button
 var _add_button: Button
+var _content: VBoxContainer
+var _motion: Tween
+var _should_be_open: bool = false
+var _slide_from_right: bool = false
 
 
 func configure(new_panel_id: StringName, slot: int) -> void:
@@ -22,6 +29,7 @@ func configure(new_panel_id: StringName, slot: int) -> void:
 	global = false
 	closable = false
 	transient = true
+	_slide_from_right = not is_pixnido
 	_build_content(is_pixnido)
 
 
@@ -31,13 +39,77 @@ func _ready() -> void:
 		_apply_editor_icon(_add_button, &"Add", "+")
 
 
+func _exit_tree() -> void:
+	cancel_motion()
+
+
+func set_slide_side(from_right: bool) -> void:
+	_slide_from_right = from_right
+
+
+func cancel_motion() -> void:
+	if _motion != null:
+		_motion.kill()
+		_motion = null
+	if is_instance_valid(_content):
+		_content.modulate.a = 1.0
+		_content.position.x = 0.0
+
+
+func show_panel(animated: bool = true) -> void:
+	cancel_motion()
+	_should_be_open = true
+	make_visible()
+	if not animated or not is_instance_valid(_content):
+		return
+	_content.modulate.a = 0.0
+	_content.position.x = _slide_offset()
+	_motion = create_tween()
+	_motion.set_trans(Tween.TRANS_CUBIC)
+	_motion.set_ease(Tween.EASE_OUT)
+	_motion.tween_property(_content, "modulate:a", 1.0, ANIMATION_SECONDS)
+	_motion.parallel().tween_property(_content, "position:x", 0.0, ANIMATION_SECONDS)
+
+
+func hide_panel(animated: bool = true) -> void:
+	cancel_motion()
+	_should_be_open = false
+	if not animated or not is_visible_in_tree() or not is_instance_valid(_content):
+		close()
+		return
+	_motion = create_tween()
+	_motion.set_trans(Tween.TRANS_CUBIC)
+	_motion.set_ease(Tween.EASE_IN)
+	_motion.tween_property(_content, "modulate:a", 0.0, ANIMATION_SECONDS)
+	_motion.parallel().tween_property(_content, "position:x", _slide_offset(), ANIMATION_SECONDS)
+	_motion.finished.connect(_finish_hide)
+
+
+func _finish_hide() -> void:
+	if _should_be_open:
+		return
+	close()
+	cancel_motion()
+
+
+func _slide_offset() -> float:
+	return SLIDE_PIXELS if _slide_from_right else -SLIDE_PIXELS
+
+
 func _build_content(is_pixnido: bool) -> void:
+	var mask := Control.new()
+	mask.name = "ContentMask"
+	mask.clip_contents = true
+	mask.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mask.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	mask.custom_minimum_size = Vector2(180, 170) if is_pixnido else Vector2(260, 170)
+	add_child(mask)
+
 	var content := VBoxContainer.new()
 	content.name = "Content"
-	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.custom_minimum_size = Vector2(180, 170) if is_pixnido else Vector2(260, 170)
-	add_child(content)
+	mask.add_child(content)
+	content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_content = content
 
 	var header := HBoxContainer.new()
 	header.name = "Header"
