@@ -235,3 +235,17 @@ godot --headless --path . tests/model/flow_model_smoke_test.tscn
 - The requested 1:2 dock width ratio remains **unimplemented and unverified** because Godot's public `EditorDock` API does not expose proportional sizing. Do not manipulate private splitter objects as a shortcut.
 
 **EXP-07 engineering flow:** code change on isolated branch, GitHub CI success; Fedora native Servo, Android, visual metrics and proportional sizing not measured. Next review: Fedora Godot UI and manual Servo installation, then decide whether to keep native dock sizing user-adjustable or adopt a documented custom arrangement.
+
+## EXP-08 — NidoLab full-editor focus workspace (supersedes the side-dock-only assumption)
+
+**User clarification (2026-11-08):** When actively editing pixel art, NidoLab **should cover Godot's interface**, rather than leaving the editor in the middle of two docks. The goal is uninterrupted drawing with easy, reversible return to Godot. The existing independently usable editor docks remain available outside focus mode.
+
+- **PNL-13A:** Add a dedicated **NidoLab Focus** entry action (Ctrl+Alt+N plus toolbar icon). This must be user-initiated, not restored automatically on startup. A visible **Back to Godot** control, plus the same shortcut, always exits. No trapping users in the overlay.
+- **PNL-13B:** Full-rect opaque editor-workspace overlay, parented to `EditorInterface.get_base_control()` as a child, never freeing or reparenting Godot's editor controls. It covers all dock/editor UI while active. The contained PixNido and References widgets are **reparented from our own two dock children**, so active work and reference positions are preserved without recreating the browser.
+- **PNL-13C:** In focus mode, a stable two-column split assigns 1/3 of available width to PixNido and 2/3 to References. Both zones remain opaque even when their panel is hidden: only the NidoLab workspace is visible, not a hole revealing Godot. Swap panes, close/show each independently and add references without leaving the workspace. The ratio is a focus-mode goal, not a guarantee for Godot's native side docks.
+- **PNL-13D:** Exiting or disabling the plugin restores each original widget to its original add-on parent, preserving editor layout state. No changes to the runtime, F4, native Servo package, or the public PixNido PWA. Close/open/swap state persists in the regular dock layout; the temporary overlay does **not** auto-launch on restart.
+- **PNL-13E:** Run headless editor and model smoke regressions, a focused node-reparent/layout test where possible, and manual real-editor tests later in Fedora. Keep Android suspended.
+
+**Decision:** Prefer a standalone opaque NidoLab overlay over private `SplitContainer` manipulation or a separate OS-level popup Window. The editor's public `EditorInterface.get_base_control()` gives a stable place for adding a user-owned Control; this is experimental and still requires visual stacking/focus verification. The overlay itself does not need native Servo.
+
+**Acceptance:** [ ] toolbar and Ctrl+Alt+N enter, [ ] NidoLab covers Godot without a visible gap, [ ] PixNido/References display side by side at 1:2 widths, [ ] hide/show/swap work, [ ] returning to Godot retains browser session and reference positions, [ ] exit and plugin disable cannot orphan controls, [ ] no extra editor errors or Flujo regressions, [ ] Fedora visual approval. CI success alone is insufficient.
