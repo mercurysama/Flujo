@@ -8,7 +8,7 @@ signal source_changed(new_source: String)
 signal export_directory_changed
 
 const DEFAULT_SOURCE: String = "https://pixnido.pages.dev/"
-const SERVO_SCRIPT_PATH: String = "res://addons/godot_servo/servo_texture_rect.gd"
+const SERVO_SCRIPT_PATH: String = "res://addons/pixnido_panel_lab/servo_editor_texture_rect.gd"
 const SERVO_CURSORS_PATH: String = "res://addons/godot_servo/cursors.gd"
 const EXPORT_BRIDGE_PATH: String = "res://addons/pixnido_panel_lab/pixnido_export_bridge.js"
 const WRITER := preload("res://addons/pixnido_panel_lab/sprite_export_writer.gd")
