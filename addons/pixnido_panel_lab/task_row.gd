@@ -72,6 +72,7 @@ func start_edit() -> void:
 
 func _build() -> void:
 	var inner := HBoxContainer.new()
+	inner.name = "TaskContents"
 	inner.add_theme_constant_override("separation", 4)
 	add_child(inner)
 	_handle = DRAG_HANDLE.new()

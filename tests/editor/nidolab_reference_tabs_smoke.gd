@@ -66,7 +66,7 @@ func _check() -> void:
 		if not bool(list[2].get("completed", false)):
 			failures.append("Completed checkbox state was not saved")
 		var row: Node = task_list.get_node("TaskScroll/TaskItems/TaskRow_task_1")
-		var source: Control = row.get_node("HBoxContainer/DragTask")
+		var source: Control = row.get_node("TaskContents/DragTask")
 		var data: Variant = source.call(&"_get_drag_data", Vector2.ZERO)
 		var target: Node = task_list.get_node("TaskScroll/TaskItems/TaskRow_task_2")
 		if not data is Dictionary or not bool(target.call(&"_can_drop_data", Vector2(3, 3), data)):

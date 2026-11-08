@@ -40,7 +40,9 @@ func _ready() -> void:
 	var icon_names: Array[StringName] = [&"Texture2D", &"Edit", &"CheckBox"]
 	var fallback: Array[String] = ["▧", "✎", "☑"]
 	var tooltips: Array[String] = ["Image references", "Text notes", "Task checklist"]
-	var theme: Theme = EditorInterface.get_editor_theme()
+	var theme: Theme = null
+	if Engine.is_editor_hint():
+		theme = EditorInterface.get_editor_theme()
 	for index in range(3):
 		set_tab_title(index, "")
 		set_tab_tooltip(index, tooltips[index])
