@@ -23,7 +23,7 @@ window/size/window_height_override=540
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/vp_flujo/plugin.cfg")
+enabled=PackedStringArray("res://addons/vp_flujo/plugin.cfg", "res://addons/pixnido_panel_lab/plugin.cfg")
 
 [rendering]
 
