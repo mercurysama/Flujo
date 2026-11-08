@@ -76,6 +76,12 @@ jobs:
         run: |
           set -o pipefail
           godot --headless --path . --script res://tests/editor/pixnido_export_writer_smoke.gd 2>&1 | tee pixnido-writer.log
+      - name: NidoLab focus overlay behavior
+        shell: bash
+        run: |
+          set -o pipefail
+          godot --headless --path . --script res://tests/editor/nidolab_focus_smoke.gd 2>&1 | tee nidolab-focus.log
+          grep -F "[NidoLab] Focus workspace smoke test passed" nidolab-focus.log
       - name: Regression model smoke
         shell: bash
         run: |
@@ -94,5 +100,6 @@ jobs:
             pixnido-errors.txt
             new-editor-errors.txt
             pixnido-writer.log
+            nidolab-focus.log
             flujo-smoke.log
           if-no-files-found: ignore
