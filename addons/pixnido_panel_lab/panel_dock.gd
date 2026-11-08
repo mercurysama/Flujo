@@ -105,6 +105,14 @@ func _slide_offset() -> float:
 	return SLIDE_PIXELS if _slide_from_right else -SLIDE_PIXELS
 
 
+func get_workspace_body() -> Control:
+	return _pixnido_host if panel_id == &"pixnido" else _board
+
+
+func open_reference_picker() -> void:
+	_open_reference_dialog()
+
+
 func get_pixnido_source() -> String:
 	if not is_instance_valid(_pixnido_host):
 		return "https://pixnido.pages.dev/"

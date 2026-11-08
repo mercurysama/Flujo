@@ -4,6 +4,7 @@ extends EditorPlugin
 ## Isolated experiment: never modifies Flujo's existing dock or F4 behavior.
 
 const PANEL_DOCK_SCRIPT := preload("res://addons/pixnido_panel_lab/panel_dock.gd")
+const FOCUS_WORKSPACE_SCRIPT := preload("res://addons/pixnido_panel_lab/focus_workspace.gd")
 const LAYOUT_SECTION: String = "PixNidoPanelLab"
 
 var _pixnido_dock: EditorDock
@@ -11,6 +12,8 @@ var _references_dock: EditorDock
 var _toolbar: HBoxContainer
 var _pixnido_button: Button
 var _references_button: Button
+var _focus_button: Button
+var _focus_workspace: Control
 
 var _pixnido_open: bool = true
 var _references_open: bool = false
@@ -72,6 +75,8 @@ func _shortcut_input(event: InputEvent) -> void:
 			_toggle_references()
 		KEY_I:
 			_swap_sides()
+		KEY_N:
+			_toggle_focus_workspace()
 		_:
 			return
 	get_viewport().set_input_as_handled()
@@ -101,12 +106,14 @@ func _enter_tree() -> void:
 
 
 func _exit_tree() -> void:
+	_leave_focus_workspace(false)
 	if is_instance_valid(_toolbar):
 		remove_control_from_container(EditorPlugin.CONTAINER_TOOLBAR, _toolbar)
 		_toolbar.queue_free()
 	_toolbar = null
 	_pixnido_button = null
 	_references_button = null
+	_focus_button = null
 
 	if is_instance_valid(_references_dock):
 		_references_dock.call(&"cancel_motion")
@@ -153,6 +160,12 @@ func _build_toolbar() -> void:
 	_references_button.pressed.connect(_toggle_references)
 	_toolbar.add_child(_references_button)
 
+	_focus_button = _make_button(&"DistractionFree", "▣", "Open NidoLab focus workspace (Ctrl+Alt+N)")
+	_focus_button.toggle_mode = true
+	_focus_button.button_pressed = false
+	_focus_button.pressed.connect(_toggle_focus_workspace)
+	_toolbar.add_child(_focus_button)
+
 	add_control_to_container(EditorPlugin.CONTAINER_TOOLBAR, _toolbar)
 
 
@@ -173,28 +186,40 @@ func _make_button(icon_id: StringName, fallback: String, hint: String) -> Button
 
 func _toggle_pixnido() -> void:
 	_pixnido_open = not _pixnido_open
-	_set_dock_visible(_pixnido_dock, _pixnido_open)
+	if is_instance_valid(_focus_workspace):
+		_focus_workspace.call(&"set_pane_visibility", &"pixnido", _pixnido_open)
+	else:
+		_set_dock_visible(_pixnido_dock, _pixnido_open)
 	_sync_button_states()
 	queue_save_layout()
 
 
 func _toggle_references() -> void:
 	_references_open = not _references_open
-	_set_dock_visible(_references_dock, _references_open)
+	if is_instance_valid(_focus_workspace):
+		_focus_workspace.call(&"set_pane_visibility", &"references", _references_open)
+	else:
+		_set_dock_visible(_references_dock, _references_open)
 	_sync_button_states()
 	queue_save_layout()
 
 
 func _close_pixnido() -> void:
 	_pixnido_open = false
-	_set_dock_visible(_pixnido_dock, false)
+	if is_instance_valid(_focus_workspace):
+		_focus_workspace.call(&"set_pane_visibility", &"pixnido", false)
+	else:
+		_set_dock_visible(_pixnido_dock, false)
 	_sync_button_states()
 	queue_save_layout()
 
 
 func _close_references() -> void:
 	_references_open = false
-	_set_dock_visible(_references_dock, false)
+	if is_instance_valid(_focus_workspace):
+		_focus_workspace.call(&"set_pane_visibility", &"references", false)
+	else:
+		_set_dock_visible(_references_dock, false)
 	_sync_button_states()
 	queue_save_layout()
 
@@ -203,8 +228,78 @@ func _swap_sides() -> void:
 	if not is_instance_valid(_pixnido_dock) or not is_instance_valid(_references_dock):
 		return
 	_swapped = not _swapped
-	_apply_registered_sides()
+	if is_instance_valid(_focus_workspace):
+		_focus_workspace.call(&"set_swapped", _swapped)
+	else:
+		_apply_registered_sides()
 	queue_save_layout()
+
+
+func _toggle_focus_workspace() -> void:
+	if is_instance_valid(_focus_workspace):
+		_leave_focus_workspace()
+	else:
+		_enter_focus_workspace()
+
+
+func _enter_focus_workspace() -> void:
+	if is_instance_valid(_focus_workspace):
+		return
+	if not is_instance_valid(_pixnido_dock) or not is_instance_valid(_references_dock):
+		return
+	var editor_root: Control = EditorInterface.get_base_control()
+	if not is_instance_valid(editor_root):
+		push_warning("NidoLab: cannot access the Godot editor root.")
+		return
+	var pix: Control = _pixnido_dock.call(&"get_workspace_body")
+	var references: Control = _references_dock.call(&"get_workspace_body")
+	if not is_instance_valid(pix) or not is_instance_valid(references):
+		push_warning("NidoLab: editor panel content is not ready.")
+		return
+
+	var workspace: Control = FOCUS_WORKSPACE_SCRIPT.new()
+	workspace.connect(&"exit_requested", _leave_focus_workspace)
+	workspace.connect(&"pane_visibility_changed", _on_focus_pane_visibility_changed)
+	workspace.connect(&"swap_requested", _swap_sides)
+	workspace.connect(&"add_reference_requested", _on_focus_add_reference)
+	editor_root.add_child(workspace)
+	workspace.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	if not bool(workspace.call(&"attach_contents", pix, references, _pixnido_open, _references_open, _swapped)):
+		workspace.queue_free()
+		push_warning("NidoLab: unable to enter focus workspace.")
+		return
+	_focus_workspace = workspace
+	workspace.move_to_front()
+	workspace.grab_focus()
+	_sync_button_states()
+
+
+func _leave_focus_workspace(restore_editor: bool = true) -> void:
+	if not is_instance_valid(_focus_workspace):
+		return
+	var workspace: Control = _focus_workspace
+	_focus_workspace = null
+	workspace.call(&"restore_contents")
+	workspace.queue_free()
+	if restore_editor and is_inside_tree():
+		_apply_registered_sides()
+		_apply_visibility.call_deferred()
+		queue_save_layout()
+	_sync_button_states()
+
+
+func _on_focus_pane_visibility_changed(panel: StringName, opening: bool) -> void:
+	if panel == &"pixnido":
+		_pixnido_open = opening
+	elif panel == &"references":
+		_references_open = opening
+	_sync_button_states()
+	queue_save_layout()
+
+
+func _on_focus_add_reference() -> void:
+	if is_instance_valid(_references_dock):
+		_references_dock.call(&"open_reference_picker")
 
 
 func _apply_registered_sides() -> void:
@@ -259,3 +354,5 @@ func _sync_button_states() -> void:
 		_pixnido_button.button_pressed = _pixnido_open
 	if is_instance_valid(_references_button):
 		_references_button.button_pressed = _references_open
+	if is_instance_valid(_focus_button):
+		_focus_button.button_pressed = is_instance_valid(_focus_workspace)
