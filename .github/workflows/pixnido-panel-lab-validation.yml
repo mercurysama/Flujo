@@ -1,0 +1,63 @@
+name: PixNido panel lab validation
+
+on:
+  push:
+    branches:
+      - experiment/pixnido-servo-dock
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bridge-js:
+    name: Bridge protocol and whitespace
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: JavaScript bridge protocol
+        run: node tests/editor/pixnido_export_bridge.test.cjs
+      - name: Changed-file whitespace check
+        run: git diff --check HEAD~1 HEAD
+
+  godot-headless:
+    name: Godot 4.7.2 project and sprite writer
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download official Godot 4.7.2 Linux build
+        shell: bash
+        run: |
+          curl -fL --retry 3 --retry-delay 2 \
+            "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip" \
+            -o "$RUNNER_TEMP/godot.zip"
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot-bin"
+          chmod +x "$RUNNER_TEMP/godot-bin/Godot_v4.7.2-stable_linux.x86_64"
+          echo "$RUNNER_TEMP/godot-bin" >> "$GITHUB_PATH"
+          mv "$RUNNER_TEMP/godot-bin/Godot_v4.7.2-stable_linux.x86_64" "$RUNNER_TEMP/godot-bin/godot"
+      - name: Check Godot version
+        run: godot --version | grep "4.7.2"
+      - name: Import project and parse plugins
+        run: godot --headless --editor --path . --quit-after 5 2>&1 | tee godot-import.log
+      - name: Test sprite writer
+        run: godot --headless --editor --path . --script res://tests/editor/pixnido_export_writer_smoke.gd 2>&1 | tee pixnido-writer.log
+      - name: Regression model smoke
+        shell: bash
+        run: |
+          godot --headless --path . tests/model/flow_model_smoke_test.tscn 2>&1 | tee flujo-smoke.log
+          grep -F "[Flujo] Model smoke test passed" flujo-smoke.log
+      - name: Upload validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pixnido-lab-validation-logs
+          path: |
+            godot-import.log
+            pixnido-writer.log
+            flujo-smoke.log
+          if-no-files-found: ignore
