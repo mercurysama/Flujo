@@ -1,7 +1,7 @@
 # NidoLab — PixNido / References (EXP-01 through EXP-07)
 
 **Branch:** `experiment/pixnido-servo-dock`
-**Status:** EXP-01–05 code in experimental branch; EXP-06 headless CI verification completed (Linux Godot 4.7.2, without native Servo); interactive Fedora/Android and Servo-WebView validation remain pending.
+**Status:** EXP-01–07 experimental code; Linux Godot 4.7.2 headless CI passed; Fedora desktop visual inspection and native Servo integration remain pending. Android integration is deliberately paused.
 **Isolation:** independent editor plugin at `addons/pixnido_panel_lab/`; no changes to `addons/vp_flujo/`, its runtime, F4 shortcut, or persistent model.
 
 ## Approved interaction contract
@@ -223,3 +223,15 @@ godot --headless --path . tests/model/flow_model_smoke_test.tscn
 - [ ] Manual visual review remains necessary; do not mark exact width ratios or live Servo rendering as verified.
 
 **Implementation rationale:** visible, optional dependencies and compact controls help keep this egg independent of Flujo. Alternatives rejected: copying Servo native binaries into the repository, adding a fourth toolbar action, changing serialized dock identifiers, or setting widths via undocumented editor nodes. **Trace:** PNL-12A/B → `pixnido_servo_host.gd`; PNL-12C → `reference_board.gd`; PNL-12D → `panel_dock.gd`, `plugin.cfg`; verification via existing CI plus manual checklist. Engineering time, performance and Windows compatibility: not measured.
+
+### EXP-07 validation evidence — 2026-11-08
+
+- <https://github.com/mercurysama/Flujo/actions/runs/42527867134> — GitHub Actions completed **success** for `45d2f76ef64ba0409feb60d73925afd80b59e10a`; both jobs passed (JavaScript bridge protocol/whitespace and Godot 4.7.2 editor baseline comparison, sprite writer, Flujo model smoke).
+- Implemented plugin display name **NidoLab** without renaming the `addons/pixnido_panel_lab/` source directory, dock layout keys, saved settings or the two dock titles. The plugin remains independently disableable; `main` and `addons/vp_flujo/` untouched.
+- PixNido URL remains in its own row; output action icons are in a separate row. Servo detection is read-only; the Get Servo button opens the official releases page only when clicked and only in the missing-addon state. No bundled binaries or automatic downloads.
+- ReferenceCanvas now focuses on selection and supports arrow-key movement (1 px), Shift+arrow resize (10 px), Delete and Escape; all require board focus. This prevents global shortcut interception in principle, but keyboard focus transition and visual behavior **still need a real Fedora review**.
+- Headless editor startup reported `Scan thread aborted...` during planned shutdown; no additional editor `ERROR:` messages were found compared with baseline. These do not validate GUI usability.
+- Android integration is paused by maintainer preference, not removed: do not count Android installation, screen, performance or touch tests as accepted.
+- The requested 1:2 dock width ratio remains **unimplemented and unverified** because Godot's public `EditorDock` API does not expose proportional sizing. Do not manipulate private splitter objects as a shortcut.
+
+**EXP-07 engineering flow:** code change on isolated branch, GitHub CI success; Fedora native Servo, Android, visual metrics and proportional sizing not measured. Next review: Fedora Godot UI and manual Servo installation, then decide whether to keep native dock sizing user-adjustable or adopt a documented custom arrangement.
