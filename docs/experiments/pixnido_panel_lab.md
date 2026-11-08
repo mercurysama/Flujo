@@ -1,4 +1,4 @@
-# PixNido Panel Lab — EXP-01 / EXP-02 / EXP-03 / EXP-04 / EXP-05 / EXP-06
+# NidoLab — PixNido / References (EXP-01 through EXP-07)
 
 **Branch:** `experiment/pixnido-servo-dock`
 **Status:** EXP-01–05 code in experimental branch; EXP-06 headless CI verification completed (Linux Godot 4.7.2, without native Servo); interactive Fedora/Android and Servo-WebView validation remain pending.
@@ -201,3 +201,25 @@ godot --headless --path . tests/model/flow_model_smoke_test.tscn
 4. **UI tests on Fedora and Android** are not performed by the headless CI; no human visual approval is claimed.
 
 **Decision:** Keep `experiment/pixnido-servo-dock` isolated. Do not merge into `main` until the interactive checks and the 1:2 layout requirement are resolved or explicitly re-scoped by the maintainer. Runtime metrics and Android outcomes are unknown.
+
+## EXP-07 — NidoLab identity and keyboard-friendly compact panels
+
+**Name:** `NidoLab` is the provisional identity of this *optional, independent* editor utility, not a Flujo glossary term or part of Flujo's runtime. The two panels retain their existing titles `PixNido` and `References`; existing internal paths, dock keys, layout persistence keys and public URL remain unchanged for compatibility.
+
+- **PNL-12A, compact PixNido UI:** separate the source URL row from the sprite export actions. The row widths should remain usable in a narrow Godot dock; full file destinations are preserved in tooltips. Retain the existing three icon-only **global** toolbar buttons and all shortcuts.
+- **PNL-12B, optional Servo:** present a read-only installed/missing status based on native-class detection, with an explicit user-action link to the upstream releases. Never download binaries silently or package native Servo libraries in Flujo/NidoLab.
+- **PNL-12C, References keyboard:** allow focus-guarded arrow-key nudge of the selected image, Shift+arrow to resize, Delete to remove the selected reference and Escape to deselect. Do not steal keys from Godot when the board lacks focus. Only changes to the selected image should be persisted.
+- **PNL-12D, layout integrity:** keep independent dock visibility, close, swap and persistence semantics; no changes under `addons/vp_flujo/`, no new runtime dependencies or changed F4 behavior.
+- **PNL-07 remains pending:** Godot 4.7.2's documented `EditorDock` API exposes placement, visibility and floating layouts but **no controlled proportional width**. Do not manipulate private editor splitters to fake the 1:2 widths; measure real behavior manually before deciding on an alternative.
+
+### EXP-07 acceptance
+
+- [ ] On Linux Godot 4.7.2, load NidoLab with no Servo extension: helpful status, accessible manual-install action, no automatic network request.
+- [ ] In narrow left/right docks, URL editor, Play, Save, Folder, and status remain usable without horizontal overflow.
+- [ ] Open References alone; select one image, nudge using arrows, resize using Shift+arrows, delete and deselect with keyboard.
+- [ ] Switch focus to Godot's script editor and confirm its arrow/Delete/ESC keys remain unaffected.
+- [ ] Reopen editor and ensure the prior session's panel configuration, paths, image coordinates and stacking order persist.
+- [ ] Linux CI: `git diff --check`, editor startup against baseline, writer smoke, JS bridge, and original Flujo model smoke.
+- [ ] Manual visual review remains necessary; do not mark exact width ratios or live Servo rendering as verified.
+
+**Implementation rationale:** visible, optional dependencies and compact controls help keep this egg independent of Flujo. Alternatives rejected: copying Servo native binaries into the repository, adding a fourth toolbar action, changing serialized dock identifiers, or setting widths via undocumented editor nodes. **Trace:** PNL-12A/B → `pixnido_servo_host.gd`; PNL-12C → `reference_board.gd`; PNL-12D → `panel_dock.gd`, `plugin.cfg`; verification via existing CI plus manual checklist. Engineering time, performance and Windows compatibility: not measured.
