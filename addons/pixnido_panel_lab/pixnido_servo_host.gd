@@ -12,6 +12,8 @@ const SERVO_SCRIPT_PATH: String = "res://addons/pixnido_panel_lab/servo_editor_t
 const SERVO_CURSORS_PATH: String = "res://addons/godot_servo/cursors.gd"
 const SERVO_INSTALL_URL: String = "https://github.com/shiena/godot-servo/releases/latest"
 const EXPORT_BRIDGE_PATH: String = "res://addons/pixnido_panel_lab/pixnido_export_bridge.js"
+const NATIVE_DIALOGS_SCRIPT: String = "res://addons/pixnido_panel_lab/pixnido_native_dialogs.js"
+const MAX_PALETTE_BYTES: int = 32768
 const WRITER := preload("res://addons/pixnido_panel_lab/sprite_export_writer.gd")
 const CHUNK_SIZE: int = 8192
 const MAX_LENGTH: int = 44739248
@@ -23,6 +25,12 @@ var _open_button: Button
 var _save_button: Button
 var _folder_button: Button
 var _folder_dialog: EditorFileDialog
+var _native_palette_dialog: EditorFileDialog
+var _native_palette_button: Button
+var _native_color_button: ColorPickerButton
+var _native_dialog_ready: bool = false
+var _opened_source: String = ""
+var _last_native_color: String = ""
 var _servo_status_label: Label
 var _servo_install_button: Button
 var _destination_label: Label
@@ -54,7 +62,9 @@ func _ready() -> void:
 	_apply_icon(_open_button, &"Play", "▶")
 	_apply_icon(_save_button, &"Save", "↓")
 	_apply_icon(_folder_button, &"Folder", "▱")
+	_apply_icon(_native_palette_button, &"FileJson", "⇧")
 	_refresh_servo_status()
+	_refresh_native_actions()
 
 
 func _process(_delta: float) -> void:
@@ -147,6 +157,41 @@ func _build_ui() -> void:
 	_folder_dialog.dir_selected.connect(_on_directory_selected)
 	add_child(_folder_dialog)
 
+	# Separate compact row: native pickers work around Servo's unsupported
+	# HTML file/color dialogs without changing the published PixNido app.
+	var native_row := HBoxContainer.new()
+	native_row.name = "NativePaletteActions"
+	add_child(native_row)
+
+	var native_caption := Label.new()
+	native_caption.text = "Palette"
+	native_caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	native_row.add_child(native_caption)
+
+	_native_color_button = ColorPickerButton.new()
+	_native_color_button.name = "NativeColorPicker"
+	_native_color_button.color = Color("#ff4f64")
+	_native_color_button.tooltip_text = "Choose a PixNido color using Godot's native color picker"
+	_native_color_button.custom_minimum_size = Vector2(32, 30)
+	_native_color_button.popup_closed.connect(_on_native_color_closed)
+	native_row.add_child(_native_color_button)
+
+	_native_palette_button = Button.new()
+	_native_palette_button.name = "ImportPaletteJson"
+	_native_palette_button.flat = true
+	_native_palette_button.tooltip_text = "Choose a PixNido palette JSON file (not a pixel-art image)"
+	_native_palette_button.custom_minimum_size = Vector2(32, 30)
+	_native_palette_button.pressed.connect(_choose_palette_json)
+	native_row.add_child(_native_palette_button)
+
+	_native_palette_dialog = EditorFileDialog.new()
+	_native_palette_dialog.name = "NativePaletteJsonDialog"
+	_native_palette_dialog.file_mode = EditorFileDialog.FILE_MODE_OPEN_FILE
+	_native_palette_dialog.access = EditorFileDialog.ACCESS_FILESYSTEM
+	_native_palette_dialog.add_filter("*.json", "PixNido palette JSON")
+	_native_palette_dialog.file_selected.connect(_on_palette_json_selected)
+	add_child(_native_palette_dialog)
+
 	var servo_row := HBoxContainer.new()
 	servo_row.name = "ServoDependency"
 	add_child(servo_row)
@@ -182,7 +227,9 @@ func _build_ui() -> void:
 
 
 func _apply_icon(button: Button, icon_id: StringName, fallback: String) -> void:
-	var editor_theme: Theme = EditorInterface.get_editor_theme()
+	var editor_theme: Theme = null
+	if Engine.is_editor_hint():
+		editor_theme = EditorInterface.get_editor_theme()
 	if editor_theme != null and editor_theme.has_icon(icon_id, &"EditorIcons"):
 		button.icon = editor_theme.get_icon(icon_id, &"EditorIcons")
 	else:
@@ -198,6 +245,115 @@ func _refresh_servo_status() -> void:
 	_servo_status_label.text = "Servo: detected" if available else "Servo: optional / not installed"
 	_servo_status_label.tooltip_text = "Native browser available (runtime not yet verified)" if available else "Install godot-servo manually to use PixNido inside Godot"
 	_servo_install_button.visible = not available
+	_refresh_native_actions()
+
+
+func _native_source_allowed() -> bool:
+	var source: String = _opened_source.strip_edges()
+	return (
+		source == DEFAULT_SOURCE
+		or source.begins_with("https://pixnido.pages.dev/")
+		or (source.begins_with("res://") and source.get_extension().to_lower() == "html")
+	)
+
+
+func _refresh_native_actions() -> void:
+	var can_use: bool = (
+		_native_dialog_ready and _native_source_allowed()
+		and is_instance_valid(_browser)
+	)
+	if is_instance_valid(_native_color_button):
+		_native_color_button.disabled = not can_use
+	if is_instance_valid(_native_palette_button):
+		_native_palette_button.disabled = not can_use
+
+
+func _choose_palette_json() -> void:
+	if not _native_dialog_ready or not _native_source_allowed():
+		_set_status("Load the trusted PixNido page before importing a palette.", true)
+		return
+	_native_palette_dialog.popup_centered_ratio(0.7)
+
+
+func _on_palette_json_selected(path: String) -> void:
+	if not _native_dialog_ready or not _native_source_allowed() or not is_instance_valid(_browser):
+		_set_status("PixNido is not ready for palette import.", true)
+		return
+	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		_set_status("Unable to read selected palette file.", true)
+		return
+	var file_length: int = file.get_length()
+	if file_length < 1 or file_length > MAX_PALETTE_BYTES:
+		file.close()
+		_set_status("Palette JSON must be 1–32768 bytes.", true)
+		return
+	var content: String = file.get_as_text()
+	file.close()
+	var palette: Variant = JSON.parse_string(content)
+	if not palette is Dictionary:
+		_set_status("Palette JSON must be an object.", true)
+		return
+	var palette_dict: Dictionary = palette
+	var name: String = String(palette_dict.get("name", ""))
+	var entries: Variant = palette_dict.get("colors", [])
+	if name.strip_edges().is_empty() or name.length() > 35 or not entries is Array:
+		_set_status("Palette requires a name and a colors array.", true)
+		return
+	var colors: Array = entries
+	if colors.is_empty() or colors.size() > 64:
+		_set_status("Palette must contain 1–64 colors.", true)
+		return
+	for value in colors:
+		if not value is String or not _valid_rgb_hex(value):
+			_set_status("Palette colors must use #RRGGBB.", true)
+			return
+	var safe_palette: Dictionary = {"name": name, "colors": colors}
+	var json_text: String = JSON.stringify(safe_palette)
+	var command: String = (
+		"window.__nidolabNativeDialogsV1 && window.__nidolabNativeDialogsV1.preparePalette("
+		+ JSON.stringify(json_text) + ");"
+	)
+	_browser.call(&"evaluate_javascript", command)
+	_set_status("Preparing palette for confirmation inside PixNido…", false)
+
+
+func _valid_rgb_hex(value: String) -> bool:
+	if value.length() != 7 or not value.begins_with("#"):
+		return false
+	for i in range(1, 7):
+		var ch: String = value.substr(i, 1).to_lower()
+		if "0123456789abcdef".find(ch) < 0:
+			return false
+	return true
+
+
+func _on_native_color_closed() -> void:
+	if not _native_dialog_ready or not _native_source_allowed() or not is_instance_valid(_browser):
+		return
+	var html_color: String = "#" + _native_color_button.color.to_html(false)
+	if not _valid_rgb_hex(html_color) or html_color == _last_native_color:
+		return
+	_last_native_color = html_color
+	var command: String = (
+		"window.__nidolabNativeDialogsV1 && window.__nidolabNativeDialogsV1.applyColor("
+		+ JSON.stringify(html_color) + ");"
+	)
+	_browser.call(&"evaluate_javascript", command)
+
+
+func _on_native_result(message: String) -> void:
+	var parsed: Variant = JSON.parse_string(message)
+	if not parsed is Dictionary:
+		return
+	var data: Dictionary = parsed
+	var action: String = String(data.get("action", ""))
+	var ok: bool = bool(data.get("ok", false))
+	if action == "ready":
+		_native_dialog_ready = ok and _native_source_allowed()
+		_refresh_native_actions()
+	elif action == "color" or action == "palette":
+		_set_status(String(data.get("message", "Native PixNido action finished.")), not ok)
 
 
 func _on_get_servo_pressed() -> void:
@@ -230,6 +386,8 @@ func _on_directory_selected(directory: String) -> void:
 
 
 func _open_source() -> void:
+	_native_dialog_ready = false
+	_opened_source = ""
 	_refresh_servo_status()
 	var source: String = get_source()
 	var target_url: String = _validated_url(source)
@@ -256,6 +414,7 @@ func _open_source() -> void:
 		return
 
 	_clear_current_browser()
+	_opened_source = source
 
 	var browser: Node = native_object as Node
 	browser.name = "PixNidoServoWebView"
@@ -278,12 +437,13 @@ func _open_source() -> void:
 	browser.connect(&"load_finished", _on_browser_loaded)
 	browser.connect(&"bridge_event", _on_bridge_event)
 	browser.connect(&"crashed", _on_browser_crashed)
+	_viewer = viewer
+	_browser = browser
 	_view_area.add_child(viewer)
 	viewer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_view_area.add_child(browser)
 	viewer.gui_input.connect(_on_viewer_input.bind(viewer))
-	_viewer = viewer
-	_browser = browser
+	_refresh_native_actions()
 	_set_status("PixNido loaded; test drawing and keyboard/touch input in Godot.", false)
 
 
@@ -295,6 +455,12 @@ func _on_browser_loaded() -> void:
 		_set_status("Export bridge script could not be read.", true)
 		return
 	_browser.call(&"evaluate_javascript", script)
+	_native_dialog_ready = false
+	_refresh_native_actions()
+	if _native_source_allowed():
+		var native_script: String = FileAccess.get_file_as_string(NATIVE_DIALOGS_SCRIPT)
+		if not native_script.is_empty():
+			_browser.call(&"evaluate_javascript", native_script)
 	_set_status("PixNido loaded. Export a sprite there, then click Save to " + _export_directory, false)
 
 
@@ -325,6 +491,9 @@ func _request_export() -> void:
 
 
 func _on_bridge_event(name: String, message: String) -> void:
+	if name == "nidolab.native.result":
+		_on_native_result(message)
+		return
 	if _transfer_token.is_empty() or not name.begins_with("pixnido.export."):
 		return
 	var decoded: Variant = JSON.parse_string(message)
@@ -410,6 +579,8 @@ func _reset_transfer() -> void:
 
 func _on_browser_crashed(reason: String) -> void:
 	_reset_transfer()
+	_native_dialog_ready = false
+	_refresh_native_actions()
 	_set_status("Servo browser crashed: " + reason, true)
 
 
@@ -437,6 +608,8 @@ func _on_viewer_input(event: InputEvent, viewer: TextureRect) -> void:
 
 func _clear_current_browser() -> void:
 	_reset_transfer()
+	_native_dialog_ready = false
+	_refresh_native_actions()
 	# Servo's multiple simultaneous views are not validated; free the old view
 	# before installing a replacement, instead of queueing an overlapping view.
 	if is_instance_valid(_viewer):
