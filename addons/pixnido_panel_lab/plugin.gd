@@ -18,13 +18,13 @@ var _swapped: bool = false
 
 func _enter_tree() -> void:
 	_pixnido_dock = PANEL_DOCK_SCRIPT.new()
-	_pixnido_dock.configure(&"pixnido", EditorDock.DOCK_SLOT_LEFT_UL)
-	_pixnido_dock.close_requested.connect(_close_pixnido)
+	_pixnido_dock.call(&"configure", &"pixnido", EditorDock.DOCK_SLOT_LEFT_UL)
+	_pixnido_dock.connect(&"close_requested", _close_pixnido)
 	add_dock(_pixnido_dock)
 
 	_references_dock = PANEL_DOCK_SCRIPT.new()
-	_references_dock.configure(&"references", EditorDock.DOCK_SLOT_RIGHT_UR)
-	_references_dock.close_requested.connect(_close_references)
+	_references_dock.call(&"configure", &"references", EditorDock.DOCK_SLOT_RIGHT_UR)
+	_references_dock.connect(&"close_requested", _close_references)
 	add_dock(_references_dock)
 
 	_build_toolbar()
