@@ -75,7 +75,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          godot --headless --editor --path . --script res://tests/editor/pixnido_export_writer_smoke.gd 2>&1 | tee pixnido-writer.log
+          godot --headless --path . --script res://tests/editor/pixnido_export_writer_smoke.gd 2>&1 | tee pixnido-writer.log
       - name: Regression model smoke
         shell: bash
         run: |
