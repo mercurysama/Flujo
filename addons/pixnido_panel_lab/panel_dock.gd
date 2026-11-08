@@ -7,9 +7,10 @@ signal close_requested
 signal references_changed
 signal pixnido_source_changed
 signal pixnido_export_directory_changed
+signal editor_tab_changed
 
 const REFERENCE_HUB_SCRIPT := preload("res://addons/pixnido_panel_lab/reference_hub.gd")
-const PIXNIDO_HOST_SCRIPT := preload("res://addons/pixnido_panel_lab/pixnido_servo_host.gd")
+const EDITOR_TABS_SCRIPT := preload("res://addons/pixnido_panel_lab/editor_tabs.gd")
 
 const ANIMATION_SECONDS: float = 0.16
 const SLIDE_PIXELS: float = 20.0
@@ -23,6 +24,7 @@ var _should_be_open: bool = false
 var _slide_from_right: bool = false
 var _board: Control
 var _pixnido_host: Control
+var _editor_tabs: TabContainer
 var _file_dialog: EditorFileDialog
 
 
@@ -106,7 +108,7 @@ func _slide_offset() -> float:
 
 
 func get_workspace_body() -> Control:
-	return _pixnido_host if panel_id == &"pixnido" else _board
+	return _editor_tabs if panel_id == &"pixnido" else _board
 
 
 func open_reference_picker() -> void:
@@ -116,6 +118,21 @@ func open_reference_picker() -> void:
 func add_to_current_reference_tab() -> void:
 	if is_instance_valid(_board):
 		_board.call(&"add_for_current_tab")
+
+
+func get_active_editor_id() -> StringName:
+	if not is_instance_valid(_editor_tabs):
+		return &"pixnido"
+	return _editor_tabs.call(&"get_active_editor_id")
+
+
+func set_active_editor_id(editor_id: StringName) -> void:
+	if is_instance_valid(_editor_tabs):
+		_editor_tabs.call(&"set_active_editor_id", editor_id)
+
+
+func _on_editor_tab_changed(_editor_id: StringName) -> void:
+	editor_tab_changed.emit()
 
 
 func get_pixnido_source() -> String:
@@ -238,10 +255,12 @@ func _build_content(is_pixnido: bool) -> void:
 	header.add_child(_close_button)
 
 	if is_pixnido:
-		_pixnido_host = PIXNIDO_HOST_SCRIPT.new()
+		_editor_tabs = EDITOR_TABS_SCRIPT.new()
+		_pixnido_host = _editor_tabs.call(&"get_pixnido_host")
 		_pixnido_host.connect(&"source_changed", _on_pixnido_source_changed)
 		_pixnido_host.connect(&"export_directory_changed", _on_pixnido_export_directory_changed)
-		content.add_child(_pixnido_host)
+		_editor_tabs.connect(&"active_editor_changed", _on_editor_tab_changed)
+		content.add_child(_editor_tabs)
 	else:
 		_board = REFERENCE_HUB_SCRIPT.new()
 		content.add_child(_board)

@@ -25,6 +25,7 @@ var _tasks_state: Dictionary = {"version": 1, "next_id": 1, "items": []}
 var _references_tab: int = 0
 var _pixnido_source: String = "https://pixnido.pages.dev/"
 var _pixnido_export_directory: String = "res://assets/sprites/"
+var _active_editor_id: StringName = &"pixnido"
 
 
 func _get_window_layout(configuration: ConfigFile) -> void:
@@ -47,6 +48,9 @@ func _get_window_layout(configuration: ConfigFile) -> void:
 	if is_instance_valid(_pixnido_dock):
 		_pixnido_export_directory = String(_pixnido_dock.call(&"get_pixnido_export_directory"))
 	configuration.set_value(LAYOUT_SECTION, "pixnido_export_directory", _pixnido_export_directory)
+	if is_instance_valid(_pixnido_dock):
+		_active_editor_id = _pixnido_dock.call(&"get_active_editor_id")
+	configuration.set_value(LAYOUT_SECTION, "active_editor_id", String(_active_editor_id))
 
 
 func _set_window_layout(configuration: ConfigFile) -> void:
@@ -55,9 +59,11 @@ func _set_window_layout(configuration: ConfigFile) -> void:
 	_swapped = bool(configuration.get_value(LAYOUT_SECTION, "swapped", false))
 	_pixnido_source = String(configuration.get_value(LAYOUT_SECTION, "pixnido_source", "https://pixnido.pages.dev/"))
 	_pixnido_export_directory = String(configuration.get_value(LAYOUT_SECTION, "pixnido_export_directory", "res://assets/sprites/"))
+	_active_editor_id = StringName(configuration.get_value(LAYOUT_SECTION, "active_editor_id", "pixnido"))
 	if is_instance_valid(_pixnido_dock):
 		_pixnido_dock.call(&"set_pixnido_source", _pixnido_source)
 		_pixnido_dock.call(&"set_pixnido_export_directory", _pixnido_export_directory)
+		_pixnido_dock.call(&"set_active_editor_id", _active_editor_id)
 	var saved_images: Variant = configuration.get_value(LAYOUT_SECTION, "reference_images", {})
 	if saved_images is Dictionary:
 		_reference_state = saved_images
@@ -106,8 +112,10 @@ func _enter_tree() -> void:
 	_pixnido_dock.connect(&"close_requested", _close_pixnido)
 	_pixnido_dock.connect(&"pixnido_source_changed", _on_pixnido_source_changed)
 	_pixnido_dock.connect(&"pixnido_export_directory_changed", _on_pixnido_export_directory_changed)
+	_pixnido_dock.connect(&"editor_tab_changed", _on_editor_tab_changed)
 	_pixnido_dock.call(&"set_pixnido_source", _pixnido_source)
 	_pixnido_dock.call(&"set_pixnido_export_directory", _pixnido_export_directory)
+	_pixnido_dock.call(&"set_active_editor_id", _active_editor_id)
 	_pixnido_dock.call(&"set_slide_side", false)
 	add_dock(_pixnido_dock)
 
@@ -145,6 +153,10 @@ func _exit_tree() -> void:
 		remove_dock(_pixnido_dock)
 		_pixnido_dock.queue_free()
 	_pixnido_dock = null
+
+
+func _on_editor_tab_changed() -> void:
+	queue_save_layout()
 
 
 func _on_pixnido_export_directory_changed() -> void:
