@@ -1,4 +1,4 @@
-# PixNido Panel Lab — EXP-01 / EXP-02 / EXP-03 / EXP-04
+# PixNido Panel Lab — EXP-01 / EXP-02 / EXP-03 / EXP-04 / EXP-05
 
 **Branch:** `experiment/pixnido-servo-dock`
 **Status:** EXP-01–03 implementation proposed in the experimental branch; Godot 4.7.2 execution and visual approval pending.
@@ -16,7 +16,7 @@
 - PNL-08 (EXP-02 code prepared): keyboard shortcuts, animated inner-panel content, and per-project editor layout persistence.
 - PNL-09 (EXP-03 code): freely movable/resizable reference images, per-project storage and controls on selection.
 - PNL-10 (EXP-04 code): optional HTML5 PixNido host via dynamically discovered godot-servo; the source app remains unchanged.
-- PNL-11 (future): sprite export to project paths, default `res://assets/sprites/`, via a vetted JS-to-GDScript bridge.
+- PNL-11 (EXP-05 code, unverified): a Save button transfers PixNido PNG/WebP previews into project folders (default `res://assets/sprites/`) using a JS/GDScript bridge.
 
 ## EXP-01 implementation
 
@@ -117,3 +117,26 @@ Trace: PNL-08A/08C → addons/pixnido_panel_lab/plugin.gd; PNL-08B → addons/pi
 **Explicit limitations:** `godot-servo` does **not** currently expose HTML file/color pickers, which PixNido uses; embedded import and color selection may fail until adapted. PNL-11's GDScript-to-JavaScript export bridge, including default `res://assets/sprites/`, is **not implemented** in EXP-04. The extension is experimental and large; Linux, Android and platform-specific render paths must be measured in real hardware. No successful launch is claimed without the native package and Godot editor execution.
 
 **Trace:** PNL-10A/B/C/D → `addons/pixnido_panel_lab/pixnido_servo_host.gd`, `panel_dock.gd`, and `plugin.gd`. PNL-10E → changed-file audit. Source provenance: `mercurysama/Anki-tools`, branch `release/pixel-art-editor-pwa`, `projects/pixel-art-editor/pwa/RELEASE_1_0_0.md`, and upstream `shiena/godot-servo` documentation. Engineering metrics: Godot execution not measured, rendering performance not measured, visual review pending.
+
+## EXP-05 — PNG / WebP sprite exports to the project
+
+**New editor controls:** PixNido's dock now offers an icon-only Save button and an icon-only Folder button. The destination defaults to `res://assets/sprites/`. Selecting another destination is restricted to `EditorFileDialog.ACCESS_RESOURCES` and saved per project in the same editor layout as the panel configuration. Existing sprite files are never overwritten.
+
+**User flow:** Open PixNido, generate a PNG/WebP export using PixNido's own existing interface (including sprite sheets or animated formats), then press Save in the Godot dock. Godot captures the exported preview image and writes it directly into the selected project folder. **No automatic filesystem writes** occur solely because a web page generates a preview; Save is an explicit user action. The destination is automatic, not the save trigger.
+
+**Protocol:** The optional `ServoWebView.load_finished` callback evaluates the local `pixnido_export_bridge.js` into the loaded page. The script reads `#exportPreviewImage.src` only on the Save request. `godot.emit` sends `pixnido.export.begin`, `chunk` and `end` messages in strict order. A random token identifies each request; Godot requests each 8192-character Base64 chunk separately, caps total size at 32 MiB, rejects out-of-sequence packets, and times out stalled transfers after 120 seconds. The native writer validates MIME/signature and filename, refuses paths outside `res://`, creates the selected folder and uses unique timestamped names.
+
+**Scope and risks:** The published `Anki-tools` PixNido PWA remains unchanged; the bridge depends on its current `exportPreviewImage` and `projectName` DOM identifiers. Godot-servo must be installed as a compatible native extension. Its real behavior in the editor, input flow and integration of `evaluate_javascript` have **not yet been executed or measured** on Godot 4.7.2. The renderer adapter from EXP-04 may also need editor `@tool` compatibility review; this is a blocker to declare end-to-end integration finished. Data URLs and chunked transfer for large animated WebP/APNG need real tests, not merely signature validation.
+
+### EXP-05 acceptance
+
+- [ ] Godot 4.7.2 headless import and original Flujo smoke tests; classify warnings separately.
+- [ ] With no godot-servo package, opening the experiment does not crash Flujo.
+- [ ] With the package installed, export PNG and sprite-sheet PNG; Save creates a valid file at `res://assets/sprites/`.
+- [ ] Repeat with static WebP, animated WebP and APNG and verify file bytes against actual previews.
+- [ ] Save twice without overwriting; choose another project directory and restart editor to verify persistence.
+- [ ] Check missing preview, malformed chunks, invalid MIME/path, oversize export and timeout: no partial files.
+- [ ] Verify References-only mode, side switching, keyboard shortcuts and preservation of Flujo F4.
+- [ ] Run `git diff --check` and record visual review on Fedora and Android.
+
+**Trace:** PNL-11 → `pixnido_export_bridge.js` (JS protocol), `pixnido_servo_host.gd` (native integration and UI), `sprite_export_writer.gd` (confined safe writing), `panel_dock.gd` + `plugin.gd` (directory persistence). **Validation:** repository static review only; execution time and real platform outcomes not measured. No edits to `addons/vp_flujo/` or production PixNido.
