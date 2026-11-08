@@ -1,4 +1,4 @@
-# PixNido Panel Lab — EXP-01 / EXP-02 / EXP-03
+# PixNido Panel Lab — EXP-01 / EXP-02 / EXP-03 / EXP-04
 
 **Branch:** `experiment/pixnido-servo-dock`
 **Status:** EXP-01–03 implementation proposed in the experimental branch; Godot 4.7.2 execution and visual approval pending.
@@ -15,7 +15,7 @@
 - PNL-07: Target widths are PixNido 1/3 and References 2/3 of the available horizontal space, **including when one is hidden**; unused space remains available to Godot.
 - PNL-08 (EXP-02 code prepared): keyboard shortcuts, animated inner-panel content, and per-project editor layout persistence.
 - PNL-09 (EXP-03 code): freely movable/resizable reference images, per-project storage and controls on selection.
-- PNL-10 (future): HTML5 PixNido via a compatible WebView/Servo extension; avoid modifying PixNido's source app.
+- PNL-10 (EXP-04 code): optional HTML5 PixNido host via dynamically discovered godot-servo; the source app remains unchanged.
 - PNL-11 (future): sprite export to project paths, default `res://assets/sprites/`, via a vetted JS-to-GDScript bridge.
 
 ## EXP-01 implementation
@@ -86,3 +86,34 @@ Trace: PNL-08A/08C → addons/pixnido_panel_lab/plugin.gd; PNL-08B → addons/pi
 **Open risks:** exact 1:2 sizing PNL-07 and real HTML5 embedding PNL-10 remain pending; pointer controls and `EditorFileDialog` require actual editor review. External image paths are intentionally **local** and will not travel to a teammate's computer. Editor layout is not a substitute for sharing image assets; project-included images should be used when collaboration is needed.
 
 **Trace:** PNL-09A → `addons/pixnido_panel_lab/panel_dock.gd`; PNL-09B/D → `reference_board.gd` and `reference_item.gd`; PNL-09C/E → `plugin.gd` and `reference_board.gd`. Automated runtime checks not executed until a matching Godot 4.7.2 executable is available. Engineering metrics: runtime duration not measured; defects unknown; visual review pending.
+
+## EXP-04 — optional PixNido HTML5 host
+
+- **PNL-10A:** The PixNido dock now provides an address field and icon-only Open button. The initial URL is the publicly documented PixNido 1.0.0 production address, `https://pixnido.pages.dev/`. It is **not opened automatically**: the user explicitly starts the browser, so the experiment does not require an external network service to load Flujo.
+- **PNL-10B:** An alternate project-local entry point `res://.../index.html` is also accepted; the HTML and its relative assets must be copied into that directory by the developer. The adapter converts it to a `file://` URL in editor mode. This is editor-only; exported PCK builds would need the upstream `local_pages.gd` extraction mechanism.
+- **PNL-10C:** `ClassDB.class_exists("ServoWebView")` and the adapter script are checked **before** loading the native-dependent script. Missing native binaries produce an informational status, not a hard parser dependency in this plugin. `servo_texture_rect.gd` (from the upstream distribution) handles input, touch, texture updates, resizing, and platform shader handling; we do not reimplement it.
+- **PNL-10D:** The existing native view is destroyed before replacing it (upstream says simultaneous ServoWebView nodes are not well tested). The optional URL is saved in the same per-project editor layout configuration as panel visibility and reference positions. Re-opening Godot restores the address only; it does not make a network request without a click.
+- **PNL-10E:** No upstream native binaries, external source copies, secrets, or credentials are checked in. Neither the published PixNido PWA nor Flujo's `addons/vp_flujo/` files are changed.
+
+### Installation for a real editor test
+
+1. Obtain the latest compatible upstream package from [shiena/godot-servo releases](https://github.com/shiena/godot-servo/releases). Upstream **v1.0.1** is a documented example; check the actual release and required Godot compatibility.
+2. Copy the complete `addons/godot_servo/` directory (including `bin/` with platform-native binaries) into this experimental project. Keep exactly **one** `godot_servo.gdextension` manifest; do not keep duplicate manifests.
+3. Restart **Godot 4.7.2** and check whether `ServoWebView` registers successfully.
+4. Open the PixNido panel and press its Play/Open icon. Loading `https://pixnido.pages.dev/` requires internet; `res://.../index.html` requires a previously copied PWA directory.
+5. Inspect the graphics backend with `ServoWebView.get_backend_name()` if troubleshooting; Fedora Compatibility may use CPU readback and Android Compatibility needs the external-sampler shader (handled by upstream TextureRect script).
+
+### EXP-04 limitations and acceptance
+
+- [ ] Without godot-servo installed, open the editor: no script parse errors; the panel shows actionable information when Open is clicked.
+- [ ] After installing the extension, load PixNido 1.0.0, render its full responsive UI inside the dock, draw and switch tools.
+- [ ] Verify keyboard focus, mouse and multitouch (not just a static texture); test resizing and orientation changes.
+- [ ] Close and reopen panel; swap sides while PixNido is active, verifying it does not create a second native view.
+- [ ] Test with local HTML and correctly packaged relative assets if offline usage is needed.
+- [ ] Restart editor and verify source URL persistence; no automatic request on restart.
+- [ ] Confirm References remain independent and Flujo F4, runtime and Inspector are unchanged.
+- [ ] Run native Godot 4.7.2 editor load, smoke test and `git diff --check`; inspect error and warning logs separately.
+
+**Explicit limitations:** `godot-servo` does **not** currently expose HTML file/color pickers, which PixNido uses; embedded import and color selection may fail until adapted. PNL-11's GDScript-to-JavaScript export bridge, including default `res://assets/sprites/`, is **not implemented** in EXP-04. The extension is experimental and large; Linux, Android and platform-specific render paths must be measured in real hardware. No successful launch is claimed without the native package and Godot editor execution.
+
+**Trace:** PNL-10A/B/C/D → `addons/pixnido_panel_lab/pixnido_servo_host.gd`, `panel_dock.gd`, and `plugin.gd`. PNL-10E → changed-file audit. Source provenance: `mercurysama/Anki-tools`, branch `release/pixel-art-editor-pwa`, `projects/pixel-art-editor/pwa/RELEASE_1_0_0.md`, and upstream `shiena/godot-servo` documentation. Engineering metrics: Godot execution not measured, rendering performance not measured, visual review pending.

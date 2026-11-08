@@ -17,6 +17,7 @@ var _references_open: bool = false
 var _swapped: bool = false
 var _registered_swapped: bool = false
 var _reference_state: Dictionary = {"version": 1, "next_id": 1, "items": []}
+var _pixnido_source: String = "https://pixnido.pages.dev/"
 
 
 func _get_window_layout(configuration: ConfigFile) -> void:
@@ -26,12 +27,18 @@ func _get_window_layout(configuration: ConfigFile) -> void:
 	if is_instance_valid(_references_dock):
 		_reference_state = _references_dock.call(&"get_references_state")
 	configuration.set_value(LAYOUT_SECTION, "reference_images", _reference_state)
+	if is_instance_valid(_pixnido_dock):
+		_pixnido_source = String(_pixnido_dock.call(&"get_pixnido_source"))
+	configuration.set_value(LAYOUT_SECTION, "pixnido_source", _pixnido_source)
 
 
 func _set_window_layout(configuration: ConfigFile) -> void:
 	_pixnido_open = bool(configuration.get_value(LAYOUT_SECTION, "pixnido_open", true))
 	_references_open = bool(configuration.get_value(LAYOUT_SECTION, "references_open", false))
 	_swapped = bool(configuration.get_value(LAYOUT_SECTION, "swapped", false))
+	_pixnido_source = String(configuration.get_value(LAYOUT_SECTION, "pixnido_source", "https://pixnido.pages.dev/"))
+	if is_instance_valid(_pixnido_dock):
+		_pixnido_dock.call(&"set_pixnido_source", _pixnido_source)
 	var saved_images: Variant = configuration.get_value(LAYOUT_SECTION, "reference_images", {})
 	if saved_images is Dictionary:
 		_reference_state = saved_images
@@ -68,6 +75,8 @@ func _enter_tree() -> void:
 	_pixnido_dock = PANEL_DOCK_SCRIPT.new()
 	_pixnido_dock.call(&"configure", &"pixnido", EditorDock.DOCK_SLOT_LEFT_UL)
 	_pixnido_dock.connect(&"close_requested", _close_pixnido)
+	_pixnido_dock.connect(&"pixnido_source_changed", _on_pixnido_source_changed)
+	_pixnido_dock.call(&"set_pixnido_source", _pixnido_source)
 	_pixnido_dock.call(&"set_slide_side", false)
 	add_dock(_pixnido_dock)
 
@@ -102,6 +111,10 @@ func _exit_tree() -> void:
 		remove_dock(_pixnido_dock)
 		_pixnido_dock.queue_free()
 	_pixnido_dock = null
+
+
+func _on_pixnido_source_changed() -> void:
+	queue_save_layout()
 
 
 func _on_references_changed() -> void:

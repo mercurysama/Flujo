@@ -5,8 +5,10 @@ extends EditorDock
 
 signal close_requested
 signal references_changed
+signal pixnido_source_changed
 
 const REFERENCE_BOARD_SCRIPT := preload("res://addons/pixnido_panel_lab/reference_board.gd")
+const PIXNIDO_HOST_SCRIPT := preload("res://addons/pixnido_panel_lab/pixnido_servo_host.gd")
 
 const ANIMATION_SECONDS: float = 0.16
 const SLIDE_PIXELS: float = 20.0
@@ -19,6 +21,7 @@ var _motion: Tween
 var _should_be_open: bool = false
 var _slide_from_right: bool = false
 var _board: Control
+var _pixnido_host: Control
 var _file_dialog: EditorFileDialog
 
 
@@ -101,6 +104,21 @@ func _slide_offset() -> float:
 	return SLIDE_PIXELS if _slide_from_right else -SLIDE_PIXELS
 
 
+func get_pixnido_source() -> String:
+	if not is_instance_valid(_pixnido_host):
+		return "https://pixnido.pages.dev/"
+	return String(_pixnido_host.call(&"get_source"))
+
+
+func set_pixnido_source(source: String) -> void:
+	if is_instance_valid(_pixnido_host):
+		_pixnido_host.call(&"set_source", source)
+
+
+func _on_pixnido_source_changed(value: String) -> void:
+	pixnido_source_changed.emit()
+
+
 func get_references_state() -> Dictionary:
 	if not is_instance_valid(_board):
 		return {"version": 1, "next_id": 1, "items": []}
@@ -163,17 +181,9 @@ func _build_content(is_pixnido: bool) -> void:
 	header.add_child(_close_button)
 
 	if is_pixnido:
-		var center := CenterContainer.new()
-		center.name = "Placeholder"
-		center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		center.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		content.add_child(center)
-
-		var message := Label.new()
-		message.name = "Status"
-		message.text = "HTML5 editor pending"
-		message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		center.add_child(message)
+		_pixnido_host = PIXNIDO_HOST_SCRIPT.new()
+		_pixnido_host.connect(&"source_changed", _on_pixnido_source_changed)
+		content.add_child(_pixnido_host)
 	else:
 		_board = REFERENCE_BOARD_SCRIPT.new()
 		content.add_child(_board)
