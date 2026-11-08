@@ -38,8 +38,10 @@ func _run() -> void:
 	placeholder.name = "FutureEditor"
 	if not bool(tabs.call(&"register_editor", &"future_editor", placeholder, &"Texture2D", "Future editor")):
 		failures.append("Cannot register a future editor")
-	if bool(tabs.call(&"register_editor", &"future_editor", Control.new(), &"Texture2D", "Duplicate")):
+	var duplicate := Control.new()
+	if bool(tabs.call(&"register_editor", &"future_editor", duplicate, &"Texture2D", "Duplicate")):
 		failures.append("Duplicate editor IDs were accepted")
+	duplicate.free()
 	if tabs.get_tab_count() != 2:
 		failures.append("Registered editor tab did not appear")
 	tabs.call(&"set_active_editor_id", &"future_editor")
