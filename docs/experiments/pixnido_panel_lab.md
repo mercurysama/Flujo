@@ -20,7 +20,7 @@
 
 ## EXP-01 implementation
 
-This step implements PNL-01 through PNL-06 as an **editor dock shell**. The `+` is deliberately disabled until image ingestion exists, preventing a misleading no-op action. Only one plugin is added; it registers two `EditorDock` instances and a minimal icon-only `CONTAINER_TOOLBAR` control. Re-registering the docks is used to swap default left/right slots; on that action Godot may reset manual placement.
+This historical EXP-01 step implemented PNL-01 through PNL-06 as an **editor dock shell**. At that step, `+` was disabled; EXP-03 now enables it for file selection. Only one plugin is added; it registers two `EditorDock` instances and a minimal icon-only `CONTAINER_TOOLBAR` control. Re-registering the docks is used to swap default left/right slots; on that action Godot may reset manual placement.
 
 **Important limitation (PNL-07):** `EditorDock` exposes dock positions but **not a guaranteed fractional editor width**. This step sets modest minimum sizes; it does *not* assert exact 1:2 sizing, horizontal adjacency, or slide animations. A controlled host-layout strategy must be validated before marking PNL-07 complete. The center editor remains a real Godot workspace, not a simulated empty panel.
 
@@ -39,7 +39,7 @@ This step implements PNL-01 through PNL-06 as an **editor dock shell**. The `+` 
 
 ## Evidence and trace
 
-PNL-01..06 → `addons/pixnido_panel_lab/plugin.gd`, `panel_dock.gd` → manual checklist above (not yet executed). PNL-07..11 remain open. Rationale: an isolated optional plugin permits review without modifying Flujo's existing dock. Alternative rejected for now: forcibly reparenting editor-internal split containers to guarantee a ratio, because it risks breaking editor layouts across versions.
+PNL-01..06 → `addons/pixnido_panel_lab/plugin.gd`, `panel_dock.gd` → manual checklist above (not yet executed). PNL-07, PNL-10, and PNL-11 remain open; PNL-08 and PNL-09 have experimental code awaiting Godot verification. Rationale: an isolated optional plugin permits review without modifying Flujo's existing dock. Alternative rejected for now: forcibly reparenting editor-internal split containers to guarantee a ratio, because it risks breaking editor layouts across versions.
 
 **Tests:** Cannot claim execution without a Godot 4.7.2 runtime. CI/manual verification required.
 **Metrics:** test duration: not measured; defects: unknown; review time: not measured.
