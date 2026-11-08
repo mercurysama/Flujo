@@ -1,4 +1,4 @@
-# NidoLab — PixNido / References (EXP-01 through EXP-09)
+# NidoLab — PixNido / References (EXP-01 through EXP-10)
 
 **Branch:** `experiment/pixnido-servo-dock`
 **Status:** EXP-01–09 experimental code; Godot 4.7.2 Linux headless tests passed for fixed-width focus layout, icon-only tabs, notes, task state/ordering and existing Flujo; Fedora visual, native Servo and real pointer drag-and-drop tests remain pending. Android integration is paused.
@@ -288,3 +288,15 @@ godot --headless --path . tests/model/flow_model_smoke_test.tscn
 - **Remaining visual review:** verify actual popup placement, three pictogram icons, text-entry focus/keyboard, note drag/resize, task native mouse drag-and-drop, checkmark strike-through, full-screen opacity, main editor restoration and visible 1:2 split in Fedora. Do **not** claim native Servo rendering/exports or Android support as tested.
 
 **Trace:** PNL-14A → `plugin.gd` and `nidolab_focus_smoke.gd`; PNL-14B → `reference_hub.gd`; PNL-14C → `note_card.gd`, `notes_board.gd`; PNL-14D → `task_drag_handle.gd`, `task_row.gd`, `tasks_list.gd`; PNL-14E → `panel_dock.gd`, `plugin.gd`, `nidolab_reference_tabs_smoke.gd`. Validation result observable in CI; interactive fidelity/performance and time to complete tasks remain unmeasured.
+
+## EXP-10 — tabbed PixNido editor and native color/palette picker
+
+**Maintainer extension (2026-11-08):** PixNido is the first icon-only tab in an expandable editor tab collection. The PixNido tab owns the **same** HTML5 host instance already used by the experiment; future editors may be registered as independent tabs without changing the NidoLab focus workspace, persistent editor layout, or reference panel. Do not add blank editor tabs as imaginary functions.
+
+- **PNL-15A:** Use an `EditorTabs` TabContainer that registers one stable `pixnido` editor ID, icon, and tooltip. Expose `get_pixnido_host`, `get_active_editor_id`, and the registration method for future independent editor Controls. Save active ID per-project for compatibility, and preserve PixNido's source/export settings and exact focus mode one-third width even when References is hidden.
+- **PNL-15B:** No bundled `godot-servo`, no automatic download, and no PWA source modification. The optional HTML5 host gains a native color picker that commits only after the picker closes, using the PWA's existing `#customColor` and `#addColorBtn` or `#editPaletteColor` + `#applyPaletteColor` controls.
+- **PNL-15C:** A native `EditorFileDialog` selects a local *palette JSON* and validates the PWA's existing schema (a unique `name`, `colors` array of 1–64 hex strings), with bounded input and no user-file writes. A tiny injected adapter opens PixNido's existing Import Palette dialog and pre-fills `#paletteImportText`; **PixNido itself still confirms** the import, so its existing duplicate-name checks remain authoritative.
+- **PNL-15D:** The current 1.0.0 PWA has **no generic HTML file upload** for importing PNGs or project files. Do not claim a functional native image importer. Color and palette actions require an explicitly loaded, compatible PixNido page, and must refuse arbitrary HTTPS origins to avoid sharing a user-selected local file with unrelated webpages. Native mouse/keyboard and modal behavior still require Fedora validation with Servo.
+- **PNL-15E:** Add a Godot 4.7.2 headless smoke test for the tab registry, stable ID, existing host preservation and focus reparenting. Add JS adapter tests for DOM targets and validation without requiring Servo. Retain the prior Flujo/notes/tasks/writer/JS CI jobs.
+
+**Acceptance:** [ ] PixNido appears as the sole icon-only editor tab, [ ] future tabs can be registered separately and selected without destroying PixNido, [ ] source/export settings persist, [ ] standard focus pane remains 1:2, [ ] file picker validates JSON and does not send other files, [ ] color chooser uses PixNido's existing controls, [ ] Servo stays optional, [ ] Godot 4.7.2 headless regression success, [ ] real Fedora native Servo dialogs and mouse interactions pending. **No Android work**.
