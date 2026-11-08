@@ -233,6 +233,12 @@ func _apply_registered_sides() -> void:
 	_apply_visibility.call_deferred()
 
 func _apply_visibility() -> void:
+	# Godot's editor splitters may still be calculating dragger controls in
+	# _enter_tree/_set_window_layout. Do not close a new dock until after layout.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if not is_inside_tree():
+		return
 	if not is_instance_valid(_pixnido_dock) or not is_instance_valid(_references_dock):
 		return
 	_set_dock_visible(_references_dock, _references_open, false)
