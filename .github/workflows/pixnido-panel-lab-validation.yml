@@ -88,6 +88,10 @@ jobs:
           set -o pipefail
           timeout 35s godot --headless --path . --script res://tests/editor/nidolab_reference_tabs_smoke.gd 2>&1 | tee nidolab-tabs.log
           grep -F "[NidoLab] References tabs smoke test passed" nidolab-tabs.log
+          if grep -E '(SCRIPT ERROR:|ERROR:)' nidolab-tabs.log; then
+            echo "::error::NidoLab reference tabs emitted a Godot error"
+            exit 1
+          fi
       - name: Regression model smoke
         shell: bash
         run: |

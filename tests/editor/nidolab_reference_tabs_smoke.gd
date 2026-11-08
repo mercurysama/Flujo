@@ -67,10 +67,16 @@ func _check() -> void:
 			failures.append("Completed checkbox state was not saved")
 		var row: Node = task_list.get_node("TaskScroll/TaskItems/TaskRow_task_1")
 		var source: Control = row.get_node("TaskContents/DragTask")
-		var data: Variant = source.call(&"_get_drag_data", Vector2.ZERO)
+		# Do not call _get_drag_data outside a real GUI drag: Godot requires
+		# gui_is_dragging() before set_drag_preview() can be used.
+		var data: Dictionary = {
+			"kind": "nidolab_task",
+			"task_id": String(source.get("task_id")),
+			"list_id": int(source.get("list_instance_id"))
+		}
 		var target: Node = task_list.get_node("TaskScroll/TaskItems/TaskRow_task_2")
-		if not data is Dictionary or not bool(target.call(&"_can_drop_data", Vector2(3, 3), data)):
-			failures.append("Native drag-and-drop payload was rejected")
+		if not bool(target.call(&"_can_drop_data", Vector2(3, 3), data)):
+			failures.append("Task drop target rejected the compatible drag payload")
 
 	var hub_2: TabContainer = HUB.new()
 	root.add_child(hub_2)
