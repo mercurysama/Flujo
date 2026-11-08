@@ -1,7 +1,7 @@
-# PixNido Panel Lab — EXP-01 / EXP-02 / EXP-03 / EXP-04 / EXP-05
+# PixNido Panel Lab — EXP-01 / EXP-02 / EXP-03 / EXP-04 / EXP-05 / EXP-06
 
 **Branch:** `experiment/pixnido-servo-dock`
-**Status:** EXP-01–03 implementation proposed in the experimental branch; Godot 4.7.2 execution and visual approval pending.
+**Status:** EXP-01–05 code in experimental branch; EXP-06 headless CI verification completed (Linux Godot 4.7.2, without native Servo); interactive Fedora/Android and Servo-WebView validation remain pending.
 **Isolation:** independent editor plugin at `addons/pixnido_panel_lab/`; no changes to `addons/vp_flujo/`, its runtime, F4 shortcut, or persistent model.
 
 ## Approved interaction contract
@@ -145,3 +145,59 @@ Trace: PNL-08A/08C → addons/pixnido_panel_lab/plugin.gd; PNL-08B → addons/pi
 
 - `tests/editor/pixnido_export_writer_smoke.gd`: creates a 2×2 PNG in memory, exercises path traversal denial, MIME/signature rejection, unique filenames, byte-for-byte save verification, and cleanup under `res://.godot/pixnido_writer_test/`. Run with `godot --headless --editor --path . --script res://tests/editor/pixnido_export_writer_smoke.gd` in Godot 4.7.2. **Not executed in this environment.**
 - The JavaScript bridge source was parsed/executed in a standalone JS harness with a stub Godot event sink: one 20,000-character Base64 payload produced 3 chunks (8192 + 8192 + 3616 characters) and one end message; a concurrent duplicate start was rejected. This **does not** prove the native Servo event transport, disk writer or editor UI works.
+
+## EXP-06 — CI and manual editor validation
+
+**Scope:** Validate the optional PixNido panel addon before any integration into `main`; no modifications to Flujo runtime, Inspector, F4, production PixNido, or persistent Flow schemas.
+
+### Verified automated evidence (2026-11-08)
+
+- GitHub Actions run [42524147510](https://github.com/mercurysama/Flujo/actions/runs/42524147510) completed **success** for commit `09a77a3c58bbff5afb6b5c47b2ecbf7cd3c378a7`.
+- `tests/editor/pixnido_export_bridge.test.cjs` passed on Node 22. Tests cover chunking, token/order, duplicate transfer, invalid/missing/oversized preview, and cancellation.
+- Official Linux Godot **4.7.2.stable.official.ed1daf0bf** downloaded in CI; the editor project loaded headlessly with no additional `ERROR:` diagnostics compared with a baseline run disabling only the PixNido lab plugin.
+- `tests/editor/pixnido_export_writer_smoke.gd` printed `[PixNido] Sprite export writer smoke test passed`, exercising a generated PNG, refusing traversal/invalid MIME and ensuring distinct output names with byte-for-byte checks.
+- Existing model regression printed `[Flujo] Model smoke test passed`. `git diff --check` passed.
+- Fixed the editor-only dock initialization regression: closing a newly registered dock too early caused an internal `SplitContainerMultiDragger` out-of-range error. Waiting two process frames before initial visibility restoration removed the extra error in CI. The comparative baseline is maintained in the workflow to detect recurrences.
+- Added `servo_editor_texture_rect.gd`, an optional `@tool` texture/input adapter for browser rendering inside Godot's **editor**. The upstream helper script is useful at runtime but is not explicitly editor-tool-enabled. Its actual native behavior has not been tested without a Servo extension package.
+- Short-lived warnings such as `Scan thread aborted...` were observed on planned headless editor shutdown. Running the writer's `SceneTree` test with `--editor --script` also produced cleanup/resource-leak diagnostics; the workflow now runs this specific test with `--headless --path . --script` to avoid starting a redundant editor UI.
+
+### Reproducible commands
+
+From the experimental Git checkout on Fedora (select the installed 4.7.2 executable, or replace `godot` below with `flatpak run org.godotengine.Godot`):
+
+```bash
+godot --version
+git diff --check
+node tests/editor/pixnido_export_bridge.test.cjs
+godot --headless --editor --path . --quit-after 5
+godot --headless --path . --script res://tests/editor/pixnido_export_writer_smoke.gd
+godot --headless --path . tests/model/flow_model_smoke_test.tscn
+```
+
+### Mandatory interactive review — Fedora
+
+- [ ] Open Godot 4.7.2's actual editor and verify PixNido-only default state, References-only mode, both visible, and both hidden.
+- [ ] Toggle, close and swap panels rapidly; test `Ctrl+Alt+P`, `Ctrl+Alt+R`, `Ctrl+Alt+I` without stealing Flujo F4.
+- [ ] Add multiple reference images; select, drag, resize, close, reopen and restart. Verify persisted paths, dimensions, layering and missing-image placeholders.
+- [ ] Confirm layout ratios **PixNido 1/3, References 2/3**; **not implemented yet** by native `EditorDock`, so do not mark accepted until a separate layout approach is approved.
+- [ ] Obtain a compatible **Linux** godot-servo release, install its entire `addons/godot_servo/` tree and exactly one manifest; restart editor and inspect the native class registration.
+- [ ] Open PixNido 1.0.0 inside the dock. Test drawing, UI responsiveness, keyboard, mouse, pan/zoom, clipboard, menu dialogs and resizing. Watch whether native HTML file/color pickers are unsupported.
+- [ ] Generate static PNG/WebP, sprite sheet PNG, animated WebP and APNG inside PixNido. Click Godot Save and verify valid files under `res://assets/sprites/`; save twice, change the folder, restart and check persistence.
+- [ ] Confirm no browser page can save without a user click and no file paths outside the Godot project can be selected.
+- [ ] Disable/uninstall the optional plugin and verify Flujo's existing editor, model/runtime and F4 behavior remain intact.
+
+### Mandatory interactive review — Android
+
+- [ ] Confirm the actual Godot Android editor version and whether the compatible `godot-servo` arm64 native extension can load in that environment.
+- [ ] Repeat reference-only usability, touch placement/resizing, panel swapping, physical-keyboard shortcuts, and orientation changes.
+- [ ] If Servo loads, verify mobile browser texture, touch/pointer forwarding, visual output with Compatibility renderer, responsive width and actual export writes in the Android editor's project storage.
+- [ ] Record package installation limitations and failures without silently substituting a web export or a Fedora result.
+
+### Open blockers
+
+1. **Native Servo is not packaged/installed in this branch.** HTML5 rendering, browser permissions/dialogs and end-to-end export still require hardware validation.
+2. **PNL-07 (exact fractional layout)** is not yet implemented: the native `EditorDock` API controls slots, not guaranteed editor width ratios.
+3. **Full slide animation** of the native dock is not implemented; only dock content transitions.
+4. **UI tests on Fedora and Android** are not performed by the headless CI; no human visual approval is claimed.
+
+**Decision:** Keep `experiment/pixnido-servo-dock` isolated. Do not merge into `main` until the interactive checks and the 1:2 layout requirement are resolved or explicitly re-scoped by the maintainer. Runtime metrics and Android outcomes are unknown.
