@@ -86,7 +86,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          godot --headless --path . --script res://tests/editor/nidolab_reference_tabs_smoke.gd 2>&1 | tee nidolab-tabs.log
+          timeout 35s godot --headless --path . --script res://tests/editor/nidolab_reference_tabs_smoke.gd 2>&1 | tee nidolab-tabs.log
           grep -F "[NidoLab] References tabs smoke test passed" nidolab-tabs.log
       - name: Regression model smoke
         shell: bash

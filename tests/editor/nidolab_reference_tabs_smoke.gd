@@ -6,7 +6,15 @@ const HUB := preload("res://addons/pixnido_panel_lab/reference_hub.gd")
 
 
 func _initialize() -> void:
+	# A GDScript runtime error can abort _check without calling quit(). Make
+	# the failure deterministic instead of hanging the CI job.
+	create_timer(20.0).timeout.connect(_on_timeout)
 	call_deferred(&"_check")
+
+
+func _on_timeout() -> void:
+	printerr("[NidoLab] References tabs smoke timed out")
+	quit(1)
 
 
 func _check() -> void:
