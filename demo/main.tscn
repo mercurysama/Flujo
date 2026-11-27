@@ -12,59 +12,62 @@
 [ext_resource type="Script" uid="uid://c1yeogxvdswy6" path="res://addons/vp_flujo/runtime/model/flow_process.gd" id="9_4bnku"]
 [ext_resource type="Script" uid="uid://ckrxvfmd0uqfj" path="res://addons/vp_flujo/runtime/model/flow_print_block.gd" id="10_6g5ly"]
 [ext_resource type="Script" uid="uid://hckd3kqwini6" path="res://addons/vp_flujo/runtime/model/flow_structured_document.gd" id="10_ucu34"]
-[ext_resource type="Script" uid="uid://b8uh5gfaayxs1" path="res://flow_packages/mercury.fprint/block.gd" id="11_6g5ly"]
 [ext_resource type="Script" uid="uid://bg2rh4sg34y23" path="res://addons/vp_flujo/runtime/model/flow_state_machine_definition.gd" id="11_dls5p"]
 [ext_resource type="Script" uid="uid://dwraxanjeg1p5" path="res://addons/vp_flujo/runtime/model/flow_document_segment.gd" id="11_f8mb2"]
 [ext_resource type="Script" uid="uid://rt7wjajaqq00" path="res://addons/vp_flujo/runtime/model/flow_literal_value_segment.gd" id="12_f8mb2"]
 [ext_resource type="Script" uid="uid://mm2nyjlt5dlb" path="res://addons/vp_flujo/runtime/model/flow_variable_definition.gd" id="12_haa2m"]
+[ext_resource type="Script" uid="uid://cj7i15fqa6vsk" path="res://addons/vp_flujo/runtime/model/flow_text_segment.gd" id="13_a6ksj"]
 
 [sub_resource type="Resource" id="Resource_27lkm"]
 script = ExtResource("6_f8mb2")
 _internal_id = "ca5085b6b08a25f35b8fd1e5d0d058c2"
 
-[sub_resource type="Resource" id="Resource_ucu34"]
-script = ExtResource("10_6g5ly")
-text = "fprint"
-_internal_id = "d82645272a8e92eb68d74d0c8f805586"
-display_name = "Print"
-
 [sub_resource type="Resource" id="Resource_ykfgg"]
 script = ExtResource("12_f8mb2")
-value_type = 2
-value = 3
-_segment_id = "ff6f46bdb3c4e6c479b4a769cdbd48f4"
+value_type = 4
+value = "holas"
+_segment_id = "cdb9c0f5eddefbf853b7be9ffa7dbc2c"
+
+[sub_resource type="Resource" id="Resource_dls5p"]
+script = ExtResource("13_a6ksj")
+_segment_id = "2eb24eec1905347035d4e09b094a3c67"
 
 [sub_resource type="Resource" id="Resource_haa2m"]
-script = ExtResource("12_f8mb2")
-value_type = 1
-value = false
-_segment_id = "a079ae850eceef7d167b9bacbe595bb7"
+script = ExtResource("13_a6ksj")
+_segment_id = "f1514594efa408022ee1516c21ff3c21"
 
 [sub_resource type="Resource" id="Resource_a6ksj"]
 script = ExtResource("12_f8mb2")
 value_type = 2
-value = 0
-_segment_id = "15edab3e35e5efd7051cb5e2a57b9d2f"
+value = 1
+_segment_id = "2bf8bce7ceddc9e89e308b3299bb69b3"
 
-[sub_resource type="Resource" id="Resource_dls5p"]
+[sub_resource type="Resource" id="Resource_3r4ql"]
+script = ExtResource("13_a6ksj")
+_segment_id = "96c33e48b143a4985c95365d9aaee007"
+
+[sub_resource type="Resource" id="Resource_3qh5v"]
+script = ExtResource("12_f8mb2")
+value_type = 20
+value = Color(0.7578125, 0.08288574, 0.08288574, 1)
+_segment_id = "8867ed571af53541be8e73e82cfe3598"
+
+[sub_resource type="Resource" id="Resource_ucu34"]
 script = ExtResource("10_ucu34")
-segments = Array[ExtResource("11_f8mb2")]([SubResource("Resource_ykfgg"), SubResource("Resource_haa2m"), SubResource("Resource_a6ksj")])
+segments = Array[ExtResource("11_f8mb2")]([SubResource("Resource_ykfgg"), SubResource("Resource_dls5p"), SubResource("Resource_haa2m"), SubResource("Resource_a6ksj"), SubResource("Resource_3r4ql"), SubResource("Resource_3qh5v")])
 
-[sub_resource type="Resource" id="Resource_f8mb2"]
-script = ExtResource("11_6g5ly")
-prefix = "\">> \""
-message = "hola literal 
-"
-suffix = " <<"
-document = SubResource("Resource_dls5p")
-_internal_id = "e269fb2bd59b94d42bcf4626d2e4b39a"
-display_name = "FPrint"
+[sub_resource type="Resource" id="Resource_fdg1k"]
+script = ExtResource("10_6g5ly")
+text = "hola"
+content = SubResource("Resource_ucu34")
+_internal_id = "549e1e65fd8dc10fa42004d6263730bb"
+display_name = "Print"
 
 [sub_resource type="Resource" id="Resource_6g5ly"]
 script = ExtResource("9_4bnku")
 _internal_id = "95623fe623c7eb69d97c99b745e258d7"
 display_name = "Flujo"
-blocks = Array[ExtResource("3_fdg1k")]([SubResource("Resource_ucu34"), SubResource("Resource_f8mb2")])
+blocks = Array[ExtResource("3_fdg1k")]([SubResource("Resource_fdg1k")])
 
 [sub_resource type="Resource" id="Resource_4bnku"]
 script = ExtResource("12_haa2m")
