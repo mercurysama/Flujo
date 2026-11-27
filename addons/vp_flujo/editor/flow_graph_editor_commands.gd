@@ -1788,6 +1788,7 @@ func _is_supported_ready_property(
 	var allowed: bool = (property == &"enabled" and value is bool) \
 		or (block_id.is_empty() and property == &"display_name" and value is String) \
 		or (target is FlowBlock and property == &"display_name" and value is String) \
+		or (target is FlowBlock and property == &"user_note" and value is String) \
 		or (target is FlowTimerDefinition and property == &"repeat" and value is bool) \
 		or (target is FlowTimerDefinition and property == &"interval_seconds" and value is float and is_finite(value) and value > 0.0) \
 		or (target is FlowPrintBlock and property == &"text" and value is String)

@@ -27,14 +27,31 @@ var _graph: FlowGraph
 var _process_id: String
 var _block_id: String
 var _list: ItemList
-var _first_add_block_button: Button
+var _first_add_block_control: Control
 var _details: VBoxContainer
 var _details_panel: PanelContainer
+var _list_panel: PanelContainer
 var _split_host: HBoxContainer
 var _list_content: VBoxContainer
+var _block_actions_container: HBoxContainer
+var _block_move_up_button: Button
+var _block_move_down_button: Button
+var _block_delete_button: Button
 var _split_block_layout: bool = false
 var _block_details_open: bool = true
 var _confirmation: ConfirmationDialog
+
+# Workspace dimension contract (configurable by code, reusable for sliding panels).
+var flow_workspace_min_width: float = 280.0
+var flow_workspace_preferred_width: float = 320.0
+var flow_workspace_min_height: float = 160.0
+var flow_workspace_expand_horizontal: bool = true
+var flow_workspace_expand_vertical: bool = true
+var flusso_workspace_min_width: float = 320.0
+var flusso_workspace_preferred_width: float = 420.0
+var flusso_workspace_min_height: float = 160.0
+var flusso_workspace_expand_horizontal: bool = true
+var flusso_workspace_expand_vertical: bool = true
 
 
 func configure(
@@ -68,18 +85,19 @@ func configure(
 		_split_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		add_child(_split_host)
 
-		var list_panel := PanelContainer.new()
-		list_panel.name = &"BlockListPanel"
-		list_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		list_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		list_panel.size_flags_stretch_ratio = 1.0
-		_split_host.add_child(list_panel)
+		_list_panel = PanelContainer.new()
+		_list_panel.name = &"BlockListPanel"
+		_list_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL if flow_workspace_expand_horizontal else Control.SIZE_SHRINK_BEGIN
+		_list_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL if flow_workspace_expand_vertical else Control.SIZE_SHRINK_BEGIN
+		_list_panel.custom_minimum_size = Vector2(flow_workspace_min_width, flow_workspace_min_height)
+		_list_panel.size_flags_stretch_ratio = 1.0
+		_split_host.add_child(_list_panel)
 
 		_list_content = VBoxContainer.new()
 		_list_content.name = &"BlockListContent"
 		_list_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_list_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		list_panel.add_child(_list_content)
+		_list_panel.add_child(_list_content)
 
 		var flow_title := Label.new()
 		flow_title.name = &"FlowPanelTitle"
@@ -90,8 +108,9 @@ func configure(
 
 		_details_panel = PanelContainer.new()
 		_details_panel.name = &"BlockOptionsPanel"
-		_details_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		_details_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		_details_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL if flusso_workspace_expand_horizontal else Control.SIZE_SHRINK_BEGIN
+		_details_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL if flusso_workspace_expand_vertical else Control.SIZE_SHRINK_BEGIN
+		_details_panel.custom_minimum_size = Vector2(flusso_workspace_min_width, flusso_workspace_min_height)
 		_details_panel.size_flags_stretch_ratio = 1.0
 		_details_panel.visible = false
 		_split_host.add_child(_details_panel)
@@ -152,19 +171,26 @@ func configure(
 	var add_row: HBoxContainer = HBoxContainer.new()
 	add_row.name = &"AddBlockActions"
 	primary_parent.add_child(add_row)
+	var add_block_option: OptionButton = OptionButton.new()
+	add_block_option.name = &"AddBlockOption"
+	add_block_option.focus_mode = Control.FOCUS_ALL
+	add_block_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	add_block_option.add_item("Add block…")
+	add_block_option.set_item_metadata(0, "")
 	for entry: FlowEditorBlockCatalogEntry in _authoring_entries():
-		var add_button: Button = _add_button(
-			add_row,
-			"Add " + entry.display_name,
-			_on_add_by_authoring_id.bind(entry.authoring_id)
-		)
-		add_button.set_meta(&"authoring_id", entry.authoring_id)
-		if _first_add_block_button == null:
-			_first_add_block_button = add_button
+		var index: int = add_block_option.item_count
+		add_block_option.add_item(entry.display_name)
+		add_block_option.set_item_metadata(index, entry.authoring_id)
 	if process is FlowProcess:
-		var call_button: Button = _add_button(add_row, "Add Call Method", _on_add_call)
-		if _first_add_block_button == null:
-			_first_add_block_button = call_button
+		if add_block_option.item_count > 1:
+			add_block_option.add_separator()
+		var call_index: int = add_block_option.item_count
+		add_block_option.add_item("Call Method…")
+		add_block_option.set_item_metadata(call_index, "__call_method__")
+	add_block_option.select(0)
+	add_block_option.item_selected.connect(_on_add_block_option_selected.bind(add_block_option))
+	add_row.add_child(add_block_option)
+	_first_add_block_control = add_block_option
 
 	var process_actions: VBoxContainer = VBoxContainer.new()
 	process_actions.name = &"ProcessActions"
@@ -196,6 +222,19 @@ func configure(
 	var font: Font = _list.get_theme_font(&"font")
 	var line_height: float = font.get_height(_list.get_theme_font_size(&"font_size")) + _list.get_theme_constant(&"v_separation")
 	_list.custom_minimum_size.y = line_height * 5.0 + _list.get_theme_stylebox(&"panel").get_minimum_size().y
+
+	if _split_block_layout:
+		_block_actions_container = HBoxContainer.new()
+		_block_actions_container.name = &"FlowBlockActions"
+		_block_actions_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		primary_parent.add_child(_block_actions_container)
+		_block_move_up_button = _add_button(_block_actions_container, "Move Block Up", _on_move.bind(-1))
+		_block_move_up_button.name = &"FlowMoveBlockUp"
+		_block_move_down_button = _add_button(_block_actions_container, "Move Block Down", _on_move.bind(1))
+		_block_move_down_button.name = &"FlowMoveBlockDown"
+		_block_delete_button = _add_button(_block_actions_container, "Delete Block", _on_delete)
+		_block_delete_button.name = &"FlowDeleteBlock"
+		_update_flow_block_actions_state()
 
 	if not _split_block_layout:
 		_details = VBoxContainer.new()
@@ -248,6 +287,20 @@ func _authoring_entries() -> Array[FlowEditorBlockCatalogEntry]:
 	return entries
 
 
+func _on_add_block_option_selected(index: int, option: OptionButton) -> void:
+	if option == null or index <= 0 or index >= option.item_count:
+		if option != null:
+			option.select(0)
+		return
+	var selected_id: String = String(option.get_item_metadata(index))
+	option.select(0)
+	if selected_id == "__call_method__":
+		_on_add_call()
+		return
+	if not selected_id.is_empty():
+		_on_add_by_authoring_id(selected_id)
+
+
 func _on_add_by_authoring_id(authoring_id: String) -> void:
 	if _current():
 		var new_block_id: String = _commands.add_ready_block_by_authoring_id(
@@ -293,6 +346,7 @@ func _on_repeat_changed(value: bool) -> void:
 func _on_selected(index: int) -> void:
 	if not _select_block_index(index):
 		return
+	_update_flow_block_actions_state()
 	_render_block()
 
 
@@ -303,6 +357,7 @@ func _on_activated(index: int) -> void:
 	if _split_block_layout:
 		_block_details_open = true
 		block_details_visibility_changed.emit(true)
+	_update_flow_block_actions_state()
 	_render_block()
 
 
@@ -355,8 +410,8 @@ func focus_flow_entry() -> bool:
 		_select_block_index(target_index)
 		_list.grab_focus()
 		return true
-	if is_instance_valid(_first_add_block_button):
-		_first_add_block_button.grab_focus()
+	if is_instance_valid(_first_add_block_control):
+		_first_add_block_control.grab_focus()
 		return true
 	return false
 
@@ -454,12 +509,15 @@ func _render_block() -> void:
 	if process == null:
 		if _details_panel != null:
 			_details_panel.visible = false
+		_update_flow_block_actions_state()
 		return
 
 	var selected: FlowBlock = null
 	for block: FlowBlock in process.blocks:
 		if block != null and block.get_internal_id() == _block_id:
 			selected = block
+
+	_update_flow_block_actions_state()
 
 	if _details_panel != null:
 		_details_panel.visible = _block_details_open and selected != null
@@ -522,11 +580,12 @@ func _render_block() -> void:
 	_details.add_child(enabled)
 	_register_flusso_owned_property(&"enabled")
 
-	var actions: HBoxContainer = HBoxContainer.new()
-	_details.add_child(actions)
-	_add_button(actions, "Move Block Up", _on_move.bind(-1))
-	_add_button(actions, "Move Block Down", _on_move.bind(1))
-	_add_button(actions, "Delete Block", _on_delete)
+	if not _split_block_layout:
+		var actions: HBoxContainer = HBoxContainer.new()
+		_details.add_child(actions)
+		_add_button(actions, "Move Block Up", _on_move.bind(-1))
+		_add_button(actions, "Move Block Down", _on_move.bind(1))
+		_add_button(actions, "Delete Block", _on_delete)
 
 	if selected is FlowMethodCallBlock:
 		_render_method_target(selected as FlowMethodCallBlock)
@@ -553,7 +612,85 @@ func _render_block() -> void:
 		_register_flusso_owned_property(&"text")
 
 	if _split_block_layout:
-		_render_generic_properties(selected)
+		if _is_fprint_block(selected):
+			_render_fprint_minimal_presentation(selected)
+		else:
+			_render_generic_properties(selected)
+
+
+func _is_fprint_block(block: FlowBlock) -> bool:
+	if block == null:
+		return false
+	var script: Script = block.get_script() as Script
+	if script != null:
+		var path: String = script.resource_path
+		if path.ends_with("flow_packages/mercury.fprint/block.gd") \
+				or path == "res://flow_packages/mercury.fprint/block.gd":
+			return true
+	return false
+
+
+func _render_fprint_minimal_presentation(selected: FlowBlock) -> void:
+	# Minimal Flusso presentation for FPrint: Block Name, Enabled, Message (Akis), User Note.
+	# Reuses existing structured document/chip editor. Placeholder is visual-only.
+	var message_label: Label = Label.new()
+	message_label.name = &"FPrintMessageLabel"
+	message_label.text = "Message"
+	_details.add_child(message_label)
+
+	var document: FlowStructuredDocument = null
+	if selected != null and selected.has_method(&"ensure_fprint_akis"):
+		# Ensure author-defined Akis contract and initial Text Tok; preserves legacy data.
+		selected.call(&"ensure_fprint_akis", true)
+	if selected != null:
+		var doc_value: Variant = selected.get(&"document")
+		if doc_value is FlowStructuredDocument:
+			document = doc_value as FlowStructuredDocument
+	if document == null:
+		document = FlowStructuredDocument.new()
+		document.akis_type_config = {"text": {"insertable": true, "evaluable": true}}
+		document.akis_preconfiguration = ["text"]
+		document.ensure_default_text_tok_if_empty()
+		if selected != null:
+			selected.set(&"document", document)
+	else:
+		if document.akis_type_config.is_empty():
+			document.akis_type_config = {"text": {"insertable": true, "evaluable": true}}
+		if document.akis_preconfiguration.is_empty():
+			document.akis_preconfiguration = ["text"]
+		document.ensure_default_text_tok_if_empty()
+
+	var document_editor: FlowStructuredDocumentEditor = FLOW_STRUCTURED_DOCUMENT_EDITOR_SCRIPT.new() as FlowStructuredDocumentEditor
+	document_editor.name = &"FPrintMessageDocumentEditor"
+	document_editor.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	document_editor.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_details.add_child(document_editor)
+	document_editor.configure(document, _commands.get_undo_redo(), _controller)
+	if document_editor.has_method(&"set_minimal_presentation_mode"):
+		document_editor.call(&"set_minimal_presentation_mode", true, "Escribe aquí")
+
+	var user_note_label: Label = Label.new()
+	user_note_label.name = &"FPrintUserNoteLabel"
+	user_note_label.text = "User Note"
+	_details.add_child(user_note_label)
+
+	var user_note: TextEdit = TextEdit.new()
+	user_note.name = &"FPrintUserNote"
+	user_note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	user_note.custom_minimum_size = Vector2(0.0, 60.0)
+	user_note.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	user_note.placeholder_text = "User Note"
+	var current_note: String = ""
+	if selected != null:
+		var note_value: Variant = selected.get(&"user_note")
+		if note_value is String:
+			current_note = note_value as String
+	user_note.text = current_note
+	if _split_block_layout and selected != null:
+		user_note.text_changed.connect(_on_live_block_user_note_changed.bind(user_note, _block_id))
+		_register_flusso_owned_property(&"user_note")
+	_apply_themed_print_text_surface(user_note)
+	_details.add_child(user_note)
 
 
 func _render_generic_properties(selected: FlowBlock) -> void:
@@ -830,6 +967,18 @@ func _on_live_print_text_changed(input: TextEdit, block_id: String) -> void:
 	)
 
 
+func _on_live_block_user_note_changed(input: TextEdit, block_id: String) -> void:
+	if not _split_block_layout or not _current() or block_id != _block_id:
+		return
+	_commands.set_ready_property_live(
+		_controller,
+		_process_id,
+		block_id,
+		&"user_note",
+		input.text
+	)
+
+
 func _refresh_selected_block_label() -> void:
 	var process: FlowBlockContainer = _commands.find_block_container(_controller, _process_id)
 	if process == null or _list == null:
@@ -967,8 +1116,67 @@ func _close_confirmation() -> void:
 	_confirmation = null
 
 
+func _update_flow_block_actions_state() -> void:
+	if not _split_block_layout or _block_actions_container == null:
+		return
+	var has_selection: bool = not _block_id.is_empty()
+	var can_move: bool = false
+	if has_selection and _current():
+		var process: FlowBlockContainer = _commands.find_block_container(_controller, _process_id)
+		if process != null and process.blocks.size() > 1:
+			can_move = true
+	if _block_move_up_button != null:
+		_block_move_up_button.disabled = not (has_selection and can_move)
+	if _block_move_down_button != null:
+		_block_move_down_button.disabled = not (has_selection and can_move)
+	if _block_delete_button != null:
+		_block_delete_button.disabled = not has_selection
+
+
 func close_transient_interfaces() -> void:
 	_close_confirmation()
+
+
+## Workspace dimension contract (reusable). Returns hints for host layout.
+func get_flow_workspace_size_hints() -> Dictionary:
+	return {
+		"min_width": flow_workspace_min_width,
+		"preferred_width": flow_workspace_preferred_width,
+		"min_height": flow_workspace_min_height,
+		"expand_horizontal": flow_workspace_expand_horizontal,
+		"expand_vertical": flow_workspace_expand_vertical,
+	}
+
+
+func get_flusso_workspace_size_hints() -> Dictionary:
+	return {
+		"min_width": flusso_workspace_min_width,
+		"preferred_width": flusso_workspace_preferred_width,
+		"min_height": flusso_workspace_min_height,
+		"expand_horizontal": flusso_workspace_expand_horizontal,
+		"expand_vertical": flusso_workspace_expand_vertical,
+	}
+
+
+func is_flusso_workspace_visible() -> bool:
+	return _split_block_layout and _details_panel != null and _details_panel.visible and _block_details_open
+
+
+## Preferred width for current composition (Flow only, or Flow+Flusso).
+func get_preferred_composed_width(separator_width: float = 8.0, margins_width: float = 24.0) -> float:
+	if not _split_block_layout:
+		return flow_workspace_preferred_width + margins_width
+	if is_flusso_workspace_visible():
+		return flow_workspace_preferred_width + flusso_workspace_preferred_width + separator_width + margins_width
+	return flow_workspace_preferred_width + margins_width
+
+
+func get_minimum_composed_width(separator_width: float = 8.0, margins_width: float = 24.0) -> float:
+	if not _split_block_layout:
+		return flow_workspace_min_width + margins_width
+	if is_flusso_workspace_visible():
+		return flow_workspace_min_width + flusso_workspace_min_width + separator_width + margins_width
+	return flow_workspace_min_width + margins_width
 
 
 func _is_escape(event: InputEvent) -> bool:

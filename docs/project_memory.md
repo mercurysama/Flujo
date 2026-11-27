@@ -1,5 +1,122 @@
 # Flujo Project Memory / Handoff
 
+## Fluxus / Pravah — norma arquitectónica de drawers (cierre 2026-11-10)
+
+- **Estado:** **IMPLEMENTADO** en código/editor (arquitectura desplegada en addon de prueba). **PROBADO (PASS manual Android, evidencia humana):** Fluxus funciona, Pravah funciona, ambos funcionan simultáneamente, el reporte se genera y puede pegarse, y la geometría superior/inferior es correcta. Este cierre manual **no sustituye** verificación formal Godot 4.7.2/Fedora (headless, catálogo, smoke/focales) mientras siga pendiente en el entorno correspondiente.
+
+- **Decisión normativa (hosts de drawers Flujo):**
+  - **Botón de cierre en el host:** cada drawer dispone de control de cierre visible y accesible en su propia superficie. El botón pertenece al HOST (no al workspace instanciado) y llama a la misma ruta central de cierre (`close()` / toggle/API equivalentes), sin duplicar desmontaje ni ciclo de vida. Cerrar por botón, atajo o API produce el mismo resultado.
+  - **Godot utilizable al cerrar:** al cerrarse, el drawer libera/interrumpe correctamente la captura de input y deja accesible la interfaz de Godot (Scene, Inspector, FileSystem, viewport, selección). No deben quedar overlays invisibles ni Controls con `mouse_filter` bloqueando la UI; el área ocupada no intercepta input al estar cerrado (el host se oculta/libera captura de forma simétrica).
+  - **Opacidad total del host:** la superficie visual del HOST es completamente opaca (`alpha = 1.0`), cubre su región y mantiene contraste legible; no se usa transparencia del drawer como decoración. Los workspaces pueden tener diseño interno propio, pero el host provee el fondo opaco.
+  - **Regla por defecto para nuevos drawers:** tendrán cierre visible en host, fondo opaco total y liberación correcta de captura de input al cerrar; no bloquearán la exploración normal del editor cuando estén cerrados. Toda excepción futura debe justificarse explícitamente en el contrato de la herramienta.
+
+- **Atajos reales y acceso (documentado):**
+  - **Fluxus:** EditorSettings `flujo/toggle_fluxus`, atajo por defecto **Ctrl+Alt+F** (`KEY_F` + Ctrl + Alt), configurable en Editor Settings; botón toolbar "Fluxus" (tooltip "Abrir/cerrar Fluxus (Ctrl+Alt+F)") y ruta central única `toggle_fluxus()`.
+  - **Pravah:** EditorSettings `flujo/toggle_pravah`, atajo por defecto **Ctrl+Alt+P**, configurable; botón toolbar "Pravah" y ruta central única `toggle_pravah()`.
+  - **Colisión con Godot:** no se identifica colisión conocida con atajos predeterminados de Godot 4 para Ctrl+Alt+F / Ctrl+Alt+P; al ser configurables, cualquier conflicto en un perfil/entorno concreto debe resolverse ajustando el atajo en Editor Settings.
+
+- **Corrección nueva pendiente de comprobar (2026-11-10, IMPLEMENTADO / PROBADO pendiente):** en `FluxusDebugWorkspace`, pulsar el texto de una tarea activa/desactiva la `CheckBox` correspondiente usando `CheckBox.text` (sin etiqueta separada no clicable), preservando captura/restauración de estado y arquitectura host+workspace instanciable. Checklist, reporte y estado comparten la misma fuente (`_tasks` capturado/restaurado); todas las tareas se renderizan en contenedor scrollable para visibilidad. No considerar PASS por funcionalidad implícita: respetar estado real de cada casilla. Requiere verificación manual humana.
+
+- **Implementación de referencia:** `FlowDrawerHost` + `FluxusDrawer`/`PravahDrawer` (`addons/vp_flujo/editor/`), integrados desde `plugin.gd`. Host genérico reutilizable (top/bottom/lateral) con montaje HBox (vertical edge) o VBox (lateral), instanciación dinámica y coexistencia independiente. Checklist manual en `~/storage/downloads/godot/fluxus_pravah_visual_checklist.txt`.
+- **Corrección de interacción/layout FluxusDebugWorkspace (2026-11-10, IMPLEMENTADO / PROBADO manual Android PASS en alcance aprobado):** acciones críticas en footer fijo y contenido scrollable expandible; observaciones con tamaño controlado.
+- **Patrón "workspace descartable + estado de sesión separado" (2026-11-10, IMPLEMENTADO / PROBADO manual Android PASS en alcance aprobado):** captura → `deactivate()` → desmontar → `queue_free()` al cerrar; nueva instancia + `restore_state()` al abrir; estado en memoria de sesión del host (`Dictionary` duplicado), sin disco.
+- **Corrección focal geometría 50/50 + footer/mount (2026-11-10, IMPLEMENTADO / PROBADO manual Android PASS):** mitad superior/inferior, sin superposición, ajuste en redimensionado/orientación, opacidad y cierre preservados. Ver `~/storage/downloads/godot/fluxus_pravah_half_screen_fix.txt`.
+- **Corrección focal Pravah posición + clipboard/reporte (2026-11-10, IMPLEMENTADO / PROBADO manual Android PASS):** geometría local explícita (Pravah en mitad inferior) y semántica de clipboard no concluyente tratada como "copia no verificada" sin volcar informe en UI. Ver `~/storage/downloads/godot/pravah_position_clipboard_fix.txt`.
+
+## Nagare — v0 infraestructura y acceso (2026-11-10)
+
+- **Estado:** **IMPLEMENTADO** (v0 infraestructura + acceso editor) / **PROBADO:** pendiente (no PASS visual sin prueba humana).
+- **Host/workspace:** `NagareDrawer` lateral (LEFT) sobre `FlowDrawerHost` genérico (mount `VBoxContainer` en lateral), superficie opaca y botón Cerrar en host; `NagareWorkspace` instanciable con `HBoxContainer` (navegador izquierda, editor Akis/Tok derecha), señales `node_selected`/`edit_requested`, estado de sesión separado de UI descartable. Primera prueba funcional de comunicación selección→editor implementada (pendiente verificación manual).
+- **Acceso (2026-11-10):** botón toolbar visible **"Nagare"** (tooltip "Abrir/cerrar Nagare (Ctrl+Alt+N)") y atajo configurable **Ctrl+Alt+N** (`EditorSettings` `flujo/toggle_nagare`, `KEY_N` + Ctrl + Alt), ambos por ruta central única `toggle_nagare()`. Colisión: no se identifica colisión conocida con atajos predeterminados de Godot 4; configurable en Editor Settings. Arquitectura genérica host+workspace preservada.
+- **Límites:** sin migración de chips/Toks/contratos, sin cambios en runtime/Potok/Fluo, sin Gota en Android.
+
+## FPrint — recuperación en Add block y pruebas Fluxus (2026-11-10)
+
+- **Estado:** **IMPLEMENTADO** (recuperación de despliegue + checklist Fluxus) / **PROBADO:** pendiente (no PASS visual sin evidencia humana).
+- **Causa raíz (ausencia en Add block del proyecto Android):** `mercury.fprint` existía y era válido en fuente (`~/flujo-bloques/flow_packages/mercury.fprint`, `manifest.json` v1, `package_id`/`type_id` `fprint`, script `block.gd`, `extends FlowOutputBlock`) pero **no estaba desplegado** en `/storage/emulated/0/Documents/test-foujo-001/flow_packages/` (solo FLog/FRepeat). Sin copia del paquete en `res://flow_packages/`, el catálogo/descubrimiento no lo incluye.
+- **Corrección:** despliegue exclusivo del paquete validado `mercury.fprint` a `test-foujo-001/flow_packages/mercury.fprint` (sin reconstruir, sin duplicar `type_id`, sin modificar FLog/FRepeat, sin alterar runtime ni contratos públicos). Addon redeployado para incluir cambios de Fluxus.
+- **Fluxus checklist:** añadida sección de pruebas manuales (FPrint/Nagare/Akis-Tok) con IDs estables, toggle por texto/casilla (CheckBox.text), estado persistido en sesión del editor, merge sin eliminar tareas previas y nuevas pruebas iniciando desmarcadas; reporte generado desde el mismo estado `_tasks`. Sin auto-PASS.
+
+## Bloqueo técnico — inserción de chip variable por `@` en FPrint (propuesta, sin implementación)
+
+- **Clasificación:** **C (extensión de SDK/editor/presentación reusable, acotada)** con posible impacto en definición de schema/capacidades del campo para el caso de documento FPrint; **no D** mientras se resuelva por ruta pública genérica (sin widget/editor específico de FPrint). **B** en authoring si solo faltara configuración declarativa ya soportada. Requiere decisión de contrato antes de código.
+- **Dependencia exacta que falta:** habilitación válida de inserción de `FlowVariableRefValueSource`/`FlowVariableRefSegment` vía trigger `@` en el `FlowChipFieldEditor` cuando edita el `document` de FPrint (actualmente creado como `FlowStructuredDocument` sin schema explícito en Flusso). Depende de: aceptación de `source_kind` variable en schema/slot o política equivalente, contexto de `variable_graph`/variables disponibles, y reglas de validación/creación compatibles con el contrato del campo.
+- **Componentes reutilizables existentes:** `FlowChipFieldEditor` (trigger/gestión `@` y variable refs), `FlowVariableRefValueSource`, `FlowVariableRefSegment`, `FlowChipFieldSchema`/`FlowChipSlotDefinition`/`FlowChipFieldFactory`/`FlowChipFieldValidator`, `FlowStructuredDocument`/renderer, descriptor y renderizado genérico de documento en Flusso, `FlowGraph` variables.
+- **Cambio mínimo necesario (propuesta):** definir y exponer de forma genérica una política/schema reusable para documentos estructurados "texto libre + chips variables" (p.ej. schema flexible que acepte `VARIABLE_REF` y texto runtime, con validación segura) aplicada al caso FPrint por configuración declarativa/presentación pública, sin rama específica de FPrint ni segundo editor. Evitar cambios de runtime de ejecución salvo evidencia de necesidad contractual.
+- **Pruebas requeridas (antes de implementar):** focal model/editor para schema/documento que acepte variable refs; inserción `@` con y sin variables compatibles; persistencia ResourceSaver/PackedScene y `duplicate_with_new_ids`; no regresión de salida FPrint (document null vs document con literal/texto/variable según contrato aprobado); regresiones K5/structured editor; revisión manual Flusso (teclado, selección, undo/redo, guardar/reabrir). `$flujo-baseline`/`$flujo-prove` y gates Godot 4.7.2 cuando haya entorno.
+- **Autorización:** no implementar cambios de contratos públicos/runtime sin especificación, plan y aprobación humana explícita 🙆🏻.
+
+## FPrint — interfaz mínima en Flusso (presentación visual, 2026-11-10)
+
+- **Estado:** **IMPLEMENTADO** (solo presentación visual) / **PROBADO:** pendiente (no PASS visual sin evidencia humana).
+- **Decisión de diseño:** para bloques FPrint en Flusso se renderiza una presentación específica mínima reutilizando el editor de chips existente (`FlowStructuredDocumentEditor`/`FlowChipFieldEditor`) sin crear sistema paralelo: nombre de bloque editable, `Block Enabled`, sección `Message` con contenedor de chips (documento) y `User Note` editable. Se ocultan en esta vista `Prefix`, el `Message` String anterior, `Structured Document` como sección separada, `Suffix`, botones `+ Value`/`+ Structured` y controles técnicos no mínimos del editor de chips (modo presentación mínima).
+- **Modelo/datos:** no se eliminan propiedades del modelo (`prefix`, `message`, `suffix`, `document`). Si `document` es null se muestra placeholder visual "Escribe aquí" (no guardado/ejecutado, contenedor inicialmente no funcional en ese estado); si existe, se muestra el editor estructurado existente en modo mínimo.
+- **Alcance excluido:** nuevo modelo de chips, conversión texto→chips, inserción por `@`, operaciones/condiciones, nuevo runtime, migración de datos. FLog/FRepeat/Potok no afectados; otros bloques conservan interfaz genérica.
+
+## Limpieza Flow/Flusso y persistencia (2026-11-10, continuidad bloques-android)
+
+- **MB1 — Responsabilidades (IMPLEMENTADO / PROBADO pendiente):** controles `Move Block Up/Down` y `Delete Block` movidos a **Flow** (panel de lista, `FlowBlockActions` en split layout) conservando callbacks/comandos y Undo/Redo; **Flusso** ya no los muestra en split layout (solo configuración de propiedades). En layout no split se mantiene comportamiento previo en detalles para compatibilidad. Sin duplicación, sin cambios de comportamiento de procesos.
+- **MB2 — User Note persistente (IMPLEMENTADO / PROBADO pendiente):** `FlowBlock.user_note` (`@export_multiline`) ya existía en modelo; se habilitó edición compatible en comandos (`FlowGraphEditorCommands._is_supported_ready_property` acepta `user_note` en bloques) y la vista mínima FPrint enlaza `User Note` a `block.user_note` con guardado live por bloque (independiente), sobreviviendo a selección/guardado/reapertura según persistencia de Resource/escena. No altera ejecución. `User Note` deja de ser efímera en FPrint minimal.
+- **MB3 — Nombre editable (VERIFICADO por auditoría de código / PROBADO manual pendiente):** `Block Name` usa `display_name` con rutas live/submit existentes (`set_ready_property_live`/`set_ready_property`) y propiedad exportada en `FlowBlock`; debe persistir y sobrevivir selección/reapertura. Sin corrección adicional aplicada en este ciclo.
+- **MB4 — Preparación Akis/Tok (AUDITADO / DOCUMENTADO, sin implementación):** ver reporte consolidado de ciclo (sección "Preparación Akis/Tok"). Componentes reutilizables: `FlowStructuredDocument` + segmentos (`FlowTextSegment`, `FlowChipSegment` y subtipos literal/variable/expresión/condición/operación/node refs/colecciones), `FlowChipFieldEditor`/`FlowChipControl`, `FlowChipFieldSchema`/`SlotDefinition`/`Factory`/`Validator`, `FlowValueSource`/segments render-resolve, undo/redo de editor, presentación genérica en Flusso. Rediseño (texto como chip unificado, composición sucesiva) diferido al siguiente ciclo.
+
+- **Archivos:** `addons/vp_flujo/editor/flow_ready_process_editor.gd`, `addons/vp_flujo/editor/flow_graph_editor_commands.gd`, `addons/vp_flujo/editor/flow_chip_field_editor.gd` (modo mínimo previo), `docs/project_memory.md`. Desplegado addon en `test-foujo-001`; `flow_packages` intactos. No Potok, no runtime innecesario, Godot 4.7.2. Sin PASS visual.
+
+## Laboratorio móvil Block Builder — FLog + Fluo Play/Stop (2026-11-09)
+
+- **Entorno:**
+  - Android + Termux.
+  - OpenCode 2.
+  - Rama local: `bloques-android`.
+  - Base: `feature/fsm-runtime-flow-flusso`.
+  - Godot Android 4.8.dev4.
+  - Compatibilidad mínima objetivo de Flujo: Godot 4.7.2.
+
+- **flujo-block-builder:**
+  - Disponible y utilizado directamente; este trabajo **NO** usa Gota a Gota.
+  - Flujo obligatorio: clasificación A/B/C/D → especificación → plan → aprobación 🙆🏻 → build → validación → prueba manual.
+
+- **FLog:**
+  - `package_id: mercury.flog`.
+  - `type_id: flog`.
+  - Base: `FlowOutputBlock`.
+  - Paquete externo bajo `flow_packages/mercury.flog`.
+  - Sin modificaciones a `addons/vp_flujo`, `FlowBlockRegistry`, runtime o schema.
+  - Clasificación final: Runtime A / Persistence A / Flow Add A / Flusso A.
+  - Propiedad inicial `text` no apareció en Flusso porque `text` es nombre explícito/reservado del host.
+  - Corrección aprobada: renombrar propiedad a `message`.
+  - Prueba manual Android **PASS** (evidencia manual):
+    - campo `Message` visible;
+    - edición funcional;
+    - ejecución funcional;
+    - salida observada: `okidoki`.
+  - Warning observado: invalid UID para `res://flow_packages/mercury.flog/block.gd`; Godot usa correctamente la ruta textual como fallback.
+  - Warning pendiente de seguimiento; no impidió carga ni ejecución.
+
+- **Banco de pruebas Android:**
+  - Proyecto: `/storage/emulated/0/Documents/test-foujo-001`
+  - Addon: `/storage/emulated/0/Documents/test-foujo-001/addons/vp_flujo`
+  - Paquetes externos: `/storage/emulated/0/Documents/test-foujo-001/flow_packages/`
+  - Flujo puede desplegarse como addon limpio copiando `addons/vp_flujo`.
+  - Bloques externos pueden desplegarse individualmente sin reinstalar el addon.
+
+- **Regresión Fluo (diagnóstico, sin corrección implementada):**
+  - Antes de Play, Fluo muestra contenido normalmente (manual).
+  - Después de ejecutar y detener la escena, el drawer puede permanecer visible pero vacío (manual).
+  - Diagnóstico actual (evidencia de inspección de código): `suspend_for_game()` oculta el editor interno sin cerrar necesariamente el drawer; la restauración tras detener depende del estado del coordinador/selección y puede no rehidratar el contenido.
+  - Posible agravante: reset de contexto/selección durante refresh del controller.
+  - Solución propuesta todavía **NO** implementada: restauración simétrica del estado abierto/visible de Fluo tras Play/Stop, preservando o recuperando controller/selección estable.
+  - Archivos probables: `addons/vp_flujo/editor/flow_interaction_coordinator.gd`, `addons/vp_flujo/editor/fluo_drawer.gd`, y solo si se confirma necesario `plugin.gd` / `flow_graph_inspector_property.gd`.
+  - Prueba manual futura (pendiente, no PASS): abrir Fluo con contenido → Play → Stop → comprobar que contenido y contexto regresan utilizables.
+
+- **Observación de flujo móvil:**
+  - Creación y corrección de FLog fueron ligeras.
+  - Termux/OpenCode no produjo calentamiento apreciable.
+  - Godot Android queda principalmente como banco de pruebas visual/runtime.
+
+- **Próximo paso:**
+  - Diagnosticar/recuperar el arreglo existente de restauración de Fluo Play/Stop antes de implementar uno nuevo.
+
 ## Potok 10B — Primer preflight y test RED preparado (2026-11-03)
 
 - [Checkpoint 10B tanda 1](fsm_phase10_10b_tanda1_handoff.md) con tres commits: 10B-0A `3ae1ec0d31e4a276f611427535b7a26375ae0d25`, 10B-0B `94a78eb8d13b3f3eb1f8da3359454a9cd3b3ac93`, 10B-1A `c3ceb157eeec5cbd5f0aa9c557d993c1a2fa321a`. CI por confirmar.
@@ -647,3 +764,66 @@ de acción, Schema 5 runtime, Apply Constructor o argumentos/returns de Methods
 requiere su propio contrato y autorización.
 
 Todo es Flujo; todo fluye. 🌊
+
+## Akis / Tok Texto V1 — implementación consolidada (2026-11-11, continuidad bloques-android)
+
+- **Estado:** **IMPLEMENTADO** (modelo/editor/runtime-FPrint/checklist/tests creados o actualizados) / **PROBADO:** pendiente (sin Godot 4.7.2 en Termux; sin PASS visual).
+- **Arquitectura Akis/Tok Texto (reutilización, sin sistema paralelo):** Akis = `FlowStructuredDocument` (contenedor ordenado persistente). Tok Texto V1 = `FlowTextSegment` como instancia independiente (ID estable, tipo `text`, contenido String, estado individual `evaluable`, persistencia, posición). Se permiten múltiples Toks Texto en secuencia; no se representa la secuencia como una única String. Eliminación/edición de un Tok no modifica los demás.
+- **Configuración por código (contrato del autor, no UI usuario):** `FlowStructuredDocument.akis_type_config` y `akis_preconfiguration`. V1 implementado para tipo `text`: `insertable`/`evaluable` por defecto `true`, preconfiguración `["text"]`. `insertable=false` impide nuevas inserciones pero no borra Toks existentes. Configuración de tipo distinta de estado individual por Tok (`evaluable` en segmento).
+- **Resolución de valores (reutilizable):** `FlowStructuredDocumentResolver.resolve_evaluable_values()` / `resolve_text()` recorren en orden, ignoran Toks no evaluables, preservan espacios y cadenas vacías, no imprimen ni ejecutan texto; Tok Texto evaluable aporta su String. `FlowStructuredValuesResult` añadido para consumo futuro por bloques.
+- **Integración FPrint:** `mercury.fprint` asegura Akis con Tok Texto inicial y contrato V1; Message en Flusso usa editor estructurado reutilizado (`FlowStructuredDocumentEditor`/chip editor) en modo mínimo con acción "Add Text" (placeholder visual "Escribe aquí" no almacenado). `get_output_message()` concatena valores evaluables de Akis con `prefix/suffix`; compatibilidad legacy preservada (`message` no borrado, fallback/adaptación compatible). User Note no participa en salida. Controles de bloque permanecen en Flow.
+- **Fluxus checklist:** vigentes 14 ítems Akis/Tok V1 con IDs estables (`akis_v1.*`), desmarcados al incorporarse, texto togglable; pruebas previas conservadas como históricas (no pendientes actuales). UI y reporte comparten el mismo estado.
+- **Compatibilidad/decisiones:** `FlowDocumentSegment.evaluable` default `true` (documentos previos compatibles). Sin rediseño visual completo, sin otros Toks, sin `@` variable chip en FPrint, sin cambios en Potok/FLog/FRepeat, sin tocar runtime/schemas/migraciones salvo extensiones aditivas compatibles. Cambio de comportamiento intencional documentado (FPrint basado en Akis con Tok inicial).
+- **Pruebas focales creadas/actualizadas (NOT RUN/DEFERRED en Termux):** `tests/model/flow_akis_text_v1_test.gd/.tscn`, `tests/runtime/flow_fprint_akis_text_v1_test.gd/.tscn`, actualizados `tests/model/flow_fprint_package_test.gd` y `tests/runtime/flow_fprint_process_runtime_test.gd`. `git diff --check` PASS.
+- **Despliegue:** addon y `mercury.fprint` redeploy en `test-foujo-001`; `mercury.flog` y `mercury.frepeat` preservados.
+- **Pendiente:** validación manual Godot (14 ítems vigentes + criterios finales de aceptación), ejecución de gates/focales en Godot 4.7.2, evidencia de no regresión visual/runtime en bloques existentes.
+
+## Corrección Akis / Tok Texto V1 — interacción inicial (2026-11-11, corrección de diseño)
+
+- **Estado:** **IMPLEMENTADO** (correcciones editor/UI/tests/checklist) / **PROBADO:** pendiente (sin Godot 4.7.2; sin PASS visual).
+- **Causa raíz `add_child(null)` (`flow_chip_field_editor.gd:214`):** en `_init()` se creaba `header` local y se añadía al árbol, pero no se asignaba a `_header`; las inserciones posteriores usaban `_header.add_child(...)` con `_header == null`. **Solución:** asignar `_header` al construir el toolbar y mantener la jerarquía existente (sin try/catch superficial, sin editor paralelo).
+- **Corrección de diseño (texto continuo = 1 Tok):** una frase continua escrita en Akis (p.ej. "Hola mundo") se representa como **un único `FlowTextSegment`**; no se fragmenta por palabras/caracteres. Múltiples Toks Texto independientes siguen siendo válidos cuando existen como instancias separadas (p.ej. inserción intencional o futura separación por otros Toks), sin exigir fragmentación artificial del texto consecutivo.
+- **Interacción FPrint/Akis:** eliminado botón externo "Add Text" y controles técnicos visibles en presentación mínima (`Inline chip field`/toolbar ocultos). Tocar superficie/placeholder activa edición y enfoque del Tok Texto principal (cursor/teclado según plataforma). Placeholder "Escribe aquí" es visual (no Tok, no guardado, no impreso), usado también como `placeholder_text` de edición en modo mínimo.
+- **Pruebas/checklist actualizadas:** `tests/model/flow_akis_text_v1_test.gd`, `tests/runtime/flow_fprint_akis_text_v1_test.gd` ajustados al criterio "frase continua = un Tok" y reglas generales de evaluable; Fluxus vigente reemplazada por 19 ítems de corrección (`akis_v1_fix.*`) y vigentes anteriores movidas a histórico.
+- **Compatibilidad:** sin reinicializar documento en cada selección (se asegura contrato/Tok inicial preservando datos), sin cambios en Potok/FLog/FRepeat, IDs/persistencia/orden/Undo-Redo/Block Name/User Note conservados.
+- **Despliegue:** addon redeploy en `test-foujo-001`; paquete FPrint sin cambios adicionales en esta corrección (ya desplegado). `git diff --check` PASS.
+
+## Recuperación visual/funcional Akis en FPrint (2026-11-11, corrección Message)
+
+- **Estado:** **IMPLEMENTADO** / **PROBADO:** pendiente (sin evidencia Godot/visual).
+- **Diagnóstico:** Akis/Message no se percibía en Flusso por falta de superficie visible y affordance de foco: el editor de chip usaba `ScrollContainer`+`FlowContainer` sin fondo/contraste ni tamaño de campo claro; controles de texto con estilos vacíos y sin placeholder integrado en modo mínimo; el toque sobre superficie no garantizaba enfoque del Tok Texto. No se detectó destrucción al refrescar por `ensure_fprint_akis` (preserva datos) ni ausencia de instancia tras corrección de `_header`.
+- **Causa raíz (visibilidad/interacción):** contenedor de edición sin panel/estilo de campo (fondo/borde/radio/márgenes/altura mínima) y sin ruta robusta de activación por toque hacia el `TextEdit` del Tok inicial.
+- **Solución:** `FlowChipFieldEditor` envuelve la superficie en `PanelContainer` estilizado (fondo ligeramente más claro, borde discreto, esquinas redondeadas, márgenes, altura mínima, respetando tema base/editor), conecta input de scroll/superficie/placeholder para enfocar el Tok Texto primario y usa `placeholder_text` visual en controles de texto en modo mínimo. `FlowReadyProcessEditor` mantiene Message con Akis existente sin reinicializar contenido. Sin segundo editor Akis, sin menú `@`, sin rediseño Nagare.
+- **Archivos:** `addons/vp_flujo/editor/flow_chip_field_editor.gd`, `addons/vp_flujo/editor/flow_ready_process_editor.gd` (integración preservada), `docs/project_memory.md`.
+- **Despliegue:** addon redeploy en `test-foujo-001`; FLog/FRepeat/Potok/FPrint paquete sin cambios en esta corrección.
+- **Pendiente (Fluxus/manual):** Akis visible y contraste adecuado, toque activa edición/teclado/cursor, escritura directa "Hola mundo" como único Tok Texto, persistencia (cambio bloque/cerrar-abrir Flusso/guardar-reabrir escena), salida FPrint correcta, sin errores de consola. No PASS sin evidencia.
+
+## Akis V1 — corrección de dimensiones y checklist Fluxus por iteración (2026-11-11)
+
+- **Estado:** **IMPLEMENTADO** (layout editor + política/checklist Fluxus) / **PROBADO:** pendiente (sin evidencia Godot/visual; Termux sin Godot 4.7.2).
+- **Diagnóstico dimensiones:** `FlowChipFieldEditor` usaba `FlowContainer` con `TextEdit` de segmentos en `SIZE_SHRINK_BEGIN`, `LINE_WRAPPING_NONE`, estilos vacíos y tamaño mínimo calculado por contenido → el Tok Texto no ocupaba el ancho útil de la superficie gris y podía provocar ajuste horizontal pobre/barras internas. Contenedor sin modo de “llenar superficie” para texto único.
+- **Solución visual:** en modo de superficie rellena (minimal/texto único), `TextEdit` pasa a `SIZE_EXPAND_FILL`, `LINE_WRAPPING_BOUNDARY` (sin scroll horizontal innecesario), altura mínima cómoda y crecimiento vertical según contenido (`scroll_fit_content_height` + recálculo de altura), manteniendo panel/superficie con fondo contrastado, márgenes y tema Godot. Texto normal sin marco individual; sin dimensiones rígidas dependientes de resolución.
+- **Comportamiento preservado:** escritura directa, cursor, selección, teclado Android (según plataforma), texto consecutivo como un único Tok, persistencia, Undo/Redo, evaluación y salida FPrint. Sin reconstruir Akis, sin menú `@`, sin otros tipos de Tok.
+- **Fluxus (política aprobada):** cada iteración muestra solo su checklist vigente en UI y en reporte generado (12 pruebas `akis_dim_v1.*`, todas desmarcadas al iniciar); sin mezcla con tareas históricas. Historial técnico relevante conservado en `docs/project_memory.md`.
+- **Archivos:** `addons/vp_flujo/editor/flow_chip_field_editor.gd`, `addons/vp_flujo/editor/fluxus_debug_workspace.gd`, `docs/project_memory.md`.
+- **Despliegue:** addon redeploy en `/storage/emulated/0/Documents/test-foujo-001/addons/vp_flujo`; `mercury.flog`/`mercury.fprint`/`mercury.frepeat` preservados. Sin cambios en Potok/FLog/FRepeat/contratos públicos.
+
+## Variables — administración en Flow/Flujo (auditoría e iteración, 2026-11-12)
+
+- **Estado:** **AUDITADO / IMPLEMENTADO PARCIAL** / **PROBADO:** pendiente (sin Godot 4.7.2; sin PASS visual ni manual).
+- **Auditoría (reutilización existente):** `FlowVariableDefinition` define IDs estables (`_internal_id`/FlowId), `display_name`, tipo (`is_valid_value_type`/`is_valid_variable_value_type`, escalar+complejo), valor inicial/default (campos escalares y `complex_value_source`), ámbito (`Scope LOCAL/GLOBAL`), binding, persistencia/nota y APIs de resolución por ID. `FlowGraphEditorCommands` provee alta/renombrado/edición de propiedades y fuente compleja/mover/eliminar con Undo/Redo y validación de candidatos. `FlowGraphInspectorProperty` ya expone en superficies tipadas/dock-Fluo: sección "Variables" con "Add Variable", listado por ID estable, selección, editor (nombre, tipo, valor inicial, ámbito/binding/persistencia/nota avanzada), acciones mover/eliminar y confirmación de borrado. Los Toks Variable (`FlowVariableRef*`) y selectores referencian `variable_id` estable; FSet (esqueleto `mercury.fset`) guarda `target_variable_id`.
+- **Comportamiento de borrado (contrato actual):** `delete_resource` rechaza la eliminación si el grafo candidato introduce nuevos errores respecto al estado actual (evita romper referencias de forma silenciosa). Esto difiere de "permitir eliminar con referencias rotas y solo advertir"; cambiarlo implica decisión de contrato público/validación. **Documentado, no modificado** en esta iteración.
+- **Acciones de esta iteración:** Fluxus sustituida por checklist vigente `var_flow_v1.*` (sin marcar). Sin rediseño de Flow/Flusso ni cambios de dimensiones. Sin modificación de Potok/FSM, sin push/merge.
+- **Brechas pendientes (requieren implementación/decisión adicional):** sección/listado de Variables explícitamente dentro del panel Flow de bloque (si se exige navegación distinta a Inspector/dock actual), advertencia previa con listado de referencias al borrar (y política de permitir borrado con diagnósticos rotos si se aprueba), unificación adicional de selección de variables en FSet/Toks para evitar cualquier editor duplicado en todos los contextos, y pruebas focales/manuales en Godot.
+- **Archivos tocados:** `addons/vp_flujo/editor/fluxus_debug_workspace.gd`, `docs/project_memory.md`, `~/storage/downloads/godot/flujo_android_cycle_report.txt` (y despliegue de addon).
+
+## Fluo — dimensiones dinámicas y workspaces reutilizables (2026-11-11)
+
+- **Estado:** **IMPLEMENTADO** / **PROBADO:** pendiente (sin evidencia Godot/visual en Termux).
+- **Diagnóstico:** `FluoDrawer` usaba ancho fijo por ratio (`DRAWER_WIDTH_RATIO` 0.46) para el shell lateral, independiente del contenido. En modo Fluo, `FlowReadyProcessEditor` compone `FluoBlockWorkspace` (HBox) con `BlockListPanel` (Flow) y `BlockOptionsPanel` (Flusso) en split con stretch igual y visibilidad de detalles según bloque; al abrir Flusso ambos paneles se comprimían dentro del ancho fijo de Fluo. No se identificaron contratos previos de dimensiones por workspace en el host.
+- **Contrato de dimensiones (configurable por código, reutilizable):** en `FlowReadyProcessEditor` (composición Flow/Flusso instanciable) se declaran hints por workspace: `*_workspace_min_width`, `*_workspace_preferred_width`, `*_workspace_min_height`, `*_workspace_expand_horizontal/vertical`, aplicados a paneles y expuestos vía `get_flow_workspace_size_hints()`, `get_flusso_workspace_size_hints()`, `get_preferred_composed_width()`, `get_minimum_composed_width()`, `is_flusso_workspace_visible()`. `FlowGraphInspectorProperty` expone `get_fluo_preferred_composed_width()`/`get_fluo_minimum_composed_width()` consultando el editor activo.
+- **Comportamiento Fluo (host):** `FluoDrawer` calcula ancho deseado por composición (Flow solo = preferido Flow; Flow+Flusso = preferido Flow + preferido Flusso + separador/márgenes), clampea a viewport (`max = viewport - margen`, respeta mínimos utilizables), mantiene lado izq/der, y refresca en open/container/block, resize, restauración y cambios de visibilidad/composición (señal `fluo_layout_refresh_requested`). Cierre de detalles/Flusso vuelve a ancho de Flow. Sin dimensiones absolutas dependientes de dispositivo; sin recortes/superposición intencionales del host.
+- **Regresiones evitadas por alcance:** sin cambios en Akis/Toks/FPrint/FLog/FRepeat/Potok/runtime/persistencia de datos; controles de bloque permanecen en Flow. Solución orientada a hints reutilizables para futuros workspaces en paneles deslizantes.
+- **Fluxus:** checklist sustituida por iteración `fluo_ws_v1` (12 pruebas, sin marcar, solo vigentes en UI/reporte).
+- **Archivos:** `addons/vp_flujo/editor/fluo_drawer.gd`, `addons/vp_flujo/editor/flow_graph_inspector_property.gd`, `addons/vp_flujo/editor/flow_ready_process_editor.gd`, `addons/vp_flujo/editor/fluxus_debug_workspace.gd`, `docs/project_memory.md`.
+- **Despliegue:** addon redeploy en `test-foujo-001`; `mercury.flog`/`mercury.fprint`/`mercury.frepeat` preservados.

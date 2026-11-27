@@ -8,7 +8,30 @@ static func resolve_text(
 		document: FlowStructuredDocument,
 		context: FlowValueResolutionContext = null
 ) -> FlowStructuredRenderResult:
+	var values_result: FlowStructuredValuesResult = resolve_evaluable_values(document, context)
 	var result: FlowStructuredRenderResult = FlowStructuredRenderResult.new()
+	for diagnostic: FlowDiagnostic in values_result.diagnostics:
+		result.add_diagnostic(diagnostic)
+	if result.has_errors():
+		return result
+	var rendered: String = ""
+	for entry: Variant in values_result.values:
+		if entry is Dictionary:
+			var dict: Dictionary = entry as Dictionary
+			rendered += String(dict.get("text", ""))
+		else:
+			rendered += str(entry)
+	result.text = rendered
+	return result
+
+
+## Reusable Akis resolution: returns ordered evaluable Tok values for consumers.
+## V1: Text Toks yield their String content. Future Toks can yield typed values.
+static func resolve_evaluable_values(
+		document: FlowStructuredDocument,
+		context: FlowValueResolutionContext = null
+) -> FlowStructuredValuesResult:
+	var result: FlowStructuredValuesResult = FlowStructuredValuesResult.new()
 	var graph: FlowGraph = context.graph if context != null else null
 	var validation: FlowValidationResult = FlowStructuredDocumentValidator.validate(
 		document,
@@ -19,11 +42,20 @@ static func resolve_text(
 	if result.has_errors():
 		return result
 
-	var rendered: String = ""
 	for index: int in document.segments.size():
 		var segment: FlowDocumentSegment = document.segments[index]
+		if segment == null:
+			continue
+		if not segment.evaluable:
+			continue
 		if segment is FlowTextSegment:
-			rendered += (segment as FlowTextSegment).text
+			var text_value: String = (segment as FlowTextSegment).text
+			result.values.append({
+				"segment_id": segment.get_segment_id(),
+				"segment_type": segment.get_segment_type(),
+				"value": text_value,
+				"text": text_value,
+			})
 			continue
 		var chip: FlowChipSegment = segment as FlowChipSegment
 		if chip == null:
@@ -56,9 +88,12 @@ static func resolve_text(
 				)
 			)
 			return result
-		rendered += format_runtime_value(value_result.value)
-
-	result.text = rendered
+		result.values.append({
+			"segment_id": segment.get_segment_id(),
+			"segment_type": segment.get_segment_type(),
+			"value": value_result.value,
+			"text": format_runtime_value(value_result.value),
+		})
 	return result
 
 

@@ -41,6 +41,7 @@ signal schema_3_delete_selection_recovery_requested(
 	view_title: String,
 	restore_focus: bool
 )
+signal fluo_layout_refresh_requested
 
 var _content: VBoxContainer
 var _commands: FlowGraphEditorCommands
@@ -136,6 +137,7 @@ func _on_commands_changed() -> void:
 				restore_focus
 			)
 	_request_rebuild()
+	call_deferred(&"request_fluo_layout_refresh")
 
 
 ## Configures this editor as the schema 3 Variables surface hosted by the Flujo dock.
@@ -231,6 +233,137 @@ func refresh_dock_controller() -> void:
 	_request_rebuild()
 
 
+func get_dock_context_snapshot() -> Dictionary:
+	if not _dock_mode:
+		return {}
+	var controller: PVController = _dock_controller_instance()
+	return {
+		"has_controller": controller != null,
+		"collection": int(_selected_collection),
+		"container_id": _selected_id,
+		"block_id": _ready_block_id,
+		"block_details_open": _ready_block_details_open,
+		"flow_entry_focus_pending": _flow_entry_focus_pending,
+	}
+
+
+func restore_dock_context_snapshot(controller: PVController, snapshot: Dictionary) -> bool:
+	if not _dock_mode or not is_instance_valid(controller):
+		return false
+	var current: PVController = _dock_controller_instance()
+	if current != controller:
+		set_dock_controller(controller)
+	var graph: FlowGraph = controller.flow_graph
+	if graph == null or snapshot.is_empty():
+		return false
+
+	var collection_value: Variant = snapshot.get("collection", int(FlowGraphEditorCommands.Collection.PROCESSES))
+	var collection: FlowGraphEditorCommands.Collection = int(collection_value) as FlowGraphEditorCommands.Collection
+	var container_id: String = String(snapshot.get("container_id", ""))
+	var block_id: String = String(snapshot.get("block_id", ""))
+	var block_details_open: bool = bool(snapshot.get("block_details_open", false))
+
+	if container_id.is_empty() or not _dock_snapshot_container_exists(graph, collection, container_id):
+		# Do not invent a selection when the previous context is unavailable.
+		_request_rebuild()
+		return false
+
+	_selected_collection = collection
+	_selected_id = container_id
+	_potok_clear_phase_selection()
+	_potok_selected_state_id = ""
+	_potok_selected_transition_id = ""
+	_potok_revert_sessions.clear()
+	_potok_transition_feedback = ""
+	_potok_structure_feedback = ""
+	_potok_close_condition_editor()
+	_potok_close_delete_dialog()
+	_selected_view_title = _view_title_for_selection(graph, collection, container_id)
+	_selected_view_index = _selected_view_index_for_id(graph, collection, container_id, _selected_view_title)
+
+	_ready_block_id = ""
+	_ready_block_details_open = false
+	if not block_id.is_empty() and _dock_snapshot_block_exists(graph, collection, container_id, block_id):
+		_ready_block_id = block_id
+		_ready_block_details_open = block_details_open
+
+	_flusso_snapshots.clear()
+	_flusso_owned_properties.clear()
+	_rename_target_id = ""
+	_variable_advanced_open = false
+	_variable_focus_control = &""
+	_restore_selected_list_focus = false
+	_clear_deleted_selection_state()
+	_close_delete_confirmation()
+	_variable_complex_edit_id = ""
+	if is_instance_valid(_variable_complex_editor) and _variable_complex_editor.visible:
+		_variable_complex_editor.hide()
+	_request_rebuild()
+	return true
+
+
+func _dock_snapshot_container_exists(
+		graph: FlowGraph,
+		collection: FlowGraphEditorCommands.Collection,
+		container_id: String
+) -> bool:
+	if graph == null or container_id.is_empty():
+		return false
+	match collection:
+		FlowGraphEditorCommands.Collection.VARIABLES:
+			for variable: FlowVariableDefinition in graph.variables:
+				if variable != null and variable.get_internal_id() == container_id:
+					return true
+		FlowGraphEditorCommands.Collection.PROCESSES:
+			for process: FlowProcess in graph.processes:
+				if process != null and process.get_internal_id() == container_id:
+					return true
+		FlowGraphEditorCommands.Collection.CONSTRUCTOR:
+			return graph.constructor != null and graph.constructor.get_internal_id() == container_id
+		FlowGraphEditorCommands.Collection.METHODS:
+			for method: FlowMethodDefinition in graph.methods:
+				if method != null and method.get_internal_id() == container_id:
+					return true
+		FlowGraphEditorCommands.Collection.STATE_MACHINES:
+			for machine: FlowStateMachineDefinition in graph.state_machines:
+				if machine != null and machine.get_internal_id() == container_id:
+					return true
+	return false
+
+
+func _dock_snapshot_block_exists(
+		graph: FlowGraph,
+		collection: FlowGraphEditorCommands.Collection,
+		container_id: String,
+		block_id: String
+) -> bool:
+	if graph == null or block_id.is_empty():
+		return false
+	if collection == FlowGraphEditorCommands.Collection.STATE_MACHINES:
+		return false
+	var container: FlowBlockContainer = null
+	match collection:
+		FlowGraphEditorCommands.Collection.PROCESSES:
+			for process: FlowProcess in graph.processes:
+				if process != null and process.get_internal_id() == container_id:
+					container = process
+					break
+		FlowGraphEditorCommands.Collection.CONSTRUCTOR:
+			if graph.constructor != null and graph.constructor.get_internal_id() == container_id:
+				container = graph.constructor
+		FlowGraphEditorCommands.Collection.METHODS:
+			for method: FlowMethodDefinition in graph.methods:
+				if method != null and method.get_internal_id() == container_id:
+					container = method
+					break
+	if container == null:
+		return false
+	for block: FlowBlock in container.blocks:
+		if block != null and block.get_internal_id() == block_id:
+			return true
+	return false
+
+
 ## Applies the Inspector-owned schema 3 variable selection to the dock editor.
 func set_dock_variable_selection(
 	controller: PVController,
@@ -270,6 +403,8 @@ func set_dock_variable_selection(
 	_clear_deleted_selection_state()
 	_close_delete_confirmation()
 	_request_rebuild()
+	if _fluo_mode:
+		fluo_layout_refresh_requested.emit()
 
 
 func sync_schema_3_container_selection(
@@ -670,6 +805,7 @@ func _on_ready_block_details_visibility_changed(is_visible: bool) -> void:
 	_ready_block_details_open = is_visible
 	if not is_visible:
 		_flusso_snapshots.clear()
+	fluo_layout_refresh_requested.emit()
 
 
 func _on_ready_block_revert_requested(block_id: String) -> void:
@@ -724,6 +860,7 @@ func open_ready_block_details(
 	_ready_block_details_open = true
 	_ensure_flusso_snapshot(block_id)
 	_request_rebuild()
+	fluo_layout_refresh_requested.emit()
 	return true
 
 
@@ -737,6 +874,7 @@ func close_ready_block_details() -> bool:
 	_flusso_snapshots.clear()
 	_flow_entry_focus_pending = true
 	_request_rebuild()
+	fluo_layout_refresh_requested.emit()
 	return true
 
 
@@ -3997,3 +4135,44 @@ func navigate_potok_machine(direction: int) -> bool:
 		_request_rebuild()
 		return true
 	return false
+
+
+func _find_ready_process_editor() -> FlowReadyProcessEditor:
+	if _content == null:
+		return null
+	return _content.find_child("ReadyProcessEditor", true, false) as FlowReadyProcessEditor
+
+
+func get_fluo_preferred_composed_width(separator_width: float = 8.0, margins_width: float = 24.0) -> float:
+	if _fluo_mode and _is_block_collection() and _ready_block_details_open:
+		# Use logical Fluo state so the host can size Flow+Flusso even while
+		# the editor is rebuilding or Flusso controls are still being created.
+		var editor: FlowReadyProcessEditor = _find_ready_process_editor()
+		if editor != null and editor.has_method(&"get_preferred_composed_width"):
+			return float(editor.call(&"get_preferred_composed_width", separator_width, margins_width))
+		return 320.0 + 420.0 + separator_width + margins_width
+	var editor_only: FlowReadyProcessEditor = _find_ready_process_editor()
+	if editor_only != null and editor_only.has_method(&"get_preferred_composed_width"):
+		return float(editor_only.call(&"get_preferred_composed_width", separator_width, margins_width))
+	if _fluo_mode:
+		# Flow-only preferred width (workspace-driven default).
+		return 320.0 + margins_width
+	return 360.0
+
+
+func get_fluo_minimum_composed_width(separator_width: float = 8.0, margins_width: float = 24.0) -> float:
+	if _fluo_mode and _is_block_collection() and _ready_block_details_open:
+		var editor: FlowReadyProcessEditor = _find_ready_process_editor()
+		if editor != null and editor.has_method(&"get_minimum_composed_width"):
+			return float(editor.call(&"get_minimum_composed_width", separator_width, margins_width))
+		return 280.0 + 320.0 + separator_width + margins_width
+	var editor_only: FlowReadyProcessEditor = _find_ready_process_editor()
+	if editor_only != null and editor_only.has_method(&"get_minimum_composed_width"):
+		return float(editor_only.call(&"get_minimum_composed_width", separator_width, margins_width))
+	if _fluo_mode:
+		return 280.0 + margins_width
+	return 320.0
+
+
+func request_fluo_layout_refresh() -> void:
+	fluo_layout_refresh_requested.emit()

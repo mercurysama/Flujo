@@ -235,6 +235,31 @@ func _evaluate(left: FlowValueResult, right: FlowValueResult) -> FlowValueResult
 				int(left.value) % int(right.value),
 				Variant.Type.TYPE_INT
 			)
+		FlowOperationOperatorCatalog.OPERATOR_POWER:
+			if get_value_type() == Variant.Type.TYPE_INT:
+				return FlowValueResult.ok(
+					int(pow(float(left.value), float(right.value))),
+					Variant.Type.TYPE_INT
+				)
+			return FlowValueResult.ok(
+				pow(float(left.value), float(right.value)),
+				Variant.Type.TYPE_FLOAT
+			)
+		FlowOperationOperatorCatalog.OPERATOR_FLOOR_DIVIDE:
+			if (right.value_type == Variant.Type.TYPE_INT and int(right.value) == 0) 					or (right.value_type == Variant.Type.TYPE_FLOAT 					and float(right.value) == 0.0):
+				return _runtime_error(
+					FlowDiagnostic.CODE_OPERATION_DIVISION_BY_ZERO,
+					"Operation division by zero."
+				)
+			if get_value_type() == Variant.Type.TYPE_INT:
+				return FlowValueResult.ok(
+					int(floor(float(left.value) / float(right.value))),
+					Variant.Type.TYPE_INT
+				)
+			return FlowValueResult.ok(
+				floor(float(left.value) / float(right.value)),
+				Variant.Type.TYPE_FLOAT
+			)
 		FlowOperationOperatorCatalog.OPERATOR_CONCAT:
 			return FlowValueResult.ok(
 				String(left.value) + String(right.value),

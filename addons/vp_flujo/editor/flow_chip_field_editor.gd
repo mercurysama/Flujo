@@ -92,6 +92,7 @@ var _validation_label: Label
 var _feedback_label: Label
 var _details_panel: PanelContainer
 var _details: VBoxContainer
+var _header: HBoxContainer
 
 var _selected_segment_id: String = ""
 var _current_position_id: String = ""
@@ -111,6 +112,9 @@ var _text_history_sessions: Dictionary[String, Dictionary] = {}
 var _value_history_sessions: Dictionary[String, Dictionary] = {}
 var _validation_result: FlowValidationResult = FlowValidationResult.new()
 var _feedback_text: String = ""
+var _minimal_presentation: bool = false
+var _placeholder_text: String = ""
+var _placeholder_label: Label
 
 var _variable_trigger_active: bool = false
 var _variable_trigger_segment_id: String = ""
@@ -186,15 +190,15 @@ func _init() -> void:
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 	add_theme_constant_override(&"separation", 6)
 
-	var header: HBoxContainer = HBoxContainer.new()
-	header.name = &"ChipFieldToolbar"
-	add_child(header)
+	_header = HBoxContainer.new()
+	_header.name = &"ChipFieldToolbar"
+	add_child(_header)
 
 	var title: Label = Label.new()
 	title.name = &"ChipFieldTitle"
 	title.text = "Inline chip field"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(title)
+	_header.add_child(title)
 
 	_add_value_button = Button.new()
 	_add_value_button.name = &"AddValue"
@@ -207,7 +211,7 @@ func _init() -> void:
 	_literal_type_menu.name = &"LiteralTypeSelector"
 	_literal_type_menu.id_pressed.connect(_on_literal_type_selected)
 	_add_value_button.add_child(_literal_type_menu)
-	header.add_child(_add_value_button)
+	_header.add_child(_add_value_button)
 
 	_add_structured_button = Button.new()
 	_add_structured_button.name = &"AddStructuredValue"
@@ -219,7 +223,7 @@ func _init() -> void:
 	_structured_type_menu.name = &"StructuredTypeSelector"
 	_structured_type_menu.id_pressed.connect(_on_structured_type_selected)
 	_add_structured_button.add_child(_structured_type_menu)
-	header.add_child(_add_structured_button)
+	_header.add_child(_add_structured_button)
 
 	_variable_selector = FLOW_VARIABLE_SELECTOR_SCRIPT.new() as FlowVariableSelector
 	_variable_selector.variable_selected.connect(_on_variable_selected)
@@ -271,19 +275,28 @@ func _init() -> void:
 	_feedback_label.visible = false
 	add_child(_feedback_label)
 
+	var surface_panel: PanelContainer = PanelContainer.new()
+	surface_panel.name = &"ChipFieldSurfacePanel"
+	surface_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	surface_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	surface_panel.custom_minimum_size = Vector2(0.0, 72.0)
+	_apply_surface_panel_style(surface_panel)
+	add_child(surface_panel)
+
 	var surface_scroll: ScrollContainer = ScrollContainer.new()
 	surface_scroll.name = &"ChipFieldScroll"
 	surface_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	surface_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	surface_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	surface_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	add_child(surface_scroll)
+	surface_scroll.gui_input.connect(_on_surface_gui_input)
+	surface_panel.add_child(surface_scroll)
 
 	_surface = FlowContainer.new()
 	_surface.name = &"ChipFieldSurface"
 	_surface.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_surface.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	_surface.custom_minimum_size = Vector2(0.0, 72.0)
+	_surface.custom_minimum_size = Vector2(0.0, 56.0)
 	_surface.add_theme_constant_override(&"h_separation", 3)
 	_surface.add_theme_constant_override(&"v_separation", 3)
 	_surface.set_drag_forwarding(
@@ -292,6 +305,16 @@ func _init() -> void:
 		Callable(self, &"_drop_data")
 	)
 	surface_scroll.add_child(_surface)
+
+	_placeholder_label = Label.new()
+	_placeholder_label.name = &"ChipFieldPlaceholder"
+	_placeholder_label.text = ""
+	_placeholder_label.modulate = Color(1.0, 1.0, 1.0, 0.55)
+	_placeholder_label.mouse_filter = Control.MOUSE_FILTER_STOP
+	_placeholder_label.focus_mode = Control.FOCUS_NONE
+	_placeholder_label.visible = false
+	_placeholder_label.gui_input.connect(_on_placeholder_gui_input)
+	_surface.add_child(_placeholder_label)
 
 	_details_panel = PanelContainer.new()
 	_details_panel.name = &"ChipEditorPanel"
@@ -367,6 +390,96 @@ func configure_field(
 		action_owner: Object = null
 ) -> void:
 	configure(field_schema, field_document, undo_redo, action_owner)
+
+
+## Editor-only presentation hint for minimal Flusso surfaces (e.g. FPrint).
+## Hides technical insertion controls; does not change model, schema or runtime.
+func set_minimal_presentation_mode(enabled: bool, placeholder: String = "") -> void:
+	_minimal_presentation = enabled
+	_placeholder_text = placeholder
+	if _header != null:
+		_header.visible = not enabled
+	if _details_panel != null and enabled:
+		_details_panel.visible = false
+	_update_placeholder_visibility()
+
+
+func _update_placeholder_visibility() -> void:
+	if _placeholder_label == null:
+		return
+	var has_content: bool = _document != null and not _document.segments.is_empty()
+	_placeholder_label.text = _placeholder_text
+	_placeholder_label.visible = _minimal_presentation and not _placeholder_text.is_empty() and not has_content
+
+
+func _apply_surface_panel_style(panel: PanelContainer) -> void:
+	if panel == null:
+		return
+	var style: StyleBoxFlat = StyleBoxFlat.new()
+	var base: Color = get_theme_color(&"base_color", &"Editor") if has_theme_color(&"base_color", &"Editor") else Color(0.2, 0.2, 0.2, 1.0)
+	style.bg_color = base.lightened(0.08)
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	style.border_color = base.lightened(0.18)
+	style.corner_radius_top_left = 4
+	style.corner_radius_top_right = 4
+	style.corner_radius_bottom_left = 4
+	style.corner_radius_bottom_right = 4
+	style.content_margin_left = 6
+	style.content_margin_top = 6
+	style.content_margin_right = 6
+	style.content_margin_bottom = 6
+	panel.add_theme_stylebox_override(&"panel", style)
+
+
+func _on_placeholder_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mb: InputEventMouseButton = event as InputEventMouseButton
+		if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+			_focus_primary_text_edit()
+			accept_event()
+	elif event is InputEventScreenTouch:
+		var st: InputEventScreenTouch = event as InputEventScreenTouch
+		if st.pressed:
+			_focus_primary_text_edit()
+			accept_event()
+
+
+func _on_surface_gui_input(event: InputEvent) -> void:
+	if _placeholder_label != null and _placeholder_label.visible:
+		_on_placeholder_gui_input(event)
+		return
+	if event is InputEventMouseButton:
+		var mb: InputEventMouseButton = event as InputEventMouseButton
+		if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+			var focus_owner: Control = get_viewport().gui_get_focus_owner() as Control if get_viewport() != null else null
+			if focus_owner == null or not is_ancestor_of(focus_owner):
+				_focus_primary_text_edit()
+	elif event is InputEventScreenTouch:
+		var st: InputEventScreenTouch = event as InputEventScreenTouch
+		if st.pressed:
+			var focus_owner: Control = get_viewport().gui_get_focus_owner() as Control if get_viewport() != null else null
+			if focus_owner == null or not is_ancestor_of(focus_owner):
+				_focus_primary_text_edit()
+
+
+func _focus_primary_text_edit() -> bool:
+	if _document == null:
+		return false
+	if _document.segments.is_empty() and _document.has_method(&"ensure_default_text_tok_if_empty"):
+		_document.call(&"ensure_default_text_tok_if_empty")
+		_refresh()
+	for segment: FlowDocumentSegment in _document.segments:
+		if segment is FlowTextSegment:
+			var segment_id: String = segment.get_segment_id()
+			var control: TextEdit = get_text_control(segment_id)
+			if control != null and is_instance_valid(control):
+				control.grab_focus()
+				set_caret_position(segment_id, (segment as FlowTextSegment).text.length())
+				return true
+	return false
 
 
 ## Routes Ctrl+Z/Ctrl+Shift+Z/Ctrl+Y to the owning Akis history before
@@ -775,6 +888,64 @@ func insert_value() -> String:
 	return insert_value_source_at_caret(
 		FlowLiteralValueSource.new(FlowLiteralValueSource.TYPE_INT, 0)
 	)
+
+
+## Inserts an independent Text Tok at the current caret/position.
+## Respects Akis type configuration when provided by the document (V1: "text").
+func insert_text_tok_at_caret(text: String = "", evaluable: Variant = null) -> String:
+	if _document == null:
+		_reject(FEEDBACK_INVALID_CHIP_POSITION)
+		return ""
+	if _document.has_method(&"is_tok_type_insertable") \
+			and not bool(_document.call(&"is_tok_type_insertable", FlowStructuredDocument.TOK_TYPE_TEXT)):
+		_reject(FEEDBACK_TOK_IMMUTABLE)
+		return ""
+
+	var tok: FlowTextSegment = FlowTextSegment.new()
+	tok.text = text
+	if evaluable is bool:
+		tok.evaluable = evaluable as bool
+	elif _document.has_method(&"is_tok_type_evaluable_by_default"):
+		tok.evaluable = bool(_document.call(&"is_tok_type_evaluable_by_default", FlowStructuredDocument.TOK_TYPE_TEXT))
+	else:
+		tok.evaluable = true
+
+	var before_segments: Array[FlowDocumentSegment] = _copy_segments(_document.segments)
+	var before_text_states: Array[Dictionary] = _text_states_for_segments(before_segments)
+	var after_segments: Array[FlowDocumentSegment] = _copy_segments(before_segments)
+	var after_text_states: Array[Dictionary] = []
+	var focus_id: String = tok.get_segment_id()
+	var focus_offset: int = tok.text.length()
+
+	var caret_text: FlowTextSegment = _find_segment(_caret_segment_id) as FlowTextSegment
+	if caret_text != null:
+		var text_index: int = _find_segment_index(_caret_segment_id)
+		# Insert as a separate independent text tok after the current text tok,
+		# preserving the current tok content unchanged.
+		after_segments.insert(text_index + 1, tok)
+	else:
+		var insert_index: int = _insertion_index()
+		insert_index = clampi(insert_index, 0, after_segments.size())
+		after_segments.insert(insert_index, tok)
+
+	_selected_segment_id = tok.get_segment_id()
+	_current_position_id = tok.get_segment_id()
+	_caret_segment_id = focus_id
+	_caret_offset = focus_offset
+	_caret_boundary_index = -1
+	_focus_restore_id = focus_id
+	_focus_restore_offset = focus_offset
+	_preserve_selection_during_focus_restore = true
+	_clear_feedback()
+	_commit_state_action(
+		"Insert Text Tok",
+		before_segments,
+		before_text_states,
+		after_segments,
+		after_text_states
+	)
+	segment_selected.emit(tok.get_segment_id())
+	return tok.get_segment_id()
 
 
 ## Inserts a graph-owned VariableRef through the same semantic source boundary
@@ -1766,6 +1937,7 @@ func _rebuild_interface(generation: int) -> void:
 	_render_details()
 	_refresh_validation()
 	_update_toolbar_state()
+	_update_placeholder_visibility()
 	_restore_focus_anchor()
 
 
@@ -1797,13 +1969,20 @@ func _create_segment_control(segment: FlowDocumentSegment) -> Control:
 		text_control.name = "FlowText_" + segment.get_segment_id()
 		text_control.focus_mode = Control.FOCUS_ALL
 		text_control.mouse_default_cursor_shape = Control.CURSOR_IBEAM
-		text_control.wrap_mode = TextEdit.LINE_WRAPPING_NONE
-		text_control.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		var fill_surface: bool = _should_text_control_fill_surface()
+		text_control.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY if fill_surface else TextEdit.LINE_WRAPPING_NONE
+		text_control.size_flags_horizontal = Control.SIZE_EXPAND_FILL if fill_surface else Control.SIZE_SHRINK_BEGIN
 		text_control.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		text_control.scroll_fit_content_height = fill_surface
+		text_control.scroll_horizontal = not fill_surface
 		text_control.text = text_segment.text
-		text_control.custom_minimum_size = _text_minimum_size(text_control, text_control.text)
+		text_control.custom_minimum_size = _text_minimum_size(text_control, text_control.text, fill_surface)
 		text_control.add_theme_stylebox_override(&"normal", StyleBoxEmpty.new())
 		text_control.add_theme_stylebox_override(&"focus", StyleBoxEmpty.new())
+		if _minimal_presentation and not _placeholder_text.is_empty():
+			text_control.placeholder_text = _placeholder_text
+		else:
+			text_control.placeholder_text = ""
 		text_control.text_changed.connect(_on_text_control_changed.bind(segment.get_segment_id(), text_control))
 		text_control.caret_changed.connect(_on_text_caret_changed.bind(segment.get_segment_id(), text_control))
 		text_control.focus_entered.connect(_on_text_control_focused.bind(segment.get_segment_id(), text_control))
@@ -1821,17 +2000,33 @@ func _create_segment_control(segment: FlowDocumentSegment) -> Control:
 	return unsupported
 
 
-func _text_minimum_size(input: TextEdit, text: String) -> Vector2:
+func _should_text_control_fill_surface() -> bool:
+	if _minimal_presentation:
+		return true
+	if _document == null or _document.segments.size() != 1:
+		return false
+	return _document.segments[0] is FlowTextSegment
+
+
+func _text_minimum_size(input: TextEdit, text: String, fill_width: bool = false) -> Vector2:
 	var font: Font = input.get_theme_font(&"font")
 	var font_size: int = input.get_theme_font_size(&"font_size")
 	if font == null:
-		return Vector2(maxf(24.0, float(text.length() * 8)), 24.0)
+		var h: float = 24.0
+		return Vector2(0.0 if fill_width else maxf(24.0, float(text.length() * 8)), h)
 	var lines: PackedStringArray = text.split("\n", true)
 	var width: float = 18.0
-	for line: String in lines:
-		width = maxf(width, font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x + 4.0)
+	if not fill_width:
+		for line: String in lines:
+			width = maxf(width, font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x + 4.0)
+	else:
+		width = 0.0
 	var line_height: float = font.get_height(font_size)
-	return Vector2(width, maxf(line_height + 4.0, line_height * float(maxi(lines.size(), 1)) + 4.0))
+	var line_count: int = maxi(lines.size(), 1)
+	# Comfortable minimum height; allow growth with content while keeping width flexible.
+	var min_lines: int = 2 if fill_width else 1
+	var height: float = maxf(line_height * float(maxi(line_count, min_lines)) + 8.0, line_height + 8.0)
+	return Vector2(width, height)
 
 
 func _on_text_control_focused(segment_id: String, input: TextEdit) -> void:
@@ -2030,7 +2225,7 @@ func _on_text_control_changed(segment_id: String, input: TextEdit) -> void:
 		return
 	_caret_offset = text_offset
 	_record_native_text_change(segment_id, input, input.text)
-	input.custom_minimum_size = _text_minimum_size(input, input.text)
+	input.custom_minimum_size = _text_minimum_size(input, input.text, _should_text_control_fill_surface())
 	_surface.queue_sort()
 
 
@@ -4100,8 +4295,8 @@ func _render_details() -> void:
 		_details.remove_child(child)
 		child.free()
 	var segment: FlowChipSegment = _selected_chip()
-	_details_panel.visible = segment != null
-	if segment == null:
+	_details_panel.visible = segment != null and not _minimal_presentation
+	if segment == null or _minimal_presentation:
 		return
 
 	var descriptor: FlowChipTypeDescriptor = segment.get_chip_type_descriptor()

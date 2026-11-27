@@ -1,0 +1,11 @@
+{
+  "manifest_version": 1,
+  "package_id": "mercury.flog",
+  "blocks": [
+    {
+      "type_id": "flog",
+      "script": "block.gd",
+      "display_name": "FLog"
+    }
+  ]
+}

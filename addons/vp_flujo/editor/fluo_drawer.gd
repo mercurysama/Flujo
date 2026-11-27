@@ -23,6 +23,9 @@ signal schema_3_delete_selection_recovery_requested(
 )
 
 const DRAWER_WIDTH_RATIO: float = 0.46
+const FLUO_CONTENT_MARGIN_WIDTH: float = 24.0
+const FLUO_WORKSPACE_SEPARATOR_WIDTH: float = 8.0
+const FLUO_MIN_VIEWPORT_MARGIN: float = 24.0
 
 enum MotionState {
 	CLOSED,
@@ -63,8 +66,13 @@ func _init() -> void:
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	resized.connect(_on_fluo_resized)
 	_apply_side_layout()
 	_reset_motion_state()
+
+
+func _on_fluo_resized() -> void:
+	_apply_side_layout()
 
 
 func _notification(what: int) -> void:
@@ -92,6 +100,8 @@ func configure(undo_redo: EditorUndoRedoManager) -> void:
 	_variable_editor.schema_3_delete_selection_recovery_requested.connect(
 		_on_delete_selection_recovery_requested
 	)
+	if _variable_editor.has_signal(&"fluo_layout_refresh_requested"):
+		_variable_editor.fluo_layout_refresh_requested.connect(_apply_side_layout)
 
 	_editor_scroll_content.add_child(_variable_editor)
 	_variable_editor.set_dock_controller(_controller_instance())
@@ -136,6 +146,7 @@ func focus_variable_editor(controller: PVController, variable_id: String) -> voi
 func refresh_controller() -> void:
 	if _variable_editor != null:
 		_variable_editor.refresh_dock_controller()
+	_apply_side_layout()
 
 
 func open_container(
@@ -149,6 +160,7 @@ func open_container(
 		_variable_editor.set_dock_variable_selection(controller, collection, container_id)
 		_variable_editor.focus_flow_entry()
 	open()
+	call_deferred(&"_apply_side_layout")
 
 
 func open_block(
@@ -161,10 +173,12 @@ func open_block(
 	if _variable_editor != null:
 		_variable_editor.open_ready_block_details(controller, collection, container_id, block_id)
 	open()
+	call_deferred(&"_apply_side_layout")
 
 
 func open() -> void:
 	if _is_open:
+		_apply_side_layout()
 		return
 	_motion_state = MotionState.OPENING
 	_remember_focus()
@@ -172,6 +186,7 @@ func open() -> void:
 	_reset_motion_state()
 	show()
 	move_to_front()
+	_apply_side_layout()
 	_motion_state = MotionState.OPEN
 
 
@@ -201,6 +216,55 @@ func close() -> void:
 
 func is_open() -> bool:
 	return _is_open
+
+
+func refresh_layout() -> void:
+	_apply_side_layout()
+
+func capture_play_context() -> Dictionary:
+	var controller: PVController = _controller_instance()
+	var dock_snapshot: Dictionary = {}
+	if _variable_editor != null and _variable_editor.has_method(&"get_dock_context_snapshot"):
+		dock_snapshot = _variable_editor.get_dock_context_snapshot()
+	return {
+		"controller": controller,
+		"drawer_open": _is_open,
+		"collection": int(dock_snapshot.get("collection", int(FlowGraphEditorCommands.Collection.PROCESSES))),
+		"container_id": String(dock_snapshot.get("container_id", "")),
+		"block_id": String(dock_snapshot.get("block_id", "")),
+		"block_details_open": bool(dock_snapshot.get("block_details_open", false)),
+	}
+
+
+func restore_play_context(snapshot: Dictionary, expected_controller: PVController = null) -> bool:
+	if snapshot.is_empty():
+		return false
+	var controller: PVController = snapshot.get("controller", null) as PVController
+	if expected_controller != null:
+		controller = expected_controller
+	if not is_instance_valid(controller):
+		return false
+	# Preserve/restore editor content visibility and drawer state without forcing
+	# unrelated interaction mode. Rehydrate by stable IDs only; do not invent.
+	var should_open: bool = bool(snapshot.get("drawer_open", false))
+	var current_controller: PVController = _controller_instance()
+	if current_controller != controller:
+		set_controller(controller)
+	if _variable_editor != null and _variable_editor.has_method(&"refresh_dock_controller"):
+		_variable_editor.set_dock_controller(controller)
+	var restored: bool = false
+	if _variable_editor != null and _variable_editor.has_method(&"restore_dock_context_snapshot"):
+		restored = bool(_variable_editor.restore_dock_context_snapshot(controller, snapshot))
+	elif _variable_editor != null and _variable_editor.has_method(&"set_dock_controller"):
+		_variable_editor.set_dock_controller(controller)
+	if should_open and not _is_open:
+		open()
+	# Visibility must win after Play/Stop restore, even if transient paths hid it.
+	set_editing_visible(true)
+	if should_open and _variable_editor != null:
+		_variable_editor.visible = true
+	_apply_side_layout()
+	return restored
 
 
 ## Lets the interaction coordinator use Fluo as the primary Flow surface.
@@ -354,20 +418,50 @@ func _build_interface() -> void:
 func _apply_side_layout() -> void:
 	if _drawer_motion_shell == null:
 		return
-
+	var desired_width: float = _compute_desired_drawer_width()
+	var clamped_width: float = _clamp_drawer_width(desired_width)
 	if _right_side:
-		_drawer_motion_shell.anchor_left = 1.0 - DRAWER_WIDTH_RATIO
+		_drawer_motion_shell.anchor_left = 1.0
 		_drawer_motion_shell.anchor_right = 1.0
+		_drawer_motion_shell.offset_left = -clamped_width
+		_drawer_motion_shell.offset_right = 0.0
 	else:
 		_drawer_motion_shell.anchor_left = 0.0
-		_drawer_motion_shell.anchor_right = DRAWER_WIDTH_RATIO
-
+		_drawer_motion_shell.anchor_right = 0.0
+		_drawer_motion_shell.offset_left = 0.0
+		_drawer_motion_shell.offset_right = clamped_width
 	_drawer_motion_shell.anchor_top = 0.0
 	_drawer_motion_shell.anchor_bottom = 1.0
-	_drawer_motion_shell.offset_left = 0.0
 	_drawer_motion_shell.offset_top = 0.0
-	_drawer_motion_shell.offset_right = 0.0
 	_drawer_motion_shell.offset_bottom = 0.0
+
+
+func _get_viewport_width() -> float:
+	var viewport: Viewport = get_viewport()
+	if viewport == null:
+		return 800.0
+	var rect: Rect2 = viewport.get_visible_rect()
+	return rect.size.x if rect.size.x > 0.0 else 800.0
+
+
+func _clamp_drawer_width(desired: float) -> float:
+	var viewport_width: float = _get_viewport_width()
+	var max_width: float = maxf(280.0, viewport_width - FLUO_MIN_VIEWPORT_MARGIN)
+	var min_width: float = _compute_minimum_drawer_width()
+	min_width = minf(min_width, max_width)
+	return clampf(desired, min_width, max_width)
+
+
+func _compute_minimum_drawer_width() -> float:
+	if _variable_editor != null and _variable_editor.has_method(&"get_fluo_minimum_composed_width"):
+		return float(_variable_editor.call(&"get_fluo_minimum_composed_width", FLUO_WORKSPACE_SEPARATOR_WIDTH, FLUO_CONTENT_MARGIN_WIDTH))
+	return 320.0
+
+
+func _compute_desired_drawer_width() -> float:
+	if _variable_editor != null and _variable_editor.has_method(&"get_fluo_preferred_composed_width"):
+		return float(_variable_editor.call(&"get_fluo_preferred_composed_width", FLUO_WORKSPACE_SEPARATOR_WIDTH, FLUO_CONTENT_MARGIN_WIDTH))
+	return 360.0
 
 
 ## Single reset boundary for all future presentation motion.

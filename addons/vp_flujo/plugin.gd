@@ -15,7 +15,13 @@ const FLOW_CONTROLLER_PROVISIONER_CLASS := preload("res://addons/vp_flujo/editor
 const STRUCTURED_DOCUMENT_HARNESS_CLASS := preload(
 	"res://addons/vp_flujo/editor/flow_structured_document_editor_harness.gd"
 )
+const FLUXUS_DRAWER_CLASS := preload("res://addons/vp_flujo/editor/fluxus_drawer.gd")
+const PRAVAH_DRAWER_CLASS := preload("res://addons/vp_flujo/editor/pravah_drawer.gd")
+const NAGARE_DRAWER_CLASS := preload("res://addons/vp_flujo/editor/nagare_drawer.gd")
 const INTERACTION_SHORTCUT_PATH: String = "flujo/toggle_interaction"
+const FLUXUS_SHORTCUT_PATH: String = "flujo/toggle_fluxus"
+const PRAVAH_SHORTCUT_PATH: String = "flujo/toggle_pravah"
+const NAGARE_SHORTCUT_PATH: String = "flujo/toggle_nagare"
 const STRUCTURED_DOCUMENT_HARNESS_MENU_ITEM: String = "Open Structured Document Harness"
 
 var _scene_inspector
@@ -26,9 +32,18 @@ var _controller_reference: WeakRef
 var _selected_schema_3_variable_id: String = ""
 var _interaction_coordinator: FlowInteractionCoordinator
 var _interaction_shortcut: Shortcut
+var _fluxus_shortcut: Shortcut
+var _pravah_shortcut: Shortcut
+var _nagare_shortcut: Shortcut
 var _controller_provisioner: FlowControllerProvisioner
 var _fluo_drawer: FluoDrawer
 var _scene_node_panel: FlowSceneNodePanel
+var _fluxus_drawer: FluxusDrawer
+var _pravah_drawer: PravahDrawer
+var _nagare_drawer: NagareDrawer
+var _fluxus_toolbar_button: Button
+var _pravah_toolbar_button: Button
+var _nagare_toolbar_button: Button
 var _structured_document_harness: FlowStructuredDocumentEditorHarness
 
 
@@ -48,6 +63,10 @@ func _enter_tree() -> void:
 	add_inspector_plugin(_controller_inspector_plugin)
 	_mount_fluo_drawer()
 	_mount_scene_node_panel()
+	_mount_fluxus_pravah_drawers()
+	_mount_fluxus_toolbar_button()
+	_mount_pravah_toolbar_button()
+	_mount_nagare_toolbar_button()
 	add_tool_menu_item("Open Fluo", Callable(self, &"_on_fluo_open_requested"))
 	add_tool_menu_item("Open Node Panel", Callable(self, &"_on_scene_node_panel_requested"))
 	add_tool_menu_item(
@@ -62,6 +81,24 @@ func _enter_tree() -> void:
 				FlowInteractionCoordinator.create_default_shortcut()
 			)
 		_interaction_shortcut = editor_settings.get_shortcut(INTERACTION_SHORTCUT_PATH)
+		if not editor_settings.has_shortcut(FLUXUS_SHORTCUT_PATH):
+			editor_settings.add_shortcut(
+				FLUXUS_SHORTCUT_PATH,
+				_create_default_fluxus_shortcut()
+			)
+		_fluxus_shortcut = editor_settings.get_shortcut(FLUXUS_SHORTCUT_PATH)
+		if not editor_settings.has_shortcut(PRAVAH_SHORTCUT_PATH):
+			editor_settings.add_shortcut(
+				PRAVAH_SHORTCUT_PATH,
+				_create_default_pravah_shortcut()
+			)
+		_pravah_shortcut = editor_settings.get_shortcut(PRAVAH_SHORTCUT_PATH)
+		if not editor_settings.has_shortcut(NAGARE_SHORTCUT_PATH):
+			editor_settings.add_shortcut(
+				NAGARE_SHORTCUT_PATH,
+				_create_default_nagare_shortcut()
+			)
+		_nagare_shortcut = editor_settings.get_shortcut(NAGARE_SHORTCUT_PATH)
 	_interaction_coordinator = FLOW_INTERACTION_COORDINATOR_CLASS.new(_fluo_drawer)
 	_controller_provisioner = FLOW_CONTROLLER_PROVISIONER_CLASS.new(
 		get_undo_redo(),
@@ -78,11 +115,19 @@ func _exit_tree() -> void:
 	if _interaction_coordinator != null:
 		_interaction_coordinator.shutdown()
 	_interaction_coordinator = null
+	_dispose_nagare_toolbar_button()
+	_dispose_pravah_toolbar_button()
+	_dispose_fluxus_toolbar_button()
+	_dispose_fluxus_pravah_drawers()
+	_dispose_nagare_drawer()
 	_dispose_structured_document_harness()
 	_dispose_scene_node_panel()
 	_dispose_fluo_drawer()
 	_controller_provisioner = null
 	_interaction_shortcut = null
+	_fluxus_shortcut = null
+	_pravah_shortcut = null
+	_nagare_shortcut = null
 	if is_instance_valid(_controller_inspector_plugin):
 		remove_inspector_plugin(_controller_inspector_plugin)
 	_controller_inspector_plugin = null
@@ -117,6 +162,12 @@ func _mount_fluo_drawer() -> void:
 	editor_base_control.add_child(_fluo_drawer)
 	_fluo_drawer.set_controller(_controller_instance())
 	_fluo_drawer.side_changed.connect(_on_fluo_side_changed)
+	var editor_settings: EditorSettings = EditorInterface.get_editor_settings()
+	if editor_settings != null:
+		var right_side: bool = false
+		if editor_settings.has_setting("flujo/fluo/right_side"):
+			right_side = bool(editor_settings.get_setting("flujo/fluo/right_side"))
+		_fluo_drawer.set_right_side(right_side)
 
 
 func _mount_scene_node_panel() -> void:
@@ -154,6 +205,9 @@ func _on_scene_node_panel_requested() -> void:
 
 
 func _on_fluo_side_changed(right_side: bool) -> void:
+	var editor_settings: EditorSettings = EditorInterface.get_editor_settings()
+	if editor_settings != null:
+		editor_settings.set_setting("flujo/fluo/right_side", right_side)
 	if is_instance_valid(_scene_node_panel):
 		_scene_node_panel.set_opposite_to_fluo(right_side)
 
@@ -261,6 +315,24 @@ func _on_selection_changed() -> void:
 
 
 func _shortcut_input(event: InputEvent) -> void:
+	if _is_fluxus_shortcut(event):
+		toggle_fluxus()
+		var viewport: Viewport = get_viewport()
+		if viewport != null:
+			viewport.set_input_as_handled()
+		return
+	if _is_pravah_shortcut(event):
+		toggle_pravah()
+		var viewport: Viewport = get_viewport()
+		if viewport != null:
+			viewport.set_input_as_handled()
+		return
+	if _is_nagare_shortcut(event):
+		toggle_nagare()
+		var viewport: Viewport = get_viewport()
+		if viewport != null:
+			viewport.set_input_as_handled()
+		return
 	if _interaction_coordinator == null or _interaction_shortcut == null:
 		return
 	if _is_deliberate_interaction_shortcut(event) \
@@ -272,6 +344,66 @@ func _shortcut_input(event: InputEvent) -> void:
 		_set_interaction_selected_controller(controller)
 	if _interaction_coordinator.handle_shortcut(event, _interaction_shortcut, get_viewport()):
 		get_viewport().set_input_as_handled()
+
+
+func _is_fluxus_shortcut(event: InputEvent) -> bool:
+	if not event is InputEventKey or _fluxus_shortcut == null:
+		return false
+	var key_event: InputEventKey = event as InputEventKey
+	return key_event.pressed and not key_event.echo \
+		and _fluxus_shortcut.matches_event(event)
+
+
+func _is_pravah_shortcut(event: InputEvent) -> bool:
+	if not event is InputEventKey or _pravah_shortcut == null:
+		return false
+	var key_event: InputEventKey = event as InputEventKey
+	return key_event.pressed and not key_event.echo \
+		and _pravah_shortcut.matches_event(event)
+
+
+func _is_nagare_shortcut(event: InputEvent) -> bool:
+	if not event is InputEventKey or _nagare_shortcut == null:
+		return false
+	var key_event: InputEventKey = event as InputEventKey
+	return key_event.pressed and not key_event.echo \
+		and _nagare_shortcut.matches_event(event)
+
+
+static func _create_default_fluxus_shortcut() -> Shortcut:
+	var shortcut: Shortcut = Shortcut.new()
+	var event: InputEventKey = InputEventKey.new()
+	event.keycode = KEY_F
+	event.ctrl_pressed = true
+	event.alt_pressed = true
+	event.shift_pressed = false
+	event.meta_pressed = false
+	shortcut.events = [event]
+	return shortcut
+
+
+static func _create_default_pravah_shortcut() -> Shortcut:
+	var shortcut: Shortcut = Shortcut.new()
+	var event: InputEventKey = InputEventKey.new()
+	event.keycode = KEY_P
+	event.ctrl_pressed = true
+	event.alt_pressed = true
+	event.shift_pressed = false
+	event.meta_pressed = false
+	shortcut.events = [event]
+	return shortcut
+
+
+static func _create_default_nagare_shortcut() -> Shortcut:
+	var shortcut: Shortcut = Shortcut.new()
+	var event: InputEventKey = InputEventKey.new()
+	event.keycode = KEY_N
+	event.ctrl_pressed = true
+	event.alt_pressed = true
+	event.shift_pressed = false
+	event.meta_pressed = false
+	shortcut.events = [event]
+	return shortcut
 
 
 func _on_scene_changed(_scene_root: Node) -> void:
@@ -548,3 +680,184 @@ static func _should_show_dock(
 	if selected_nodes.size() > 1:
 		return false
 	return scene_inspector != null and scene_inspector.contains_controller(scene_root)
+
+
+func _mount_fluxus_pravah_drawers() -> void:
+	var editor_base_control: Control = EditorInterface.get_base_control()
+	if not is_instance_valid(editor_base_control):
+		return
+	if not is_instance_valid(_fluxus_drawer):
+		_fluxus_drawer = FLUXUS_DRAWER_CLASS.new() as FluxusDrawer
+		if is_instance_valid(_fluxus_drawer):
+			editor_base_control.add_child(_fluxus_drawer)
+	if not is_instance_valid(_pravah_drawer):
+		_pravah_drawer = PRAVAH_DRAWER_CLASS.new() as PravahDrawer
+		if is_instance_valid(_pravah_drawer):
+			editor_base_control.add_child(_pravah_drawer)
+	if not is_instance_valid(_nagare_drawer):
+		_nagare_drawer = NAGARE_DRAWER_CLASS.new() as NagareDrawer
+		if is_instance_valid(_nagare_drawer):
+			editor_base_control.add_child(_nagare_drawer)
+
+
+func _dispose_fluxus_pravah_drawers() -> void:
+	_dispose_editor_drawer(_fluxus_drawer)
+	_fluxus_drawer = null
+	_dispose_editor_drawer(_pravah_drawer)
+	_pravah_drawer = null
+
+
+func _dispose_nagare_drawer() -> void:
+	_dispose_editor_drawer(_nagare_drawer)
+	_nagare_drawer = null
+
+
+func _dispose_editor_drawer(drawer: Control) -> void:
+	if not is_instance_valid(drawer):
+		return
+	if drawer.has_method(&"close"):
+		drawer.call(&"close")
+	if drawer.has_method(&"clear_instances"):
+		drawer.call(&"clear_instances")
+	if drawer.get_parent() != null:
+		drawer.get_parent().remove_child(drawer)
+	drawer.free()
+
+
+func _mount_fluxus_toolbar_button() -> void:
+	if is_instance_valid(_fluxus_toolbar_button):
+		return
+	_fluxus_toolbar_button = Button.new()
+	_fluxus_toolbar_button.name = &"FluxusToggleButton"
+	_fluxus_toolbar_button.text = "Fluxus"
+	_fluxus_toolbar_button.tooltip_text = "Abrir/cerrar Fluxus (Ctrl+Alt+F)"
+	_fluxus_toolbar_button.flat = false
+	_fluxus_toolbar_button.focus_mode = Control.FOCUS_NONE
+	_fluxus_toolbar_button.pressed.connect(Callable(self, &"toggle_fluxus"))
+	# Stable editor toolbar container. Placing exactly next to Play/Stop is not
+	# done here because it requires fragile/private editor tree access.
+	add_control_to_container(CONTAINER_TOOLBAR, _fluxus_toolbar_button)
+
+
+func _dispose_fluxus_toolbar_button() -> void:
+	if not is_instance_valid(_fluxus_toolbar_button):
+		_fluxus_toolbar_button = null
+		return
+	remove_control_from_container(CONTAINER_TOOLBAR, _fluxus_toolbar_button)
+	if _fluxus_toolbar_button.pressed.is_connected(Callable(self, &"toggle_fluxus")):
+		_fluxus_toolbar_button.pressed.disconnect(Callable(self, &"toggle_fluxus"))
+	_fluxus_toolbar_button.free()
+	_fluxus_toolbar_button = null
+
+
+## Central Fluxus toggle used by toolbar button and editor shortcut.
+func toggle_fluxus() -> void:
+	var drawer: FluxusDrawer = get_fluxus_drawer()
+	if is_instance_valid(drawer):
+		drawer.toggle()
+
+
+func get_fluxus_drawer() -> FluxusDrawer:
+	return _fluxus_drawer
+
+
+func get_pravah_drawer() -> PravahDrawer:
+	return _pravah_drawer
+
+
+func get_nagare_drawer() -> NagareDrawer:
+	return _nagare_drawer
+
+
+func toggle_nagare() -> void:
+	var drawer: NagareDrawer = get_nagare_drawer()
+	if is_instance_valid(drawer):
+		drawer.toggle()
+
+
+func mount_workspace_in_nagare(workspace: Control) -> bool:
+	var drawer: NagareDrawer = get_nagare_drawer()
+	return drawer.mount_instance(workspace) if is_instance_valid(drawer) else false
+
+
+func unmount_workspace_from_nagare(workspace: Control) -> bool:
+	var drawer: NagareDrawer = get_nagare_drawer()
+	return drawer.unmount_instance(workspace) if is_instance_valid(drawer) else false
+
+
+## Supported host access for external/editor tooling: mount workspaces through
+## the generic FlowDrawerHost API without registering tools in plugin code.
+func mount_workspace_in_fluxus(workspace: Control) -> bool:
+	var drawer: FluxusDrawer = get_fluxus_drawer()
+	return drawer.mount_instance(workspace) if is_instance_valid(drawer) else false
+
+
+func unmount_workspace_from_fluxus(workspace: Control) -> bool:
+	var drawer: FluxusDrawer = get_fluxus_drawer()
+	return drawer.unmount_instance(workspace) if is_instance_valid(drawer) else false
+
+
+func mount_workspace_in_pravah(workspace: Control) -> bool:
+	var drawer: PravahDrawer = get_pravah_drawer()
+	return drawer.mount_instance(workspace) if is_instance_valid(drawer) else false
+
+
+func unmount_workspace_from_pravah(workspace: Control) -> bool:
+	var drawer: PravahDrawer = get_pravah_drawer()
+	return drawer.unmount_instance(workspace) if is_instance_valid(drawer) else false
+
+
+func _mount_pravah_toolbar_button() -> void:
+	if is_instance_valid(_pravah_toolbar_button):
+		return
+	_pravah_toolbar_button = Button.new()
+	_pravah_toolbar_button.name = &"PravahToggleButton"
+	_pravah_toolbar_button.text = "Pravah"
+	_pravah_toolbar_button.tooltip_text = "Abrir/cerrar Pravah (Ctrl+Alt+P)"
+	_pravah_toolbar_button.flat = false
+	_pravah_toolbar_button.focus_mode = Control.FOCUS_NONE
+	_pravah_toolbar_button.pressed.connect(Callable(self, &"toggle_pravah"))
+	# Supported explicit access for testing Pravah; stable toolbar container.
+	add_control_to_container(CONTAINER_TOOLBAR, _pravah_toolbar_button)
+
+
+func _dispose_pravah_toolbar_button() -> void:
+	if not is_instance_valid(_pravah_toolbar_button):
+		_pravah_toolbar_button = null
+		return
+	remove_control_from_container(CONTAINER_TOOLBAR, _pravah_toolbar_button)
+	if _pravah_toolbar_button.pressed.is_connected(Callable(self, &"toggle_pravah")):
+		_pravah_toolbar_button.pressed.disconnect(Callable(self, &"toggle_pravah"))
+	_pravah_toolbar_button.free()
+	_pravah_toolbar_button = null
+
+
+func _mount_nagare_toolbar_button() -> void:
+	if is_instance_valid(_nagare_toolbar_button):
+		return
+	_nagare_toolbar_button = Button.new()
+	_nagare_toolbar_button.name = &"NagareToggleButton"
+	_nagare_toolbar_button.text = "Nagare"
+	_nagare_toolbar_button.tooltip_text = "Abrir/cerrar Nagare (Ctrl+Alt+N)"
+	_nagare_toolbar_button.flat = false
+	_nagare_toolbar_button.focus_mode = Control.FOCUS_NONE
+	_nagare_toolbar_button.pressed.connect(Callable(self, &"toggle_nagare"))
+	add_control_to_container(CONTAINER_TOOLBAR, _nagare_toolbar_button)
+
+
+func _dispose_nagare_toolbar_button() -> void:
+	if not is_instance_valid(_nagare_toolbar_button):
+		_nagare_toolbar_button = null
+		return
+	remove_control_from_container(CONTAINER_TOOLBAR, _nagare_toolbar_button)
+	if _nagare_toolbar_button.pressed.is_connected(Callable(self, &"toggle_nagare")):
+		_nagare_toolbar_button.pressed.disconnect(Callable(self, &"toggle_nagare"))
+	_nagare_toolbar_button.free()
+	_nagare_toolbar_button = null
+
+
+## Central Pravah toggle used by toolbar button and editor shortcut.
+func toggle_pravah() -> void:
+	var drawer: PravahDrawer = get_pravah_drawer()
+	if is_instance_valid(drawer):
+		drawer.toggle()

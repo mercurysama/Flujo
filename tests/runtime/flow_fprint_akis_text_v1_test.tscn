@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/runtime/flow_fprint_akis_text_v1_test.gd" id="1_fprint_akis_text_v1"]
+
+[node name="FlowFPrintAkisTextV1RuntimeTest" type="Node"]
+script = ExtResource("1_fprint_akis_text_v1")

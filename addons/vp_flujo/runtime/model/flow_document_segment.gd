@@ -5,6 +5,9 @@ extends Resource
 
 
 @export_storage var _segment_id: String = FlowId.create()
+## Per-instance state: whether this Tok contributes to Akis evaluation/output.
+## Defaults to true for backward compatibility and V1 text behavior.
+@export var evaluable: bool = true
 
 
 ## Read/write alias useful to authoring adapters; the serialized field remains

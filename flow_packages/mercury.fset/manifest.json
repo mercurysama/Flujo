@@ -1,0 +1,11 @@
+{
+  "manifest_version": 1,
+  "package_id": "mercury.fset",
+  "blocks": [
+    {
+      "type_id": "fset",
+      "script": "block.gd",
+      "display_name": "FSet"
+    }
+  ]
+}

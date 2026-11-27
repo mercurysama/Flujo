@@ -18,6 +18,7 @@ var _focus_before_flow_reference: WeakRef
 var _flow_controller_before_game_reference: WeakRef
 var _resume_flow_after_game: bool = false
 var _playing_scene: bool = false
+var _drawer_play_context: Dictionary = {}
 var _transition_generation: int = 0
 
 
@@ -94,6 +95,7 @@ func update_playing_scene(is_playing_scene: bool, viewport: Viewport) -> void:
 func shutdown() -> void:
 	_transition_generation += 1
 	_resume_flow_after_game = false
+	_drawer_play_context = {}
 	_focus_before_flow_reference = null
 	_flow_controller_reference = null
 	_selected_controller_reference = null
@@ -132,6 +134,11 @@ func _leave_flow(restore_focus: bool, viewport: Viewport) -> void:
 
 func _enter_game(viewport: Viewport) -> void:
 	_transition_generation += 1
+	_drawer_play_context = {}
+	if _surface_has_method(&"capture_play_context"):
+		var captured: Variant = _surface_call(&"capture_play_context")
+		if captured is Dictionary:
+			_drawer_play_context = (captured as Dictionary).duplicate(true)
 	_resume_flow_after_game = _state == State.FLOW
 	_flow_controller_before_game_reference = _flow_controller_reference
 	_focus_before_flow_reference = null
@@ -146,17 +153,30 @@ func _enter_game(viewport: Viewport) -> void:
 func _leave_game() -> void:
 	_transition_generation += 1
 	var resume_controller: PVController = _controller_from_reference(_flow_controller_before_game_reference)
-	var may_resume: bool = _resume_flow_after_game \
+	var may_resume_flow: bool = _resume_flow_after_game \
 		and resume_controller != null \
 		and resume_controller == _selected_controller()
+	var snapshot: Dictionary = _drawer_play_context.duplicate(true)
+	var snapshot_controller: PVController = snapshot.get("controller", null) as PVController
 	_resume_flow_after_game = false
 	_flow_controller_before_game_reference = null
-	if may_resume and _surface_has_method(&"activate_flow_interaction"):
-		_flow_controller_reference = weakref(resume_controller)
-		_state = State.FLOW
-		_surface_call(&"set_editing_visible", [true])
-		_surface_call(&"activate_flow_interaction")
-		return
+	_drawer_play_context = {}
+
+	if is_instance_valid(snapshot_controller) and _surface_has_method(&"restore_play_context"):
+		if may_resume_flow and _surface_has_method(&"activate_flow_interaction"):
+			_flow_controller_reference = weakref(resume_controller)
+			_state = State.FLOW
+			_surface_call(&"restore_play_context", [snapshot, resume_controller])
+			_surface_call(&"set_editing_visible", [true])
+			_surface_call(&"activate_flow_interaction")
+			return
+		if bool(snapshot.get("drawer_open", false)):
+			_flow_controller_reference = null
+			_state = State.GODOT
+			_surface_call(&"restore_play_context", [snapshot, snapshot_controller])
+			_surface_call(&"set_editing_visible", [true])
+			return
+
 	_flow_controller_reference = null
 	_state = State.GODOT
 	_surface_call(&"set_editing_visible", [false])

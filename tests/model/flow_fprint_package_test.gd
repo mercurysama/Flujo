@@ -133,11 +133,22 @@ func _test_defaults_and_independent_instances(first: FlowBlock, second: FlowBloc
 	_check(first.display_name == "FPrint" and second.display_name == "FPrint",
 		"Factory-created FPrint instances receive the manifest display name.")
 	_check(_value(first, &"prefix").is_empty() and _value(first, &"message").is_empty() \
-			and _value(first, &"suffix").is_empty() and first.get(&"document") == null,
-		"FPrint defaults retain empty legacy strings and a null structured document.")
+			and _value(first, &"suffix").is_empty(),
+		"FPrint defaults retain empty legacy prefix/message/suffix strings.")
 	_check(_value(second, &"prefix").is_empty() and _value(second, &"message").is_empty() \
-			and _value(second, &"suffix").is_empty() and second.get(&"document") == null,
-		"A second FPrint keeps independent exact defaults including null document state.")
+			and _value(second, &"suffix").is_empty(),
+		"A second FPrint keeps independent empty legacy prefix/message/suffix defaults.")
+	var first_doc: FlowStructuredDocument = first.get(&"document") as FlowStructuredDocument
+	var second_doc: FlowStructuredDocument = second.get(&"document") as FlowStructuredDocument
+	_check(first_doc != null and second_doc != null and first_doc != second_doc,
+		"FPrint initializes independent Akis documents for each instance.")
+	_check(first_doc != null and first_doc.segments.size() == 1 and first_doc.segments[0] is FlowTextSegment,
+		"FPrint Akis contains an initial Text Tok by default.")
+	if first_doc != null and first_doc.segments.size() == 1 and first_doc.segments[0] is FlowTextSegment:
+		_check((first_doc.segments[0] as FlowTextSegment).text.is_empty(),
+			"The initial Text Tok is empty by default (placeholder is not stored).")
+		_check((first_doc.segments[0] as FlowTextSegment).evaluable,
+			"The initial Text Tok is evaluable by default.")
 	var descriptor_result: FlowBlockPropertyCatalogResult = FlowBlockPropertyCatalog.describe(
 		first,
 		PACKAGE_ROOT,
@@ -147,8 +158,8 @@ func _test_defaults_and_independent_instances(first: FlowBlock, second: FlowBloc
 	_check(document_descriptor != null \
 			and document_descriptor.model_type == TYPE_OBJECT \
 			and document_descriptor.presentation_kind == FlowBlockPropertyDescriptor.PRESENTATION_STRUCTURED_DOCUMENT \
-			and document_descriptor.current_value == null,
-		"The generic catalog describes the optional null structured-document property without a package-specific editor.")
+			and document_descriptor.current_value is FlowStructuredDocument,
+		"The generic catalog describes the present Akis structured-document property without a package-specific editor.")
 	first.set(&"message", "first")
 	second.set(&"message", "second")
 	_check(String(first.get(&"message")) == "first" and String(second.get(&"message")) == "second",

@@ -9,6 +9,8 @@ const OPERATOR_SUBTRACT: StringName = &"subtract"
 const OPERATOR_MULTIPLY: StringName = &"multiply"
 const OPERATOR_DIVIDE: StringName = &"divide"
 const OPERATOR_MODULO: StringName = &"modulo"
+const OPERATOR_POWER: StringName = &"power"
+const OPERATOR_FLOOR_DIVIDE: StringName = &"floor_divide"
 const OPERATOR_CONCAT: StringName = &"concat"
 
 
@@ -19,6 +21,8 @@ static func operator_ids() -> Array[StringName]:
 		OPERATOR_MULTIPLY,
 		OPERATOR_DIVIDE,
 		OPERATOR_MODULO,
+		OPERATOR_POWER,
+		OPERATOR_FLOOR_DIVIDE,
 		OPERATOR_CONCAT,
 	]
 
@@ -56,6 +60,16 @@ static func get_descriptor(operator_id: StringName) -> Dictionary:
 		OPERATOR_MODULO:
 			return _descriptor(operator_id, "Modulo", "%", [
 				_signature([Variant.Type.TYPE_INT, Variant.Type.TYPE_INT], Variant.Type.TYPE_INT),
+			])
+		OPERATOR_POWER:
+			return _descriptor(operator_id, "Power", "**", [
+				_signature([Variant.Type.TYPE_INT, Variant.Type.TYPE_INT], Variant.Type.TYPE_INT),
+				_signature([Variant.Type.TYPE_FLOAT, Variant.Type.TYPE_FLOAT], Variant.Type.TYPE_FLOAT),
+			])
+		OPERATOR_FLOOR_DIVIDE:
+			return _descriptor(operator_id, "Floor divide", "//", [
+				_signature([Variant.Type.TYPE_INT, Variant.Type.TYPE_INT], Variant.Type.TYPE_INT),
+				_signature([Variant.Type.TYPE_FLOAT, Variant.Type.TYPE_FLOAT], Variant.Type.TYPE_FLOAT),
 			])
 		OPERATOR_CONCAT:
 			return _descriptor(operator_id, "Concatenate", "+", [

@@ -13,10 +13,13 @@ func _ready() -> void:
 
 
 func _run() -> void:
+	# Legacy compatibility: block with null document and legacy message.
 	var legacy_block: FlowBlock = FPRINT_SCRIPT.new() as FlowBlock
+	legacy_block.set(&"document", null)
 	legacy_block.set(&"prefix", "[")
 	legacy_block.set(&"message", "Process output")
 	legacy_block.set(&"suffix", "]")
+	# Akis/document path: present document provides central content (evaluable toks).
 	var structured_block: FlowBlock = FPRINT_SCRIPT.new() as FlowBlock
 	structured_block.set(&"prefix", "<")
 	structured_block.set(&"message", "ignored legacy message")
@@ -34,10 +37,10 @@ func _run() -> void:
 	controller.runtime_output.contextual_message_emitted.connect(_record)
 	get_tree().root.add_child(controller)
 	await get_tree().process_frame
-	_check(_events.size() == 2, "Process executes both legacy and structured FPrint outputs through the generic runtime path.")
+	_check(_events.size() == 2, "Process executes both legacy and Akis/document FPrint outputs through the generic runtime path.")
 	if _events.size() == 2:
-		_check(_events[0]["message"] == "[Process output]", "Null document preserves exact prefix + message + suffix output.")
-		_check(_events[1]["message"] == "<Structured 5>", "Present document replaces Message in exact Process output.")
+		_check(_events[0]["message"] == "[Process output]", "Legacy null-document case preserves exact prefix + message + suffix output.")
+		_check(_events[1]["message"] == "<Structured 5>", "Present Akis document provides central output in exact Process output.")
 		_check(_events[0]["process_id"] == process.get_internal_id() and _events[1]["process_id"] == process.get_internal_id(),
 			"Process outputs carry the Process FlowId.")
 		_check(_events[0]["block_id"] == legacy_block.get_internal_id() and _events[1]["block_id"] == structured_block.get_internal_id(),

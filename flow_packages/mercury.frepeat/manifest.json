@@ -1,0 +1,11 @@
+{
+  "manifest_version": 1,
+  "package_id": "mercury.frepeat",
+  "blocks": [
+    {
+      "type_id": "frepeat",
+      "script": "block.gd",
+      "display_name": "FRepeat"
+    }
+  ]
+}
