@@ -390,12 +390,12 @@ func _required_node_schema() -> FlowChipFieldSchema:
 	return field
 
 
-func _payload(node_name: String, class_name: String) -> Dictionary:
+func _payload(node_name: String, node_class_name: String) -> Dictionary:
 	return {
 		"type": "flujo_scene_node",
 		"node_path": NodePath(node_name),
 		"node_name": node_name,
-		"class_name": class_name,
+		"class_name": node_class_name,
 		"requirement_id": "",
 	}
 
