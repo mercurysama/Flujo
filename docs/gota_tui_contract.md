@@ -82,8 +82,8 @@ same flow without opening an action selector.
 `Execute prompt from clipboard` and `gota clipboard` read one non-empty
 clipboard prompt and execute it immediately through the existing
 `OpenCodeRunner`. The default invocation is OpenCode 2.0.32 with model
-`openai/gpt-5.6-luna#max` and agent `build`; the prompt remains one argv data
-value and is never evaluated as shell syntax. This action does not create a
+`openai/gpt-5.6-luna`, variant `max`, and agent `build`; the prompt remains one
+argv data value and is never evaluated as shell syntax. This action does not create a
 Coordinator `TaskRun`, lease, Worker result, Reviewer result, or decision.
 
 The durable local run is written before the runner starts, streams stdout and
@@ -103,7 +103,7 @@ The new `audit-opencode` action is labelled **Read-only OpenCode audit** and has
 `mutable = false`, `requires_prompt = true`, `prompt_source = "clipboard"`,
 `requires_confirmation = true`, `confirmation_mode = "selection"`, and backend
 `opencode-readonly`. Its default model is
-`openai/gpt-5.6-luna#max`, with the existing configuration override boundary
+model `openai/gpt-5.6-luna` and variant `max`, with the existing configuration override boundary
 preserved.
 
 `audit-opencode` uses a canonical project agent whose OpenCode V2 permission
@@ -118,7 +118,8 @@ The prompt passed to OpenCode is read from the durable `prompt.txt` created by
 the TUI when the action is activated; clipboard contents are not read again.
 The selection plus Enter is the action confirmation and does not open a second
 confirmation screen. The existing `OpenCodeRunner` remains the sole subprocess boundary and supplies
-`--standalone`, canonical configuration, provider/model#variant argv data,
+`--standalone`, canonical configuration, `provider/model#variant` selector argv
+data,
 bounded timeout/termination, shell-free invocation, and incremental stdout and
 stderr observation. The local run request/result persist run/action identity,
 prompt SHA-256, model, variant, OpenCode version, agent, repository, timestamp,
@@ -151,17 +152,45 @@ Action Registry; `audit-opencode` is not a special clipboard dispatch.
 
 `Execute prompt from clipboard` remains the direct `clipboard-prompt` action:
 one Enter reads the clipboard, persists the prompt and SHA-256 before spawning,
-and runs OpenCode with `build` and `openai/gpt-5.6-luna#max`. The `C` shortcut
+and runs OpenCode with `build`, model `openai/gpt-5.6-luna`, and variant `max`. The `C` shortcut
 has the explicit footer label **Run clipboard prompt** and invokes that same
 direct action. `gota clipboard` remains equivalent to this direct flow.
 
 For `audit-opencode`, one action selection plus Enter reads and validates the
 clipboard, persists the prompt and SHA-256 before `OpenCodeRunner`, uses
-`gota-auditor` and `openai/gpt-5.6-luna#max`, preserves the read-only policy,
+`gota-auditor`, model `openai/gpt-5.6-luna`, and variant `max`, preserves the read-only policy,
 streams live output, persists the report, and copies the report. Empty
 clipboard, invalid read-only agent or policy, and an invalid repository fail
 closed before OpenCode execution. No failure path silently changes the action
 to `clipboard-prompt` or the agent to `build`.
+
+## GOTA-TUI-007 — Per-run model, variant, role, and agent routing
+
+Before a registered backend is prepared, the TUI parses only a contiguous
+header at prompt offset zero. The supported fields are `GOTA_MODEL`,
+`GOTA_VARIANT`, `GOTA_ROLE`, and `GOTA_AGENT`; duplicate or invalid values fail
+closed before OpenCode starts. Header-looking lines later in the prompt remain
+assignment data and are not reinterpreted.
+
+The original prompt, including its header, remains the durable prompt and the
+prompt SHA-256 covers that original text. The effective prompt removes the
+initial header. When a role is present, the effective prompt is explicitly
+constructed as `ROLE:\n<role>\n\nTASK:\n<body>`; without a role, the body is
+preserved unchanged. For formal actions, the header-free body is the input to
+the registered template/composition as well as to direct and read-only flows.
+
+Each run resolves values with prompt-header precedence, then CLI/environment
+configuration overrides, then the declarative action values, and finally the
+legacy defaults (`openai/gpt-5.6-luna`, variant `max`, agent `build`). The
+effective selection is persisted before execution and `GOTA_REPORT_V1` records
+`MODEL`, `VARIANT`, `ROLE`, `AGENT` and the corresponding `*_SOURCE` fields.
+For OpenCode 2.1.4, the subprocess boundary combines a configured variant into
+the model selector and receives argv in the form `opencode run --standalone
+--model <model>[#<variant>] --agent <agent> --auto <effective-prompt>`; it never
+emits a separate `--variant` flag. Without a variant, the selector is exactly
+`<model>` without a trailing `#`. No model, variant, role, agent, or prompt value
+is evaluated through a shell. Read-only actions continue to validate the
+resolved agent against their canonical policy.
 
 ## GOTA-TUI-004 — Auditor denial classification and credential boundary
 
@@ -213,6 +242,20 @@ the existing local credential redaction boundary. `GOTA_REPORT_V1` exposes the
 durable `OUTPUT_PATH` when it exists, plus `PROCESS_STATUS` and
 `PROCESS_EXIT_CODE`.
 
+The reporting boundary also reads `OUTPUT_PATH` and, when a complete
+`STDOUT_BEGIN`/`STDOUT_END` block is present, appends the complete UTF-8 stdout
+as `GOTA_OPENCODE_STDOUT_BEGIN`/`GOTA_OPENCODE_STDOUT_END`. The machine-readable
+fields `OUTPUT_EMBED_STATUS`, `OUTPUT_EMBED_SOURCE=OPENCODE_STDOUT`, and
+`OUTPUT_EMBED_BYTES` describe that additional evidence. `OK` embeds the full
+stdout without truncation; `EMPTY` is a valid empty block;
+`NO_STDOUT_BLOCK` and `UNAVAILABLE` retain `OUTPUT_PATH` but append no body.
+The original Coordinator embedded-report fields and `RESULT_CONSISTENCY` are
+unchanged. `STDERR_BEGIN`/`STDERR_END` is never copied into the report and
+remains available only through `OUTPUT_PATH` (and the durable live log).
+`report.txt` and the clipboard use one extraction snapshot, so the embedded
+stdout is identical in both representations; only their existing copy-status
+field may differ while the copy is pending.
+
 Only one complete, line-delimited stdout block with the exact shape
 `=== <ID>_REPORT_BEGIN ===` and `=== <ID>_REPORT_END ===` is parsed. More than
 one complete block is ambiguous, including repeated identical blocks. A
@@ -238,6 +281,45 @@ Ambiguous embedded evidence is classified as `AMBIGUOUS_EMBEDDED_REPORT` and
 never becomes `PROCESS_AND_REPORT_PASS`. Whenever the visible final or
 historical report changes, the `result-conflict` visual state is recalculated
 from the newly displayed report.
+
+## TUI-010 — Monotonic execution timing
+
+Every `GOTA_REPORT_V1` contains `STARTED_AT`, `FINISHED_AT`, `DURATION_MS`, and
+`DURATION_HUMAN`. `STARTED_AT` is the UTC ISO-8601 wall-clock observation made
+when `ActionExecutor.execute()` accepts the prepared run, before its local
+`RUNNING` marker and backend dispatch. `FINISHED_AT` is the corresponding
+wall-clock observation taken when the selected backend has returned an outcome
+or a handled exception has been converted into one, immediately before the
+reporting pipeline begins. `DURATION_MS` is the authoritative elapsed value
+from the runtime monotonic clock; it is never calculated by subtracting the
+wall-clock timestamps. The duration includes the registered backend's
+execution and its handled failure paths, but excludes report persistence,
+automatic clipboard copy, and any later user-triggered `Copy report` action.
+
+`DURATION_HUMAN` is a deterministic presentation derived from `DURATION_MS`.
+`TIMESTAMP` retains its existing meaning: the `created_at` timestamp written
+when the local durable TUI run record is prepared, before the prompt and live
+log are made eligible for child execution. It is not replaced by either run
+boundary timestamp.
+
+For a single direct or read-only OpenCode invocation, the report also exposes
+`PROCESS_DURATION_MS` and `PROCESS_DURATION_HUMAN`. These values come from the
+OpenCodeRunner monotonic subprocess boundary: spawning the OpenCode process
+(or its existing Linux containment wrapper) through completion and bounded
+output collection. They exclude Gota report construction and clipboard work.
+Formal Coordinator actions may invoke more than one OpenCode phase or reuse a
+durable phase result, so their process fields remain `UNKNOWN` rather than
+inventing one ambiguous subprocess duration. A process start failure before a
+child exists likewise has no process duration. Whenever both durations are
+present, the report only publishes a process duration no greater than the
+total run duration.
+
+The timing fields are written to `report.txt`, the canonical clipboard report,
+and the local result/request evidence. Success, non-zero exit, invalid payload,
+timeout, cancellation, transport failure, and handled exception outcomes all
+retain the run timing fields. The live log adds only `Run started`, `Run
+finished`, and `Duration` entries for the run; it does not emit per-event
+timing noise.
 
 ## VIT-001R — Native OpenCode V2 permission guardrails
 
@@ -265,7 +347,7 @@ execution, task state, leases, or persisted evidence.
 
 ## Traceability
 
-`TUI-001`–`TUI-009`, `GOTA-TUI-002`–`GOTA-TUI-005`, and `VIT-001R` map to the implementation modules and tests in
+`TUI-001`–`TUI-010`, `GOTA-TUI-002`–`GOTA-TUI-007`, and `VIT-001R` map to the implementation modules and tests in
 `tools/gota_tui/`, the `FLUJO-BHV-GOTA-TUI-001` and
 `FLUJO-BHV-GOTA-TUI-002`, `FLUJO-BHV-GOTA-TUI-003`, and
 `FLUJO-BHV-GOTA-TUI-004`, `FLUJO-BHV-GOTA-TUI-005`, and

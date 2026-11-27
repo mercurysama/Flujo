@@ -151,6 +151,11 @@ class DurableRunStore:
         allow_empty_prompt: bool = False,
         timeout: float | None = None,
         opencode_output: bool = False,
+        role: str | None = None,
+        model_source: str | None = None,
+        variant_source: str | None = None,
+        role_source: str | None = None,
+        agent_source: str | None = None,
     ) -> RunPaths:
         if type(prompt) is not str or (not allow_empty_prompt and not prompt.strip()):
             raise DurableStateError("Cannot persist an empty prompt")
@@ -178,6 +183,11 @@ class DurableRunStore:
             "model": model,
             "variant": variant,
             "agent": agent,
+            "role": role,
+            "model_source": model_source,
+            "variant_source": variant_source,
+            "role_source": role_source,
+            "agent_source": agent_source,
             "repository": repository,
             "prompt": prompt,
             "prompt_sha256": prompt_sha256,
@@ -199,6 +209,11 @@ class DurableRunStore:
                 "model": model,
                 "variant": variant,
                 "agent": agent,
+                "role": role,
+                "model_source": model_source,
+                "variant_source": variant_source,
+                "role_source": role_source,
+                "agent_source": agent_source,
                 "repository": repository,
                 "prompt_sha256": prompt_sha256,
                 "coordinator_run_id": None,
@@ -236,6 +251,11 @@ class DurableRunStore:
                 "model": payload.get("model"),
                 "variant": payload.get("variant"),
                 "agent": payload.get("agent"),
+                "role": payload.get("role"),
+                "model_source": payload.get("model_source"),
+                "variant_source": payload.get("variant_source"),
+                "role_source": payload.get("role_source"),
+                "agent_source": payload.get("agent_source"),
                 "repository": payload.get("repository"),
                 "prompt_sha256": payload.get("prompt_sha256"),
                 "coordinator_run_id": payload.get("coordinator_run_id"),
@@ -243,6 +263,10 @@ class DurableRunStore:
                 "verdict": payload.get("verdict"),
                 "coordinator_state": payload.get("coordinator_state"),
                 "report_path": payload.get("report_path"),
+                "run_started_at": payload.get("run_started_at"),
+                "run_finished_at": payload.get("run_finished_at"),
+                "run_duration_ms": payload.get("run_duration_ms"),
+                "run_process_duration_ms": payload.get("run_process_duration_ms"),
             }
         )
         return dict(payload)
@@ -292,16 +316,31 @@ class DurableRunStore:
         coordinator_state: str | None,
         task_id: str | None,
         coordinator_run_id: str | None,
+        run_started_at: str | None = None,
+        run_finished_at: str | None = None,
+        run_duration_ms: int | None = None,
+        run_process_duration_ms: int | None = None,
     ) -> Mapping[str, Any]:
+        updates: dict[str, Any] = {
+            "ui_state": ui_state,
+            "verdict": verdict,
+            "coordinator_state": coordinator_state,
+            "task_id": task_id,
+            "coordinator_run_id": coordinator_run_id,
+            "report_path": str(self.paths(run_id).report),
+            "log_path": str(self.paths(run_id).live_log),
+        }
+        if run_started_at is not None:
+            updates["run_started_at"] = run_started_at
+        if run_finished_at is not None:
+            updates["run_finished_at"] = run_finished_at
+        if run_duration_ms is not None:
+            updates["run_duration_ms"] = run_duration_ms
+        if run_process_duration_ms is not None:
+            updates["run_process_duration_ms"] = run_process_duration_ms
         return self.update_request(
             run_id,
-            ui_state=ui_state,
-            verdict=verdict,
-            coordinator_state=coordinator_state,
-            task_id=task_id,
-            coordinator_run_id=coordinator_run_id,
-            report_path=str(self.paths(run_id).report),
-            log_path=str(self.paths(run_id).live_log),
+            **updates,
         )
 
     def mark_interrupted(self, run_id: str) -> Mapping[str, Any]:

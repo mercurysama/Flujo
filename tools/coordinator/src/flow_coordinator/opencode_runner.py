@@ -13,7 +13,7 @@ import codecs
 import threading
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Callable, Final
@@ -30,6 +30,7 @@ from .sensitive_output import SensitiveOutputRedactor
 
 DEFAULT_OPENCODE_MODEL: Final[str] = "openai/gpt-5.6-luna"
 DEFAULT_OPENCODE_VARIANT: Final[str] = "max"
+DEFAULT_OPENCODE_AGENT: Final[str] = "build"
 _PROCESS_TERM_GRACE_SECONDS: Final[float] = 0.25
 _PROCESS_KILL_GRACE_SECONDS: Final[float] = 0.25
 _POST_TIMEOUT_COMMUNICATE_SECONDS: Final[float] = 0.25
@@ -66,7 +67,12 @@ OutputCallback = Callable[[str, str], None]
 
 @dataclass(frozen=True, slots=True)
 class OpenCodeRunResult:
-    """Captured process data and, when valid, one parsed Gota result."""
+    """Captured process data and, when valid, one parsed Gota result.
+
+    ``process_duration_ms`` is optional because no child exists for some
+    pre-start failures. When present, it is measured monotonically from the
+    existing runner subprocess spawn through final pipe collection.
+    """
 
     status: OpenCodeRunStatus
     argv: tuple[str, ...]
@@ -79,6 +85,7 @@ class OpenCodeRunResult:
     error: str | None = None
     protocol_error_code: GotaProtocolErrorCode | None = None
     start_failure: OpenCodeStartFailure | None = None
+    process_duration_ms: int | None = None
 
 
 class OpenCodeRunner:
@@ -90,10 +97,26 @@ class OpenCodeRunner:
         executable: str | Path = "opencode",
         model: str = DEFAULT_OPENCODE_MODEL,
         variant: str | None = DEFAULT_OPENCODE_VARIANT,
+        monotonic_ns: Callable[[], int] | None = None,
     ) -> None:
         self.executable = self._required_text(executable, "executable")
-        self.model = self._required_text(model, "model")
-        self.variant = None if variant is None else self._required_text(variant, "variant")
+        self.model = self._validate_model(model)
+        self.variant = None if variant is None else self._validate_variant(variant)
+        self._monotonic_ns = monotonic_ns or time.monotonic_ns
+
+    def _with_process_duration(
+        self,
+        result: OpenCodeRunResult,
+        started_monotonic_ns: int | None,
+        finished_monotonic_ns: int | None = None,
+    ) -> OpenCodeRunResult:
+        if started_monotonic_ns is None:
+            return result
+        elapsed_ns = (
+            (self._monotonic_ns() if finished_monotonic_ns is None else finished_monotonic_ns)
+            - started_monotonic_ns
+        )
+        return replace(result, process_duration_ms=max(0, elapsed_ns // 1_000_000))
 
     @staticmethod
     def _required_text(value: str | Path, field: str) -> str:
@@ -102,18 +125,43 @@ class OpenCodeRunner:
             raise ValueError(f"{field} must be a non-empty string")
         return text
 
+    @classmethod
+    def _validate_model(cls, value: str | Path) -> str:
+        model = cls._required_text(value, "model")
+        provider, separator, model_name = model.partition("/")
+        if (
+            not separator
+            or not provider.strip()
+            or not model_name.strip()
+            or any(character.isspace() for character in model)
+            or "#" in model
+            or "/" in model_name
+        ):
+            raise ValueError(
+                "model must use the non-empty provider/model format without whitespace"
+            )
+        return model
+
+    @classmethod
+    def _validate_variant(cls, value: str | Path) -> str:
+        variant = cls._required_text(value, "variant")
+        if any(character.isspace() for character in variant):
+            raise ValueError("variant must not contain whitespace")
+        return variant
+
     def _build_argv(self, agent: str, prompt: str) -> list[str]:
-        return [
+        model_selector = (
+            self.model if self.variant is None else f"{self.model}#{self.variant}"
+        )
+        argv = [
             self.executable,
             "run",
             "--standalone",
             "--model",
-            self.model if self.variant is None else f"{self.model}#{self.variant}",
-            "--agent",
-            agent,
-            "--auto",
-            prompt,
+            model_selector,
         ]
+        argv.extend(("--agent", agent, "--auto", prompt))
+        return argv
 
     @staticmethod
     def _validate_timeout(timeout: float) -> float:
@@ -599,6 +647,7 @@ class OpenCodeRunner:
         startup_error: str | None = None
         process: subprocess.Popen[Any]
         streaming = output_callback is not None or cancel_event is not None
+        process_started_monotonic_ns: int | None = None
         try:
             if sys.platform == "linux":
                 assert systemd_tools is not None
@@ -613,6 +662,7 @@ class OpenCodeRunner:
                     unit=unit,
                     systemd_run=systemd_run,
                 )
+                process_started_monotonic_ns = self._monotonic_ns()
                 process = subprocess.Popen(
                     systemd_argv,
                     cwd=cwd_path,
@@ -626,6 +676,7 @@ class OpenCodeRunner:
                     errors="replace" if not streaming else None,
                 )
             else:
+                process_started_monotonic_ns = self._monotonic_ns()
                 process = subprocess.Popen(
                     argv,
                     cwd=cwd_path,
@@ -663,6 +714,25 @@ class OpenCodeRunner:
                 start_failure=failure,
             )
 
+        process_finished_monotonic_ns: int | None = None
+
+        def with_process_duration(result: OpenCodeRunResult) -> OpenCodeRunResult:
+            return self._with_process_duration(
+                result,
+                process_started_monotonic_ns,
+                process_finished_monotonic_ns,
+            )
+
+        def with_process_duration_if_target_started(
+            result: OpenCodeRunResult,
+        ) -> OpenCodeRunResult:
+            if sys.platform == "linux":
+                assert status_file is not None
+                target_status, _target_error = self._read_wrapper_status(status_file)
+                if target_status != "started":
+                    return result
+            return with_process_duration(result)
+
         try:
             if streaming:
                 callback = output_callback or (lambda _source, _text: None)
@@ -675,6 +745,7 @@ class OpenCodeRunner:
                     unit=unit,
                     redactor=redactor,
                 )
+                process_finished_monotonic_ns = self._monotonic_ns()
                 if terminal in {"timeout", "cancelled"}:
                     message = (
                         "process exceeded timeout of "
@@ -684,23 +755,26 @@ class OpenCodeRunner:
                     )
                     if cleanup_error is not None:
                         message = f"{message}; cleanup: {cleanup_error}"
-                    return OpenCodeRunResult(
-                        status=(
-                            OpenCodeRunStatus.TIMEOUT
-                            if terminal == "timeout"
-                            else OpenCodeRunStatus.CANCELLED
+                    return with_process_duration_if_target_started(
+                        OpenCodeRunResult(
+                            status=(
+                                OpenCodeRunStatus.TIMEOUT
+                                if terminal == "timeout"
+                                else OpenCodeRunStatus.CANCELLED
+                            ),
+                            argv=argv_tuple,
+                            cwd=str(cwd_path),
+                            stdout=stdout,
+                            stderr=stderr,
+                            exit_code=process.returncode,
+                            timed_out=terminal == "timeout",
+                            error=message,
                         ),
-                        argv=argv_tuple,
-                        cwd=str(cwd_path),
-                        stdout=stdout,
-                        stderr=stderr,
-                        exit_code=process.returncode,
-                        timed_out=terminal == "timeout",
-                        error=message,
                     )
             else:
                 try:
                     stdout, stderr = process.communicate(timeout=timeout_seconds)
+                    process_finished_monotonic_ns = self._monotonic_ns()
                 except subprocess.TimeoutExpired as timeout_error:
                     cleanup_error = None
                     if sys.platform == "linux":
@@ -717,18 +791,21 @@ class OpenCodeRunner:
                     stdout, stderr = self._bounded_timeout_communication(
                         process, timeout_error
                     )
+                    process_finished_monotonic_ns = self._monotonic_ns()
                     timeout_message = f"process exceeded timeout of {timeout_seconds:g} seconds"
                     if cleanup_error is not None:
                         timeout_message = f"{timeout_message}; cleanup: {cleanup_error}"
-                    return OpenCodeRunResult(
-                        status=OpenCodeRunStatus.TIMEOUT,
-                        argv=argv_tuple,
-                        cwd=str(cwd_path),
-                        stdout=stdout,
-                        stderr=stderr,
-                        exit_code=process.returncode,
-                        timed_out=True,
-                        error=timeout_message,
+                    return with_process_duration_if_target_started(
+                        OpenCodeRunResult(
+                            status=OpenCodeRunStatus.TIMEOUT,
+                            argv=argv_tuple,
+                            cwd=str(cwd_path),
+                            stdout=stdout,
+                            stderr=stderr,
+                            exit_code=process.returncode,
+                            timed_out=True,
+                            error=timeout_message,
+                        ),
                     )
 
             if sys.platform == "linux":
@@ -765,19 +842,51 @@ class OpenCodeRunner:
                 )
 
             if process.returncode != 0:
-                return OpenCodeRunResult(
-                    status=OpenCodeRunStatus.NON_ZERO_EXIT,
-                    argv=argv_tuple,
-                    cwd=str(cwd_path),
-                    stdout=stdout,
-                    stderr=stderr,
-                    exit_code=process.returncode,
-                    timed_out=False,
-                    error=f"process exited with code {process.returncode}",
+                return with_process_duration(
+                    OpenCodeRunResult(
+                        status=OpenCodeRunStatus.NON_ZERO_EXIT,
+                        argv=argv_tuple,
+                        cwd=str(cwd_path),
+                        stdout=stdout,
+                        stderr=stderr,
+                        exit_code=process.returncode,
+                        timed_out=False,
+                        error=f"process exited with code {process.returncode}",
+                    ),
                 )
 
             if not expect_gota_payload:
-                return OpenCodeRunResult(
+                return with_process_duration(
+                    OpenCodeRunResult(
+                        status=OpenCodeRunStatus.SUCCEEDED,
+                        argv=argv_tuple,
+                        cwd=str(cwd_path),
+                        stdout=stdout,
+                        stderr=stderr,
+                        exit_code=process.returncode,
+                        timed_out=False,
+                    ),
+                )
+
+            try:
+                payload = parse_gota_output(stdout)
+            except GotaProtocolError as error:
+                return with_process_duration(
+                    OpenCodeRunResult(
+                        status=OpenCodeRunStatus.INVALID_PAYLOAD,
+                        argv=argv_tuple,
+                        cwd=str(cwd_path),
+                        stdout=stdout,
+                        stderr=stderr,
+                        exit_code=process.returncode,
+                        timed_out=False,
+                        error=str(error),
+                        protocol_error_code=error.code,
+                    ),
+                )
+
+            return with_process_duration(
+                OpenCodeRunResult(
                     status=OpenCodeRunStatus.SUCCEEDED,
                     argv=argv_tuple,
                     cwd=str(cwd_path),
@@ -785,32 +894,8 @@ class OpenCodeRunner:
                     stderr=stderr,
                     exit_code=process.returncode,
                     timed_out=False,
-                )
-
-            try:
-                payload = parse_gota_output(stdout)
-            except GotaProtocolError as error:
-                return OpenCodeRunResult(
-                    status=OpenCodeRunStatus.INVALID_PAYLOAD,
-                    argv=argv_tuple,
-                    cwd=str(cwd_path),
-                    stdout=stdout,
-                    stderr=stderr,
-                    exit_code=process.returncode,
-                    timed_out=False,
-                    error=str(error),
-                    protocol_error_code=error.code,
-                )
-
-            return OpenCodeRunResult(
-                status=OpenCodeRunStatus.SUCCEEDED,
-                argv=argv_tuple,
-                cwd=str(cwd_path),
-                stdout=stdout,
-                stderr=stderr,
-                exit_code=process.returncode,
-                timed_out=False,
-                payload=payload,
+                    payload=payload,
+                ),
             )
         finally:
             if status_file is not None:
@@ -823,6 +908,7 @@ class OpenCodeRunner:
 
 
 __all__ = [
+    "DEFAULT_OPENCODE_AGENT",
     "DEFAULT_OPENCODE_MODEL",
     "DEFAULT_OPENCODE_VARIANT",
     "OpenCodeRunResult",

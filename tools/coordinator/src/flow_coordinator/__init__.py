@@ -64,6 +64,7 @@ from .gota_protocol import (
     parse_gota_payload,
 )
 from .opencode_runner import (
+    DEFAULT_OPENCODE_AGENT,
     DEFAULT_OPENCODE_MODEL,
     DEFAULT_OPENCODE_VARIANT,
     OpenCodeRunResult,
@@ -145,6 +146,7 @@ __all__ = [
     "WorkerResultStatus",
     "parse_gota_output",
     "parse_gota_payload",
+    "DEFAULT_OPENCODE_AGENT",
     "DEFAULT_OPENCODE_MODEL",
     "DEFAULT_OPENCODE_VARIANT",
     "OpenCodeRunResult",

@@ -29,6 +29,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--coordinator-db", type=Path, help="Coordinator SQLite path")
     parser.add_argument("--model", help="Override the configured OpenCode model")
     parser.add_argument("--variant", help="Override the configured OpenCode variant")
+    parser.add_argument("--role", help="Override the semantic OpenCode role")
+    parser.add_argument("--agent", help="Override the configured OpenCode agent")
     parser.add_argument("--opencode", default=os.environ.get("GOTA_OPENCODE", "opencode"))
     parser.add_argument(
         "--self-check",
@@ -178,6 +180,8 @@ def main(arguments: list[str] | None = None) -> int:
         opencode_executable=options.opencode,
         model_override=options.model or os.environ.get("GOTA_TUI_MODEL") or None,
         variant_override=options.variant or os.environ.get("GOTA_TUI_VARIANT") or None,
+        role_override=options.role or os.environ.get("GOTA_TUI_ROLE") or None,
+        agent_override=options.agent or os.environ.get("GOTA_TUI_AGENT") or None,
     )
     initial_prompt: str | None = None
     initial_action: str | None = None

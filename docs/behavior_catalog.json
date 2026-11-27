@@ -571,7 +571,7 @@
         "Plain prompts remain data; direct clipboard prompts do not require a Coordinator envelope, while formal mutable actions do.",
         "Execute task and Review retain explicit confirmation; one clipboard-prompt activation is its confirmation and never maps OpenCode exit 0 to Coordinator DONE.",
         "gota clipboard reads one non-empty prompt and starts direct execution without opening a second selector or confirmation screen.",
-        "Direct clipboard execution defaults to OpenCode model openai/gpt-5.6-luna#max and agent build, and reports NOT_APPLICABLE for Coordinator-only fields.",
+        "Direct clipboard execution defaults to OpenCode model openai/gpt-5.6-luna, variant max, and agent build, and reports NOT_APPLICABLE for Coordinator-only fields.",
         "Direct clipboard execution captures the Git HEAD before and after the runner, including a final HEAD changed by the prompt.",
         "UI_INTERRUPTED is local UI state; opening history never cancels, accepts, fences, or rewrites a Coordinator task.",
         "Clipboard failure does not delete a durable report or change its verdict.",
@@ -590,7 +590,7 @@
       "area": "Read-only OpenCode audit in the Gota Textual interface",
       "precondition": "The clipboard contains a non-empty prompt, the repository is valid, and the canonical gota-auditor policy passes validation.",
       "public_action": "Select Read-only OpenCode audit and press Enter once.",
-      "expected_result": "The TUI reads and durably persists the clipboard prompt before invoking the existing OpenCodeRunner with audit-opencode, gota-auditor, and openai/gpt-5.6-luna#max; it captures complete observed output with local credential redaction, produces generic findings and a durable report, accepts a zero-exit non-Gota response when Git remains unchanged, and keeps denied-read warnings separate from mutation evidence.",
+      "expected_result": "The TUI reads and durably persists the clipboard prompt before invoking the existing OpenCodeRunner with audit-opencode, gota-auditor, model openai/gpt-5.6-luna, and variant max; it captures complete observed output with local credential redaction, produces generic findings and a durable report, accepts a zero-exit non-Gota response when Git remains unchanged, and keeps denied-read warnings separate from mutation evidence.",
       "invariants": [
         "The action is mutable=false, requires a prompt, uses prompt_source=clipboard and selection confirmation, and remains distinct from the local Read-only Git audit.",
         "The clipboard is read by the selected action without a C prerequisite or second Enter; persisted prompt text and the model/variant remain argv data without shell evaluation.",
@@ -651,16 +651,56 @@
         "The process exit result remains the technical verdict authority and the Coordinator/Gota/SQLite authority is unchanged.",
         "Original embedded ID/status/verdict text is preserved alongside conservative classification, while unrecognized text cannot infer PASS or FAIL.",
         "opencode-output.txt exists before report copy and local credentials are redacted in live.log, opencode-output.txt, report.txt, and result.json.",
+        "The report and clipboard embed the complete UTF-8 stdout block from OUTPUT_PATH without truncation, exclude stderr by default, and keep Coordinator embedded-report fields and RESULT_CONSISTENCY independent.",
         "The result-conflict visual state is recalculated whenever a final or historical visible report changes."
       ],
       "coverage": "automatic",
       "baseline_status": "passing",
       "test_paths": [
         "tools/gota_tui/tests/test_result_consistency.py",
+        "tools/gota_tui/tests/test_reporting_output.py",
         "tools/gota_tui/tests/test_core.py",
         "tools/gota_tui/tests/test_runtime.py"
       ],
       "notes": "Authorized behavior correction GOTA-TUI-005F for conservative embedded-report ambiguity and stale result-conflict UI state. The focal injected-runner suite covers process/report pass and fail combinations, incomplete and loose markers, prompt-only fake markers, stdout-versus-stderr selection, multiple reports, duplicate STATUS/VERDICT lines, direct durable-output ordering, and redaction; the runtime suite covers conflict/history recalculation; the existing TUI suites protect clipboard, audit, history, report-copy, and Coordinator boundaries."
+    },
+    {
+      "id": "FLUJO-BHV-GOTA-TUI-006",
+      "area": "Automatic Gota run timing and report transport",
+      "precondition": "A registered Gota action has been accepted by ActionExecutor and reaches a success, failure, timeout, cancellation, transport-error, or handled-exception outcome.",
+      "public_action": "Execute the action and inspect report.txt, the clipboard report, the live log, and local result evidence.",
+      "expected_result": "GOTA_REPORT_V1 contains timezone-aware STARTED_AT and FINISHED_AT, monotonic-authoritative DURATION_MS with deterministic DURATION_HUMAN, and PROCESS_DURATION_MS/PROCESS_DURATION_HUMAN only for a reliable single OpenCode runner boundary; the same timing snapshot reaches report.txt and clipboard without including later report-copy delay.",
+      "invariants": [
+        "TIMESTAMP remains the durable local run-record creation timestamp and is not repurposed as either execution boundary.",
+        "DURATION_MS is never derived solely by subtracting wall-clock timestamps and is non-negative.",
+        "Handled failure paths retain timing fields, including immediate OpenCode start failure, non-zero exit, timeout, cancellation, transport failure, and exceptions.",
+        "The live log emits only concise Run started, Run finished, and Duration messages for timing observability.",
+        "Process duration is monotonic and subprocess-only at the existing OpenCodeRunner boundary; formal multi-phase or reused Coordinator executions remain UNKNOWN instead of inventing a singular process duration.",
+        "No Worker/Reviewer, Coordinator, FSM, lease, fencing, Git, model-selection, or prompt semantics change is introduced."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tools/gota_tui/tests/test_timing.py"],
+      "notes": "Timing uses an injectable fake clock for focal tests. The report is finalized before automatic clipboard copy, and a later user-triggered copy reads the already-recorded report without recomputing timing."
+    },
+    {
+      "id": "FLUJO-BHV-GOTA-TUI-007",
+      "area": "Per-run OpenCode model, variant, role, and agent routing",
+      "precondition": "A registered OpenCode-backed Gota action receives a prompt that may contain an initial GOTA_MODEL/GOTA_VARIANT/GOTA_ROLE/GOTA_AGENT header.",
+      "public_action": "Execute the action and inspect the effective OpenCode argv, durable prompt, and GOTA_REPORT_V1 report.",
+      "expected_result": "Only a contiguous header at prompt offset zero controls that run; the effective model, variant, role, and agent are validated, the model and optional variant form the OpenCode model selector, and the durable original prompt and effective selection remain separately auditable.",
+      "invariants": [
+        "Header-looking lines in the body remain ordinary assignment data, and duplicate or invalid initial fields fail before a child starts.",
+        "The original prompt and its SHA-256 remain durable; the effective prompt removes the header and injects ROLE/TASK context only when GOTA_ROLE is present.",
+        "Resolution precedence is prompt header, configuration override, declarative action value, then the legacy model/variant/agent defaults.",
+        "OpenCode receives --model with a provider/model#variant selector when a variant is defined, or provider/model without a suffix otherwise; no separate --variant flag or shell evaluation is introduced.",
+        "GOTA_REPORT_V1 records effective MODEL, VARIANT, ROLE, AGENT, and their source fields rather than inferring values from model stdout.",
+        "Read-only actions continue to validate the resolved agent against the canonical read-only policy."
+      ],
+      "coverage": "automatic",
+      "baseline_status": "passing",
+      "test_paths": ["tools/gota_tui/tests/test_routing.py", "tools/coordinator/tests/test_opencode_runner.py"],
+      "notes": "Per-run routing is covered by parser, precedence, body-preservation, role-injection, direct execution, and shell-free command-builder tests; real Sol/low and Luna/high smoke runs remain delivery evidence."
     },
     {
       "id": "FLUJO-BHV-OPENCODE-PERMISSIONS-001",

@@ -470,6 +470,37 @@ class OpenCodeRunnerTest(unittest.TestCase):
         self.assertEqual(invocation["pager"], "cat")
         self.assertEqual(invocation["probe_env"], "$literal ${HOME} & Unicode 🌧️")
 
+    def test_per_run_model_selector_combines_model_and_variant(self) -> None:
+        for model, variant in (
+            ("openai/gpt-5.6-sol", "low"),
+            ("openai/gpt-5.6-luna", "high"),
+        ):
+            with self.subTest(model=model, variant=variant):
+                executable, record = self._fake_executable()
+                result = OpenCodeRunner(
+                    model=model,
+                    variant=variant,
+                    executable=executable,
+                ).run(
+                    agent="build",
+                    prompt="CONFIG_OK",
+                    cwd=self.cwd,
+                    timeout=2,
+                )
+                expected = [
+                    "run",
+                    "--standalone",
+                    "--model",
+                    f"{model}#{variant}",
+                    "--agent",
+                    "build",
+                    "--auto",
+                    "CONFIG_OK",
+                ]
+                self.assertEqual(list(result.argv[1:]), expected)
+                self.assertEqual(self._record(record)["argv"], expected)
+                self.assertNotIn("--variant", result.argv)
+
     def test_canonical_config_dir_overrides_inherited_value_only_in_child(self) -> None:
         executable, record = self._fake_executable()
         canonical_config = Path(__file__).resolve().parents[3] / ".opencode"

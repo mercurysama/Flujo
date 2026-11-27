@@ -11,6 +11,8 @@ from typing import Any, Mapping
 from flow_coordinator import GOTA_PROTOCOL, GotaRequest
 from flow_coordinator.domain import TaskSpec
 
+from .routing import GotaPromptHeader, parse_gota_prompt
+
 
 class PromptEnvelopeError(ValueError):
     """A prompt cannot be safely represented for the selected action."""
@@ -46,6 +48,7 @@ class PromptEnvelope:
     assignment: str
     structured: bool
     metadata: Mapping[str, Any]
+    prompt_header: GotaPromptHeader | None = None
 
     @classmethod
     def parse(cls, prompt: str) -> "PromptEnvelope":
@@ -53,12 +56,19 @@ class PromptEnvelope:
             raise PromptEnvelopeError("Prompt must be text")
         if not prompt.strip():
             raise PromptEnvelopeError("Clipboard prompt is empty")
-        if not prompt.startswith(_FRONTMATTER_MARKER + "\n"):
-            return cls(prompt, prompt, False, {})
+        try:
+            parsed_prompt = parse_gota_prompt(prompt)
+        except ValueError as error:
+            raise PromptEnvelopeError(str(error)) from error
+        body = parsed_prompt.body
+        if not body.strip():
+            raise PromptEnvelopeError("Prompt body is empty after the Gota header")
+        if not body.startswith(_FRONTMATTER_MARKER + "\n"):
+            return cls(prompt, body, False, {}, parsed_prompt.header)
 
-        lines = prompt.splitlines(keepends=True)
+        lines = body.splitlines(keepends=True)
         if not lines or lines[0].rstrip("\r\n") != _FRONTMATTER_MARKER:
-            return cls(prompt, prompt, False, {})
+            return cls(prompt, body, False, {}, parsed_prompt.header)
         closing_index: int | None = None
         for index in range(1, len(lines)):
             if lines[index].rstrip("\r\n") == _FRONTMATTER_MARKER:
@@ -84,7 +94,7 @@ class PromptEnvelope:
             raise PromptEnvelopeError("Prompt envelope version must be integer 1")
         if not assignment.strip():
             raise PromptEnvelopeError("Structured prompt assignment is empty")
-        return cls(prompt, assignment, True, metadata)
+        return cls(prompt, assignment, True, metadata, parsed_prompt.header)
 
     @property
     def prompt_sha256(self) -> str:
@@ -209,6 +219,16 @@ class PromptEnvelope:
             "prompt": self.original,
             "assignment": self.assignment,
             "structured": self.structured,
+            "gota_header": (
+                {
+                    "model": self.prompt_header.model,
+                    "variant": self.prompt_header.variant,
+                    "role": self.prompt_header.role,
+                    "agent": self.prompt_header.agent,
+                }
+                if self.prompt_header is not None and self.prompt_header.present
+                else None
+            ),
             "envelope": dict(self.metadata),
             "prompt_composition": dict(composition),
         }

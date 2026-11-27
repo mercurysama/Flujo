@@ -87,7 +87,8 @@ class GotaTUICoreTest(unittest.TestCase):
         self.assertTrue(registry.get("execute-task").requires_confirmation)
         direct = registry.get("clipboard-prompt")
         self.assertEqual(direct.backend, "opencode-direct")
-        self.assertEqual(direct.model + "#" + direct.variant, "openai/gpt-5.6-luna#max")
+        self.assertEqual(direct.model, "openai/gpt-5.6-luna")
+        self.assertEqual(direct.variant, "max")
         self.assertEqual(direct.agent, "build")
         self.assertFalse(direct.requires_confirmation)
         git_audit = registry.get("audit-readonly")
@@ -100,7 +101,8 @@ class GotaTUICoreTest(unittest.TestCase):
         self.assertEqual(audit.prompt_source, "clipboard")
         self.assertEqual(audit.confirmation_mode, "selection")
         self.assertFalse(audit.mutable)
-        self.assertEqual(audit.model + "#" + audit.variant, "openai/gpt-5.6-luna#max")
+        self.assertEqual(audit.model, "openai/gpt-5.6-luna")
+        self.assertEqual(audit.variant, "max")
         self.assertEqual(audit.agent, "gota-auditor")
         self.assertTrue(
             all(
@@ -435,7 +437,9 @@ class GotaTUICoreTest(unittest.TestCase):
                             "run",
                             "--standalone",
                             "--model",
-                            "openai/gpt-5.6-luna#max",
+                            "openai/gpt-5.6-luna",
+                            "--variant",
+                            "max",
                             "--agent",
                             agent,
                             "--auto",
@@ -450,7 +454,9 @@ class GotaTUICoreTest(unittest.TestCase):
                         "run",
                         "--standalone",
                         "--model",
-                        "openai/gpt-5.6-luna#max",
+                        "openai/gpt-5.6-luna",
+                        "--variant",
+                        "max",
                         "--agent",
                         agent,
                         "--auto",
@@ -509,7 +515,8 @@ class GotaTUICoreTest(unittest.TestCase):
         self.assertEqual(runner_calls[1]["agent"], "gota-auditor")
         self.assertEqual(runner_calls[1]["prompt"], prompt)
         self.assertEqual(runner_calls[1]["cwd"], repository)
-        self.assertEqual(runner_calls[1]["argv"][4], "openai/gpt-5.6-luna#max")
+        self.assertEqual(runner_calls[1]["argv"][4], "openai/gpt-5.6-luna")
+        self.assertEqual(runner_calls[1]["argv"][6], "max")
         self.assertTrue(prepared.paths.prompt.exists())
         self.assertIn("[STDOUT] real finding", prepared.paths.live_log.read_text(encoding="utf-8"))
         self.assertIn("[STDERR] read-only diagnostic", prepared.paths.live_log.read_text(encoding="utf-8"))
@@ -982,7 +989,8 @@ class GotaTUICoreTest(unittest.TestCase):
             result = executor.execute(prepared)
 
         self.assertEqual(result.verdict, "SUCCEEDED")
-        self.assertEqual(runner_observations[0]["model"] + "#" + runner_observations[0]["variant"], "openai/gpt-5.6-luna#max")
+        self.assertEqual(runner_observations[0]["model"], "openai/gpt-5.6-luna")
+        self.assertEqual(runner_observations[0]["variant"], "max")
         self.assertEqual(runner_observations[1]["agent"], "build")
         self.assertEqual(runner_observations[1]["prompt"], prompt)
         self.assertTrue(runner_observations[1]["persisted"])
@@ -1197,7 +1205,9 @@ class GotaTUICoreTest(unittest.TestCase):
                         "run",
                         "--standalone",
                         "--model",
-                        "openai/gpt-5.6-luna#max",
+                        "openai/gpt-5.6-luna",
+                        "--variant",
+                        "max",
                         "--agent",
                         "gota-auditor",
                         "--auto",

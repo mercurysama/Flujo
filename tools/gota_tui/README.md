@@ -73,8 +73,11 @@ Read-only Git audit uses the local Git adapter without a model. Read-only
 OpenCode audit validates the canonical `gota-auditor` policy, reads its prompt
 from durable `prompt.txt`, and reuses the existing shell-free OpenCodeRunner.
 It never creates Coordinator task state and fails when Git changes across the
-child. The configured OpenCode default is `openai/gpt-5.6-luna#max`, overridable with
-`--model`, `--variant`, `GOTA_TUI_MODEL`, and `GOTA_TUI_VARIANT`.
+child. The configured OpenCode default is model `openai/gpt-5.6-luna` with
+variant `max`, overridable with `--model`, `--variant`, `GOTA_TUI_MODEL`, and
+`GOTA_TUI_VARIANT`. Semantic role and agent configuration overrides use
+`--role`, `--agent`, `GOTA_TUI_ROLE`, and `GOTA_TUI_AGENT`; prompt headers take
+precedence over these values.
 
 ## Clipboard and security
 
@@ -85,11 +88,37 @@ backends and copy errors leave the UI/report functional.
 
 Direct and formal OpenCode execution reuse
 `tools/coordinator/src/flow_coordinator/opencode_runner.py`, including
-`--standalone`, canonical agents, provider/model#variant, bounded cleanup,
+`--standalone`, canonical agents, OpenCode 2.1.4 `provider/model#variant`
+selectors, bounded cleanup,
 Linux containment, and shell-free argv construction. Formal Gota actions retain
 protocol validation. The direct clipboard action treats a zero-exit raw
 response as a direct result and does not create Coordinator authority. The
 optional observer streams captured stdout/stderr to the TUI.
+
+### Per-run OpenCode routing
+
+A prompt may begin with a contiguous machine-readable header. Only these lines
+at the very beginning of the prompt are configuration; identical text later in
+the assignment remains ordinary prompt data:
+
+```text
+GOTA_MODEL=openai/gpt-5.6-sol
+GOTA_VARIANT=low
+GOTA_ROLE=Reviewer of the requested change
+GOTA_AGENT=build
+
+Implement the assignment.
+```
+
+The header is removed from the effective prompt sent to OpenCode, while the
+original prompt and its digest remain in durable state. `GOTA_ROLE` is explicit
+context rather than an OpenCode flag and is rendered as `ROLE` followed by
+`TASK`. Values are resolved per run in this order: initial prompt header,
+configuration/action defaults, then the legacy defaults. The variant is joined
+to the `--model` value as `provider/model#variant`; no separate `--variant` flag
+is sent to OpenCode. Without a variant, `--model` receives only `provider/model`.
+Invalid values fail before the child starts. The effective model, variant, role,
+agent, and their source are recorded separately in `GOTA_REPORT_V1`.
 
 ## Prompt library and envelope
 
@@ -151,7 +180,7 @@ local record is marked `UI_INTERRUPTED` only in TUI state; any durable
 Coordinator state is displayed separately through public read APIs. Opening
 history never transitions, cancels, accepts, or rewrites a Coordinator task.
 
-The final report is compact and includes `RUN_ID`, `ACTION`, `TASK_ID`,
+The final report includes a machine-readable `GOTA_REPORT_V1` header with `RUN_ID`, `ACTION`, `TASK_ID`,
 `CONTEXT_ID`, model/variant, OpenCode version/agent, repository/base/commit,
 Coordinator/Worker/Review state, tests, diff check, prompt SHA, report/log and
 associated-output paths, read-only policy, mutation guard, clipboard status,
@@ -159,9 +188,24 @@ findings, and verdict. Complete observed output with local credential values
 redacted remains in `live.log` and, for both direct clipboard OpenCode and the
 OpenCode audit, in `opencode-output.txt`. Direct reports expose the process
 status/exit code, embedded-report fields, and `RESULT_CONSISTENCY`; a non-zero
-process remains a failure even when an embedded report says PASS. The report
-is persisted before copy is attempted, and a clipboard failure never removes
-it.
+process remains a failure even when an embedded report says PASS. When
+`opencode-output.txt` contains a complete `STDOUT_BEGIN`/`STDOUT_END` block,
+the report automatically appends its complete, untruncated stdout between
+`GOTA_OPENCODE_STDOUT_BEGIN` and `GOTA_OPENCODE_STDOUT_END`, with
+`OUTPUT_EMBED_STATUS`, `OUTPUT_EMBED_SOURCE`, and `OUTPUT_EMBED_BYTES` fields.
+Coordinator embedded-report evidence and this stdout transport are distinct;
+stderr is not appended and remains in `opencode-output.txt` for diagnostics.
+Manual `sed`/`grep` recovery should normally no longer be necessary. The
+report also includes `STARTED_AT`, `FINISHED_AT`, `DURATION_MS`, and
+`DURATION_HUMAN`; the duration is measured with a monotonic runtime clock from
+`ActionExecutor.execute()` entry to the backend outcome immediately before
+reporting. Direct and read-only OpenCode actions additionally expose
+`PROCESS_DURATION_MS` and `PROCESS_DURATION_HUMAN` when the single runner
+subprocess boundary is available; formal multi-phase actions leave those
+fields `UNKNOWN`. `TIMESTAMP` remains the local durable run-record creation
+timestamp. The report is persisted before copy is attempted, and a clipboard
+failure never removes it; later user-triggered report copies do not change the
+recorded duration.
 
 ## Adding an action or template
 

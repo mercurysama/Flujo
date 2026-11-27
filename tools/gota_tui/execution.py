@@ -15,7 +15,14 @@ from pathlib import Path
 from threading import Event
 from typing import Any, Callable, Mapping
 
-from flow_coordinator import OpenCodeRunResult, OpenCodeRunStatus, SQLiteCoordinatorStore
+from flow_coordinator import (
+    DEFAULT_OPENCODE_AGENT,
+    DEFAULT_OPENCODE_MODEL,
+    DEFAULT_OPENCODE_VARIANT,
+    OpenCodeRunResult,
+    OpenCodeRunStatus,
+    SQLiteCoordinatorStore,
+)
 from flow_coordinator.git_adapter import GitReadError, ReadOnlyGitAdapter
 from flow_coordinator.sensitive_output import (
     SensitiveOutputRedactor,
@@ -40,6 +47,13 @@ from .envelope import PromptEnvelope
 from .prompt_library import PromptComposition, PromptLibrary
 from .read_only_agent import ReadOnlyAgentError, validate_read_only_agent
 from .reporting import ReportData, ReportManager, PersistedReport
+from .routing import (
+    ExecutionRouting,
+    GotaRoutingError,
+    parse_gota_prompt,
+    resolve_execution_routing,
+)
+from .timing import RunTimer, RunTiming, SystemTimingClock, TimingClock, format_duration_ms
 
 
 class ExecutionError(RuntimeError):
@@ -77,6 +91,8 @@ class TUIConfig:
     opencode_executable: str = "opencode"
     model_override: str | None = None
     variant_override: str | None = None
+    role_override: str | None = None
+    agent_override: str | None = None
     timeout: float = 1800.0
 
 
@@ -86,6 +102,7 @@ class PreparedAction:
     envelope: PromptEnvelope
     composition: PromptComposition | None
     paths: RunPaths
+    routing: ExecutionRouting
 
 
 @dataclass(slots=True)
@@ -108,6 +125,10 @@ class ActionExecutionResult:
     embedded_status: str | None
     embedded_verdict: str | None
     result_consistency: str
+    started_at: str | None = None
+    finished_at: str | None = None
+    duration_ms: int | None = None
+    process_duration_ms: int | None = None
 
 
 class ActionExecutor:
@@ -121,12 +142,14 @@ class ActionExecutor:
         prompts: PromptLibrary,
         clipboard_writer: ClipboardWriter,
         output_sink: Callable[[str], None] | None = None,
+        clock: TimingClock | None = None,
     ) -> None:
         self.config = config
         self.runs = runs
         self.prompts = prompts
         self.clipboard_writer = clipboard_writer
         self.output_sink = output_sink
+        self.timing_clock = clock if clock is not None else SystemTimingClock()
 
     def _model(self, action: ActionDefinition) -> str:
         return self.config.model_override or action.model or ""
@@ -134,19 +157,36 @@ class ActionExecutor:
     def _variant(self, action: ActionDefinition) -> str:
         return self.config.variant_override or action.variant or ""
 
-    def _validate_opencode_audit_configuration(self, action: ActionDefinition) -> None:
+    def _routing(self, action: ActionDefinition, prompt: str) -> ExecutionRouting:
+        try:
+            parsed = parse_gota_prompt(prompt)
+            return resolve_execution_routing(
+                parsed,
+                action_model=action.model,
+                action_variant=action.variant,
+                action_agent=action.agent,
+                config_model=self.config.model_override,
+                config_variant=self.config.variant_override,
+                config_role=self.config.role_override,
+                config_agent=self.config.agent_override,
+                legacy_model=DEFAULT_OPENCODE_MODEL,
+                legacy_variant=DEFAULT_OPENCODE_VARIANT,
+                legacy_agent=DEFAULT_OPENCODE_AGENT,
+            )
+        except GotaRoutingError as error:
+            raise ExecutionError(str(error)) from error
+
+    def _validate_opencode_audit_configuration(
+        self,
+        action: ActionDefinition,
+        routing: ExecutionRouting,
+    ) -> None:
         if action.backend != "opencode-readonly":
             return
         if action.mutable:
             raise ExecutionError("OpenCode audit action is mutable")
-        model = self._model(action)
-        variant = self._variant(action)
-        if re.fullmatch(r"[^\s/#]+/[^\s#]+", model) is None:
-            raise ExecutionError(f"Invalid OpenCode model: {model!r}")
-        if re.fullmatch(r"[^\s#]+", variant) is None:
-            raise ExecutionError(f"Invalid OpenCode variant: {variant!r}")
         try:
-            validate_read_only_agent(action.agent)
+            validate_read_only_agent(routing.agent)
         except ReadOnlyAgentError as error:
             raise ExecutionError(str(error)) from error
 
@@ -157,11 +197,12 @@ class ActionExecutor:
         *,
         run_id: str | None = None,
     ) -> PreparedAction:
-        if action.requires_prompt and not envelope.original.strip():
+        routing = self._routing(action, envelope.original)
+        if action.requires_prompt and not routing.prompt.body.strip():
             raise ExecutionError(f"Action {action.id} requires a non-empty prompt")
         if action.mutable:
             envelope.require_mutable_fields()
-        self._validate_opencode_audit_configuration(action)
+        self._validate_opencode_audit_configuration(action, routing)
         composition: PromptComposition | None = None
         if action.template:
             composition = self.prompts.compose(action.template, envelope.assignment)
@@ -175,9 +216,14 @@ class ActionExecutor:
             }
         paths = self.runs.prepare(
             action_id=action.id,
-            model=self._model(action),
-            variant=self._variant(action),
-            agent=action.agent,
+            model=routing.model,
+            variant=routing.variant,
+            agent=routing.agent,
+            role=routing.role,
+            model_source=routing.model_source,
+            variant_source=routing.variant_source,
+            role_source=routing.role_source,
+            agent_source=routing.agent_source,
             repository=str(self.config.repository),
             prompt=envelope.original,
             prompt_sha256=original_sha,
@@ -188,7 +234,7 @@ class ActionExecutor:
             timeout=self.config.timeout,
             opencode_output=action.backend in {"opencode-direct", "opencode-readonly"},
         )
-        return PreparedAction(action, envelope, composition, paths)
+        return PreparedAction(action, envelope, composition, paths, routing)
 
     def execute(
         self,
@@ -197,10 +243,30 @@ class ActionExecutor:
         cancel_event: Event | None = None,
     ) -> ActionExecutionResult:
         cancel = cancel_event or Event()
-        action = prepared.action
-        if cancel.is_set():
+        timer = RunTimer(self.timing_clock)
+
+        def finish(
+            outcome: CoordinatorOutcome,
+            *,
+            cancel_status: str | None = None,
+        ) -> ActionExecutionResult:
             return self._finish(
                 prepared,
+                outcome,
+                timing=timer.finish(),
+                cancel_status=cancel_status,
+            )
+
+        action = prepared.action
+        routing = prepared.routing
+        self.runs.update_request(
+            prepared.paths.run_id,
+            ui_state="RUNNING",
+            run_started_at=timer.started_at,
+        )
+        self._log(prepared.paths.run_id, f"Run started: {timer.started_at}")
+        if cancel.is_set():
+            return finish(
                 CoordinatorOutcome(
                     verdict="UI_CANCELLED",
                     cancelled=True,
@@ -208,7 +274,6 @@ class ActionExecutor:
                 ),
                 cancel_status="UI_CANCELLED",
             )
-        self.runs.update_request(prepared.paths.run_id, ui_state="RUNNING")
         try:
             if action.backend == "gota-task":
                 if prepared.composition is None:
@@ -216,41 +281,52 @@ class ActionExecutor:
                 outcome = CoordinatorGotaFacade(
                     database=self.config.database,
                     opencode_executable=self.config.opencode_executable,
-                    model=self._model(action),
-                    variant=self._variant(action),
+                    model=routing.model,
+                    variant=routing.variant,
                     timeout=self.config.timeout,
                     owner_id=f"gota-tui:{os.getpid()}:{prepared.paths.run_id}",
                     output=self._open_code_output(prepared.paths.run_id),
                     cancel_event=cancel,
+                    role=routing.role,
+                    agent_override=(
+                        routing.agent
+                        if routing.agent_source in {"prompt", "config"}
+                        else None
+                    ),
                 ).execute_new_task(prepared.envelope, prepared.composition)
-                return self._finish(prepared, outcome)
+                return finish(outcome)
 
             if action.backend == "gota-review":
                 outcome = CoordinatorGotaFacade(
                     database=self.config.database,
                     opencode_executable=self.config.opencode_executable,
-                    model=self._model(action),
-                    variant=self._variant(action),
+                    model=routing.model,
+                    variant=routing.variant,
                     timeout=self.config.timeout,
                     owner_id=f"gota-tui:{os.getpid()}:{prepared.paths.run_id}",
                     output=self._open_code_output(prepared.paths.run_id),
                     cancel_event=cancel,
+                    role=routing.role,
+                    agent_override=(
+                        routing.agent
+                        if routing.agent_source in {"prompt", "config"}
+                        else None
+                    ),
                 ).review_existing(prepared.envelope)
-                return self._finish(prepared, outcome)
+                return finish(outcome)
 
             if action.backend == "opencode-direct":
                 outcome = self._execute_direct_prompt(prepared, cancel)
-                return self._finish(prepared, outcome)
+                return finish(outcome)
 
             if action.backend == "opencode-readonly":
                 outcome = self._execute_opencode_audit(prepared, cancel)
-                return self._finish(prepared, outcome)
+                return finish(outcome)
 
             outcome = self._execute_registered_read_only(prepared, cancel)
-            return self._finish(prepared, outcome)
+            return finish(outcome)
         except Exception as error:
-            return self._finish(
-                prepared,
+            return finish(
                 CoordinatorOutcome(
                     verdict=(
                         "FAIL"
@@ -273,17 +349,19 @@ class ActionExecutor:
     ) -> CoordinatorOutcome:
         """Execute raw clipboard text without creating Coordinator state."""
         run_id = prepared.paths.run_id
+        routing = prepared.routing
         base_sha = self._git_head()
         result = OpenCodePromptFacade(
             opencode_executable=self.config.opencode_executable,
-            model=self._model(prepared.action),
-            variant=self._variant(prepared.action),
+            model=routing.model,
+            variant=routing.variant,
             timeout=self.config.timeout,
             output=self._open_code_output(run_id),
             cancel_event=cancel,
+            role=routing.role,
         ).execute(
-            agent=prepared.action.agent,
-            prompt=prepared.envelope.original,
+            agent=routing.agent,
+            prompt=routing.prompt.body,
             cwd=self.config.repository,
         )
         commit_sha = self._git_head()
@@ -352,6 +430,11 @@ class ActionExecutor:
             "output_path": str(output_path),
             "result_consistency": consistency,
         }
+        if (
+            type(result.process_duration_ms) is int
+            and result.process_duration_ms >= 0
+        ):
+            metadata["process_duration_ms"] = result.process_duration_ms
         if report is not None:
             redactor = self._output_redactor()
             metadata.update(
@@ -527,11 +610,15 @@ class ActionExecutor:
         """Run the generic prompt through the canonical read-only boundary."""
 
         action = prepared.action
+        routing = prepared.routing
         if action.backend != "opencode-readonly" or action.mutable:
             raise ExecutionError("OpenCode audit backend is not read-only")
-        self._validate_opencode_audit_configuration(action)
+        self._validate_opencode_audit_configuration(action, routing)
         prompt, request = self._read_durable_audit_prompt(prepared)
-        policy = validate_read_only_agent(action.agent)
+        parsed_prompt = parse_gota_prompt(prompt)
+        if parsed_prompt.raw != routing.prompt.raw:
+            raise ExecutionError("Durable audit prompt differs from the prepared prompt")
+        policy = validate_read_only_agent(routing.agent)
         repository = self.config.repository
         try:
             before = ReadOnlyGitAdapter(repository).snapshot()
@@ -545,10 +632,15 @@ class ActionExecutor:
             "run_id": prepared.paths.run_id,
             "action_id": action.id,
             "prompt_sha256": request.get("prompt_sha256"),
-            "model": self._model(action),
-            "variant": self._variant(action),
+            "model": routing.model,
+            "variant": routing.variant,
             "opencode_version": version,
-            "agent": action.agent,
+            "agent": routing.agent,
+            "role": routing.role,
+            "model_source": routing.model_source,
+            "variant_source": routing.variant_source,
+            "role_source": routing.role_source,
+            "agent_source": routing.agent_source,
             "repository": str(repository.resolve()),
             "timestamp": timestamp,
             "started_at": started_at,
@@ -580,14 +672,15 @@ class ActionExecutor:
             try:
                 result = OpenCodePromptFacade(
                     opencode_executable=self.config.opencode_executable,
-                    model=self._model(action),
-                    variant=self._variant(action),
+                    model=routing.model,
+                    variant=routing.variant,
                     timeout=self.config.timeout,
                     output=self._open_code_output(prepared.paths.run_id),
                     cancel_event=cancel,
+                    role=routing.role,
                 ).execute(
-                    agent=action.agent,
-                    prompt=prompt,
+                    agent=routing.agent,
+                    prompt=parsed_prompt.body,
                     cwd=repository,
                 )
             except Exception as error:
@@ -706,7 +799,7 @@ class ActionExecutor:
             commit_sha=after.head if after is not None else None,
             coordinator_state="READ_ONLY",
             findings=self._audit_findings(
-                prompt=prompt,
+                prompt=parsed_prompt.effective_prompt,
                 stdout=stdout,
                 stderr=stderr,
                 output_path=str(output_path),
@@ -972,9 +1065,11 @@ class ActionExecutor:
         prepared: PreparedAction,
         outcome: CoordinatorOutcome,
         *,
+        timing: RunTiming,
         cancel_status: str | None = None,
     ) -> ActionExecutionResult:
         action = prepared.action
+        routing = prepared.routing
         redactor = self._output_redactor()
         request = self.runs.request(prepared.paths.run_id)
         coordinator_run_id = outcome.coordinator_run_id
@@ -982,6 +1077,29 @@ class ActionExecutor:
         coordinator_state = outcome.coordinator_state
         verdict = cancel_status or outcome.verdict
         metadata = dict(outcome.metadata)
+        metadata.update(
+            {
+                "run_started_at": timing.started_at,
+                "run_finished_at": timing.finished_at,
+                "run_duration_ms": timing.duration_ms,
+                "run_duration_human": timing.duration_human,
+            }
+        )
+        process_duration_value = metadata.get("process_duration_ms")
+        if (
+            type(process_duration_value) is not int
+            or process_duration_value < 0
+            or process_duration_value > timing.duration_ms
+        ):
+            process_duration_value = None
+            metadata.pop("process_duration_ms", None)
+        else:
+            metadata["process_duration_human"] = format_duration_ms(process_duration_value)
+        self._log(prepared.paths.run_id, f"Run finished: {timing.finished_at}")
+        self._log(
+            prepared.paths.run_id,
+            f"Duration: {timing.duration_human}",
+        )
         output_path_value = metadata.get("output_path")
         if type(output_path_value) is not str:
             if action.backend in {"opencode-direct", "opencode-readonly"} and prepared.paths.opencode_output.exists():
@@ -1027,16 +1145,31 @@ class ActionExecutor:
                 "action_id": action.id,
                 "action": action.id,
                 "prompt_sha256": request.get("prompt_sha256"),
-                "model": metadata.get("model", self._model(action) or "NOT_APPLICABLE"),
-                "variant": metadata.get("variant", self._variant(action) or "NOT_APPLICABLE"),
+                "model": metadata.get("model", routing.model or "NOT_APPLICABLE"),
+                "variant": metadata.get("variant", routing.variant or "NOT_APPLICABLE"),
                 "opencode_version": opencode_version,
-                "agent": metadata.get("agent", action.agent or "NOT_APPLICABLE"),
+                "agent": metadata.get("agent", routing.agent or "NOT_APPLICABLE"),
+                "role": metadata.get("role", routing.role),
+                "model_source": metadata.get("model_source", routing.model_source),
+                "variant_source": metadata.get("variant_source", routing.variant_source),
+                "role_source": metadata.get("role_source", routing.role_source),
+                "agent_source": metadata.get("agent_source", routing.agent_source),
                 "repository": metadata.get("repository", str(self.config.repository)),
                 "timestamp": metadata.get("timestamp", request.get("timestamp")),
                 "timeout": metadata.get("timeout", request.get("timeout")),
                 "report_path": str(prepared.paths.report),
                 "log_path": str(prepared.paths.live_log),
                 "output_path": output_path_value,
+                "run_started_at": timing.started_at,
+                "run_finished_at": timing.finished_at,
+                "run_duration_ms": timing.duration_ms,
+                "run_duration_human": timing.duration_human,
+                "run_process_duration_ms": process_duration_value,
+                "run_process_duration_human": (
+                    format_duration_ms(process_duration_value)
+                    if process_duration_value is not None
+                    else None
+                ),
             }
         )
         result_payload.update(metadata)
@@ -1074,15 +1207,22 @@ class ActionExecutor:
         report_model = (
             "NOT_APPLICABLE"
             if action.backend == "git-audit"
-            else self._model(action) or "NOT_APPLICABLE"
+            else routing.model or "NOT_APPLICABLE"
         )
         report_variant = (
             "NOT_APPLICABLE"
             if action.backend == "git-audit"
-            else self._variant(action) or "NOT_APPLICABLE"
+            else routing.variant or "NOT_APPLICABLE"
         )
         report_agent = (
-            "NOT_APPLICABLE" if action.backend == "git-audit" else action.agent or "NOT_APPLICABLE"
+            "NOT_APPLICABLE"
+            if action.backend == "git-audit"
+            else routing.agent or "NOT_APPLICABLE"
+        )
+        report_role = (
+            "NOT_APPLICABLE"
+            if action.backend == "git-audit"
+            else routing.role
         )
 
         safe_findings = redact_sensitive_data(
@@ -1100,6 +1240,27 @@ class ActionExecutor:
             variant=report_variant,
             opencode_version=opencode_version,
             agent=report_agent,
+            role=report_role,
+            model_source=(
+                "NOT_APPLICABLE"
+                if action.backend == "git-audit"
+                else routing.model_source
+            ),
+            variant_source=(
+                "NOT_APPLICABLE"
+                if action.backend == "git-audit"
+                else routing.variant_source
+            ),
+            role_source=(
+                "NOT_APPLICABLE"
+                if action.backend == "git-audit"
+                else routing.role_source
+            ),
+            agent_source=(
+                "NOT_APPLICABLE"
+                if action.backend == "git-audit"
+                else routing.agent_source
+            ),
             repository=str(metadata.get("repository", self.config.repository)),
             base_sha=outcome.base_sha,
             commit_sha=outcome.commit_sha,
@@ -1113,6 +1274,10 @@ class ActionExecutor:
             log_path=str(prepared.paths.live_log),
             output_path=metadata.get("output_path"),
             timestamp=metadata.get("timestamp", request.get("timestamp")),
+            started_at=timing.started_at,
+            finished_at=timing.finished_at,
+            duration_ms=timing.duration_ms,
+            process_duration_ms=process_duration_value,
             timeout=metadata.get("timeout", request.get("timeout")),
             readonly_policy=metadata.get("readonly_policy"),
             mutation_guard=metadata.get("mutation_guard"),
@@ -1144,6 +1309,10 @@ class ActionExecutor:
             coordinator_state=report_coordinator_state,
             task_id=report_task_id,
             coordinator_run_id=coordinator_run_id,
+            run_started_at=timing.started_at,
+            run_finished_at=timing.finished_at,
+            run_duration_ms=timing.duration_ms,
+            run_process_duration_ms=process_duration_value,
         )
         return ActionExecutionResult(
             run_id=prepared.paths.run_id,
@@ -1164,6 +1333,10 @@ class ActionExecutor:
             embedded_status=embedded_status,
             embedded_verdict=embedded_verdict,
             result_consistency=result_consistency_value,
+            started_at=timing.started_at,
+            finished_at=timing.finished_at,
+            duration_ms=timing.duration_ms,
+            process_duration_ms=process_duration_value,
         )
 
 
@@ -1187,4 +1360,6 @@ def default_config(state_root: str | Path | None = None) -> TUIConfig:
         opencode_executable=os.environ.get("GOTA_OPENCODE", "opencode"),
         model_override=os.environ.get("GOTA_TUI_MODEL") or None,
         variant_override=os.environ.get("GOTA_TUI_VARIANT") or None,
+        role_override=os.environ.get("GOTA_TUI_ROLE") or None,
+        agent_override=os.environ.get("GOTA_TUI_AGENT") or None,
     )

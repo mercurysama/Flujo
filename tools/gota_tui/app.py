@@ -18,7 +18,7 @@ from .durable import DurableRunStore
 from .envelope import PromptEnvelope, PromptEnvelopeError
 from .execution import ActionExecutionResult, ActionExecutor, PreparedAction, TUIConfig
 from .prompt_library import PromptLibrary, PromptTemplateError
-from .reporting import ReportManager
+from .reporting import ReportManager, report_header
 
 
 _RESULT_CONFLICT_CONSISTENCIES: frozenset[str] = frozenset(
@@ -269,12 +269,28 @@ class GotaApp(App[None]):
             "GOTA  ·  Running  ·  Esc cancels UI process request"
         )
         self.query_one("#live-log", RichLog).clear()
+        routing = self._prepared.routing if self._prepared is not None else None
+        selection = ""
+        if routing is not None:
+            selection = (
+                f"Model: {routing.model}  Variant: {routing.variant}  "
+                f"Role: {routing.role or 'UNKNOWN'}  Agent: {routing.agent}  · "
+            )
         if self._selected_action is not None and self._selected_action.backend == "opencode-readonly":
-            self._set_status("OpenCode read-only analysis running; stdout/stderr stream to live.log.")
+            self._set_status(
+                selection
+                + "OpenCode read-only analysis running; stdout/stderr stream to live.log."
+            )
         elif self._selected_action is not None and self._selected_action.backend == "opencode-direct":
-            self._set_status("Direct OpenCode prompt running; stdout/stderr stream to live.log.")
+            self._set_status(
+                selection
+                + "Direct OpenCode prompt running; stdout/stderr stream to live.log."
+            )
         else:
-            self._set_status("Coordinator state is authoritative; exit=0 is not DONE.")
+            self._set_status(
+                selection
+                + "Coordinator state is authoritative; exit=0 is not DONE."
+            )
 
     def _update_report_view(self, report: str) -> None:
         report_view = self.query_one("#report-view", Static)
@@ -283,7 +299,7 @@ class GotaApp(App[None]):
             line.startswith(_RESULT_CONSISTENCY_PREFIX)
             and line[len(_RESULT_CONSISTENCY_PREFIX) :]
             in _RESULT_CONFLICT_CONSISTENCIES
-            for line in report.splitlines()
+            for line in report_header(report).splitlines()
         ):
             report_view.add_class("result-conflict")
         report_view.update(Text(report))

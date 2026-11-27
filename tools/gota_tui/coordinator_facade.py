@@ -24,6 +24,7 @@ from flow_coordinator.gota_phases import ReviewPhaseResult, WorkerPhaseResult
 
 from .envelope import PromptEnvelope
 from .prompt_library import PromptComposition
+from .routing import inject_role
 
 
 class CoordinatorFacadeError(RuntimeError):
@@ -62,6 +63,8 @@ class _ObservingRunner:
         executable: str,
         output: OutputCallback,
         cancel_event: Event,
+        role: str | None = None,
+        agent_override: str | None = None,
     ) -> None:
         self._runner = OpenCodeRunner(
             executable=executable,
@@ -70,6 +73,8 @@ class _ObservingRunner:
         )
         self._output = output
         self._cancel_event = cancel_event
+        self._role = role
+        self._agent_override = agent_override
 
     def run(
         self,
@@ -80,18 +85,20 @@ class _ObservingRunner:
         timeout: float,
         expect_gota_payload: bool = True,
     ) -> OpenCodeRunResult:
+        effective_agent = self._agent_override or agent
+        effective_prompt = inject_role(prompt, self._role)
         if expect_gota_payload:
             return self._runner.run(
-                agent=agent,
-                prompt=prompt,
+                agent=effective_agent,
+                prompt=effective_prompt,
                 cwd=cwd,
                 timeout=timeout,
                 output_callback=self._output,
                 cancel_event=self._cancel_event,
             )
         return self._runner.run(
-            agent=agent,
-            prompt=prompt,
+            agent=effective_agent,
+            prompt=effective_prompt,
             cwd=cwd,
             timeout=timeout,
             output_callback=self._output,
@@ -112,6 +119,8 @@ class OpenCodePromptFacade:
         timeout: float,
         output: OutputCallback,
         cancel_event: Event,
+        role: str | None = None,
+        agent_override: str | None = None,
     ) -> None:
         self.opencode_executable = opencode_executable
         self.model = model
@@ -119,6 +128,8 @@ class OpenCodePromptFacade:
         self.timeout = timeout
         self.output = output
         self.cancel_event = cancel_event
+        self.role = role
+        self.agent_override = agent_override
 
     def execute(self, *, agent: str, prompt: str, cwd: str | Path) -> OpenCodeRunResult:
         return _ObservingRunner(
@@ -127,6 +138,8 @@ class OpenCodePromptFacade:
             executable=self.opencode_executable,
             output=self.output,
             cancel_event=self.cancel_event,
+            role=self.role,
+            agent_override=self.agent_override,
         ).run(
             agent=agent,
             prompt=prompt,
@@ -150,6 +163,8 @@ class CoordinatorGotaFacade:
         owner_id: str,
         output: OutputCallback,
         cancel_event: Event,
+        role: str | None = None,
+        agent_override: str | None = None,
     ) -> None:
         self.database = Path(database)
         self.opencode_executable = opencode_executable
@@ -159,6 +174,8 @@ class CoordinatorGotaFacade:
         self.owner_id = owner_id
         self.output = output
         self.cancel_event = cancel_event
+        self.role = role
+        self.agent_override = agent_override
 
     def _store_and_service(self) -> tuple[SQLiteCoordinatorStore, CoordinatorService]:
         store = SQLiteCoordinatorStore(self.database)
@@ -171,6 +188,8 @@ class CoordinatorGotaFacade:
             executable=self.opencode_executable,
             output=self.output,
             cancel_event=self.cancel_event,
+            role=self.role,
+            agent_override=self.agent_override,
         )
 
     @staticmethod

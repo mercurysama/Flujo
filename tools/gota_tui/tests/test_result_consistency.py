@@ -58,9 +58,9 @@ class GotaTUIResultConsistencyTest(unittest.TestCase):
 
         class Writer:
             def copy(inner_self, text: str) -> str:
-                del text
                 copied.append(
                     {
+                        "text": text,
                         "output_exists": prepared.paths.opencode_output.exists(),
                         "output": prepared.paths.opencode_output.read_text(encoding="utf-8"),
                         "report_exists": prepared.paths.report.exists(),
@@ -263,6 +263,33 @@ class GotaTUIResultConsistencyTest(unittest.TestCase):
         self.assertIn("EMBEDDED_REPORT_ID=STDOUT", report)
         self.assertNotIn("EMBEDDED_REPORT_ID=STDERR", report)
         self.assertIn("STDERR_REPORT_BEGIN", output_path.read_text(encoding="utf-8"))
+
+    def test_successful_process_without_coordinator_report_embeds_stdout_only(self) -> None:
+        stdout = "D3 COMPLETE — PROVE PASS — READY FOR D4\n"
+        stderr = "Godot startup\nRID teardown\nlarge irrelevant diagnostic trace\n"
+        result, state, output_path, copied = self._run_direct(
+            stdout=stdout,
+            stderr=stderr,
+            run_id="stdout-embedding-regression",
+        )
+
+        report = state.read_report(result.run_id)
+        self.assertEqual(result.verdict, "SUCCEEDED")
+        self.assertEqual(result.result_consistency, NO_EMBEDDED_REPORT)
+        self.assertIn("PROCESS_STATUS=succeeded", report)
+        self.assertIn("PROCESS_EXIT_CODE=0", report)
+        self.assertIn("EMBEDDED_REPORT_ID=UNKNOWN", report)
+        self.assertIn("EMBEDDED_STATUS=UNKNOWN", report)
+        self.assertIn("EMBEDDED_VERDICT=UNKNOWN", report)
+        self.assertIn("RESULT_CONSISTENCY=NO_EMBEDDED_REPORT", report)
+        self.assertIn("OUTPUT_EMBED_STATUS=OK", report)
+        self.assertIn("OUTPUT_EMBED_SOURCE=OPENCODE_STDOUT", report)
+        self.assertIn(f"OUTPUT_EMBED_BYTES={len(stdout.encode('utf-8'))}", report)
+        self.assertIn(stdout, report)
+        self.assertNotIn("large irrelevant diagnostic trace", report)
+        self.assertIn(stdout, str(copied[0]["text"]))
+        self.assertNotIn("large irrelevant diagnostic trace", str(copied[0]["text"]))
+        self.assertIn("STDERR_BEGIN", output_path.read_text(encoding="utf-8"))
 
     def test_complete_unknown_verdict_does_not_infer_from_partial_words(self) -> None:
         parsed = parse_embedded_report(_report("UNKNOWN", "the word PASS is not a verdict", "maybe PASS"))
